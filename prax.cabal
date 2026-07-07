@@ -27,6 +27,7 @@ library
                       Prax.Engine
                       Prax.Planner
                       Prax.Core
+                      Prax.Reactions
                       Prax.Loop
                       Prax.Worlds.Bar
 
@@ -57,3 +58,4 @@ test-suite prax-test
                       Prax.LoopSpec
                       Prax.BarSpec
                       Prax.CoreSpec
+                      Prax.ReactionsSpec

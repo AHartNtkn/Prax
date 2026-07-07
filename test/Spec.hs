@@ -9,6 +9,7 @@ import qualified Prax.PlannerSpec
 import qualified Prax.LoopSpec
 import qualified Prax.BarSpec
 import qualified Prax.CoreSpec
+import qualified Prax.ReactionsSpec
 
 main :: IO ()
 main = defaultMain $ testGroup "prax"
@@ -19,4 +20,5 @@ main = defaultMain $ testGroup "prax"
   , Prax.LoopSpec.tests
   , Prax.BarSpec.tests
   , Prax.CoreSpec.tests
+  , Prax.ReactionsSpec.tests
   ]
