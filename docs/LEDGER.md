@@ -2,7 +2,8 @@
 
 Every capability we intend `prax` to support, derived from the Versu paper and Praxish. Status:
 - **v1** — in the first milestone (faithful engine core).
-- **planned** — committed for after v1; well-understood from sources.
+- **v2** — the core-model round (emotions & relationships), built as `Prax.Core`.
+- **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
   logic paper) or an unsettled design question.
 
@@ -50,9 +51,9 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 
 | # | Feature | Status | Source | Notes |
 |---|---------|--------|--------|-------|
-| 24 | Emotions (Ekman, single-slot, remembers target+cause+prev) | planned | P§X | |
-| 25 | Role-evaluation relationships (multiple, asymmetric, w/ reason) | planned | P§X | `A.relationship.B.role!Val!Why` |
-| 26 | Public symmetric relationship state | planned | P§X | mutual consent to change |
+| 24 | Emotions (Ekman, single-slot, remembers target+cause+prev) | v2 | P§X | `Prax.Core` `setMood`; mood `!`-override + `priorMood` |
+| 25 | Role-evaluation relationships (multiple, asymmetric, w/ reason) | v2 | P§X | `Prax.Core` `adjustScore`; `A.relationship.B.role.score!N`/`reason!Why` |
+| 26 | Public symmetric relationship state | v2 | P§X | `Prax.Core` `setBond` writes both orderings |
 | 27 | Beliefs: shared world + per-issue divergence | planned | P§X | |
 | 28 | Quantified / nested beliefs | research-needed | P§XI | Versu itself couldn't do this |
 | 29 | Conversation: speakers, topics, quips (template + effects) | planned | P§X / ES blog | |

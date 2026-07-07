@@ -25,9 +25,13 @@ utility. See the design writeups:
 - `Prax.Planner` — utility-based reactive selection: per-character wants, apply-and-evaluate,
   discounted lookahead.
 - `Prax.Loop` / `Prax.Worlds.Bar` / CLI — round-robin turns and a menu-driven bar demo.
+- `Prax.Core` (v2) — the Versu core model: emotions (single-slot moods with target/cause and a
+  remembered prior) and relationships (numeric, asymmetric role evaluations). Wired into the bar
+  so interaction changes feelings and feelings change behaviour (a warmth-gated "buy a drink"
+  affordance; a snub breeds an `annoyed` mood that withholds it).
 
-See `docs/LEDGER.md` for what's next (the Versu core model: emotions, relationships, beliefs,
-reactions, story manager, a text authoring language, …).
+See `docs/LEDGER.md` for what's next (public bonds in play, reactions-as-practices, beliefs, a
+story manager, character arcs, a text authoring language, …).
 
 ## Build, test, play
 

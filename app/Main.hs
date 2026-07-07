@@ -94,7 +94,8 @@ prompt = do
 
 renderScene :: PraxState -> String
 renderScene st =
-  unlines (map ("  - " ++) (locations ++ orders ++ held ++ tipsy ++ bell))
+  unlines (map ("  - " ++)
+            (locations ++ orders ++ held ++ tipsy ++ bell ++ moods ++ feelings))
   where
     rows sentence = unify sentence (db st) Map.empty
     val k b = valToString <$> Map.lookup k (b :: Bindings)
@@ -121,3 +122,14 @@ renderScene st =
     bell =
       [ "the bar is busy — " ++ b' ++ " rang the bell"
       | b <- rows "practice.tendBar.Pl.Bartender.rang", Just b' <- [val "Bartender" b] ]
+
+    moods =
+      [ who ++ " feels " ++ feeling ++ " toward " ++ target
+      | b <- rows "Who.mood!Feeling.toward!Target"
+      , Just who <- [val "Who" b], Just feeling <- [val "Feeling" b]
+      , Just target <- [val "Target" b] ]
+
+    feelings =
+      [ a ++ "'s warmth toward " ++ bb ++ ": " ++ score
+      | b <- rows "A.relationship.B.warmth.score!N"
+      , Just a <- [val "A" b], Just bb <- [val "B" b], Just score <- [val "N" b] ]

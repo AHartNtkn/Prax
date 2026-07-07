@@ -134,6 +134,42 @@ it only happens with two: early on, with just one customer, the bell never rings
 - and `Not …rang` makes it fire only once.
 → features: `Subquery`, `Count`, `Cmp`. code: `tendBarP` "Ring the bell" action.
 
+### 7. Feelings & relationships — the core model (v2)
+
+Characters now build up an emotional and relational interior as they interact, and that interior
+changes what they do. Watch the scene's new lines (`… feels … toward …`, `…'s warmth toward …`).
+
+- **Warm up to someone.** On your turn, **`Greet ada`**, then **order a beer** and let ada serve
+  you. Each of those raises your `warmth` toward ada (greeting +10, being served +8). Watch the
+  scene: *"you's warmth toward ada"* climbs from 10 to 18.
+  → features: numeric relationship evaluation. code: `Prax.Core` `adjustScore`; wired into
+  `greetP`/`tendBarP` in `Prax.Worlds.Bar`.
+
+- **A relationship creating a new goal.** Once your warmth toward ada crosses 15, a brand-new
+  option appears: **`Buy ada a drink`** — an affordance that literally did not exist until you'd
+  warmed up to her. This is the point of the core model: relationships open up behaviour.
+  → features: relationship-gated precondition (`Prax.Core` `scoreAtLeast` = `Match` + `Cmp`).
+
+- **Snub someone and watch them cool.** When an NPC greets you and you **don't greet back**, on a
+  later turn they *"Take offense at you ignoring your greeting."* The scene then shows they
+  *"feel annoyed toward you"* and their warmth toward you goes **negative**. An `annoyed` mood (and
+  the cooled warmth) then **withholds** their friendly "buy you a drink" gesture.
+  → features: single-slot mood override (`setMood`, the `!` operator), a negative `adjustScore`,
+  and mood-/score-gated preconditions (`Not …mood!annoyed…`, `scoreAtLeast`).
+
+- **Emotions are momentary; the record persists.** A mood is single-slot — a new feeling
+  overrides the old one, and the previous mood is kept as `priorMood`. So after a character is
+  cheered back up, the *mood* is no longer "annoyed", but the lasting **grievance** and the
+  lowered **warmth score** remain. That's how a fleeting feeling differs from a durable relationship.
+
+- **Feelings are asymmetric.** Because warmth is directional, you'll routinely see one character
+  warmer than the other (e.g. `bex's warmth toward ada: 38` while `ada's warmth toward bex: 30`),
+  and both NPCs cold toward a player who never reciprocates.
+  → features: asymmetric role evaluation (§X). code: `Prax.Core`.
+
+*(Left to try later, per `docs/LEDGER.md`: public "bonds" via `setBond`, and the automated way
+Versu populates all this — reactions-as-practices — plus beliefs and conversation.)*
+
 ---
 
 ## Feature coverage map
@@ -160,11 +196,15 @@ Everything implemented in v1, where it lives, and how the demo shows it:
 | `dataFacts` | `Prax.Engine` | the four beverage choices |
 | Wants / utility / lookahead | `Prax.Planner` | bex walking in to order; ada serving |
 | Round-robin loop + CLI menu | `Prax.Loop` / `app/Main` | the whole session |
+| Emotions (mood, target/cause, prior) | `Prax.Core` `setMood` | "feels annoyed toward you" after a snub |
+| Relationship evaluation (numeric, asymmetric) | `Prax.Core` `adjustScore` | "warmth toward …" climbing/cooling |
+| Relationship-gated affordance | `Prax.Core` `scoreAtLeast` | "Buy … a drink" appearing once warm |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
 same behaviours are asserted in the test suite (`cabal test`): see `Prax.QuerySpec`,
-`Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.BarSpec` (drunkenness + bell), and `Prax.LoopSpec`
-(a deterministic 12-turn replay of the emergent order→fulfill→serve arc).
+`Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.BarSpec`
+(drunkenness + bell + the warmth/mood gates), and `Prax.LoopSpec` (a deterministic 12-turn replay
+of the emergent greet → serve → take-offense → buy-a-drink arc).
 
 ---
 
@@ -179,9 +219,10 @@ same behaviours are asserted in the test suite (`cabal test`): see `Prax.QuerySp
 - **Watch bex's arc end:** once bex has its beer, it stops chasing and just waits at the bar —
   its top want (`beer in hand`) is satisfied, so no action beats waiting.
 
-## What v1 does *not* yet model
+## What is *not* yet modeled
 
-The bar exercises the whole engine, but the engine is deliberately smaller than Versu. Not yet
-built (see `docs/LEDGER.md`): emotions, role-evaluation relationships, beliefs, reactions as
-auto-spawned practices, a story-manager practice, the full first-order query grammar
+The bar exercises the whole engine including the v2 core model (emotions & relationships), but the
+engine is still deliberately smaller than Versu. Not yet built (see `docs/LEDGER.md`): public
+"bonds" in play, beliefs, reactions as auto-spawned practices (the automated way the core model
+gets populated), a story-manager practice, character arcs, the full first-order query grammar
 (`∀`/`∃`/`∨`/`→`), and a text authoring language. Those are the next milestones.
