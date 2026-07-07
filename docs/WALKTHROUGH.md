@@ -199,6 +199,36 @@ Actions now provoke *responses*, and the bar has a social rule with teeth. Watch
   norms" falling out of ordinary utility evaluation, no special rule engine.
   → features: norm avoidance via `Prax.Planner` lookahead + a large negative `Want`.
 
+### 9. Beliefs — what a character thinks may not be true (v4)
+
+The world state is shared, but a character can hold a private belief about a specific issue that
+diverges from the truth — and act on the belief, not the fact. In the bar this shows up as
+believed grudges.
+
+- **Plant a rumour.** If you're *cross with* someone (e.g. you rebuffed ada, so you're annoyed at
+  her), then — while she's **out of the room** — you can **`Warn [someone] that ada resents them`**.
+  That plants a belief in the hearer: the scene will read *"… believes ada resents them."* The
+  claim needn't be true; ada may actually like them.
+  → features: a per-agent belief formed by telling. code: `Prax.Beliefs` `believe`; the "Warn …"
+  action in `Prax.Worlds.Bar` (gated on real annoyance + the subject's absence, so nobody gossips
+  idly).
+
+- **A false belief overrides real feeling.** A character who believes someone resents them **won't
+  greet or buy a drink for** that person — even if their actual `warmth` is high. Belief beats
+  fact for driving behaviour (Versu's whole point in modelling beliefs separately).
+  → features: belief-gated preconditions (`Not …believes.resentedBy…`).
+
+- **Beliefs are private and can disagree.** The rumour changes only the hearer's mind; others (and
+  the truth) are untouched — two characters can hold opposite beliefs about the same issue.
+
+- **Evidence can change a mind.** If the supposedly-hostile person actually **greets** the
+  believer, they can **`Realize [they] don't resent you after all`** and drop the false belief.
+  → features: belief revision (`Prax.Beliefs` `forget`).
+
+*(What v4 doesn't do, per `docs/LEDGER.md`: quantified/nested beliefs — "X believes that everyone
+thinks …" — which Versu itself couldn't represent; and there's no single "believe-or-else-the-truth"
+query operator, since that needs disjunction, a later item.)*
+
 ---
 
 ## Feature coverage map
@@ -231,13 +261,16 @@ Everything implemented in v1, where it lives, and how the demo shows it:
 | Reactions (spawned practices + response chains) | `Prax.Reactions` | greet → "Greet back"/"Rebuff"; take-offense |
 | Norms (violation-marking + disapproval) | `Prax.Reactions` | stiff the tab → "broke a norm" → ada disapproves |
 | Norm avoidance in the planner | `Prax.Planner` + a `Want` | NPCs tip rather than stiff |
+| Beliefs (per-agent, can be false) | `Prax.Beliefs` | a rumour → "… believes ada resents them" |
+| Belief-gated behaviour / revision | `Prax.Beliefs` | a false belief suppresses friendliness; evidence dispels it |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
 same behaviours are asserted in the test suite (`cabal test`): see `Prax.QuerySpec`,
 `Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.ReactionsSpec`
-(reactions, norms, norm-avoidance), `Prax.BarSpec` (drunkenness + bell + warmth/mood gates +
-greeting chain + tipping), and `Prax.LoopSpec` (a deterministic 15-turn replay of the emergent
-greet → serve → greet-back → take-offense → buy-a-drink → tip arc).
+(reactions, norms, norm-avoidance), `Prax.BeliefsSpec` (per-agent & false beliefs), `Prax.BarSpec`
+(drunkenness + bell + warmth/mood gates + greeting chain + tipping + rumours), and `Prax.LoopSpec`
+(a deterministic 15-turn replay of the emergent greet → serve → greet-back → take-offense →
+buy-a-drink → tip arc).
 
 ---
 
@@ -254,8 +287,9 @@ greet → serve → greet-back → take-offense → buy-a-drink → tip arc).
 
 ## What is *not* yet modeled
 
-The bar exercises the whole engine including the v2 core model and v3 reactions & norms, but the
-engine is still deliberately smaller than Versu. Not yet built (see `docs/LEDGER.md`): public
-"bonds" in play, richer norms & eviction, a generic "react to any action" event bus, beliefs, a
-story-manager practice, character arcs, the full first-order query grammar (`∀`/`∃`/`∨`/`→`), and a
-text authoring language. Those are the next milestones.
+The bar exercises the whole engine including the v2 core model, v3 reactions & norms, and v4
+beliefs, but the engine is still deliberately smaller than Versu. Not yet built (see
+`docs/LEDGER.md`): public "bonds" in play, richer norms & eviction, a generic "react to any action"
+event bus, quantified/nested beliefs, conversation (speakers/topics/quips), a story-manager
+practice, character arcs, the full first-order query grammar (`∀`/`∃`/`∨`/`→`), and a text
+authoring language. Those are the next milestones.

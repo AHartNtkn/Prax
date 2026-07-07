@@ -33,9 +33,12 @@ utility. See the design writeups:
   offering responses (greet back / rebuff / take offense), and a norm violation (stiffing the
   bartender) spawns disapproval. NPCs avoid violations because the planner scores the
   violation→disapproval future poorly.
+- `Prax.Beliefs` (v4) — per-agent beliefs that can diverge from the shared world. A rumour plants a
+  possibly-false belief; a character who believes someone resents them won't be friendly to them
+  even when their actual warmth is high; evidence can dispel the belief.
 
 See `docs/LEDGER.md` for what's next (public bonds in play, richer norms, a generic event bus,
-beliefs, a story manager, character arcs, a text authoring language, …).
+conversation, a story manager, character arcs, a text authoring language, …).
 
 ## Build, test, play
 

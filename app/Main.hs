@@ -96,7 +96,7 @@ renderScene :: PraxState -> String
 renderScene st =
   unlines (map ("  - " ++)
             (locations ++ orders ++ held ++ tipsy ++ bell
-              ++ pending ++ trouble ++ moods ++ feelings))
+              ++ pending ++ trouble ++ beliefs ++ moods ++ feelings))
   where
     rows sentence = unify sentence (db st) Map.empty
     val k b = valToString <$> Map.lookup k (b :: Bindings)
@@ -142,6 +142,12 @@ renderScene st =
       [ ol ++ " disapproves of " ++ off
       | b <- rows "practice.disapproval.Off.Ol"
       , Just off <- [val "Off" b], Just ol <- [val "Ol" b] ]
+
+    -- beliefs that diverge from the truth (here: believed grudges)
+    beliefs =
+      [ who ++ " believes " ++ subj ++ " resents them"
+      | b <- rows "Who.believes.resentedBy.Subj.yes"
+      , Just who <- [val "Who" b], Just subj <- [val "Subj" b] ]
 
     moods =
       [ who ++ " feels " ++ feeling ++ " toward " ++ target
