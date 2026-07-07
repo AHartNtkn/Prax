@@ -81,7 +81,8 @@ prompt = do
 -- Scene rendering ---------------------------------------------------------------
 
 renderScene :: PraxState -> String
-renderScene st = unlines (map ("  - " ++) (locations ++ orders ++ drinks))
+renderScene st =
+  unlines (map ("  - " ++) (locations ++ orders ++ held ++ tipsy ++ bell))
   where
     rows sentence = unify sentence (db st) Map.empty
     val k b = valToString <$> Map.lookup k (b :: Bindings)
@@ -96,7 +97,15 @@ renderScene st = unlines (map ("  - " ++) (locations ++ orders ++ drinks))
       | b <- rows "practice.tendBar.Pl.Bartender.customer.Who!order!Bev"
       , Just who <- [val "Who" b], Just bev <- [val "Bev" b] ]
 
-    drinks =
+    held =
       [ who ++ " has a " ++ bev ++ " in hand"
       | b <- rows "practice.tendBar.Pl.Bartender.customer.Who!beverage!Bev"
       , Just who <- [val "Who" b], Just bev <- [val "Bev" b] ]
+
+    tipsy =
+      [ who ++ " is looking tipsy"
+      | b <- rows "person.Who.tipsy", Just who <- [val "Who" b] ]
+
+    bell =
+      [ "the bar is busy — " ++ b' ++ " rang the bell"
+      | b <- rows "practice.tendBar.Pl.Bartender.rang", Just b' <- [val "Bartender" b] ]

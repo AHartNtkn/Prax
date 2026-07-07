@@ -54,3 +54,4 @@ test-suite prax-test
                       Prax.EngineSpec
                       Prax.PlannerSpec
                       Prax.LoopSpec
+                      Prax.BarSpec

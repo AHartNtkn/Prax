@@ -42,6 +42,9 @@ cabal run prax    # play the bar demo — you are 'you'; pick actions from the m
 In the demo, NPCs act autonomously: order a drink at the bar and the bartender (ada) will
 serve you, while the patron (bex) pursues a beer of their own.
 
+**New here? Read `docs/WALKTHROUGH.md`** — a guided playthrough that names each thing to try and
+explains which engine feature it demonstrates. The bar world exercises every v1 feature.
+
 ## References
 
 Primary source material (the Versu paper, the Praxish checkout, etc.) is downloaded into
