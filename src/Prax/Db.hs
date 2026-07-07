@@ -22,6 +22,9 @@ module Prax.Db
   , unifyAll
   , ground
   , dbToSentences
+  , childKeys
+  , exists
+  , pathNames
   ) where
 
 import           Data.Char (isUpper)
@@ -82,6 +85,10 @@ tokens = go . trim
 -- | Names only (both operators treated identically), for matching and retract.
 parseNames :: String -> [String]
 parseNames = map fst . tokens
+
+-- | Split a sentence into its segment names (both @.@ and @!@ are separators).
+pathNames :: String -> [String]
+pathNames = parseNames
 
 -- | Insert a sentence into the database, with the corrected exclusion rule.
 --
@@ -156,6 +163,20 @@ ground sentence b = concatMap emit (tokens sentence)
     value name
       | isVariable name = maybe name valToString (Map.lookup name b)
       | otherwise       = name
+
+-- | The keys directly beneath the node at a (constant) dotted path, or @[]@ if
+-- the path is absent. Used to enumerate instantiated practices.
+childKeys :: String -> Db -> [String]
+childKeys path db = case walk (parseNames path) db of
+  Just (Db m) -> Map.keys m
+  Nothing     -> []
+  where
+    walk [] d          = Just d
+    walk (n : ns) (Db m) = Map.lookup n m >>= walk ns
+
+-- | Whether any node exists at the given constant path.
+exists :: String -> Db -> Bool
+exists path db = not (null (unify path db Map.empty))
 
 -- | Enumerate all leaf paths (facts) in the database, sorted, joined by @.@.
 -- Loses the @.@/@!@ distinction; intended for display and tests.

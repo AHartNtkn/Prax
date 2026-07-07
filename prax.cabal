@@ -23,6 +23,8 @@ library
                     , containers
     exposed-modules:  Prax.Db
                       Prax.Query
+                      Prax.Types
+                      Prax.Engine
 
 test-suite prax-test
     import:           warnings
@@ -37,3 +39,4 @@ test-suite prax-test
                     , tasty-hunit
     other-modules:    Prax.DbSpec
                       Prax.QuerySpec
+                      Prax.EngineSpec
