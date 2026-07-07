@@ -1,17 +1,17 @@
--- | A small demo storyworld: a bar with a movement/location practice, greeting,
--- and tending bar (order → fulfill → drink). Adapted from Praxish's @demos/pwim@
--- domain into the eDSL, then extended so a single playthrough exercises every
--- v1 engine feature.
+-- | A small demo storyworld: a bar with movement, greeting, and tending bar,
+-- now wired to the Core Model so interaction changes feelings and feelings
+-- change behaviour. Adapted from Praxish's @demos/pwim@ into the eDSL.
 --
--- Cast: @you@ (the player), @ada@ (an NPC bartender who dislikes leaving orders
--- outstanding and likes staying at the bar), and @bex@ (an NPC patron who wants
--- a beer). With lookahead, bex walks to the bar, orders, and ada fulfills.
+-- Cast: @you@ (the player), @ada@ (an NPC bartender) and @bex@ (an NPC patron).
 --
--- Feature coverage (see @docs/WALKTHROUGH.md@): the location/greet/tendBar loop
--- covers Match\/Not\/Eq\/Neq, Insert\/Delete, spawning, single- and multi-role
--- practices, dataFacts, wants, and lookahead. The added drunkenness mechanic
--- covers @init@-on-spawn, @Call@ + functions with guarded cases, @Calc@, and
--- @Cmp@; the "busy bar" bell covers @Subquery@ + @Count@ + @Cmp@.
+-- The social feedback loop (see @docs/WALKTHROUGH.md@): greeting and being
+-- served raise a numeric @warmth@ evaluation between characters; once warm
+-- enough toward someone, the "buy … a drink" affordance appears (a relationship
+-- *creating* a new goal) and characters with the matching want pursue it. A
+-- greeting that goes unreciprocated lets the snubbed party take offense —
+-- setting an @annoyed@ mood and cooling the relationship, which then withholds
+-- the friendly buy-a-drink action. Because warmth is directional, one character
+-- can end up warmer than the other (asymmetry).
 module Prax.Worlds.Bar
   ( barWorld
   , playerName
@@ -20,10 +20,15 @@ module Prax.Worlds.Bar
 import           Prax.Query
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome)
+import           Prax.Core
 
 -- | The character the human player controls.
 playerName :: String
 playerName = "you"
+
+-- Once your warmth toward someone reaches this, you may buy them a drink.
+buyThreshold :: Int
+buyThreshold = 15
 
 -- Practices ---------------------------------------------------------------------
 
@@ -38,15 +43,13 @@ worldP = practice
           [ Match "practice.world.World.at.Actor!OtherPlace"
           , Match "practice.world.World.connected.OtherPlace.Place" ]
           [ Insert "practice.world.World.at.Actor!Place" ]
-        -- Doing nothing is a real choice: without it, an agent with no useful
-        -- move is forced to wander. Empty outcomes leave the world unchanged.
       , action "[Actor]: Wait a moment"
           [ Match "practice.world.World.at.Actor!Place" ]
           []
       ]
   }
 
--- Greeting between co-located characters (once each direction).
+-- Greeting, taking offense at a snub, and the warmth-gated gift of a drink.
 greetP :: Practice
 greetP = practice
   { practiceId = "greet"
@@ -57,8 +60,33 @@ greetP = practice
           [ Match "practice.world.world.at.Actor!Place"
           , Match "practice.world.world.at.Other!Place"
           , Neq "Actor" "Other"
-          , Not "practice.greet.World.greeted.Actor.Other" ]
-          [ Insert "practice.greet.World.greeted.Actor.Other" ]
+          , Not "practice.greet.World.greeted.Actor.Other"
+          , Not "Actor.mood!annoyed.toward!Other" ]     -- won't greet someone you're cross with
+          [ Insert "practice.greet.World.greeted.Actor.Other"
+          , adjustScore "Actor" "Other" warmth 10 "greeting"
+          , setMood "Actor" pleased "Other" "greeting" ]
+
+      , action "[Actor]: Take offense at [Other] ignoring your greeting"
+          [ Match "practice.greet.World.greeted.Actor.Other"
+          , Not "practice.greet.World.greeted.Other.Actor"
+          , Not "practice.greet.World.grievance.Actor.Other" ]
+          [ Insert "practice.greet.World.grievance.Actor.Other"
+          , setMood "Actor" annoyed "Other" "ignoredMyGreeting"
+          , adjustScore "Actor" "Other" warmth (-15) "snubbedMe" ]
+
+      , action "[Actor]: Buy [Other] a drink"
+          ( [ Match "practice.world.world.at.Actor!Place"
+            , Match "practice.world.world.at.Other!Place"
+            , Neq "Actor" "Other"
+            , Not "practice.greet.World.grievance.Actor.Other"
+            , Not "Actor.mood!annoyed.toward!Other"
+            , Not "practice.greet.World.bought.Actor.Other" ]
+            ++ scoreAtLeast "Actor" "Other" warmth buyThreshold )
+          [ Insert "practice.greet.World.bought.Actor.Other"
+          , adjustScore "Other" "Actor" warmth 15 "boughtMeADrink"
+          , adjustScore "Actor" "Other" warmth 5 "feelingGenerous"
+          , setMood "Actor" pleased "Other" "generosity"
+          , setMood "Other" pleased "Actor" "aFreeDrink" ]
       ]
   }
 
@@ -68,11 +96,11 @@ patronP = practice
   { practiceId = "patron"
   , practiceName = "[Patron] is a patron"
   , roles = ["Patron"]
-  , initOutcomes = [ Insert "practice.patron.Patron.drinks!0" ]  -- init-on-spawn
+  , initOutcomes = [ Insert "practice.patron.Patron.drinks!0" ]
   }
 
--- Tending bar: order a beverage, have it fulfilled, drink it (getting tipsy
--- after two alcoholic drinks), and — when the bar is busy — ring the bell.
+-- Tending bar: order, fulfill (which warms the customer to the bartender),
+-- drink (getting tipsy), and the busy-bar bell.
 tendBarP :: Practice
 tendBarP = practice
   { practiceId = "tendBar"
@@ -94,16 +122,15 @@ tendBarP = practice
           , Match "practice.tendBar.Place.Bartender.customer.Customer!order!Beverage"
           , Match "practice.world.world.at.Bartender!Place" ]
           [ Delete "practice.tendBar.Place.Bartender.customer.Customer!order"
-          , Insert "practice.tendBar.Place.Bartender.customer.Customer!beverage!Beverage" ]
-        -- Drinking records the drink: Call into a function that (for alcoholic
-        -- drinks) increments the patron's counter and checks the tipsy threshold.
+          , Insert "practice.tendBar.Place.Bartender.customer.Customer!beverage!Beverage"
+          , adjustScore "Customer" "Bartender" warmth 8 "servedMeWell"
+          , setMood "Customer" pleased "Bartender" "gotMyDrink" ]
       , action "[Actor]: Drink the [Beverage]"
           [ Match "practice.tendBar.Place.Bartender.customer.Actor!beverage!Beverage"
           , Match "practiceData.tendBar.beverageType.Beverage!Kind"
           , Match "practice.patron.Actor.drinks!N" ]
           [ Delete "practice.tendBar.Place.Bartender.customer.Actor!beverage"
           , Call "recordDrink" ["Actor", "Kind", "N"] ]
-        -- Available only when the bar is busy: two or more customers present.
       , action "[Actor]: Ring the bell — busy bar!"
           [ Eq "Actor" "Bartender"
           , Subquery { subSet = "Crowd", subFind = ["C"]
@@ -114,10 +141,7 @@ tendBarP = practice
           [ Insert "practice.tendBar.Place.Bartender.rang" ]
       ]
   , functions =
-      [ -- Increment the patron's counter for an alcoholic drink, then check
-        -- whether they have crossed the tipsy threshold. Non-alcoholic drinks
-        -- fall through to the no-op case.
-        Function "recordDrink" ["P", "Kind", "N"]
+      [ Function "recordDrink" ["P", "Kind", "N"]
           [ FnCase [ Eq "Kind" "alcoholic", Calc "M" Add "N" "1" ]
                    [ Insert "practice.patron.P.drinks!M"
                    , Call "checkTipsy" ["P", "M"] ]
@@ -133,46 +157,48 @@ tendBarP = practice
 you :: Character
 you = character playerName   -- the player chooses; no wants drive them
 
--- The bartender dislikes leaving any order outstanding (negative utility) and
--- likes staying at the bar, so she tends it rather than wandering off.
+-- The bartender: tends the bar, greets patrons, and takes offense if snubbed.
 ada :: Character
 ada = (character "ada")
   { charWants =
       [ Want [ Match "practice.tendBar.Place.ada.customer.Customer!order" ] (-5)
       , Want [ Match "practice.world.world.at.ada!bar" ] 1
+      , Want [ Match "practice.greet.world.greeted.ada.Other" ] 2     -- likes greeting people
+      , Want [ Match "practice.greet.world.grievance.ada.Other" ] 2   -- takes justified offense
       ] }
 
--- A patron who wants a beer in hand, and likes the bar.
+-- A patron who wants a beer, greets people, and — once warm toward the
+-- bartender — likes to stand her a drink in return.
 bex :: Character
 bex = (character "bex")
   { charWants =
       [ Want [ Match "practice.tendBar.Place.ada.customer.bex!order!beer" ] 4
       , Want [ Match "practice.tendBar.Place.ada.customer.bex!beverage!beer" ] 9
       , Want [ Match "practice.world.world.at.bex!bar" ] 1
+      , Want [ Match "practice.greet.world.greeted.bex.Other" ] 2
+      , Want [ Match "practice.greet.world.grievance.bex.Other" ] 2
+      , Want [ Match "practice.greet.world.bought.bex.Friend" ] 6     -- stands a warm friend a drink
       ] }
 
 -- Initial world ----------------------------------------------------------------
 
--- | The fully initialized bar: practices defined, instances spawned, cast placed.
+-- | The fully initialized bar: practices (incl. the core-model library) defined,
+-- instances spawned, cast placed.
 barWorld :: PraxState
 barWorld =
   foldl' (flip performOutcome) withPractices setup
   where
     withPractices =
-      (definePractices [worldP, greetP, patronP, tendBarP] emptyState)
+      (definePractices [coreLib, worldP, greetP, patronP, tendBarP] emptyState)
         { characters = [you, ada, bex] }
     setup =
-      [ -- two connected rooms
-        Insert "practice.world.world.connected.entrance.bar"
+      [ Insert "practice.world.world.connected.entrance.bar"
       , Insert "practice.world.world.connected.bar.entrance"
-        -- everyone starts at the entrance except the bartender
       , Insert "practice.world.world.at.you!entrance"
       , Insert "practice.world.world.at.bex!entrance"
       , Insert "practice.world.world.at.ada!bar"
-        -- the two patrons (spawns their drink counters via init)
       , Insert "practice.patron.you"
       , Insert "practice.patron.bex"
-        -- activate greeting and the bar
       , Insert "practice.greet.world"
       , Insert "practice.tendBar.bar.ada"
       ]
