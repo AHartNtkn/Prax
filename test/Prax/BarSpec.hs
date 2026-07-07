@@ -77,4 +77,41 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       -- …but once annoyed at ada, bex withholds the gesture.
       let sulky = performOutcome (setMood "bex" annoyed "ada" "wasRude") warm
       assertBool "annoyed bex will not buy" (not (bexCanBuy sulky))
+
+  , testCase "greeting spawns a response reaction the greeted party can take" $ do
+      -- you go to the bar and greet ada; that spawns a respondGreet reaction.
+      afterGreet <- runSteps barWorld [ ("you", "Go to bar"), ("you", "Greet ada") ]
+      assertBool "reaction spawned"
+        ("practice.respondGreet.you.ada" `elem` dbToSentences (db afterGreet))
+      assertBool "ada can greet back (a response that only exists now)"
+        (any ("Greet you back" `isInfixOf`) (map gaLabel (possibleActions afterGreet "ada")))
+      -- ada greets back: mutual warmth, and the reaction is consumed.
+      afterBack <- runSteps afterGreet [ ("ada", "Greet you back") ]
+      let fs = dbToSentences (db afterBack)
+      assertBool "ada greeted you back" ("practice.greet.world.greeted.ada.you" `elem` fs)
+      assertBool "reaction consumed" ("practice.respondGreet.you.ada" `notElem` fs)
+
+  , testCase "being served spawns a tip obligation; tipping respects the norm" $ do
+      served <- runSteps barWorld
+        [ ("bex", "Go to bar"), ("bex", "Order beer"), ("ada", "Fulfill bex") ]
+      assertBool "settle-up obligation spawned"
+        ("practice.settleUp.bex.ada" `elem` dbToSentences (db served))
+      tipped <- runSteps served [ ("bex", "Tip ada") ]
+      let fs = dbToSentences (db tipped)
+      assertBool "bex tipped ada" ("bex.tipped.ada" `elem` fs)
+      assertBool "no violation" ("violated.bex.stiffedTheBartender" `notElem` fs)
+      assertBool "obligation cleared" ("practice.settleUp.bex.ada" `notElem` fs)
+
+  , testCase "leaving the tab is a violation that draws the bartender's disapproval" $ do
+      served <- runSteps barWorld
+        [ ("bex", "Go to bar"), ("bex", "Order beer"), ("ada", "Fulfill bex") ]
+      stiffed <- runSteps served [ ("bex", "Leave ada") ]
+      let fs = dbToSentences (db stiffed)
+      assertBool "violation marked" ("violated.bex.stiffedTheBartender" `elem` fs)
+      assertBool "disapproval reaction spawned for ada"
+        ("practice.disapproval.bex.ada" `elem` fs)
+      -- ada disapproves: her warmth toward bex drops.
+      judged <- runSteps stiffed [ ("ada", "Disapprove of bex") ]
+      assertBool "ada cooled toward bex"
+        ("ada.relationship.bex.warmth.score.-20" `elem` dbToSentences (db judged))
   ]

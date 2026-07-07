@@ -77,7 +77,8 @@ disapprovalP = practice
   , actions =
       [ action "[Actor]: Disapprove of [Offender]"
           [ Eq "Actor" "Onlooker" ]
-          [ setMood "Onlooker" annoyed "Offender" "brokeANorm"
+          [ Insert "Onlooker.disapprovedOf.Offender"
+          , setMood "Onlooker" annoyed "Offender" "brokeANorm"
           , adjustScore "Onlooker" "Offender" warmth (-20) "brokeANorm"
           , endReaction "disapproval" ["Offender", "Onlooker"] ]
       , action "[Actor]: Let [Offender]'s lapse slide"
