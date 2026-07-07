@@ -9,6 +9,7 @@ import           Prax.Db (dbToSentences)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, performOutcome)
 import           Prax.Core (adjustScore, setMood, warmth, annoyed)
+import           Prax.Beliefs (believe)
 import           Prax.Worlds.Bar (barWorld)
 
 -- Perform the first action whose label contains `needle` for `actor`.
@@ -114,4 +115,39 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       judged <- runSteps stiffed [ ("ada", "Disapprove of bex") ]
       assertBool "ada cooled toward bex"
         ("ada.relationship.bex.warmth.score.-20" `elem` dbToSentences (db judged))
+
+  , testCase "a believed grudge suppresses friendliness (a false belief drives behaviour)" $ do
+      let atBar = performOutcome (Insert "practice.world.world.at.bex!bar") barWorld
+          warm  = performOutcome (adjustScore "bex" "ada" warmth 20 "fond") atBar
+          canBuy s   = any ("Buy ada a drink" `isInfixOf`) (map gaLabel (possibleActions s "bex"))
+          canGreet s = any ("Greet ada"       `isInfixOf`) (map gaLabel (possibleActions s "bex"))
+      assertBool "warm bex would buy ada a drink" (canBuy warm)
+      assertBool "warm bex would greet ada"       (canGreet warm)
+      -- bex comes to believe ada resents them (even though she's actually warm).
+      let wary = performOutcome (believe "bex" "resentedBy.ada" "yes") warm
+      assertBool "the belief blocks the gift"  (not (canBuy wary))
+      assertBool "the belief blocks greeting"  (not (canGreet wary))
+
+  , testCase "a grudge lets you plant a (possibly-false) rumour" $ do
+      let s0 = foldl (flip performOutcome) barWorld
+                 [ Insert "practice.world.world.at.ada!entrance"  -- ada steps out
+                 , Insert "practice.world.world.at.you!bar"
+                 , Insert "practice.world.world.at.bex!bar"
+                 , setMood "you" annoyed "ada" "wasRude" ]        -- you're cross with ada
+      assertBool "the rumour is available behind ada's back"
+        (any ("Warn bex that ada resents" `isInfixOf`) (map gaLabel (possibleActions s0 "you")))
+      s1 <- runSteps s0 [ ("you", "Warn bex that ada resents") ]
+      assertBool "bex now believes ada resents them"
+        ("bex.believes.resentedBy.ada.yes" `elem` dbToSentences (db s1))
+
+  , testCase "evidence of warmth dispels a false belief" $ do
+      let s0 = foldl (flip performOutcome) barWorld
+                 [ Insert "practice.world.world.at.bex!bar"
+                 , believe "bex" "resentedBy.ada" "yes"
+                 , Insert "practice.greet.world.greeted.ada.bex" ]  -- ada actually greeted bex
+      assertBool "bex can reconsider"
+        (any ("Realize ada doesn't resent you" `isInfixOf`) (map gaLabel (possibleActions s0 "bex")))
+      s1 <- runSteps s0 [ ("bex", "Realize ada doesn't resent you") ]
+      assertBool "the false belief is dropped"
+        (not (any ("bex.believes.resentedBy.ada" `isInfixOf`) (dbToSentences (db s1))))
   ]

@@ -24,6 +24,7 @@ import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome)
 import           Prax.Core
 import           Prax.Reactions
+import           Prax.Beliefs
 
 -- | The character the human player controls.
 playerName :: String
@@ -66,6 +67,7 @@ greetP = practice
           , Neq "Actor" "Other"
           , Not "practice.greet.World.greeted.Actor.Other"
           , Not "Actor.mood!annoyed.toward!Other"
+          , Not (beliefSentence "Actor" "resentedBy.Other" "yes")  -- wary of those you think dislike you
             -- if they've greeted you and you owe a response, use that, not a new greeting
           , Not (reactionPath "respondGreet" ["Other", "Actor"]) ]
           [ Insert "practice.greet.World.greeted.Actor.Other"
@@ -73,12 +75,30 @@ greetP = practice
           , setMood "Actor" pleased "Other" "greeting"
           , spawnReaction "respondGreet" ["Actor", "Other"] ]
 
+      , action "[Actor]: Warn [Hearer] that [Subject] resents them"
+          [ Match "practice.world.world.at.Actor!Place"
+          , Match "practice.world.world.at.Hearer!Place"
+          , Neq "Actor" "Hearer"
+          , Match "Actor.mood!annoyed.toward!Subject"     -- you must actually be cross with Subject
+          , Neq "Actor" "Subject"
+          , Neq "Hearer" "Subject"
+          , Not "practice.world.world.at.Subject!Place"    -- behind Subject's back
+          , Not (beliefSentence "Hearer" "resentedBy.Subject" "yes") ]
+          [ believe "Hearer" "resentedBy.Subject" "yes" ]  -- a possibly-false rumour
+
+      , action "[Actor]: Realize [Subject] doesn't resent you after all"
+          [ Match (beliefSentence "Actor" "resentedBy.Subject" "yes")
+          , Match "practice.greet.world.greeted.Subject.Actor" ]  -- they greeted you: evidence
+          [ forget "Actor" "resentedBy.Subject"
+          , setMood "Actor" pleased "Subject" "reassured" ]
+
       , action "[Actor]: Buy [Other] a drink"
           ( [ Match "practice.world.world.at.Actor!Place"
             , Match "practice.world.world.at.Other!Place"
             , Neq "Actor" "Other"
             , Not "practice.greet.World.grievance.Actor.Other"
             , Not "Actor.mood!annoyed.toward!Other"
+            , Not (beliefSentence "Actor" "resentedBy.Other" "yes")
             , Not "practice.greet.World.bought.Actor.Other" ]
             ++ scoreAtLeast "Actor" "Other" warmth buyThreshold )
           [ Insert "practice.greet.World.bought.Actor.Other"
@@ -100,7 +120,8 @@ respondGreetP = practice
   , actions =
       [ action "[Actor]: Greet [Greeter] back"
           [ Eq "Actor" "Greeted"
-          , Not "Greeted.mood!annoyed.toward!Greeter" ]
+          , Not "Greeted.mood!annoyed.toward!Greeter"
+          , Not (beliefSentence "Greeted" "resentedBy.Greeter" "yes") ]
           [ Insert "practice.greet.world.greeted.Greeted.Greeter"
           , adjustScore "Greeted" "Greeter" warmth 10 "greetedBack"
           , setMood "Greeted" pleased "Greeter" "greetedBack"
