@@ -3,6 +3,7 @@
 Every capability we intend `prax` to support, derived from the Versu paper and Praxish. Status:
 - **v1** — in the first milestone (faithful engine core).
 - **v2** — the core-model round (emotions & relationships), built as `Prax.Core`.
+- **v3** — reactions-as-practices & a first norm, built as `Prax.Reactions`.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
   logic paper) or an unsettled design question.
@@ -32,8 +33,8 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 12 | Practice `data`, `init`-on-spawn, `functions`/`cases` | v1 | Praxish | |
 | 13 | Concurrent practices; options = union of affordances | v1 | P§V | falls out of the loop |
 | 14 | Constitutive affordances (only available in-practice) | v1 | P§VIII | |
-| 15 | Norms: violation-marking postconditions + norm desires | planned | P§VIII-D | |
-| 16 | Reactions as auto-spawned practices | planned | P§X | every action spawns a reacting practice |
+| 15 | Norms: violation-marking postconditions + norm desires | v3 | P§VIII-D | `Prax.Reactions` `markViolation`/`violationOf`; strong-negative want ⇒ planner avoids |
+| 16 | Reactions as practices (spawned by an action's outcomes) | v3 | P§X | `Prax.Reactions` `spawnReaction`/`endReaction`; `disapprovalP`; response chains |
 | 17 | Conditional effects / domain axioms in the action language | planned | P§VIII | partly via `call`/`functions` today |
 
 ## Agents & action selection

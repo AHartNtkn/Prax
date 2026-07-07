@@ -29,9 +29,13 @@ utility. See the design writeups:
   remembered prior) and relationships (numeric, asymmetric role evaluations). Wired into the bar
   so interaction changes feelings and feelings change behaviour (a warmth-gated "buy a drink"
   affordance; a snub breeds an `annoyed` mood that withholds it).
+- `Prax.Reactions` (v3) — reactions-as-practices and norms: an action spawns a reaction practice
+  offering responses (greet back / rebuff / take offense), and a norm violation (stiffing the
+  bartender) spawns disapproval. NPCs avoid violations because the planner scores the
+  violation→disapproval future poorly.
 
-See `docs/LEDGER.md` for what's next (public bonds in play, reactions-as-practices, beliefs, a
-story manager, character arcs, a text authoring language, …).
+See `docs/LEDGER.md` for what's next (public bonds in play, richer norms, a generic event bus,
+beliefs, a story manager, character arcs, a text authoring language, …).
 
 ## Build, test, play
 

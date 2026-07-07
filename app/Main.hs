@@ -95,7 +95,8 @@ prompt = do
 renderScene :: PraxState -> String
 renderScene st =
   unlines (map ("  - " ++)
-            (locations ++ orders ++ held ++ tipsy ++ bell ++ moods ++ feelings))
+            (locations ++ orders ++ held ++ tipsy ++ bell
+              ++ pending ++ trouble ++ moods ++ feelings))
   where
     rows sentence = unify sentence (db st) Map.empty
     val k b = valToString <$> Map.lookup k (b :: Bindings)
@@ -122,6 +123,25 @@ renderScene st =
     bell =
       [ "the bar is busy — " ++ b' ++ " rang the bell"
       | b <- rows "practice.tendBar.Pl.Bartender.rang", Just b' <- [val "Bartender" b] ]
+
+    -- pending reactions / obligations
+    pending =
+      [ gd ++ " hasn't returned " ++ gr ++ "'s greeting"
+      | b <- rows "practice.respondGreet.Gr.Gd"
+      , Just gr <- [val "Gr" b], Just gd <- [val "Gd" b] ]
+      ++
+      [ p ++ " owes " ++ bt ++ " a tip"
+      | b <- rows "practice.settleUp.P.B"
+      , Just p <- [val "P" b], Just bt <- [val "B" b] ]
+
+    -- norm violations and disapproval
+    trouble =
+      [ w ++ " broke a norm (" ++ n ++ ")"
+      | b <- rows "violated.W.N", Just w <- [val "W" b], Just n <- [val "N" b] ]
+      ++
+      [ ol ++ " disapproves of " ++ off
+      | b <- rows "practice.disapproval.Off.Ol"
+      , Just off <- [val "Off" b], Just ol <- [val "Ol" b] ]
 
     moods =
       [ who ++ " feels " ++ feeling ++ " toward " ++ target

@@ -167,8 +167,37 @@ changes what they do. Watch the scene's new lines (`… feels … toward …`, `
   and both NPCs cold toward a player who never reciprocates.
   → features: asymmetric role evaluation (§X). code: `Prax.Core`.
 
-*(Left to try later, per `docs/LEDGER.md`: public "bonds" via `setBond`, and the automated way
-Versu populates all this — reactions-as-practices — plus beliefs and conversation.)*
+*(Left to try later, per `docs/LEDGER.md`: public "bonds" via `setBond`, plus beliefs and
+conversation.)*
+
+### 8. Reactions & norms (v3)
+
+Actions now provoke *responses*, and the bar has a social rule with teeth. Watch the scene's
+`… hasn't returned …'s greeting`, `… owes … a tip`, and `… broke a norm …` lines.
+
+- **A greeting is a two-part exchange.** When someone greets you, the scene notes you *"hasn't
+  returned"* their greeting, and your menu gains responses that didn't exist a moment ago:
+  **`Greet … back`** (mutual warmth) or **`Rebuff …`** (both cool). Greeting *back* is the reaction
+  consuming itself — not a fresh greeting.
+  → features: a reaction spawned by an action; a response that consumes it. code: `Prax.Reactions`
+  `spawnReaction`/`endReaction`; `respondGreetP` in `Prax.Worlds.Bar`.
+
+- **Ignore a greeting and it comes back on you.** If you *don't* respond, the greeter can — on
+  their turn — **take offense that you ignored them**, leaving a grievance and cooling toward you.
+  (In the NPC replay, ada does exactly this to the always-silent player.)
+
+- **A norm with consequences.** Order a drink and get served: the scene shows you now *owe ada a
+  tip*. Choose **`Tip ada`** (she warms to you) or **`Leave ada's tab unpaid`**. Stiff her and the
+  scene marks *"you broke a norm (stiffedTheBartender)"*; on her next turn ada **disapproves**, and
+  her warmth toward you drops sharply.
+  → features: `markViolation`; a violation spawning the ready-made `disapproval` reaction;
+  core-model consequences. code: `Prax.Reactions` + `settleUpP`.
+
+- **NPCs respect norms on their own.** bex is given a strong aversion to stiffing plus a small
+  liking for tipping, so when served it **tips** rather than walking out — the planner sees that the
+  violation→disapproval future scores far worse. That's the paper's "strong desire to respect
+  norms" falling out of ordinary utility evaluation, no special rule engine.
+  → features: norm avoidance via `Prax.Planner` lookahead + a large negative `Want`.
 
 ---
 
@@ -199,12 +228,16 @@ Everything implemented in v1, where it lives, and how the demo shows it:
 | Emotions (mood, target/cause, prior) | `Prax.Core` `setMood` | "feels annoyed toward you" after a snub |
 | Relationship evaluation (numeric, asymmetric) | `Prax.Core` `adjustScore` | "warmth toward …" climbing/cooling |
 | Relationship-gated affordance | `Prax.Core` `scoreAtLeast` | "Buy … a drink" appearing once warm |
+| Reactions (spawned practices + response chains) | `Prax.Reactions` | greet → "Greet back"/"Rebuff"; take-offense |
+| Norms (violation-marking + disapproval) | `Prax.Reactions` | stiff the tab → "broke a norm" → ada disapproves |
+| Norm avoidance in the planner | `Prax.Planner` + a `Want` | NPCs tip rather than stiff |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
 same behaviours are asserted in the test suite (`cabal test`): see `Prax.QuerySpec`,
-`Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.BarSpec`
-(drunkenness + bell + the warmth/mood gates), and `Prax.LoopSpec` (a deterministic 12-turn replay
-of the emergent greet → serve → take-offense → buy-a-drink arc).
+`Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.ReactionsSpec`
+(reactions, norms, norm-avoidance), `Prax.BarSpec` (drunkenness + bell + warmth/mood gates +
+greeting chain + tipping), and `Prax.LoopSpec` (a deterministic 15-turn replay of the emergent
+greet → serve → greet-back → take-offense → buy-a-drink → tip arc).
 
 ---
 
@@ -221,8 +254,8 @@ of the emergent greet → serve → take-offense → buy-a-drink arc).
 
 ## What is *not* yet modeled
 
-The bar exercises the whole engine including the v2 core model (emotions & relationships), but the
+The bar exercises the whole engine including the v2 core model and v3 reactions & norms, but the
 engine is still deliberately smaller than Versu. Not yet built (see `docs/LEDGER.md`): public
-"bonds" in play, beliefs, reactions as auto-spawned practices (the automated way the core model
-gets populated), a story-manager practice, character arcs, the full first-order query grammar
-(`∀`/`∃`/`∨`/`→`), and a text authoring language. Those are the next milestones.
+"bonds" in play, richer norms & eviction, a generic "react to any action" event bus, beliefs, a
+story-manager practice, character arcs, the full first-order query grammar (`∀`/`∃`/`∨`/`→`), and a
+text authoring language. Those are the next milestones.
