@@ -26,6 +26,7 @@ library
                       Prax.Types
                       Prax.Engine
                       Prax.Planner
+                      Prax.Core
                       Prax.Loop
                       Prax.Worlds.Bar
 
@@ -55,3 +56,4 @@ test-suite prax-test
                       Prax.PlannerSpec
                       Prax.LoopSpec
                       Prax.BarSpec
+                      Prax.CoreSpec
