@@ -25,6 +25,7 @@ library
                       Prax.Query
                       Prax.Types
                       Prax.Engine
+                      Prax.Planner
 
 test-suite prax-test
     import:           warnings
@@ -40,3 +41,4 @@ test-suite prax-test
     other-modules:    Prax.DbSpec
                       Prax.QuerySpec
                       Prax.EngineSpec
+                      Prax.PlannerSpec
