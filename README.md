@@ -14,19 +14,33 @@ utility. See the design writeups:
 
 ## Status
 
-v1 (faithful engine core) in progress. Done so far:
+**v1 (faithful engine core) complete.** The engine runs a playable bar storyworld end-to-end.
 
-- `Prax.Db` — the exclusion-logic trie: `insert` (with the **corrected `!` semantics**, fixing
-  a data-loss bug in Praxish's `db.js`), `retract`, `unify`, `ground`.
+- `Prax.Db` — exclusion-logic trie: `insert` (with the **corrected `!` semantics**, fixing a
+  data-loss bug in Praxish's `db.js`), `retract`, `unify`, `ground`.
+- `Prax.Query` — typed condition language (match, negation, eq/neq, numeric compares, calc,
+  count, subqueries).
+- `Prax.Types` / `Prax.Engine` — practices/actions/outcomes as an eDSL; action discovery,
+  execution, practice spawning + `init`, and guarded function calls.
+- `Prax.Planner` — utility-based reactive selection: per-character wants, apply-and-evaluate,
+  discounted lookahead.
+- `Prax.Loop` / `Prax.Worlds.Bar` / CLI — round-robin turns and a menu-driven bar demo.
 
-## Build & test
+See `docs/LEDGER.md` for what's next (the Versu core model: emotions, relationships, beliefs,
+reactions, story manager, a text authoring language, …).
+
+## Build, test, play
 
 Requires GHC 9.x + Cabal.
 
 ```sh
-cabal build       # compile the library
+cabal build       # compile everything
 cabal test        # run the test suite (tasty)
+cabal run prax    # play the bar demo — you are 'you'; pick actions from the menu
 ```
+
+In the demo, NPCs act autonomously: order a drink at the bar and the bartender (ada) will
+serve you, while the patron (bex) pursues a beer of their own.
 
 ## References
 

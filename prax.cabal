@@ -26,6 +26,17 @@ library
                       Prax.Types
                       Prax.Engine
                       Prax.Planner
+                      Prax.Loop
+                      Prax.Worlds.Bar
+
+executable prax
+    import:           warnings
+    hs-source-dirs:   app
+    main-is:          Main.hs
+    default-language: Haskell2010
+    build-depends:    base
+                    , containers
+                    , prax
 
 test-suite prax-test
     import:           warnings
@@ -42,3 +53,4 @@ test-suite prax-test
                       Prax.QuerySpec
                       Prax.EngineSpec
                       Prax.PlannerSpec
+                      Prax.LoopSpec

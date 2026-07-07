@@ -16,7 +16,7 @@ module Prax.Engine
   , groundOutcome
   ) where
 
-import           Data.List (foldl', intercalate)
+import           Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db
