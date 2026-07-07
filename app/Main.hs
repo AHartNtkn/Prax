@@ -43,7 +43,7 @@ playerTurn st actor = do
   putStrLn ""
   putStrLn "-------------------- scene --------------------"
   putStr (renderScene st)
-  let acts = possibleActions st (charName actor)
+  let acts = playerActions st actor
   putStrLn ("Your move (" ++ charName actor ++ "):")
   mapM_ (\(i, a) -> putStrLn ("  " ++ show i ++ ") " ++ gaLabel a))
         (zip [1 :: Int ..] acts)
@@ -61,6 +61,18 @@ playerTurn st actor = do
       | otherwise -> do
           putStrLn "No such option."
           playerTurn st actor
+
+-- The player already has `m` to pass, so pure no-op actions (empty outcomes,
+-- e.g. the world's "Wait a moment") are noise in the menu. They remain
+-- available to NPCs, who need a "do nothing" affordance to avoid being forced
+-- to act. Hide them from the player only.
+playerActions :: PraxState -> Character -> [GroundedAction]
+playerActions st actor = filter (not . isNoOp) (possibleActions st (charName actor))
+  where
+    isNoOp ga = case Map.lookup (gaPracticeId ga) (practiceDefs st) of
+      Just def | (a : _) <- filter ((== gaActionId ga) . actionName) (actions def)
+                 -> null (actionOutcomes a)
+      _          -> False
 
 data Choice = Quit | Wait | Pick Int
 

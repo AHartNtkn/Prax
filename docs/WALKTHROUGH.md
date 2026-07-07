@@ -15,6 +15,10 @@ or `m` to wait (let others act), or `q` to quit.
 
 > Menu **numbers shift** as options appear and disappear, so this guide names actions rather
 > than numbering them. Pick the option whose text matches.
+>
+> Note: `m` (pass your turn) and the in-world "Wait a moment" action do the same nothing, so the
+> player menu hides "Wait a moment" — use `m`. NPCs still have it (they need a "do nothing"
+> option so an idle agent isn't forced to wander).
 
 ---
 
@@ -30,7 +34,8 @@ or `m` to wait (let others act), or `q` to quit.
   So bex will walk in, order a beer, and settle once served.
 
 **Practices** (the reusable social situations):
-- `world` — locations and movement (`Go to`, plus a universal `Wait a moment`).
+- `world` — locations and movement (`Go to`, plus a universal `Wait a moment` no-op used by
+  idle NPCs; hidden from your menu since `m` already passes your turn).
 - `greet` — greeting a co-located character (once each direction).
 - `patron` — marks someone a patron; seeds their drink counter when created.
 - `tendBar` — order → fulfill → drink, getting tipsy, plus a "busy bar" bell.
