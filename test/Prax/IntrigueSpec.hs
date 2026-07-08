@@ -68,7 +68,7 @@ tests = testGroup "Prax.Worlds.Intrigue (a dramatic slice)"
       -- reach an ending, then Cassia (who wanted Artus dead) has nothing left to do
       st <- act afterConfide "marcus" "warn artus"
       assertBool "no poisoning remains available"
-        (not (any ("poison" `isInfixOf`) (map gaLabel (possibleActions st "cassia"))))
+        (not (any (("poison" `isInfixOf`) . gaLabel) (possibleActions st "cassia")))
 
   , testCase "the inspector explains why an action is (un)available" $ do
       -- before Marcus knows the plot, warning is blocked by the belief precondition

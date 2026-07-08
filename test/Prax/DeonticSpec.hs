@@ -145,7 +145,7 @@ tests = testGroup "Prax.Deontic"
         -- having helped alice, bob's duty is foreclosed — still owed, but unmeetable
         let st' = maybe st (performAction st) chosen
         assertBool "helping bob is now foreclosed"
-          (not (any ("help bob" `isInfixOf`) (map gaLabel (possibleActions st' "gil"))))
+          (not (any (("help bob" `isInfixOf`) . gaLabel) (possibleActions st' "gil")))
         assertBool "bob duty still owed but unfulfilled"
           (sat st' [isObliged "gil" "helped.bob"]
             && not (sat st' (fulfilled "gil" "helped.bob")))

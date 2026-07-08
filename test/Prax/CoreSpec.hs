@@ -46,7 +46,7 @@ tests = testGroup "Prax.Core"
         let st1 = performOutcome (adjustScore "ada" "bex" warmth 5 "served") st0
             fs  = facts st1
         assertBool "accumulated to 15" ("ada.relationship.bex.warmth.score.15" `elem` fs)
-        assertBool "single score value" (not ("ada.relationship.bex.warmth.score.10" `elem` fs))
+        assertBool "single score value" ("ada.relationship.bex.warmth.score.10" `notElem` fs)
         assertBool "reason updated" ("ada.relationship.bex.warmth.reason.served" `elem` fs)
 
     , testCase "a negative delta cools the relationship" $ do

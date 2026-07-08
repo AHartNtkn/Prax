@@ -38,7 +38,7 @@ talkingWith x y = Match (talkPath x y)
 -- marks the pair as having chatted (so a world can prevent re-opening).
 beginConversation :: String -> String -> String -> [Outcome]
 beginConversation opener other topic =
-  [ Insert (base)
+  [ Insert base
   , Insert (base ++ ".speaker!" ++ opener)
   , Insert (base ++ ".listener!" ++ other)
   , Insert (base ++ ".topic!" ++ topic)

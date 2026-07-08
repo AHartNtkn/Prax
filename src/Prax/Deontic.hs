@@ -155,7 +155,7 @@ obligationsOf who d =
 -- | A want to /fulfil/ an obligation: utility @k@ per met duty. Feeds the
 -- unchanged planner ("Prax.Planner"), which then pursues the duty.
 wantFulfilled :: String -> String -> Int -> Want
-wantFulfilled who content k = Want (fulfilled who content) k
+wantFulfilled who content = Want (fulfilled who content)
 
 -- | A want to /avoid breaching/ a duty: applied as strong-negative @-|k|@ so the
 -- planner steers away from the breach (the mechanism by which norms already shape

@@ -1,7 +1,7 @@
 module Prax.ScriptSpec (tests) where
 
 import           Data.List (isInfixOf)
-import           Data.Maybe (listToMaybe)
+import           Data.Maybe (isJust, listToMaybe)
 import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
@@ -37,7 +37,7 @@ driveIdle target idle = go
   where
     go 0 st = st
     go k st
-      | endingOf st /= Nothing            = st
+      | isJust (endingOf st)              = st
       | currentSceneOf st == target       = st
       | otherwise =
           let (actor, st1) = advance st
@@ -71,7 +71,7 @@ tests = testGroup "Prax.Script"
       case [ c | c <- characters st1, charName c == narratorName ] of
         (narr : _) -> do
           let (mv, st2) = npcAct 2 narr st1
-          assertBool "narrator acted" (mv /= Nothing)
+          assertBool "narrator acted" (isJust mv)
           currentSceneOf st2 @?= Just "banquet"         -- scene advanced
         [] -> assertBool "narrator should be in the cast" False
 

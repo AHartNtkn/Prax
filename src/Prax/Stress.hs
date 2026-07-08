@@ -17,7 +17,7 @@ module Prax.Stress
 
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import           Data.Maybe (listToMaybe)
+import           Data.Maybe (isNothing, listToMaybe)
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Word (Word64)
@@ -112,5 +112,5 @@ stressTest runs cap st0 =
                              (srScenes r) (Set.toList (runScenes res))
         , srDeadEnds = srDeadEnds r + fromEnum (runDeadEnd res)
         , srNoEnding = srNoEnding r
-                         + fromEnum (runEnding res == Nothing && not (runDeadEnd res))
+                         + fromEnum (isNothing (runEnding res) && not (runDeadEnd res))
         }

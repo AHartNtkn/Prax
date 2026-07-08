@@ -19,10 +19,10 @@ module Prax.Planner
   , pickAction
   ) where
 
-import           Data.List (sortBy)
+import           Data.List (sortOn)
 import qualified Data.Map.Strict as Map
 import           Data.Maybe (listToMaybe)
-import           Data.Ord (Down(..), comparing)
+import           Data.Ord (Down(..))
 
 import           Prax.Query (countSatisfying)
 import           Prax.Types
@@ -65,7 +65,7 @@ worldValue depth st actor = base + future
 -- that results, sorted best first (ties broken by label for determinism).
 scoreActions :: Int -> PraxState -> Character -> [(GroundedAction, Double)]
 scoreActions depth st actor =
-  sortBy (comparing (\(ga, s) -> (Down s, gaLabel ga)))
+  sortOn (\(ga, s) -> (Down s, gaLabel ga))
     [ (a, worldValue depth (performAction st a) actor)
     | a <- candidateActions st actor ]
 

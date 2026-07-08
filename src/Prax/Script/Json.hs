@@ -92,11 +92,11 @@ instance FromJSON Condition where
   parseJSON = withObject "Condition" $ \o ->
         (Match  <$> o .: "match")
     <|> (Not    <$> o .: "not")
-    <|> (triadOr2 o "eq"  Eq)
-    <|> (triadOr2 o "neq" Neq)
+    <|> triadOr2 o "eq"  Eq
+    <|> triadOr2 o "neq" Neq
     <|> (do [op, a, b] <- o .: "cmp"; (\op' -> Cmp op' a b) <$> parseCmp op)
     <|> (do [r, op, a, b] <- o .: "calc"; (\op' -> Calc r op' a b) <$> parseCalc op)
-    <|> (triadOr2 o "count" Count)
+    <|> triadOr2 o "count" Count
     <|> (o .: "subquery" >>= withObject "subquery"
            (\s -> Subquery <$> s .: "set" <*> s .: "find" <*> s .: "where"))
     <|> (Or     <$> o .: "or")

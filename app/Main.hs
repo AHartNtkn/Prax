@@ -328,8 +328,9 @@ renderScene st =
     arcs =
       [ who ++ " feels " ++ arcPhrase stage
       | b <- rows "Who.arc!Stage"
-      , Just who <- [val "Who" b], Just stage <- [val "Stage" b]
-      , who `elem` map charName (characters st) ]  -- a real character's arc, not a practice.arc.<who> instance
+      , Just who <- [val "Who" b]
+      , who `elem` map charName (characters st)  -- a real character's arc, not a practice.arc.<who> instance
+      , Just stage <- [val "Stage" b] ]
 
     -- beliefs that diverge from the truth (here: believed grudges)
     beliefs =

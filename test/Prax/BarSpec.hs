@@ -63,7 +63,7 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
   , testCase "the buy-a-drink affordance is gated on relationship warmth" $ do
       -- Co-locate bex with ada at the bar.
       let atBar = performOutcome (Insert "practice.world.world.at.bex!bar") barWorld
-          bexCanBuy s = any ("Buy ada a drink" `isInfixOf`) (map gaLabel (possibleActions s "bex"))
+          bexCanBuy s = any (("Buy ada a drink" `isInfixOf`) . gaLabel) (possibleActions s "bex")
       -- Below the threshold: the gift is not offered.
       let cool = performOutcome (adjustScore "bex" "ada" warmth 10 "acquaintance") atBar
       assertBool "no buy option when only mildly warm" (not (bexCanBuy cool))
@@ -73,7 +73,7 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
 
   , testCase "an annoyed mood withholds the friendly buy action" $ do
       let atBar = performOutcome (Insert "practice.world.world.at.bex!bar") barWorld
-          bexCanBuy s = any ("Buy ada a drink" `isInfixOf`) (map gaLabel (possibleActions s "bex"))
+          bexCanBuy s = any (("Buy ada a drink" `isInfixOf`) . gaLabel) (possibleActions s "bex")
       -- Warm enough to buy…
       let warm = performOutcome (adjustScore "bex" "ada" warmth 20 "fondness") atBar
       assertBool "warm bex can buy" (bexCanBuy warm)
@@ -87,7 +87,7 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       assertBool "reaction spawned"
         ("practice.respondGreet.you.ada" `elem` dbToSentences (db afterGreet))
       assertBool "ada can greet back (a response that only exists now)"
-        (any ("Greet you back" `isInfixOf`) (map gaLabel (possibleActions afterGreet "ada")))
+        (any (("Greet you back" `isInfixOf`) . gaLabel) (possibleActions afterGreet "ada"))
       -- ada greets back: mutual warmth, and the reaction is consumed.
       afterBack <- runSteps afterGreet [ ("ada", "Greet you back") ]
       let fs = dbToSentences (db afterBack)
@@ -127,8 +127,8 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
   , testCase "a believed grudge suppresses friendliness (a false belief drives behaviour)" $ do
       let atBar = performOutcome (Insert "practice.world.world.at.bex!bar") barWorld
           warm  = performOutcome (adjustScore "bex" "ada" warmth 20 "fond") atBar
-          canBuy s   = any ("Buy ada a drink" `isInfixOf`) (map gaLabel (possibleActions s "bex"))
-          canGreet s = any ("Greet ada"       `isInfixOf`) (map gaLabel (possibleActions s "bex"))
+          canBuy s   = any (("Buy ada a drink" `isInfixOf`) . gaLabel) (possibleActions s "bex")
+          canGreet s = any (("Greet ada" `isInfixOf`) . gaLabel) (possibleActions s "bex")
       assertBool "warm bex would buy ada a drink" (canBuy warm)
       assertBool "warm bex would greet ada"       (canGreet warm)
       -- bex comes to believe ada resents them (even though she's actually warm).
@@ -143,7 +143,7 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
                  , Insert "practice.world.world.at.bex!bar"
                  , setMood "you" annoyed "ada" "wasRude" ]        -- you're cross with ada
       assertBool "the rumour is available behind ada's back"
-        (any ("Warn bex that ada resents" `isInfixOf`) (map gaLabel (possibleActions s0 "you")))
+        (any (("Warn bex that ada resents" `isInfixOf`) . gaLabel) (possibleActions s0 "you"))
       s1 <- runSteps s0 [ ("you", "Warn bex that ada resents") ]
       assertBool "bex now believes ada resents them"
         ("bex.believes.resentedBy.ada.yes" `elem` dbToSentences (db s1))
@@ -154,7 +154,7 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
                  , believe "bex" "resentedBy.ada" "yes"
                  , Insert "practice.greet.world.greeted.ada.bex" ]  -- ada actually greeted bex
       assertBool "bex can reconsider"
-        (any ("Realize ada doesn't resent you" `isInfixOf`) (map gaLabel (possibleActions s0 "bex")))
+        (any (("Realize ada doesn't resent you" `isInfixOf`) . gaLabel) (possibleActions s0 "bex"))
       s1 <- runSteps s0 [ ("bex", "Realize ada doesn't resent you") ]
       assertBool "the false belief is dropped"
         (not (any ("bex.believes.resentedBy.ada" `isInfixOf`) (dbToSentences (db s1))))
@@ -165,13 +165,13 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
                    [ Insert "practice.world.world.at.bex!bar"
                    , adjustScore "bex" "ada" warmth 20 "fond" ]
       assertBool "warm bex can strike up a conversation"
-        (any ("Strike up a conversation with ada" `isInfixOf`) (map gaLabel (possibleActions warm "bex")))
+        (any (("Strike up a conversation with ada" `isInfixOf`) . gaLabel) (possibleActions warm "bex"))
       s1 <- runSteps warm [ ("bex", "Strike up a conversation with ada") ]
       -- opens on small talk: the compliment quip (rapport) is off-topic and withheld
       assertBool "small talk is on topic"
-        (any ("Make small talk with ada" `isInfixOf`) (map gaLabel (possibleActions s1 "bex")))
+        (any (("Make small talk with ada" `isInfixOf`) . gaLabel) (possibleActions s1 "bex"))
       assertBool "compliment is off topic (withheld)"
-        (not (any ("Compliment ada" `isInfixOf`) (map gaLabel (possibleActions s1 "bex"))))
+        (not (any (("Compliment ada" `isInfixOf`) . gaLabel) (possibleActions s1 "bex")))
       -- small talk (turn -> ada), ada steers to rapport (turn -> bex), bex compliments ada
       s2 <- runSteps s1
               [ ("bex", "Make small talk with ada")
@@ -183,11 +183,11 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
   , testCase "a gossip quip transmits a (possibly-false) belief in conversation" $ do
       -- bex, cross with you, is chatting with ada on the gossip topic.
       let g0 = foldl (flip performOutcome) barWorld
-                 ([ setMood "bex" annoyed "you" "grudge" ]
-                   ++ beginConversation "bex" "ada" "gossip")
+                 (setMood "bex" annoyed "you" "grudge"
+                   : beginConversation "bex" "ada" "gossip")
       assertBool "the gossip quip is available to the speaker"
-        (any ("Confide to ada that you resents them" `isInfixOf`)
-             (map gaLabel (possibleActions g0 "bex")))
+        (any (("Confide to ada that you resents them" `isInfixOf`) . gaLabel)
+             (possibleActions g0 "bex"))
       g1 <- runSteps g0 [ ("bex", "Confide to ada that you resents them") ]
       assertBool "ada now believes you resent her"
         ("ada.believes.resentedBy.you.yes" `elem` dbToSentences (db g1))
@@ -220,14 +220,14 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       -- bex feels genuinely warm toward ada.
       let warm = performOutcome (adjustScore "bex" "ada" warmth 20 "fond") barWorld
       assertBool "the belonging beat is available"
-        (any ("settle in, feeling you belong" `isInfixOf`) (map gaLabel (possibleActions warm "bex")))
+        (any (("settle in, feeling you belong" `isInfixOf`) . gaLabel) (possibleActions warm "bex"))
       settled <- runSteps warm [ ("bex", "settle in, feeling you belong") ]
       assertBool "bex now belongs" ("bex.arc.belonging" `elem` dbToSentences (db settled))
 
   , testCase "the against-desires transformation is offered but the planner refuses it" $ do
       -- Every hopeful patron *can* resign themselves to loneliness…
       assertBool "the transformation is on the table"
-        (any ("give up on the evening" `isInfixOf`) (map gaLabel (possibleActions barWorld "bex")))
+        (any (("give up on the evening" `isInfixOf`) . gaLabel) (possibleActions barWorld "bex"))
       -- …but an NPC never chooses it (sliding into loneliness only costs utility):
       -- true transformation is, in practice, a player-only act.
       let bexChar = head [ c | c <- characters barWorld, charName c == "bex" ]

@@ -45,7 +45,7 @@ tests = testGroup "Prax.Derive (m(X) closure)"
       let axs  = [ axiom [ Match "at.W.bar" ] [ "in.W.building" ] ]
           base = build ["at.bex.bar"]
       assertBool "closure has it" (has "in.bex.building" (closedFacts axs base))
-      assertBool "base does not"  (not ("in.bex.building" `elem` dbToSentences base))
+      assertBool "base does not"  ("in.bex.building" `notElem` dbToSentences base)
       -- retract the premise, re-close: the conclusion is gone (no manual undo)
       let base' = retract "at.bex.bar" base
       assertBool "conclusion retracts too" (not (has "in.bex.building" (closedFacts axs base')))

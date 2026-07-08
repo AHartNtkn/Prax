@@ -25,6 +25,7 @@ module Prax.TypeCheck
   ) where
 
 import           Data.List (intercalate, nub)
+import           Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences)
@@ -119,7 +120,7 @@ unboundInAxiom ax =
 edgesOf :: String -> [(String, Bool)]
 edgesOf s =
   [ (intercalate "." (take (i + 1) names), op == Just '!')
-  | (i, (_, op)) <- zip [0 :: Int ..] ts, op /= Nothing ]
+  | (i, (_, op)) <- zip [0 :: Int ..] ts, isJust op ]
   where
     ts    = tokens s
     names = map (\(n, _) -> if isVariable n then "_" else n) ts
@@ -162,7 +163,7 @@ assertedSentences st =
          , s <- dataFacts p
                 ++ inserts (initOutcomes p)
                 ++ concatMap (inserts . actionOutcomes) (actions p)
-                ++ concatMap (\f -> concatMap (inserts . caseOutcomes) (fnCases f)) (functions p) ]
+                ++ concatMap (concatMap (inserts . caseOutcomes) . fnCases) (functions p) ]
   ++ [ h | ax <- axioms st, h <- axiomThen ax ]
   ++ dbToLabeledSentences (db st)
   where
@@ -228,7 +229,7 @@ find uf x = case Map.lookup x uf of
 
 unionAll :: Map.Map String String -> [String] -> Map.Map String String
 unionAll uf []       = uf
-unionAll uf (x : xs) = foldl (\u y -> link u x y) uf xs
+unionAll uf (x : xs) = foldl (`link` x) uf xs
   where link u a b = let ra = find u a; rb = find u b
                      in if ra == rb then u else Map.insert ra rb u
 
@@ -245,8 +246,8 @@ sentencesByScope st =
     practiceSents p =
          concatMap (\a -> condSents (actionConditions a) ++ outcomeSents (actionOutcomes a)) (actions p)
       ++ outcomeSents (initOutcomes p)
-      ++ concatMap (\f -> concatMap (\c -> condSents (caseConditions c)
-                                           ++ outcomeSents (caseOutcomes c)) (fnCases f)) (functions p)
+      ++ concatMap (concatMap (\c -> condSents (caseConditions c)
+                                     ++ outcomeSents (caseOutcomes c)) . fnCases) (functions p)
 
 condSents :: [Condition] -> [String]
 condSents = concatMap go
