@@ -13,6 +13,7 @@
 -- (Alice "makes amends") and every derived @resents@ — and the shunning — vanishes.
 module Prax.Worlds.Feud
   ( feudWorld
+  , bigFeud
   , feudAxioms
   , playerName
   ) where
@@ -83,3 +84,19 @@ feudWorld =
       , Insert "allied.bob.carol"
       , Insert "allied.carol.dave"
       ]
+
+-- | A scaled feud (for scale demos / benchmarks): @n@ grudge-bearers in an
+-- alliance chain, all turned against Alice by the one original wrong — so the
+-- closure derives @O(n)@ enmities and the planner has @n+1@ movers per node.
+bigFeud :: Int -> PraxState
+bigFeud n =
+  (foldl (flip performOutcome) withPractices setup) { axioms = feudAxioms }
+  where
+    names = [ "a" ++ show i | i <- [1 .. n] ]
+    withPractices =
+      (definePractices [ societyP ] emptyState)
+        { characters = alice : map grudgeBearer names }
+    setup =
+      [ Insert "practice.society.here"
+      , Insert "wronged.alice.a1" ]
+      ++ [ Insert ("allied.a" ++ show i ++ ".a" ++ show (i + 1)) | i <- [1 .. n - 1] ]

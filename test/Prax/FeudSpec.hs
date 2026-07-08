@@ -11,7 +11,7 @@ import           Prax.Db (dbToSentences)
 import           Prax.Types
 import           Prax.Engine (readView, possibleActions, performAction)
 import           Prax.Loop (advance, npcAct)
-import           Prax.Worlds.Feud (feudWorld)
+import           Prax.Worlds.Feud (feudWorld, bigFeud)
 
 -- Run with `idle` (the player, Alice) never acting and everyone else planner-driven.
 runWithPassive :: String -> Int -> PraxState -> PraxState
@@ -63,6 +63,13 @@ tests = testGroup "Prax.Worlds.Feud (emergent sandbox)"
       assertBool "bob shunned alice"   ("shunned.bob.alice"   `elem` vs)
       assertBool "carol shunned alice" ("shunned.carol.alice" `elem` vs)
       assertBool "dave shunned alice"  ("shunned.dave.alice"  `elem` vs)
+
+  , testCase "the feud scales: bigFeud turns every ally in the chain against Alice" $ do
+      -- guards semi-naive closure correctness at scale (no derivation dropped)
+      let n  = 20
+          vs = viewFacts (bigFeud n)
+      assertBool "every one of the chain's members (transitively) resents alice"
+        (all (\i -> ("resents.a" ++ show i ++ ".alice") `elem` vs) [1 .. n])
 
   , testCase "DEFEASIBLE: making amends retracts the wrong and dissolves the whole feud" $ do
       amended <- perform feudWorld "alice" "make amends with bob"

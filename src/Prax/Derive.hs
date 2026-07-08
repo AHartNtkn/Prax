@@ -33,12 +33,13 @@ module Prax.Derive
   ) where
 
 import           Control.Monad (foldM)
+import           Data.List (nub)
 import           Data.Maybe (mapMaybe)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Db, insert, emptyDb, ground, dbToSentences)
+import           Prax.Db (Db, insert, insertAll, emptyDb, ground, dbToSentences)
 import           Prax.Query (Condition (..), query)
-import           Prax.EL (meet)
+import           Prax.EL (meet, leq)
 
 -- | An implication rule @axiomWhen → axiomThen@: when the body holds for some
 -- binding of its variables, assert each (grounded) head sentence. Heads are
@@ -65,22 +66,37 @@ newtype Contradiction = Contradiction String
 -- returned unchanged (the identity that keeps un-axiomatised worlds free).
 closure :: [Axiom] -> Db -> Either Contradiction Db
 closure []  db0 = Right db0
-closure axs db0 = fixpoint db0
+closure axs db0 = go db0 db0
   where
     rules = axs ++ mapMaybe liftObliged axs
 
-    fixpoint m = case stepAll m of
-      Left c -> Left c
-      Right m'
-        | m' == m   -> Right m'      -- fixpoint (compares labels too, so it is exact)
-        | otherwise -> fixpoint m'
+    -- Semi-naive evaluation: each round fires the rules using at least one fact
+    -- from @delta@ (the facts derived last round), so nothing already known is
+    -- re-derived. @delta@ starts as the whole base, then shrinks to just what is
+    -- new. Terminates when a round produces no fresh fact.
+    go model delta =
+      let heads = [ ground h b | Axiom body hs <- rules
+                               , b <- deltaJoin model delta body, h <- hs ]
+          fresh = nub (filter (not . entailed model) heads)
+      in if null fresh
+           then Right model
+           else case foldM meetOne model fresh of
+                  Left c  -> Left c
+                  Right m -> go m (insertAll fresh emptyDb)
 
-    -- one round: query every rule body against the round-start model, meet each
-    -- grounded head into the growing model (⊥ if it clashes on an exclusive slot)
-    stepAll m = foldM (fire m) m rules
-    fire qdb m (Axiom body heads) =
-      foldM meetOne m [ ground h b | b <- query qdb body Map.empty, h <- heads ]
     meetOne m h = maybe (Left (Contradiction h)) Right (meet m (insert h emptyDb))
+    entailed m h = leq m (insert h emptyDb)     -- model already has h (labels included)
+
+    -- Bindings of @body@ in which at least one 'Match' atom is satisfied by a
+    -- @delta@ fact (the others by the full model). With @delta@ = the base this is
+    -- a full query; thereafter it visits only the newly-relevant joins.
+    deltaJoin model delta body =
+      case [ i | (i, Match _) <- zip [0 :: Int ..] body ] of
+        []  -> query model body Map.empty        -- no positive atom: fire on the model
+        pos -> nub (concatMap joinAt pos)
+      where
+        joinAt i = foldl step [Map.empty] (zip [0 :: Int ..] body)
+          where step bs (j, c) = concatMap (query (if j == i then delta else model) [c]) bs
 
 -- Lift a purely-conjunctive domain rule under the obligation operator: prefix
 -- @obliged.\<fresh\>.@ to every body match and head, so □A ⊢ □B whenever A ⊢ B.
