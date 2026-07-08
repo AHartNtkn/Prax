@@ -54,6 +54,8 @@ utility. See the design writeups:
 - `Prax.Inspect` + `Prax.Stress` (v10) — QA tooling: an inspector that explains why an action is
   unavailable (`explain`), and a seeded stress-tester that plays many random all-AI games and
   reports endings, action coverage, and dead ends (`cabal run prax -- stress [world]`).
+- `Prax.Persist` (v11) — save/load a session (the world state is all facts). In play, press `s` to
+  save; `cabal run prax -- <world> resume` continues from the save.
 
 See `docs/LEDGER.md` for what's next (public bonds in play, richer norms, a generic event bus,
 multi-party conversation, the player as DM, a text authoring language, …).

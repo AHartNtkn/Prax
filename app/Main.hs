@@ -16,12 +16,17 @@ import           Prax.Types
 import           Prax.Engine (possibleActions, performAction)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Stress
+import           Prax.Persist (saveState, loadState)
 import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
 
 -- How many plies of lookahead the NPCs use.
 lookaheadDepth :: Int
 lookaheadDepth = 2
+
+-- Where an in-game save is written / resumed from.
+saveFile :: FilePath
+saveFile = "prax.save"
 
 -- A world by name, for both playing and stress-testing.
 worldNamed :: [String] -> (String, PraxState, String)
@@ -62,7 +67,11 @@ play args = do
   putStrLn ("  " ++ title)
   putStrLn (replicate (length title + 4) '=')
   putStrLn blurb
-  loop player world
+  world' <- if "resume" `elem` args
+              then do putStrLn ("(resumed from " ++ saveFile ++ ")")
+                      loadState saveFile world
+              else pure world
+  loop player world'
 
 -- The first reached ending, if any (an @ending.\<key\>@ fact).
 endingOf :: PraxState -> Maybe String
@@ -81,7 +90,7 @@ loop player st =
     Nothing -> do
       let (actor, st1) = advance st
       if charName actor == player
-        then playerTurn player st1 actor
+        then playerTurn player st st1 actor   -- `st` is the pre-advance save point
         else do
           let (mga, st2) = npcAct lookaheadDepth actor st1
           case mga of
@@ -89,8 +98,10 @@ loop player st =
             Nothing -> pure ()          -- idle NPCs stay quiet to reduce noise
           loop player st2
 
-playerTurn :: String -> PraxState -> Character -> IO ()
-playerTurn player st actor = do
+-- @savePoint@ is the state *before* advancing to the player, so resuming from it
+-- replays the advance and lands back on the player's turn.
+playerTurn :: String -> PraxState -> PraxState -> Character -> IO ()
+playerTurn player savePoint st actor = do
   putStrLn ""
   putStrLn "-------------------- scene --------------------"
   putStr (renderScene st)
@@ -99,11 +110,15 @@ playerTurn player st actor = do
   mapM_ (\(i, a) -> putStrLn ("  " ++ show i ++ ") " ++ gaLabel a))
         (zip [1 :: Int ..] acts)
   putStrLn "  m) wait and let others act"
-  putStrLn "  q) quit"
+  putStrLn "  s) save    q) quit"
   choice <- prompt
   case choice of
     Quit -> putStrLn "Bye."
     Wait -> loop player st
+    Save -> do
+      saveState saveFile savePoint
+      putStrLn ("(saved to " ++ saveFile ++ ")")
+      playerTurn player savePoint st actor
     Pick i
       | i >= 1 && i <= length acts -> do
           let ga = acts !! (i - 1)
@@ -111,7 +126,7 @@ playerTurn player st actor = do
           loop player (performAction st ga)
       | otherwise -> do
           putStrLn "No such option."
-          playerTurn player st actor
+          playerTurn player savePoint st actor
 
 -- The player already has `m` to pass, so pure no-op actions (empty outcomes,
 -- e.g. the world's "Wait a moment") are noise in the menu. They remain
@@ -125,7 +140,7 @@ playerActions st actor = filter (not . isNoOp) (possibleActions st (charName act
                  -> null (actionOutcomes a)
       _          -> False
 
-data Choice = Quit | Wait | Pick Int
+data Choice = Quit | Wait | Save | Pick Int
 
 prompt :: IO Choice
 prompt = do
@@ -137,6 +152,7 @@ prompt = do
       line <- getLine
       pure $ case words line of
         ["q"] -> Quit
+        ["s"] -> Save
         ["m"] -> Wait
         [tok] | Just n <- readMaybe tok -> Pick n
         _     -> Pick (-1)
