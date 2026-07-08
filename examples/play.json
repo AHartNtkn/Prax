@@ -172,6 +172,53 @@
               ]
             }
           ]
+        },
+        {
+          "effects": [
+            {
+              "call": {
+                "args": [
+                  "marcus",
+                  "cassia",
+                  "lovers"
+                ],
+                "fn": "prax_setBond"
+              }
+            },
+            {
+              "call": {
+                "args": [
+                  "marcus",
+                  "cassia",
+                  "warmth",
+                  "15",
+                  "sweptUp"
+                ],
+                "fn": "prax_adjustScore"
+              }
+            },
+            {
+              "call": {
+                "args": [
+                  "marcus",
+                  "pleased",
+                  "cassia",
+                  "smitten"
+                ],
+                "fn": "prax_setMood"
+              }
+            }
+          ],
+          "label": "[Actor]: warm to cassia's charms",
+          "speaker": "marcus",
+          "when": [
+            {
+              "match": "marcusKnows"
+            },
+            {
+              "not": "bond.marcus.cassia!lovers"
+            }
+          ]
         }
       ],
       "id": "banquet",

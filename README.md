@@ -61,8 +61,10 @@ utility. See the design writeups:
   (dialogue/affordances) and `junction`s (labelled routes that end the story or hand off to the
   next scene) — and `compile`d to ordinary practices. A bodiless *narrator* (Versu's story manager)
   fires junctions automatically; `flowChart` renders the scene graph (`cabal run prax -- flow`), and
-  the stress-tester reports scene coverage. `Prax.Worlds.Play` recasts the Rome conspiracy as a
-  two-scene play in ~30% fewer authored lines than the hand-coded `Intrigue`.
+  the stress-tester reports scene coverage. `Prax.Worlds.Play` is a *faithful* recasting of
+  `Prax.Worlds.Intrigue` — same cast, affordances (confide, poison, warn, self-poison, romance),
+  and endings — as a two-scene play in ~25% fewer authored lines, *plus* the scene transition,
+  flow-chart, and story manager the layer supplies for free.
 - `Prax.Script.Json` (v12) — play-scripts round-trip through **readable JSON** (`Prax.Script.Json`),
   the editable authoring/exchange format (chosen over maintaining a bespoke `.prompter` grammar).
   `cabal run prax -- dump-play` prints the built-in play as JSON; `cabal run prax -- play

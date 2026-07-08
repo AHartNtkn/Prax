@@ -7,7 +7,10 @@
 -- Act I, /the confidence/: Cassia confides her plot to Marcus (the player). Once
 -- she has, the story flows to Act II, /the banquet/, where — unless Marcus warns
 -- Artus or strikes first himself — Cassia poisons the patron. Three endings:
--- betrayal (Cassia's poison), loyalty (Marcus warns), complicity (Marcus's hand).
+-- betrayal (Cassia's poison), loyalty (Marcus warns), complicity (Marcus's hand);
+-- Marcus may also warm to Cassia along the way (a romance, orthogonal to the
+-- killing). This is a faithful recasting of "Prax.Worlds.Intrigue" — same cast,
+-- same affordances, same endings — in fewer authored lines and split into scenes.
 --
 -- The narrator (Versu's story manager, supplied by 'compile') advances the scene
 -- and fires the ending automatically the moment a junction's condition holds.
@@ -19,7 +22,7 @@ module Prax.Worlds.Play
 
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Core (adjustScore, setMood, warmth, pleased)
+import           Prax.Core (adjustScore, setMood, setBond, warmth, pleased)
 import           Prax.Script
 
 -- | The player is Marcus, the poet.
@@ -73,6 +76,14 @@ banquet = (scene "banquet")
           [ Match "marcusKnows", Not (deadSentence "artus"), Absent [ Match "foiled" ] ]
           [ Insert "poisoned.artus.byMarcus"
           , Insert (deadSentence "artus") ]
+
+      -- Romance: warm to the conspirator you now share a secret with (orthogonal
+      -- to the killing — it neither foils nor causes it).
+      , quip "marcus" "[Actor]: warm to cassia's charms"
+          [ Match "marcusKnows", Not "bond.marcus.cassia!lovers" ]
+          [ setBond "marcus" "cassia" "lovers"
+          , adjustScore "marcus" "cassia" warmth 15 "sweptUp"
+          , setMood "marcus" pleased "cassia" "smitten" ]
       ]
   , sceneJunctions =
       [ ending "betrayal"   [ Match "poisoned.artus.byCassia" ]

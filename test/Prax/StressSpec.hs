@@ -26,14 +26,14 @@ tests = testGroup "Prax.Stress"
       srDeadEnds r @?= 0
       assertBool "many distinct actions exercised" (Set.size (srCoverage r) >= 10)
 
-  , testCase "scene coverage: random play reaches both scenes and no dead ends" $ do
+  , testCase "scene coverage: random play reaches both scenes and every ending" $ do
       let r = stressTest 200 50 playWorld
       -- both authored scenes are reached by random play (no unreachable scene)
       assertBool "confidence visited" (Map.member "confidence" (srScenes r))
       assertBool "banquet visited"    (Map.member "banquet"    (srScenes r))
-      -- with an active (random) Marcus, both branches he can force are hit
-      -- (betrayal needs a *passive* Marcus — proven deterministically in ScriptSpec)
-      assertBool "loyalty reached"    (Map.member "loyalty"    (srEndings r))
-      assertBool "complicity reached" (Map.member "complicity" (srEndings r))
+      -- all three endings occur: Marcus can force loyalty/complicity, and when he
+      -- instead romances (spending his turn) Cassia gets to poison — betrayal
+      mapM_ (\e -> assertBool (e ++ " reached") (Map.member e (srEndings r)))
+            ["betrayal", "loyalty", "complicity"]
       assertBool "no dead ends" (srDeadEnds r == 0)
   ]

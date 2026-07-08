@@ -26,11 +26,11 @@ actionMatching who needle st =
     (ga : _) -> ga
     []       -> error ("no action for " ++ who ++ " matching " ++ show needle)
 
--- Run the simulation with @player@ idle (never acting) and everyone else driven
--- by the planner, until an ending, until @target@ becomes the current scene, or
--- for @k@ advances — whichever comes first.
+-- Run the simulation with @idle@ (the player) never acting and everyone else
+-- driven by the planner, until an ending, until @target@ becomes the current
+-- scene, or for @k@ advances — whichever comes first.
 driveIdle :: Maybe String -> String -> Int -> PraxState -> PraxState
-driveIdle target player = go
+driveIdle target idle = go
   where
     go 0 st = st
     go k st
@@ -38,8 +38,8 @@ driveIdle target player = go
       | currentSceneOf st == target       = st
       | otherwise =
           let (actor, st1) = advance st
-              st2 | charName actor == player = st1              -- the player idles
-                  | otherwise                = snd (npcAct 2 actor st1)
+              st2 | charName actor == idle = st1                -- the player idles
+                  | otherwise              = snd (npcAct 2 actor st1)
           in go (k - 1) st2
 
 tests :: TestTree
@@ -65,10 +65,12 @@ tests = testGroup "Prax.Script"
   , testCase "a transition junction is fired automatically by the narrator" $ do
       let confide = actionMatching "cassia" "confide" playWorld
           st1     = performAction playWorld confide     -- confided holds
-          narr    = head [ c | c <- characters st1, charName c == narratorName ]
-          (mv, st2) = npcAct 2 narr st1
-      assertBool "narrator acted" (mv /= Nothing)
-      currentSceneOf st2 @?= Just "banquet"             -- scene advanced
+      case [ c | c <- characters st1, charName c == narratorName ] of
+        (narr : _) -> do
+          let (mv, st2) = npcAct 2 narr st1
+          assertBool "narrator acted" (mv /= Nothing)
+          currentSceneOf st2 @?= Just "banquet"         -- scene advanced
+        [] -> assertBool "narrator should be in the cast" False
 
   , testCase "idle player: the plot runs to betrayal across two scenes" $ do
       let st = driveIdle Nothing "marcus" 30 playWorld
@@ -87,6 +89,12 @@ tests = testGroup "Prax.Script"
           killed = performAction atBanquet (actionMatching "marcus" "own hand" atBanquet)
           st     = driveIdle Nothing "marcus" 20 killed
       endingOf st @?= Just "complicity"
+
+  , testCase "the player can romance the conspirator (as in Intrigue)" $ do
+      let atBanquet = driveIdle (Just "banquet") "marcus" 20 playWorld
+          loved = performAction atBanquet (actionMatching "marcus" "charms" atBanquet)
+      assertBool "Marcus and Cassia become lovers"
+        (exists "bond.marcus.cassia.lovers" (db loved))
 
   , testCase "flowChart names every scene and junction" $ do
       let chart = flowChart playScript
