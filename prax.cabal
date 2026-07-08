@@ -30,6 +30,7 @@ library
                       Prax.Reactions
                       Prax.Beliefs
                       Prax.Conversation
+                      Prax.Arc
                       Prax.Loop
                       Prax.Worlds.Bar
 
@@ -63,3 +64,4 @@ test-suite prax-test
                       Prax.ReactionsSpec
                       Prax.BeliefsSpec
                       Prax.ConversationSpec
+                      Prax.ArcSpec
