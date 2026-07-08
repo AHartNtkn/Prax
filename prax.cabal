@@ -33,6 +33,7 @@ library
                       Prax.Arc
                       Prax.Loop
                       Prax.Worlds.Bar
+                      Prax.Worlds.Intrigue
 
 executable prax
     import:           warnings
@@ -65,3 +66,4 @@ test-suite prax-test
                       Prax.BeliefsSpec
                       Prax.ConversationSpec
                       Prax.ArcSpec
+                      Prax.IntrigueSpec
