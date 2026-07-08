@@ -111,3 +111,12 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   checking): the `m(X)`/LRT decision procedure it defines is the machinery a full type checker needs.
 - Extent of static type checking (#8) — decide how much of Versu's implicit type system to port
   (rests on the DEON paper's decision procedure, now available).
+
+## Future ideas to investigate
+- **Incremental view maintenance for the derivation layer (#17).** Closure is now semi-naive and
+  cheap per call, but the planner's lookahead still re-closes each distinct future state from scratch.
+  Since a child state differs from its parent by a small delta (one action's outcomes), the closed
+  view could be *maintained incrementally* — add/retract the delta's consequences rather than
+  recompute — which would cut the lookahead's dominant cost. Bigger change than semi-naive (needs
+  delta-retraction / provenance to un-derive facts whose support is gone); worth it only if a large
+  axiom set + deep lookahead proves to be the bottleneck in a real sandbox.
