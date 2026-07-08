@@ -16,6 +16,7 @@ import qualified Prax.ArcSpec
 import qualified Prax.IntrigueSpec
 import qualified Prax.StressSpec
 import qualified Prax.PersistSpec
+import qualified Prax.ScriptSpec
 
 main :: IO ()
 main = defaultMain $ testGroup "prax"
@@ -33,4 +34,5 @@ main = defaultMain $ testGroup "prax"
   , Prax.IntrigueSpec.tests
   , Prax.StressSpec.tests
   , Prax.PersistSpec.tests
+  , Prax.ScriptSpec.tests
   ]

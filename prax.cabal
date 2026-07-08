@@ -35,8 +35,10 @@ library
                       Prax.Inspect
                       Prax.Stress
                       Prax.Persist
+                      Prax.Script
                       Prax.Worlds.Bar
                       Prax.Worlds.Intrigue
+                      Prax.Worlds.Play
 
 executable prax
     import:           warnings
@@ -72,3 +74,4 @@ test-suite prax-test
                       Prax.IntrigueSpec
                       Prax.StressSpec
                       Prax.PersistSpec
+                      Prax.ScriptSpec

@@ -8,6 +8,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Stress
 import           Prax.Worlds.Bar (barWorld)
 import           Prax.Worlds.Intrigue (intrigueWorld)
+import           Prax.Worlds.Play (playWorld)
 
 tests :: TestTree
 tests = testGroup "Prax.Stress"
@@ -24,4 +25,15 @@ tests = testGroup "Prax.Stress"
       let r = stressTest 20 30 barWorld
       srDeadEnds r @?= 0
       assertBool "many distinct actions exercised" (Set.size (srCoverage r) >= 10)
+
+  , testCase "scene coverage: random play reaches both scenes and no dead ends" $ do
+      let r = stressTest 200 50 playWorld
+      -- both authored scenes are reached by random play (no unreachable scene)
+      assertBool "confidence visited" (Map.member "confidence" (srScenes r))
+      assertBool "banquet visited"    (Map.member "banquet"    (srScenes r))
+      -- with an active (random) Marcus, both branches he can force are hit
+      -- (betrayal needs a *passive* Marcus — proven deterministically in ScriptSpec)
+      assertBool "loyalty reached"    (Map.member "loyalty"    (srEndings r))
+      assertBool "complicity reached" (Map.member "complicity" (srEndings r))
+      assertBool "no dead ends" (srDeadEnds r == 0)
   ]

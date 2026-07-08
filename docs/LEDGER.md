@@ -12,6 +12,9 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 - **v9** — cast removal + a dramatic vertical slice (`Prax.Worlds.Intrigue`).
 - **v10** — QA tooling: the inspector (`Prax.Inspect`) and stress-test (`Prax.Stress`).
 - **v11** — persistence: save/load a session (`Prax.Persist`), CLI save + resume.
+- **v12** — a Prompter-lite scene-authoring layer (`Prax.Script`) that compiles a
+  CAST + scene-graph play-script to practices, with an auto flow-chart + scene coverage;
+  demonstrated by `Prax.Worlds.Play`.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
   logic paper) or an unsettled design question.
@@ -73,8 +76,8 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 |---|---------|--------|--------|-------|
 | 30 | DM / story manager as a special practice | v6 | P§VI, XI | bar `director`: a bound metalevel agent with story-level wants; injects a rivalry |
 | 31 | Player as DM | planned | P§XI | |
-| 32 | Text authoring language (`.prax` parser: `process … end`) | planned | P§VII-VIII | v1 uses a Haskell eDSL instead |
-| 33 | Prompter-style play-script front end | research-needed | P§XII | compiles script → practices |
+| 32 | Text authoring language (`.prax`/`.prompter` parser) | planned | P§VII-VIII | Stage F: a text front-end onto the v12 `Script` AST (writer readability) |
+| 33 | Prompter-style play-script front end (scene/beat/junction → practices) | v12 | P§XII | `Prax.Script`: CAST + scene-graph eDSL, `compile`, auto `flowChart`; a bodiless narrator fires junctions. Text parser + prose sketches + timed junctions + memories deferred (Stage F) |
 | 34 | Deontic `should` / obligation operator; norm-conflict resolution | research-needed | DEON 2010 | **need the paywalled paper** |
 
 ## Runtime, tooling, UX
@@ -85,9 +88,9 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 36 | Round-robin turn loop | v1 | Praxish `app.js` | |
 | 37 | Deterministic playback / replay | v10 | P§VI | pure loop ⇒ reproducible traces (golden replay); mid-session save/resume-to-file via `Prax.Persist` (v11) |
 | 38 | Runtime inspector ("why is X true / why did preconds fail") | v10 | P§VI | `Prax.Inspect` `explain`/`firstFailing` (revives `killsPerStep`) |
-| 39 | Stress-test harness (many auto-played runs) | v10 | P§VI | `Prax.Stress` — seeded random all-AI runs; endings + coverage + dead-ends; CLI `prax stress` |
+| 39 | Stress-test harness (many auto-played runs) | v10 | P§VI | `Prax.Stress` — seeded random all-AI runs; endings + action coverage + dead-ends; **scene coverage** (which scenes random play reaches — Prompter's report) added in v12; CLI `prax stress` |
 | 40 | Serializable world state (save/load) | v11 | P§VI | `Prax.Persist` (facts + cursor); exact round-trip; CLI in-game `s` save + `resume` |
-| 41 | Rich branching multi-character episode (content) | v9 | P§XII | `Prax.Worlds.Intrigue`: murder, character death (cast-removal), betrayal/loyalty/complicity endings, romance |
+| 41 | Rich branching multi-character episode (content) | v9 | P§XII | `Prax.Worlds.Intrigue`: murder, character death (cast-removal), betrayal/loyalty/complicity endings, romance. `Prax.Worlds.Play` (v12) recasts it as a 2-scene play-script |
 | 43 | Cast removal (death / eviction) | v9 | P§VIII-D | `dead.<name>` fact; `Prax.Types.livingCharacters`; loop/planner skip the dead |
 | 42 | PWIM embedding-based free-text player input | research-needed | arXiv 2406.00942 | external model dependency |
 

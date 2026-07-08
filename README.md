@@ -56,9 +56,16 @@ utility. See the design writeups:
   reports endings, action coverage, and dead ends (`cabal run prax -- stress [world]`).
 - `Prax.Persist` (v11) — save/load a session (the world state is all facts). In play, press `s` to
   save; `cabal run prax -- <world> resume` continues from the save.
+- `Prax.Script` + `Prax.Worlds.Play` (v12) — a **Prompter-lite** scene-authoring layer. Drama is
+  written as a screenplay — a `CAST` plus a graph of `scene`s, each with a body of `beat`s
+  (dialogue/affordances) and `junction`s (labelled routes that end the story or hand off to the
+  next scene) — and `compile`d to ordinary practices. A bodiless *narrator* (Versu's story manager)
+  fires junctions automatically; `flowChart` renders the scene graph (`cabal run prax -- flow`), and
+  the stress-tester reports scene coverage. `Prax.Worlds.Play` recasts the Rome conspiracy as a
+  two-scene play in ~30% fewer authored lines than the hand-coded `Intrigue`.
 
-See `docs/LEDGER.md` for what's next (public bonds in play, richer norms, a generic event bus,
-multi-party conversation, the player as DM, a text authoring language, …).
+See `docs/LEDGER.md` for what's next (a text `.prompter` parser onto the same AST, character
+prose-sketches, timed junctions, memories, the player as DM, …).
 
 ## Build, test, play
 
@@ -69,6 +76,8 @@ cabal build       # compile everything
 cabal test        # run the test suite (tasty)
 cabal run prax             # play the bar demo — you are 'you'; pick from the menu
 cabal run prax -- intrigue  # play the dramatic episode (a Roman conspiracy)
+cabal run prax -- play      # play the same drama authored as a Prompter-lite play-script
+cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
 ```
 
 In the bar demo, NPCs act autonomously: order a drink and the bartender (ada) will serve you,

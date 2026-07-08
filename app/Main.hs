@@ -17,8 +17,10 @@ import           Prax.Engine (possibleActions, performAction)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Stress
 import           Prax.Persist (saveState, loadState)
+import           Prax.Script (flowChart)
 import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
+import qualified Prax.Worlds.Play as Play
 
 -- How many plies of lookahead the NPCs use.
 lookaheadDepth :: Int
@@ -31,6 +33,7 @@ saveFile = "prax.save"
 -- A world by name, for both playing and stress-testing.
 worldNamed :: [String] -> (String, PraxState, String)
 worldNamed ("intrigue" : _) = ("Intrigue (Rome)", Intrigue.intrigueWorld, Intrigue.playerName)
+worldNamed ("play" : _)     = ("the conspiracy (a play)", Play.playWorld, Play.playerName)
 worldNamed _                = ("a night at the bar", Bar.barWorld, Bar.playerName)
 
 -- @prax stress [world]@ — a QA report over many random all-AI playthroughs.
@@ -41,6 +44,9 @@ runStress args = do
   putStrLn ("stress-testing " ++ name ++ " — 200 random runs, cap 50 turns")
   putStrLn ("  endings:   " ++ show (Map.toList (srEndings r)))
   putStrLn ("  coverage:  " ++ show (Set.size (srCoverage r)) ++ " distinct actions fired")
+  if Map.null (srScenes r)
+    then pure ()
+    else putStrLn ("  scenes:    " ++ show (Map.toList (srScenes r)) ++ " (runs visiting each)")
   putStrLn ("  dead ends: " ++ show (srDeadEnds r))
   putStrLn ("  no ending: " ++ show (srNoEnding r) ++ " / " ++ show (srRuns r) ++ " runs")
 
@@ -50,6 +56,7 @@ main = do
   args <- getArgs
   case args of
     ("stress" : rest) -> runStress rest
+    ("flow" : _)      -> putStr (flowChart Play.playScript)
     _                 -> play args
 
 play :: [String] -> IO ()
@@ -59,6 +66,10 @@ play args = do
           ( "prax — Intrigue (Rome)"
           , "You are Marcus, the poet. The others act on their own."
           , Intrigue.intrigueWorld, Intrigue.playerName )
+        ("play" : _) ->
+          ( "prax — the conspiracy (a play)"
+          , "You are Marcus. The scene plays out around you (see `prax flow`)."
+          , Play.playWorld, Play.playerName )
         _ ->
           ( "prax — a night at the bar"
           , "You are 'you'. Others act on their own."
@@ -162,11 +173,16 @@ prompt = do
 renderScene :: PraxState -> String
 renderScene st =
   unlines (map ("  - " ++)
-            (locations ++ orders ++ held ++ tipsy ++ bell
+            (act ++ locations ++ orders ++ held ++ tipsy ++ bell
               ++ deaths ++ chats ++ pending ++ trouble ++ arcs ++ beliefs ++ moods ++ feelings))
   where
     rows sentence = unify sentence (db st) Map.empty
     val k b = valToString <$> Map.lookup k (b :: Bindings)
+
+    -- the current act, in a play-script world
+    act =
+      [ "the scene: " ++ s
+      | b <- rows "currentScene.S", Just s <- [val "S" b] ]
 
     locations =
       [ who ++ " is at the " ++ place
