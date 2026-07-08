@@ -10,6 +10,7 @@ import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, performOutcome)
 import           Prax.Core (adjustScore, setMood, warmth, annoyed)
 import           Prax.Beliefs (believe)
+import           Prax.Conversation (beginConversation)
 import           Prax.Worlds.Bar (barWorld)
 
 -- Perform the first action whose label contains `needle` for `actor`.
@@ -150,4 +151,37 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       s1 <- runSteps s0 [ ("bex", "Realize ada doesn't resent you") ]
       assertBool "the false belief is dropped"
         (not (any ("bex.believes.resentedBy.ada" `isInfixOf`) (dbToSentences (db s1))))
+
+  , testCase "friends can strike up a chat; quips stay on topic and shift feeling" $ do
+      -- bex is fond of ada (warmth 20) and co-located: a conversation is possible.
+      let warm = foldl (flip performOutcome) barWorld
+                   [ Insert "practice.world.world.at.bex!bar"
+                   , adjustScore "bex" "ada" warmth 20 "fond" ]
+      assertBool "warm bex can strike up a conversation"
+        (any ("Strike up a conversation with ada" `isInfixOf`) (map gaLabel (possibleActions warm "bex")))
+      s1 <- runSteps warm [ ("bex", "Strike up a conversation with ada") ]
+      -- opens on small talk: the compliment quip (rapport) is off-topic and withheld
+      assertBool "small talk is on topic"
+        (any ("Make small talk with ada" `isInfixOf`) (map gaLabel (possibleActions s1 "bex")))
+      assertBool "compliment is off topic (withheld)"
+        (not (any ("Compliment ada" `isInfixOf`) (map gaLabel (possibleActions s1 "bex"))))
+      -- small talk (turn -> ada), ada steers to rapport (turn -> bex), bex compliments ada
+      s2 <- runSteps s1
+              [ ("bex", "Make small talk with ada")
+              , ("ada", "Warm the talk toward rapport")
+              , ("bex", "Compliment ada") ]
+      assertBool "the compliment warmed ada toward bex"
+        ("ada.relationship.bex.warmth.score.10" `elem` dbToSentences (db s2))
+
+  , testCase "a gossip quip transmits a (possibly-false) belief in conversation" $ do
+      -- bex, cross with you, is chatting with ada on the gossip topic.
+      let g0 = foldl (flip performOutcome) barWorld
+                 ([ setMood "bex" annoyed "you" "grudge" ]
+                   ++ beginConversation "bex" "ada" "gossip")
+      assertBool "the gossip quip is available to the speaker"
+        (any ("Confide to ada that you resents them" `isInfixOf`)
+             (map gaLabel (possibleActions g0 "bex")))
+      g1 <- runSteps g0 [ ("bex", "Confide to ada that you resents them") ]
+      assertBool "ada now believes you resent her"
+        ("ada.believes.resentedBy.you.yes" `elem` dbToSentences (db g1))
   ]

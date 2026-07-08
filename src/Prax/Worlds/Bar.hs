@@ -25,6 +25,7 @@ import           Prax.Engine (definePractices, performOutcome)
 import           Prax.Core
 import           Prax.Reactions
 import           Prax.Beliefs
+import           Prax.Conversation
 
 -- | The character the human player controls.
 playerName :: String
@@ -91,6 +92,18 @@ greetP = practice
           , Match "practice.greet.world.greeted.Subject.Actor" ]  -- they greeted you: evidence
           [ forget "Actor" "resentedBy.Subject"
           , setMood "Actor" pleased "Subject" "reassured" ]
+
+      , action "[Actor]: Strike up a conversation with [Other]"
+          ( [ Match "practice.world.world.at.Actor!Place"
+            , Match "practice.world.world.at.Other!Place"
+            , Neq "Actor" "Other"
+            , Not "Actor.mood!annoyed.toward!Other"
+            , Not (beliefSentence "Actor" "resentedBy.Other" "yes")
+            , Not (talkPath "Actor" "Other")           -- not already talking (either order)
+            , Not (talkPath "Other" "Actor")
+            , Not "Actor.chattedWith.Other" ]           -- one conversation per pair
+            ++ scoreAtLeast "Actor" "Other" warmth buyThreshold )
+          (beginConversation "Actor" "Other" "smallTalk")
 
       , action "[Actor]: Buy [Other] a drink"
           ( [ Match "practice.world.world.at.Actor!Place"
@@ -233,6 +246,32 @@ settleUpP = practice
       ]
   }
 
+-- A conversation between two friends: small talk, compliments, or gossip.
+-- Quips say a line and shift the core model / plant beliefs. Spawned by "Strike
+-- up a conversation"; participants stay on a topic until someone changes it.
+converseP :: Practice
+converseP = practice
+  { practiceId = "converse"
+  , practiceName = "[A] and [B] are chatting"
+  , roles = ["A", "B"]
+  , actions =
+      [ quip "smalltalk" "[Actor]: Make small talk with [Partner]" "smallTalk" []
+          [ adjustScore "Actor" "Partner" warmth 2 "pleasantChat"
+          , adjustScore "Partner" "Actor" warmth 2 "pleasantChat" ]
+      , quip "compliment" "[Actor]: Compliment [Partner]" "rapport" []
+          [ adjustScore "Partner" "Actor" warmth 8 "kindWords"
+          , setMood "Partner" pleased "Actor" "flattered" ]
+      , quip "gossip" "[Actor]: Confide to [Partner] that [Subject] resents them" "gossip"
+          [ Match "Actor.mood!annoyed.toward!Subject"
+          , Neq "Actor" "Subject", Neq "Partner" "Subject" ]
+          [ believe "Partner" "resentedBy.Subject" "yes" ]
+      , changeSubject "[Actor]: Warm the talk toward rapport" "rapport"
+      , changeSubject "[Actor]: Lower your voice to gossip" "gossip"
+      , changeSubject "[Actor]: Keep it to small talk" "smallTalk"
+      , endConversation "[Actor]: Wrap up the chat with [Partner]"
+      ]
+  }
+
 -- Cast --------------------------------------------------------------------------
 
 you :: Character
@@ -276,7 +315,7 @@ barWorld =
     withPractices =
       (definePractices
          [ coreLib, disapprovalP
-         , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP ]
+         , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP ]
          emptyState)
         { characters = [you, ada, bex] }
     setup =
