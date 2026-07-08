@@ -288,6 +288,34 @@ cast react.
 *(Deferred, per `docs/LEDGER.md`: the player *as* the DM, richer metalevel repertoire and pacing,
 and a generic event stream the director could watch.)*
 
+### 12. Character arcs — an inner life that reshapes what you want (v7)
+
+Practices give characters *external* choices; an **arc** is a character's *internal*, high-level
+state — the through-line of their evening. Everyone arrives **`hopeful`** (watch the scene:
+*"bex feels hopeful"*).
+
+- **Watch bex find its place.** As bex warms to someone over the evening, once it feels genuinely
+  fond (its own warmth crosses a threshold) it takes the beat **`bex: settle in, feeling you belong
+  here`** and the scene turns to *"bex feels at home here"*. Its wants shift with the stage — a
+  belonging bex is content to linger.
+  → features: a stage-gated `Want` — advancing the arc changes what the character pursues. code:
+  `Prax.Arc`; the `arc` practice + bex's arc wants in `Prax.Worlds.Bar`.
+
+- **Arcs are robust to the drama.** Even when the director turns ada against bex, bex still settles
+  into belonging — because bex's *own* warmth toward ada held. The arc reflects the character's
+  interior, not just what's done to them.
+
+- **True transformation is the player's alone.** Every hopeful patron is *offered* the downward
+  move, **`give up on the evening, resigning yourself to solitude`** (→ lonely). But no NPC ever
+  takes it: sliding into loneliness only forecloses the belonging they crave, with no way back, so
+  the utility planner refuses it. Only a human — who isn't bound by the planner — would ever choose
+  to change against their own desires. This is Versu's "true transformation … is only available to
+  the player," and here it falls straight out of the architecture (NPCs maximize utility; the
+  player picks from the menu).
+
+*(Deferred, per `docs/LEDGER.md`: richer multi-stage arcs and arcs that feed back into the
+director's pacing.)*
+
 ---
 
 ## Feature coverage map
@@ -324,15 +352,17 @@ Everything implemented in v1, where it lives, and how the demo shows it:
 | Belief-gated behaviour / revision | `Prax.Beliefs` | a false belief suppresses friendliness; evidence dispels it |
 | Conversation (speaker turns, topics, quips) | `Prax.Conversation` | "… are chatting (rapport)"; compliment / gossip quips |
 | Story manager (DM) as a metalevel agent | `dmPractice` / `director` | "director: turn ada against bex to stir up the evening" |
+| Character arcs (stage-gated wants) | `Prax.Arc` | "bex feels hopeful" → "at home here"; belonging beat |
+| Player-only transformation (against desires) | `arc` practice | "give up …" offered but never taken by an NPC |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
 same behaviours are asserted in the test suite (`cabal test`): see `Prax.QuerySpec`,
 `Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.ReactionsSpec`
 (reactions, norms, norm-avoidance), `Prax.BeliefsSpec` (per-agent & false beliefs), `Prax.ConversationSpec`
-(speaker turns, topics, one-shot quips), `Prax.BarSpec` (drunkenness + bell + warmth/mood gates +
-greeting chain + tipping + rumours + a driven conversation + the director), and `Prax.LoopSpec` (a
-deterministic 20-turn replay of the emergent greet → serve → take-offense → buy → tip arc, capped by
-the director turning two friends against each other).
+(speaker turns, topics, one-shot quips), `Prax.ArcSpec` (arc stages), `Prax.BarSpec` (drunkenness +
+bell + warmth/mood gates + greeting chain + tipping + rumours + a driven conversation + the director
++ arcs), and `Prax.LoopSpec` (a deterministic 20-turn replay: greet → serve → take-offense → buy,
+the director turning two friends against each other, and bex settling into belonging anyway).
 
 ---
 
@@ -350,8 +380,9 @@ the director turning two friends against each other).
 ## What is *not* yet modeled
 
 The bar exercises the whole engine including the v2 core model, v3 reactions & norms, v4 beliefs,
-v5 conversation, and a v6 story manager, but the engine is still deliberately smaller than Versu.
+v5 conversation, a v6 story manager, and v7 character arcs, but the engine is still deliberately
+smaller than Versu.
 Not yet built (see `docs/LEDGER.md`): public "bonds" in play, richer norms & eviction, a generic
 "react to any action" event bus, quantified/nested beliefs, multi-party conversation, the player as
-DM, character arcs, the full first-order query grammar (`∀`/`∃`/`∨`/`→`), and a text authoring
-language. Those are the next milestones.
+DM, the full first-order query grammar (`∀`/`∃`/`∨`/`→`), and a text authoring language. Those are
+the next milestones.

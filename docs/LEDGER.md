@@ -7,6 +7,7 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 - **v4** — per-agent beliefs (incl. false beliefs), built as `Prax.Beliefs`.
 - **v5** — conversation (speakers, topics, quips), built as `Prax.Conversation`.
 - **v6** — a story manager (DM) as a metalevel agent (the bar `director`).
+- **v7** — character arcs (internal high-level state), built as `Prax.Arc`.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
   logic paper) or an unsettled design question.
@@ -48,7 +49,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 19 | Per-character wants; utility = Σ modifier × #bindings | v1 | P§IX-A | Versu-faithful; supersedes Praxish global goals |
 | 20 | Forward-chaining lookahead w/ discounts (0.9 self / 0.5 other) | v1 | Praxish `planner.js` | depth configurable |
 | 21 | Wants as arbitrary logic sentences (∃/∀ desires) | planned | P§IX-A | needs #7 |
-| 22 | Character arcs / interiority (high-level internal choices) | planned | P§X | |
+| 22 | Character arcs / interiority (high-level internal choices) | v7 | P§X | `Prax.Arc`; bex's hopeful→belonging/lonely arc gates its wants; against-desires transformation is player-only |
 | 23 | Swaygent-style volition/influence selection | research-needed | Praxish `swaygent.js` | Ensemble-inspired alt selector |
 
 ## Core model (emotion / relationship / belief)

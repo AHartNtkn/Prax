@@ -96,7 +96,7 @@ renderScene :: PraxState -> String
 renderScene st =
   unlines (map ("  - " ++)
             (locations ++ orders ++ held ++ tipsy ++ bell
-              ++ chats ++ pending ++ trouble ++ beliefs ++ moods ++ feelings))
+              ++ chats ++ pending ++ trouble ++ arcs ++ beliefs ++ moods ++ feelings))
   where
     rows sentence = unify sentence (db st) Map.empty
     val k b = valToString <$> Map.lookup k (b :: Bindings)
@@ -148,6 +148,16 @@ renderScene st =
       [ ol ++ " disapproves of " ++ off
       | b <- rows "practice.disapproval.Off.Ol"
       , Just off <- [val "Off" b], Just ol <- [val "Ol" b] ]
+
+    -- a character's inner arc (their evening's through-line)
+    arcPhrase "hopeful"   = "hopeful"
+    arcPhrase "belonging" = "at home here"
+    arcPhrase "lonely"    = "out of place"
+    arcPhrase s           = s
+    arcs =
+      [ who ++ " feels " ++ arcPhrase stage
+      | b <- rows "Who.arc!Stage"
+      , Just who <- [val "Who" b], Just stage <- [val "Stage" b] ]
 
     -- beliefs that diverge from the truth (here: believed grudges)
     beliefs =

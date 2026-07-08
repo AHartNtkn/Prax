@@ -43,9 +43,13 @@ utility. See the design writeups:
   no body and only *metalevel* desires. It watches for a too-cosy room and injects a falling-out
   between two friends, then lets the autonomous cast play it out — "the DM is just a particular
   type of practice."
+- `Prax.Arc` (v7) — character arcs: a character's internal high-level state (hopeful → belonging /
+  lonely) that gates its wants, so advancing the arc reshapes what it pursues. The against-desires
+  transformation (giving up) is offered to everyone but never taken by the utility planner — so
+  "true transformation" is, in practice, the player's alone.
 
 See `docs/LEDGER.md` for what's next (public bonds in play, richer norms, a generic event bus,
-multi-party conversation, the player as DM, character arcs, a text authoring language, …).
+multi-party conversation, the player as DM, a text authoring language, …).
 
 ## Build, test, play
 
