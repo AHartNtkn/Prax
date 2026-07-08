@@ -272,6 +272,28 @@ converseP = practice
       ]
   }
 
+-- The story manager (Versu's DM): an autonomous agent with *metalevel* desires
+-- that shapes the drama without controlling anyone directly. Here it watches for
+-- a too-cosy room and injects a falling-out between two friends — which then
+-- plays out through the ordinary reaction / gossip machinery.
+dmPractice :: Practice
+dmPractice = practice
+  { practiceId = "dm"
+  , practiceName = "the director shapes the evening"
+  , roles = ["Director"]
+  , actions =
+      [ action "[Actor]: (as director) turn [X] against [Y] to stir up the evening"
+          ( [ Eq "Actor" "Director"
+            , Not "dm.stirred" ]                  -- one dramatic beat per evening
+            ++ scoreAtLeast "X" "Y" warmth 20     -- bind two who currently like each other…
+            ++ [ Neq "X" "Y", Neq "X" "Actor", Neq "Y" "Actor" ] )  -- …then require them distinct
+          [ Insert "dm.stirred"
+          , setMood "X" annoyed "Y" "aBitterMisunderstanding"
+          , adjustScore "X" "Y" warmth (-30) "aSuddenFallingOut"
+          , Insert "practice.greet.world.grievance.X.Y" ]
+      ]
+  }
+
 -- Cast --------------------------------------------------------------------------
 
 you :: Character
@@ -304,6 +326,13 @@ bex = (character "bex")
       , Want [ violationOf "bex" "stiffedTheBartender" ] (-40)  -- and hates stiffing
       ] }
 
+-- The director: no physical presence, only metalevel desires; bound to its own
+-- practice, so it never greets or drinks — it only shapes the story.
+director :: Character
+director = (character "director")
+  { charWants   = [ Want [ Match "dm.stirred" ] 20 ]  -- wants the evening to have a spark
+  , charBoundTo = Just "dm" }
+
 -- Initial world ----------------------------------------------------------------
 
 -- | The fully initialized bar: practices (core-model + reaction libraries)
@@ -315,9 +344,9 @@ barWorld =
     withPractices =
       (definePractices
          [ coreLib, disapprovalP
-         , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP ]
+         , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice ]
          emptyState)
-        { characters = [you, ada, bex] }
+        { characters = [you, ada, bex, director] }
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"
       , Insert "practice.world.world.connected.bar.entrance"
@@ -328,4 +357,5 @@ barWorld =
       , Insert "practice.patron.bex"
       , Insert "practice.greet.world"
       , Insert "practice.tendBar.bar.ada"
+      , Insert "practice.dm.director"
       ]

@@ -184,4 +184,28 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       g1 <- runSteps g0 [ ("bex", "Confide to ada that you resents them") ]
       assertBool "ada now believes you resent her"
         ("ada.believes.resentedBy.you.yes" `elem` dbToSentences (db g1))
+
+  , testCase "the director (story manager) has nothing to do in a placid room" $
+      -- No warm pair yet, so the director's metalevel action is unavailable…
+      assertBool "director idle when nothing is warm"
+        (null (possibleActions barWorld "director"))
+
+  , testCase "the director injects a rivalry between two warm friends" $ do
+      -- Make ada and bex fond of each other.
+      let warm = foldl (flip performOutcome) barWorld
+                   [ adjustScore "ada" "bex" warmth 25 "friends"
+                   , adjustScore "bex" "ada" warmth 25 "friends" ]
+      -- The director's only move is its metalevel one (it is bound; it has no body).
+      let dirOpts = map gaLabel (possibleActions warm "director")
+      assertBool "director can now act" (not (null dirOpts))
+      assertBool "director only does metalevel direction"
+        (all ("director)" `isInfixOf`) dirOpts)
+      -- It turns the two friends against each other (once).
+      stirred <- runSteps warm [ ("director", "turn ada against bex") ]
+      let fs = dbToSentences (db stirred)
+      assertBool "the beat is marked done" ("dm.stirred" `elem` fs)
+      assertBool "ada now bears a grievance against bex"
+        ("practice.greet.world.grievance.ada.bex" `elem` fs)
+      assertBool "and their warmth has soured"
+        ("ada.relationship.bex.warmth.score.-5" `elem` fs)
   ]
