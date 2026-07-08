@@ -18,9 +18,13 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   (`Prax.Script.Json`) — the editable authoring format, chosen over a bespoke parser.
 - **v13** — player-as-DM: the human occupies the drama-manager slot, steering an
   autonomous cast with metalevel nudges (`Prax.Worlds.Bar` `barDirectorWorld`, `prax dm`).
+- **v14** — a first-class deontic `should`/obligation layer (`Prax.Deontic`): `□φ` as the
+  fact `obliged.<who>.<φ>`, conflict detection via the `!` exclusion, and contrary-to-duty
+  (`□□`); the bar's settle-up is now a real obligation.
 - **planned** — committed for later; well-understood from sources.
-- **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
-  logic paper) or an unsettled design question.
+- **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
+  design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
+  obtained and distilled (`docs/research/deon-notes.md`).
 
 Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its section/page.
 
@@ -81,7 +85,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 31 | Player as DM | v13 | P§XI | `Prax.Worlds.Bar` `barDirectorWorld`: the human is bound to the metalevel `direct` practice (stir a rivalry / kindle warmth / cast a pall) and steers an autonomous cast; the CLI offers a bound player only its practice's affordances (via `candidateActions`). `prax dm` |
 | 32 | Readable serialization for play-scripts (JSON) | v12 | P§VII-VIII | `Prax.Script.Json`: round-trips a `Script` to/from JSON — an editable authoring/exchange format with no bespoke grammar to maintain; `prax play <file.json>`, `prax dump-play`, `examples/play.json`. (Chosen over a custom `.prompter` parser.) |
 | 33 | Prompter-style play-script front end (scene/beat/junction → practices) | v12 | P§XII | `Prax.Script`: CAST + scene-graph eDSL, `compile`, auto `flowChart`; a bodiless narrator fires junctions. Text parser + prose sketches + timed junctions + memories deferred (Stage F) |
-| 34 | Deontic `should` / obligation operator; norm-conflict resolution | research-needed | DEON 2010 | **need the paywalled paper** |
+| 34 | Deontic `should` / obligation operator; norm-conflict resolution | v14 | DEON 2010 | `Prax.Deontic`: `□φ` = fact `obliged.<who>.<φ>` (the paper's `Ob:φ` sugar, no semantic change); conflict *detection* via `!`-exclusion collapse (property 2); breach reuses `violated.…`; contrary-to-duty (`□□`) via nested obligations; behavioural coupling by Wants, planner unchanged. Resolution is *emergent* (utility) — explicit priority is a documented extension. Gaps: no entailment-closure (property 1), no `m(X)`/LRT (that's #8). Grounding: `docs/research/deon-notes.md` |
 
 ## Runtime, tooling, UX
 
@@ -98,8 +102,9 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 42 | PWIM embedding-based free-text player input | research-needed | arXiv 2406.00942 | external model dependency |
 
 ## Open research to close
-- **DEON 2010 paper** — Richard Evans, "Introducing Exclusion Logic as a Deontic Logic," in *Deontic
-  Logic in Computer Science* (DEON 2010), Springer LNCS 6181, pp. 179–195 (DOI
-  10.1007/978-3-642-14183-6_14): full formal semantics, decision procedure, and obligation operator.
-  Blocks #8, #34. Open-access PDF: https://philarchive.org/archive/EVAIEL
-- Extent of static type checking (#8) — decide how much of Versu's implicit type system to port.
+- **DEON 2010 paper** — Richard Evans, "Introducing Exclusion Logic as a Deontic Logic" — *obtained*
+  (`references/papers/EVAIEL.pdf`, open-access https://philarchive.org/archive/EVAIEL) and distilled
+  (`docs/research/deon-notes.md`). It unblocked #34 (done, v14). It also underpins #8 (static type
+  checking): the `m(X)`/LRT decision procedure it defines is the machinery a full type checker needs.
+- Extent of static type checking (#8) — decide how much of Versu's implicit type system to port
+  (rests on the DEON paper's decision procedure, now available).

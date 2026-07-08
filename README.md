@@ -74,6 +74,13 @@ utility. See the design writeups:
   your menu is authorial nudges — stir a rivalry, kindle warmth, cast a pall — over an autonomous
   cast (ada, bex, cai), who then play out the consequences through the ordinary social machinery.
   (A practice-bound player is offered only its practice's affordances, via `candidateActions`.)
+- `Prax.Deontic` (v14) — a first-class **deontic "should"/obligation** layer, grounded in Evans'
+  *Exclusion Logic as a Deontic Logic* (DEON 2010; distilled in `docs/research/deon-notes.md`). An
+  obligation `□φ` is just the fact `obliged.<who>.<φ>` (the paper's `Ob:φ` sugar — no new
+  semantics); norm **conflict** is detected via the `!` exclusion (incompatible duties collapse to ⊥),
+  resolved *emergently* by the utility planner, and **contrary-to-duty** is the iterated `□□`
+  (a reparative duty after a breach). The bar's "settle up" is now a real obligation: serving raises
+  it, tipping discharges it, stiffing breaches it and creates a duty to make amends.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).

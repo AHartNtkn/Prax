@@ -26,6 +26,7 @@ import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome)
 import           Prax.Core
 import           Prax.Reactions
+import           Prax.Deontic
 import           Prax.Beliefs
 import           Prax.Conversation
 import           Prax.Arc
@@ -230,7 +231,9 @@ tendBarP = practice
           , Insert "practice.tendBar.Place.Bartender.customer.Customer!beverage!Beverage"
           , adjustScore "Customer" "Bartender" warmth 8 "servedMeWell"
           , setMood "Customer" pleased "Bartender" "gotMyDrink"
-          , spawnReaction "settleUp" ["Customer", "Bartender"] ]
+          , spawnReaction "settleUp" ["Customer", "Bartender"]
+            -- being served creates a real obligation to settle (a first-class □)
+          , oblige "Customer" "Customer.tipped.Bartender" ]
       , action "[Actor]: Drink the [Beverage]"
           [ Match "practice.tendBar.Place.Bartender.customer.Actor!beverage!Beverage"
           , Match "practiceData.tendBar.beverageType.Beverage!Kind"
@@ -258,9 +261,11 @@ tendBarP = practice
       ]
   }
 
--- Settling up after being served: tip (norm respected) or leave the tab (a
--- violation that spawns the bartender's disapproval). Spawned as
--- practice.settleUp.<Patron>.<Bartender>.
+-- Settling up after being served: the obligation "[Patron] should tip
+-- [Bartender]" (a first-class deontic □, raised on serve — see 'oblige' above) is
+-- discharged by tipping, or breached by leaving the tab unpaid — a norm violation
+-- that spawns the bartender's disapproval AND, contrary-to-duty (□□), a reparative
+-- obligation to make amends. Spawned as practice.settleUp.<Patron>.<Bartender>.
 settleUpP :: Practice
 settleUpP = practice
   { practiceId = "settleUp"
@@ -269,14 +274,17 @@ settleUpP = practice
   , actions =
       [ action "[Actor]: Tip [Bartender]"
           [ Eq "Actor" "Patron" ]
-          [ Insert "Patron.tipped.Bartender"
+          [ Insert "Patron.tipped.Bartender"            -- fulfils the duty's content…
+          , discharge "Patron" "Patron.tipped.Bartender" -- …so the obligation is met and closed
           , adjustScore "Bartender" "Patron" warmth 8 "aGoodTipper"
           , adjustScore "Patron" "Bartender" warmth 3 "friendlyService"
           , setMood "Bartender" pleased "Patron" "aGoodTip"
           , endReaction "settleUp" ["Patron", "Bartender"] ]
       , action "[Actor]: Leave [Bartender]'s tab unpaid"
           [ Eq "Actor" "Patron" ]
-          [ markViolation "Patron" "stiffedTheBartender"
+          [ breach "Patron" "stiffedTheBartender"         -- the duty is breached (= a violation)
+          , discharge "Patron" "Patron.tipped.Bartender"  -- the original duty can no longer be met…
+          , obligeReparative "Patron" "make.amends.with.Bartender"  -- …so a reparative □□ duty arises
           , spawnReaction "disapproval" ["Patron", "Bartender"]
           , endReaction "settleUp" ["Patron", "Bartender"] ]
       ]

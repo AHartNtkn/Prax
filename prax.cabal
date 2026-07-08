@@ -30,6 +30,7 @@ library
                       Prax.Planner
                       Prax.Core
                       Prax.Reactions
+                      Prax.Deontic
                       Prax.Beliefs
                       Prax.Conversation
                       Prax.Arc
@@ -73,6 +74,7 @@ test-suite prax-test
                       Prax.BarSpec
                       Prax.CoreSpec
                       Prax.ReactionsSpec
+                      Prax.DeonticSpec
                       Prax.BeliefsSpec
                       Prax.ConversationSpec
                       Prax.ArcSpec

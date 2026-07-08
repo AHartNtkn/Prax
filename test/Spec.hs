@@ -10,6 +10,7 @@ import qualified Prax.LoopSpec
 import qualified Prax.BarSpec
 import qualified Prax.CoreSpec
 import qualified Prax.ReactionsSpec
+import qualified Prax.DeonticSpec
 import qualified Prax.BeliefsSpec
 import qualified Prax.ConversationSpec
 import qualified Prax.ArcSpec
@@ -30,6 +31,7 @@ main = defaultMain $ testGroup "prax"
   , Prax.BarSpec.tests
   , Prax.CoreSpec.tests
   , Prax.ReactionsSpec.tests
+  , Prax.DeonticSpec.tests
   , Prax.BeliefsSpec.tests
   , Prax.ConversationSpec.tests
   , Prax.ArcSpec.tests

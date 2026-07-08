@@ -99,11 +99,15 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
         [ ("bex", "Go to bar"), ("bex", "Order beer"), ("ada", "Fulfill bex") ]
       assertBool "settle-up obligation spawned"
         ("practice.settleUp.bex.ada" `elem` dbToSentences (db served))
+      assertBool "a first-class tip obligation (a real □) arose on serve"
+        ("obliged.bex.bex.tipped.ada" `elem` dbToSentences (db served))
       tipped <- runSteps served [ ("bex", "Tip ada") ]
       let fs = dbToSentences (db tipped)
       assertBool "bex tipped ada" ("bex.tipped.ada" `elem` fs)
       assertBool "no violation" ("violated.bex.stiffedTheBartender" `notElem` fs)
       assertBool "obligation cleared" ("practice.settleUp.bex.ada" `notElem` fs)
+      assertBool "the □ obligation is discharged once tipped"
+        ("obliged.bex.bex.tipped.ada" `notElem` fs)
 
   , testCase "leaving the tab is a violation that draws the bartender's disapproval" $ do
       served <- runSteps barWorld
@@ -111,6 +115,8 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       stiffed <- runSteps served [ ("bex", "Leave ada") ]
       let fs = dbToSentences (db stiffed)
       assertBool "violation marked" ("violated.bex.stiffedTheBartender" `elem` fs)
+      assertBool "a reparative □□ obligation arises after the breach (contrary-to-duty)"
+        ("obliged.bex.obliged.bex.make.amends.with.ada" `elem` fs)
       assertBool "disapproval reaction spawned for ada"
         ("practice.disapproval.bex.ada" `elem` fs)
       -- ada disapproves: her warmth toward bex drops.
