@@ -8,6 +8,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, assertFailure)
 import           Prax.Db (dbToSentences)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, performOutcome)
+import           Prax.Planner (pickAction)
 import           Prax.Core (adjustScore, setMood, warmth, annoyed)
 import           Prax.Beliefs (believe)
 import           Prax.Conversation (beginConversation)
@@ -208,4 +209,22 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
         ("practice.greet.world.grievance.ada.bex" `elem` fs)
       assertBool "and their warmth has soured"
         ("ada.relationship.bex.warmth.score.-5" `elem` fs)
+
+  , testCase "a character's arc advances to belonging once it feels at home" $ do
+      -- bex feels genuinely warm toward ada.
+      let warm = performOutcome (adjustScore "bex" "ada" warmth 20 "fond") barWorld
+      assertBool "the belonging beat is available"
+        (any ("settle in, feeling you belong" `isInfixOf`) (map gaLabel (possibleActions warm "bex")))
+      settled <- runSteps warm [ ("bex", "settle in, feeling you belong") ]
+      assertBool "bex now belongs" ("bex.arc.belonging" `elem` dbToSentences (db settled))
+
+  , testCase "the against-desires transformation is offered but the planner refuses it" $ do
+      -- Every hopeful patron *can* resign themselves to loneliness…
+      assertBool "the transformation is on the table"
+        (any ("give up on the evening" `isInfixOf`) (map gaLabel (possibleActions barWorld "bex")))
+      -- …but an NPC never chooses it (sliding into loneliness only costs utility):
+      -- true transformation is, in practice, a player-only act.
+      let bexChar = head [ c | c <- characters barWorld, charName c == "bex" ]
+      assertBool "bex never resigns to solitude on its own"
+        (maybe True (not . ("give up" `isInfixOf`) . gaLabel) (pickAction 2 barWorld bexChar))
   ]

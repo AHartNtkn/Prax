@@ -31,7 +31,7 @@ expectedTrace =
   , "director: turn ada against bex to stir up the evening"
   , "you: Go to bar"
   , "ada: Wait a moment"
-  , "bex: Tip ada"
+  , "bex: settle in, feeling you belong here"
   ]
 
 tests :: TestTree
@@ -46,9 +46,12 @@ tests = testGroup "Prax.Loop"
       has "practice.greet.world.greeted.bex.ada"
       -- the player's ignored greeting left ada with a grievance
       has "practice.greet.world.grievance.ada.you"
-      -- bex respected the tipping norm
-      has "bex.tipped.ada"
       -- the director intervened once, injecting a rivalry between the two friends
       has "dm.stirred"
       has "practice.greet.world.grievance.ada.bex"
+      -- bex's arc reaches belonging (its own warmth held even as the director
+      -- soured ada toward it); no NPC ever chose the against-desires transformation
+      has "bex.arc.belonging"
+      assertBool "no NPC resigned to solitude"
+        ("bex.arc.lonely" `notElem` facts && "you.arc.lonely" `notElem` facts)
   ]

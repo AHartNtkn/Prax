@@ -26,6 +26,7 @@ import           Prax.Core
 import           Prax.Reactions
 import           Prax.Beliefs
 import           Prax.Conversation
+import           Prax.Arc
 
 -- | The character the human player controls.
 playerName :: String
@@ -165,7 +166,40 @@ patronP = practice
   { practiceId = "patron"
   , practiceName = "[Patron] is a patron"
   , roles = ["Patron"]
-  , initOutcomes = [ Insert "practice.patron.Patron.drinks!0" ]
+  , initOutcomes =
+      [ Insert "practice.patron.Patron.drinks!0"
+      , enterArc "Patron" "hopeful" ]   -- everyone arrives hopeful
+  }
+
+-- A character's inner arc: hopeful arrivals either come to feel they belong
+-- (if someone stands them a drink) or withdraw, feeling out of place (if someone
+-- comes to resent them). These are internal, high-level choices; the stage a
+-- character is in changes what they want (see bex's wants).
+arcP :: Practice
+arcP = practice
+  { practiceId = "arc"
+  , practiceName = "[Self]'s evening"
+  , roles = ["Self"]
+  , actions =
+      [ -- The rewarding beat an NPC pursues: once you feel genuinely warm toward
+        -- someone here, you can decide you belong (bex's +25 want drives this).
+        action "[Actor]: settle in, feeling you belong here"
+          ( [ Eq "Actor" "Self", arcIs "Actor" "hopeful" ]
+            ++ scoreAtLeast "Actor" "Friend" warmth 20 )   -- you've warmed to someone
+          [ enterArc "Actor" "belonging"
+          , setMood "Actor" happy "here" "foundMyPeople" ]
+
+        -- A transformation *against* one's desires: sliding into loneliness
+        -- forecloses the belonging you crave (+25) and is itself dreaded (-25),
+        -- with no way back — so the utility planner never chooses it. In practice
+        -- only the player ever does: "true transformation is available only to
+        -- the player" (Versu §X).
+      , action "[Actor]: give up on the evening, resigning yourself to solitude"
+          [ Eq "Actor" "Self"
+          , arcIs "Actor" "hopeful" ]
+          [ enterArc "Actor" "lonely"
+          , setMood "Actor" sad "here" "whatsThePoint" ]
+      ]
   }
 
 -- Tending bar: order, fulfill (which warms the customer and spawns a tip
@@ -324,6 +358,12 @@ bex = (character "bex")
       , Want [ Match "practice.greet.world.bought.bex.Friend" ] 6
       , Want [ Match "bex.tipped.ada" ] 3                       -- likes to tip
       , Want [ violationOf "bex" "stiffedTheBartender" ] (-40)  -- and hates stiffing
+        -- the arc: bex yearns to belong and dreads loneliness, and once settled
+        -- behaves accordingly (lingers if it belongs, drifts home if it doesn't)
+      , Want [ arcIs "bex" "belonging" ] 25
+      , Want [ arcIs "bex" "lonely" ] (-25)
+      , Want [ arcIs "bex" "belonging", Match "practice.world.world.at.bex!bar" ] 3
+      , Want [ arcIs "bex" "lonely", Match "practice.world.world.at.bex!entrance" ] 8
       ] }
 
 -- The director: no physical presence, only metalevel desires; bound to its own
@@ -344,7 +384,8 @@ barWorld =
     withPractices =
       (definePractices
          [ coreLib, disapprovalP
-         , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice ]
+         , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
+         , arcP ]
          emptyState)
         { characters = [you, ada, bex, director] }
     setup =
@@ -358,4 +399,6 @@ barWorld =
       , Insert "practice.greet.world"
       , Insert "practice.tendBar.bar.ada"
       , Insert "practice.dm.director"
+      , Insert "practice.arc.you"
+      , Insert "practice.arc.bex"
       ]
