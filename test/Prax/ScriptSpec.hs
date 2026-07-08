@@ -14,6 +14,7 @@ import           Prax.Core (adjustScore)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Script
 import           Prax.Worlds.Play (playScript, playWorld)
+import           Prax.Worlds.Audience (audienceWorld)
 
 -- The ending reached, if any.
 endingOf :: PraxState -> Maybe String
@@ -148,4 +149,42 @@ tests = testGroup "Prax.Script"
           driven = driveIdle Nothing "p" 12 w0
       assertBool "trait/desire wiring lets vain be moved by regard: it preens"
         (exists "preened" (db driven))
+
+  , testCase "same-labelled quips by different speakers dispatch to their own effects" $ do
+      -- Two quips share the display text "[Actor]: act"; performing b's must run
+      -- b's outcome, not a's. (A quip is a specific speaker's action, so the
+      -- compiled action id must distinguish the speakers.)
+      let sc = Script
+            { scriptStart = "s", scriptCast = [ member "a", member "b" ]
+            , scriptScenes =
+                [ (scene "s")
+                    { sceneBeats =
+                        [ quip "a" "[Actor]: act" [] [ Insert "aDid" ]
+                        , quip "b" "[Actor]: act" [] [ Insert "bDid" ] ] } ] }
+          w      = compile sc
+          afterB = performAction w (actionMatching "b" "act" w)
+      assertBool "b's beat set b's fact"        (exists "bDid" (db afterB))
+      assertBool "b's beat did NOT run a's beat" (not (exists "aDid" (db afterB)))
+
+    -- The audience: one story that uses all three features together ----------
+  , testCase "the audience: dawdling lets the clock run out to 'dismissed'" $ do
+      let driven = driveIdle Nothing "envoy" 40 audienceWorld
+      endingOf driven @?= Just "dismissed"
+
+  , testCase "the audience: flatter then petition reaches 'granted'" $ do
+      let w0 = audienceWorld
+          w1 = performAction w0 (actionMatching "envoy" "flatter" w0)
+          w2 = performAction w1 (actionMatching "envoy" "petition" w1)
+          -- enough narrator turns for both the pending memory and the ending to
+          -- fire (they both count as advancing the story); granted lands well
+          -- before the timeout clock could reach 'dismissed'.
+      endingOf (driveIdle Nothing "envoy" 15 w2) @?= Just "granted"
+
+  , testCase "the audience: memory fires and the Duke's concern moves him (once)" $ do
+      let driven = driveIdle Nothing "envoy" 6 audienceWorld
+      assertBool "memory fired"                 (exists "memoryFired.audience_mem0" (db driven))
+      assertBool "the Duke, concerned for favour, flattered unbidden"
+                                                (exists "dukeSpoke" (db driven))
+      assertBool "and the one-shot held: no flatter left on the Duke's menu"
+        (not (any (("flatter" `isInfixOf`) . gaLabel) (possibleActions driven "duke")))
   ]

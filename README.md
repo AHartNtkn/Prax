@@ -70,6 +70,10 @@ utility. See the design writeups:
   after N turns, via a passive scene clock), and **character sketches** (`concernedWith` turns
   concerns into desires; `withTraits` records personality as queryable facts). Scene *bounds* are
   subsumed by scene-local beats, and the readable text playtext is intentionally replaced by JSON.
+  `Prax.Worlds.Audience` (`prax audience`) exercises all three in one short scene: a royal audience
+  where a memory recalls a warning as you enter, an ambitious Duke's *concern* for standing makes him
+  court the king unbidden, and the audience times out (`dismissed`) if you don't press your petition
+  (`granted`) in time.
 - `Prax.Script.Json` (v12) — play-scripts round-trip through **readable JSON** (`Prax.Script.Json`),
   the editable authoring/exchange format (chosen over maintaining a bespoke `.prompter` grammar).
   `cabal run prax -- dump-play` prints the built-in play as JSON; `cabal run prax -- play
@@ -119,6 +123,7 @@ cabal run prax -- intrigue  # play the dramatic episode (a Roman conspiracy)
 cabal run prax -- play      # play the same drama authored as a Prompter-lite play-script
 cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
 cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + three rules
+cabal run prax -- audience  # a Prompter demo: memory + timed junction + character-sketch in one scene
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
 cabal run prax -- check feud   # static well-formedness check of a world
 ```

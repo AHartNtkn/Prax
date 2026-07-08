@@ -47,6 +47,7 @@ library
                       Prax.Worlds.Intrigue
                       Prax.Worlds.Play
                       Prax.Worlds.Feud
+                      Prax.Worlds.Audience
 
 executable prax
     import:           warnings

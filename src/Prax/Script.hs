@@ -63,7 +63,7 @@ module Prax.Script
   ) where
 
 import           Data.Char (isAlphaNum)
-import           Data.List (find, isPrefixOf)
+import           Data.List (find, isPrefixOf, stripPrefix)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (unify, valToString)
@@ -254,11 +254,25 @@ compile scr = foldl (flip performOutcome) base setup
       , actions = concatMap compileJunctions scenes ++ concatMap compileMemories scenes }
 
     compileBeats s = map (compileBeat (sceneId s)) (sceneBeats s)
-    compileBeat sid b = action (beatLabel b)
+    -- A quip is a *specific* speaker's action, so its compiled id bakes the
+    -- speaker into the "[Actor]" slot: two speakers sharing the display text
+    -- "[Actor]: flatter the king" become distinct actions ("duke: …" vs
+    -- "envoy: …") and dispatch (which is by action id) can't cross them. The
+    -- rendered label is unchanged, since "[Actor]" would render to the speaker
+    -- anyway. Speaker-less beats keep their label verbatim.
+    compileBeat sid b = action (maybe id bakeActor (beatSpeaker b) (beatLabel b))
       ( [ Match ("currentScene!" ++ sid), Match "character.Actor" ]
         ++ maybe [] (\spk -> [Eq "Actor" spk]) (beatSpeaker b)
         ++ beatConds b )
       (beatEffects b)
+
+    -- Substitute a concrete speaker for every "[Actor]" token in a label.
+    bakeActor spk = go
+      where
+        go [] = []
+        go s@(c:cs) = case stripPrefix "[Actor]" s of
+                        Just rest -> spk ++ go rest
+                        Nothing   -> c : go cs
 
     compileJunctions s = map (compileJunction (sceneId s)) (sceneJunctions s)
     compileJunction sid j = action ("(story) " ++ junctionName j)
