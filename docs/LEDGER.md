@@ -8,6 +8,7 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 - **v5** — conversation (speakers, topics, quips), built as `Prax.Conversation`.
 - **v6** — a story manager (DM) as a metalevel agent (the bar `director`).
 - **v7** — character arcs (internal high-level state), built as `Prax.Arc`.
+- **v8** — first-order connectives in the query language (∀/∃/∨/→).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
   logic paper) or an unsettled design question.
@@ -24,7 +25,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 4 | Prefix = object; delete subtree by prefix | v1 | P§VII | `retract` |
 | 5 | Unification / pattern match (vars = Capitalized) | v1 | Praxish `db.js` | list-monad over bindings |
 | 6 | Query ops: not / eq(assign) / neq / lt·lte·gt·gte / calc / subquery | v1 | Praxish `praxish.js` | typed `Condition` ADT |
-| 7 | Full FOL queries: ∀, ∃, ∨, → | planned | P§VII | Praxish lacks these |
+| 7 | Full FOL queries: ∀, ∃, ∨, → | v8 | P§VII | `Prax.Query` `Or`/`Absent`/`Exists` + `forAll`/`implies`; nests freely |
 | 8 | Static type inference / checker (ML-style) | research-needed | P§VII p.120 | design question: how far to go |
 
 ## Practices & actions
@@ -48,7 +49,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 18 | Utility-based reactive selection (apply-evaluate-undo) | v1 | P§IX | immutability ⇒ no explicit undo |
 | 19 | Per-character wants; utility = Σ modifier × #bindings | v1 | P§IX-A | Versu-faithful; supersedes Praxish global goals |
 | 20 | Forward-chaining lookahead w/ discounts (0.9 self / 0.5 other) | v1 | Praxish `planner.js` | depth configurable |
-| 21 | Wants as arbitrary logic sentences (∃/∀ desires) | planned | P§IX-A | needs #7 |
+| 21 | Wants as arbitrary logic sentences (∃/∀ desires) | v8\* | P§IX-A | unblocked by #7 — a want is now any FOL formula; *runtime want injection still open* |
 | 22 | Character arcs / interiority (high-level internal choices) | v7 | P§X | `Prax.Arc`; bex's hopeful→belonging/lonely arc gates its wants; against-desires transformation is player-only |
 | 23 | Swaygent-style volition/influence selection | research-needed | Praxish `swaygent.js` | Ensemble-inspired alt selector |
 

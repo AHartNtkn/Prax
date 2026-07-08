@@ -81,4 +81,30 @@ tests = testGroup "Prax.Planner"
           let afterWalk = performAction barState walk
           worldValue 0 afterWalk bethWantsCider @?= 0.0
           worldValue 1 afterWalk bethWantsCider @?= 9.0
+
+  , testCase "a universally-quantified desire drives the planner to complete it" $ do
+      -- A host who wants EVERY guest to have a drink (a ∀ desire), where one guest
+      -- still lacks one. The planner should pour a drink for the one who needs it.
+      let serveP = practice
+            { practiceId = "serve", practiceName = "[Host] hosts", roles = ["Host"]
+            , actions =
+                [ action "[Actor]: pour a drink for [Guest]"
+                    [ Match "guest.Guest", Not "hasDrink.Guest" ]
+                    [ Insert "hasDrink.Guest" ]
+                , action "[Actor]: rest" [] []   -- a 0-utility alternative
+                ] }
+          host = (character "host")
+            { charWants = [ Want [ forAll [Match "guest.G"] [Match "hasDrink.G"] ] 10 ] }
+          st0 = (definePractice serveP emptyState) { characters = [host] }
+          st  = foldl (flip performOutcome) st0
+                  [ Insert "guest.a", Insert "guest.b", Insert "hasDrink.a"  -- b lacks a drink
+                  , Insert "practice.serve.host" ]
+      -- the ∀ is currently unsatisfied (b has no drink), so it scores 0…
+      evaluate st (charWants host) @?= 0
+      -- …and the planner chooses to serve b, which completes "everyone has a drink".
+      fmap gaLabel (pickAction 1 st host) @?= Just "host: pour a drink for b"
+      let served = performAction st
+                     (head [ ga | ga <- possibleActions st "host"
+                                , gaLabel ga == "host: pour a drink for b" ])
+      evaluate served (charWants host) @?= 10   -- now the universal holds
   ]

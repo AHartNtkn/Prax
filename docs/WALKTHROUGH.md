@@ -380,9 +380,9 @@ the director turning two friends against each other, and bex settling into belon
 ## What is *not* yet modeled
 
 The bar exercises the whole engine including the v2 core model, v3 reactions & norms, v4 beliefs,
-v5 conversation, a v6 story manager, and v7 character arcs, but the engine is still deliberately
-smaller than Versu.
+v5 conversation, a v6 story manager, v7 character arcs, and a v8 first-order query grammar
+(`∀`/`∃`/`∨`/`→`), but the engine is still deliberately smaller than Versu.
 Not yet built (see `docs/LEDGER.md`): public "bonds" in play, richer norms & eviction, a generic
 "react to any action" event bus, quantified/nested beliefs, multi-party conversation, the player as
-DM, the full first-order query grammar (`∀`/`∃`/`∨`/`→`), and a text authoring language. Those are
-the next milestones.
+DM, a verified dramatic episode, QA tooling (stress-test / inspector / save-load), and a text
+authoring language. Those are the next milestones.
