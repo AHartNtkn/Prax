@@ -51,6 +51,9 @@ utility. See the design writeups:
   so preconditions and desires can be disjunctive/quantified.
 - Cast removal + `Prax.Worlds.Intrigue` (v9) — a character can die and leave the cast; a branching
   dramatic episode verifies Versu-style drama end-to-end.
+- `Prax.Inspect` + `Prax.Stress` (v10) — QA tooling: an inspector that explains why an action is
+  unavailable (`explain`), and a seeded stress-tester that plays many random all-AI games and
+  reports endings, action coverage, and dead ends (`cabal run prax -- stress [world]`).
 
 See `docs/LEDGER.md` for what's next (public bonds in play, richer norms, a generic event bus,
 multi-party conversation, the player as DM, a text authoring language, …).

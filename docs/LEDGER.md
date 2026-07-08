@@ -10,6 +10,7 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 - **v7** — character arcs (internal high-level state), built as `Prax.Arc`.
 - **v8** — first-order connectives in the query language (∀/∃/∨/→).
 - **v9** — cast removal + a dramatic vertical slice (`Prax.Worlds.Intrigue`).
+- **v10** — QA tooling: the inspector (`Prax.Inspect`) and stress-test (`Prax.Stress`).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
   logic paper) or an unsettled design question.
@@ -81,9 +82,9 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 |---|---------|--------|--------|-------|
 | 35 | CLI menu loop (act / more), narration | v1 | P§V UI | |
 | 36 | Round-robin turn loop | v1 | Praxish `app.js` | |
-| 37 | Deterministic playback / replay | planned | P§VI | golden-trace tests seed this |
-| 38 | Runtime inspector ("why is X true / why did preconds fail") | planned | P§VI | reuse `killsPerStep` idea |
-| 39 | Stress-test harness (many auto-played runs) | planned | P§VI | |
+| 37 | Deterministic playback / replay | v10\* | P§VI | the loop is pure & deterministic — `Prax.Loop.runNpcTicks` gives reproducible traces (golden replay); *player action-log record/replay to a file still open* |
+| 38 | Runtime inspector ("why is X true / why did preconds fail") | v10 | P§VI | `Prax.Inspect` `explain`/`firstFailing` (revives `killsPerStep`) |
+| 39 | Stress-test harness (many auto-played runs) | v10 | P§VI | `Prax.Stress` — seeded random all-AI runs; endings + coverage + dead-ends; CLI `prax stress` |
 | 40 | Serializable world state (save/load) | planned | P§VI | trivial given #1 |
 | 41 | Rich branching multi-character episode (content) | v9 | P§XII | `Prax.Worlds.Intrigue`: murder, character death (cast-removal), betrayal/loyalty/complicity endings, romance |
 | 43 | Cast removal (death / eviction) | v9 | P§VIII-D | `dead.<name>` fact; `Prax.Types.livingCharacters`; loop/planner skip the dead |

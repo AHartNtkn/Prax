@@ -6,6 +6,7 @@ module Main (main) where
 
 import           Data.Maybe (listToMaybe)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import           System.Environment (getArgs)
 import           System.IO (BufferMode (NoBuffering), hSetBuffering, isEOF, stdout)
 import           Text.Read (readMaybe)
@@ -14,6 +15,7 @@ import           Prax.Db (Bindings, unify, valToString)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction)
 import           Prax.Loop (advance, npcAct)
+import           Prax.Stress
 import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
 
@@ -21,10 +23,32 @@ import qualified Prax.Worlds.Intrigue as Intrigue
 lookaheadDepth :: Int
 lookaheadDepth = 2
 
+-- A world by name, for both playing and stress-testing.
+worldNamed :: [String] -> (String, PraxState, String)
+worldNamed ("intrigue" : _) = ("Intrigue (Rome)", Intrigue.intrigueWorld, Intrigue.playerName)
+worldNamed _                = ("a night at the bar", Bar.barWorld, Bar.playerName)
+
+-- @prax stress [world]@ — a QA report over many random all-AI playthroughs.
+runStress :: [String] -> IO ()
+runStress args = do
+  let (name, world, _) = worldNamed args
+      r = stressTest 200 50 world
+  putStrLn ("stress-testing " ++ name ++ " — 200 random runs, cap 50 turns")
+  putStrLn ("  endings:   " ++ show (Map.toList (srEndings r)))
+  putStrLn ("  coverage:  " ++ show (Set.size (srCoverage r)) ++ " distinct actions fired")
+  putStrLn ("  dead ends: " ++ show (srDeadEnds r))
+  putStrLn ("  no ending: " ++ show (srNoEnding r) ++ " / " ++ show (srRuns r) ++ " runs")
+
 main :: IO ()
 main = do
   hSetBuffering stdout NoBuffering
   args <- getArgs
+  case args of
+    ("stress" : rest) -> runStress rest
+    _                 -> play args
+
+play :: [String] -> IO ()
+play args = do
   let (title, blurb, world, player) = case args of
         ("intrigue" : _) ->
           ( "prax — Intrigue (Rome)"
