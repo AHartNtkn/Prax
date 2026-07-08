@@ -3,8 +3,11 @@ module Prax.LoopSpec (tests) where
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, (@?=), assertBool)
 
+import           Data.List (isInfixOf)
+
 import           Prax.Db (dbToSentences)
-import           Prax.Types (db)
+import           Prax.Types (db, Outcome (..))
+import           Prax.Engine (performOutcome)
 import           Prax.Loop (runNpcTicks)
 import           Prax.Worlds.Bar (barWorld)
 
@@ -54,4 +57,10 @@ tests = testGroup "Prax.Loop"
       has "bex.arc.belonging"
       assertBool "no NPC resigned to solitude"
         ("bex.arc.lonely" `notElem` facts && "you.arc.lonely" `notElem` facts)
+
+  , testCase "a dead character is skipped in turn-taking" $ do
+      -- mark bex dead; over a full run bex must never act again
+      let dead = performOutcome (Insert "dead.bex") barWorld
+          (tr, _) = runNpcTicks 2 16 dead
+      assertBool "bex takes no turns once dead" (not (any ("bex:" `isInfixOf`) tr))
   ]

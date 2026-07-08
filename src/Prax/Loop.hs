@@ -9,18 +9,22 @@ module Prax.Loop
   , runNpcTicks
   ) where
 
+import           Prax.Db (exists)
 import           Prax.Types
 import           Prax.Engine (performAction)
 import           Prax.Planner (pickAction)
 
--- | Advance the round-robin cursor and return the character whose turn it is.
+-- | Advance the round-robin cursor to the next living character and return it.
+-- Dead characters (fact @dead.\<name\>@) are skipped; the cursor stays an index
+-- into the full cast list so ordering is preserved.
 advance :: PraxState -> (Character, PraxState)
-advance st
-  | n == 0    = error "Prax.Loop.advance: no characters in the cast"
-  | otherwise = (characters st !! i, st { cursor = i })
+advance st =
+  case [ i | k <- [1 .. n], let i = (cursor st + k) `mod` n, alive i ] of
+    (i : _) -> (characters st !! i, st { cursor = i })
+    []      -> error "Prax.Loop.advance: no living characters"
   where
     n = length (characters st)
-    i = (cursor st + 1) `mod` n
+    alive i = not (exists (deadSentence (charName (characters st !! i))) (db st))
 
 -- | Have an NPC choose (looking @depth@ plies ahead) and perform its best
 -- action, returning what it did (if anything) and the resulting state.

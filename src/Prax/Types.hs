@@ -24,12 +24,14 @@ module Prax.Types
   , GroundedAction(..)
   , PraxState(..)
   , emptyState
+  , deadSentence
+  , livingCharacters
   ) where
 
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Bindings, Db, emptyDb)
+import           Prax.Db (Bindings, Db, emptyDb, exists)
 import           Prax.Query (Condition)
 
 -- | A social practice: a role-parameterized bundle of affordances.
@@ -128,3 +130,14 @@ data PraxState = PraxState
 emptyState :: PraxState
 emptyState = PraxState
   { db = emptyDb, practiceDefs = Map.empty, characters = [], cursor = -1 }
+
+-- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead
+-- character stays in the cast list but is skipped in turn-taking and lookahead.
+deadSentence :: String -> String
+deadSentence name = "dead." ++ name
+
+-- | The characters still in play (not marked dead). Used by the turn loop and
+-- the planner so a removed character neither acts nor is planned around.
+livingCharacters :: PraxState -> [Character]
+livingCharacters st =
+  [ c | c <- characters st, not (exists (deadSentence (charName c)) (db st)) ]

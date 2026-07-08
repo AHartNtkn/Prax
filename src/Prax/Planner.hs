@@ -53,7 +53,7 @@ worldValue depth st actor = base + future
       | otherwise  =
           maximum (0 : [ discount mover
                           * (worldValue (depth - 1) (performAction st a) actor - base)
-                       | mover <- characters st
+                       | mover <- livingCharacters st
                        , a <- candidateActions st mover ])
     discount mover
       | charName mover == charName actor = 0.9   -- the actor's own future move
