@@ -124,3 +124,12 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   recompute — which would cut the lookahead's dominant cost. Bigger change than semi-naive (needs
   delta-retraction / provenance to un-derive facts whose support is gone); worth it only if a large
   axiom set + deep lookahead proves to be the bottleneck in a real sandbox.
+- **Hard priority tiers for action selection (from Praxish's `swaygent.js`).** Ensemble/CiF-style
+  selection tags actions with a symbolic tier — `forbidden` / `required` / `normal` — that sorts
+  *above* numeric utility, giving categorical "you must / may not" rules. Our planner and norms are
+  all *soft* (a strong-negative want steers away, but nothing is inviolable). Borrowing tiers would
+  give the deontic layer (#34, v14) **hard** norm enforcement: an obligation ⇒ `required`, a
+  prohibition ⇒ `forbidden`. It is a selection-paradigm change, not a Versu feature — Swaygent is
+  Praxish's alt selector, whereas we (faithfully) use Versu's utility planner — and combining hard
+  tiers with N-ply lookahead (prune forbidden branches, propagate required) is the non-trivial part.
+  A "beyond Versu" enhancement, not a parity gap.
