@@ -8,6 +8,7 @@ import           Prax.Db (dbToSentences)
 import           Prax.Types (PraxState, db, gaLabel)
 import           Prax.Engine (possibleActions, performAction)
 import           Prax.Loop (runNpcTicks)
+import           Prax.Inspect (explain)
 import           Prax.Worlds.Intrigue (intrigueWorld)
 
 facts :: PraxState -> [String]
@@ -68,4 +69,13 @@ tests = testGroup "Prax.Worlds.Intrigue (a dramatic slice)"
       st <- act afterConfide "marcus" "warn artus"
       assertBool "no poisoning remains available"
         (not (any ("poison" `isInfixOf`) (map gaLabel (possibleActions st "cassia"))))
+
+  , testCase "the inspector explains why an action is (un)available" $ do
+      -- before Marcus knows the plot, warning is blocked by the belief precondition
+      let before = concat (explain intrigueWorld "marcus" "warn artus")
+      assertBool ("blocked, reason mentions the belief: " ++ before)
+        ("blocked by" `isInfixOf` before && "believes" `isInfixOf` before)
+      -- once Cassia has confided, it becomes available
+      let after = concat (explain afterConfide "marcus" "warn artus")
+      assertBool ("now available: " ++ after) ("AVAILABLE" `isInfixOf` after)
   ]
