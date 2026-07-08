@@ -16,11 +16,14 @@ module Prax.Query
   ( CmpOp(..)
   , CalcOp(..)
   , Condition(..)
+  , forAll
+  , implies
   , query
   , satisfies
   , countSatisfying
   ) where
 
+import           Data.List (nub)
 import qualified Data.Map.Strict as Map
 import           Text.Read (readMaybe)
 
@@ -58,7 +61,32 @@ data Condition
       , subWhere :: [Condition] -- ^ the sub-query's conditions
       }
     -- ^ Run a nested query and bind @subSet@ to the list of projected rows.
+  | Or [[Condition]]
+    -- ^ Disjunction: at least one clause (each a conjunction) holds. A
+    -- /generator/ — it unions the (deduplicated) bindings from every satisfying
+    -- clause, so a disjunctive precondition can bind variables from either side.
+  | Absent [Condition]
+    -- ^ Negation-as-failure over a whole conjunction: keep the binding iff the
+    -- inner conjunction has no solution. Generalizes 'Not' from a single
+    -- sentence to @¬(compound)@ — e.g. @Absent [Match "leader.X", Match "X.sex!male"]@
+    -- is "there is no male leader" (@¬∃@).
+  | Exists [Condition]
+    -- ^ Dual of 'Absent': keep the binding iff the inner conjunction /has/ a
+    -- solution, discarding the witnesses (a boolean @∃@ that neither leaks nor
+    -- multiplies bindings downstream).
   deriving (Eq, Show)
+
+-- | Universal quantification: for every binding of @guard@, @body@ holds
+-- (@∀ x. guard(x) → body(x)@). Defined as "there is no @guard@-binding for which
+-- @body@ fails". E.g. @forAll [Match "patron.P"] [Match "P.hasDrink"]@ = "every
+-- patron has a drink".
+forAll :: [Condition] -> [Condition] -> Condition
+forAll guard body = Absent (guard ++ [Absent body])
+
+-- | Material implication @a → b@ (propositional: either @a@ is unsatisfiable
+-- from the current binding, or @b@ holds).
+implies :: [Condition] -> [Condition] -> Condition
+implies a b = Or [ [Absent a], b ]
 
 -- | Evaluate a conjunctive list of conditions from a starting binding, yielding
 -- every consistent binding that satisfies them all.
@@ -118,6 +146,11 @@ evalCond inSub db (Subquery setVar find conds) b
           rows = [ [ maybe lvar valToString (Map.lookup lvar r) | lvar <- find ]
                  | r <- results ]
       in [Map.insert setVar (VSet rows) b]
+
+evalCond inSub db (Or clauses) b =
+  nub (concat [ queryWith inSub db clause b | clause <- clauses ])
+evalCond inSub db (Absent conds) b = [ b | null  (queryWith inSub db conds b) ]
+evalCond inSub db (Exists conds) b = [ b | not (null (queryWith inSub db conds b)) ]
 
 -- Resolve an operand: an uppercase-initial operand is a variable (look it up),
 -- otherwise it is a literal constant. Returns Nothing for an unbound variable.

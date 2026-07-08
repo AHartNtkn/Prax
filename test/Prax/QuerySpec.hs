@@ -98,7 +98,56 @@ tests = testGroup "Prax.Query"
         in query db conds (Map.fromList [("Actor", VStr "solo")]) @?= []
           -- solo sees only tim dancing (count 1), so eq 2 fails.
     ]
+
+  , testGroup "first-order connectives (∨, ¬compound, ∃, ∀, →)"
+    [ testCase "Or binds via either clause (disjunction)" $
+        let db = build ["p.a", "q.b"]
+            rs = query db [ Or [ [Match "p.X"], [Match "q.X"] ] ] Map.empty
+        in sortVals (concatMap (maybe [] pure . look "X") rs) @?= [VStr "a", VStr "b"]
+
+    , testCase "Or deduplicates overlapping clauses" $
+        let db = build ["p.a", "q.a"]  -- both clauses yield X=a
+        in length (query db [ Or [ [Match "p.X"], [Match "q.X"] ] ] Map.empty) @?= 1
+
+    , testCase "Absent is ¬∃ over a compound (no male leader)" $ do
+        -- a male leader exists → Absent fails
+        query (build ["leader.brown", "brown.sex!male"])
+              [ Absent [ Match "leader.L", Match "L.sex!male" ] ] Map.empty @?= []
+        -- only a female leader → Absent holds
+        query (build ["leader.lucy", "lucy.sex!female"])
+              [ Absent [ Match "leader.L", Match "L.sex!male" ] ] Map.empty @?= [Map.empty]
+
+    , testCase "Exists is boolean ∃ — satisfiable without leaking witnesses" $ do
+        let db = build ["char.tim", "char.kev", "here.ok"]
+        -- bare Match multiplies over all chars…
+        length (query db [ Match "here.OK", Match "char.Who" ] Map.empty) @?= 2
+        -- …Exists keeps a single binding and does not bind Who
+        let rs = query db [ Match "here.OK", Exists [ Match "char.Who" ] ] Map.empty
+        length rs @?= 1
+        look "Who" (head rs) @?= Nothing
+
+    , testCase "forAll: every patron has a drink (flips when one lacks it)" $ do
+        let has  = build ["patron.tim", "patron.kev", "drink.tim", "drink.kev"]
+            lacks = build ["patron.tim", "patron.kev", "drink.tim"]
+            q d = query d [ forAll [Match "patron.P"] [Match "drink.P"] ] Map.empty
+        q has   @?= [Map.empty]
+        q lacks @?= []
+
+    , testCase "implies: A → B truth table" $ do
+        let q facts = query (build facts) [ implies [Match "raining"] [Match "wet"] ] Map.empty
+        q ["raining", "wet"]        @?= [Map.empty]   -- A ∧ B
+        q ["raining"]               @?= []            -- A ∧ ¬B
+        q ["wet"]                   @?= [Map.empty]   -- ¬A (vacuously true)
+        q []                        @?= [Map.empty]   -- ¬A
+    ]
   ]
+
+sortVals :: [Val] -> [Val]
+sortVals = map VStr . sortStr . map valToString
+  where sortStr = foldr ins []
+        ins x [] = [x]
+        ins x (y:ys) | x <= y    = x : y : ys
+                     | otherwise = y : ins x ys
 
 asSet :: Val -> Maybe [[String]]
 asSet (VSet xs) = Just xs
