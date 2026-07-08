@@ -33,6 +33,7 @@ library
                       Prax.Arc
                       Prax.Loop
                       Prax.Inspect
+                      Prax.Stress
                       Prax.Worlds.Bar
                       Prax.Worlds.Intrigue
 
@@ -68,3 +69,4 @@ test-suite prax-test
                       Prax.ConversationSpec
                       Prax.ArcSpec
                       Prax.IntrigueSpec
+                      Prax.StressSpec
