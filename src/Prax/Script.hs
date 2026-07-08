@@ -50,6 +50,7 @@ module Prax.Script
   , ending
     -- * Compilation and tooling
   , narratorName
+  , scriptPlayer
   , currentSceneOf
   , compile
   , flowChart
@@ -159,6 +160,12 @@ ending name = Junction name Nothing
 -- never collides with a cast name and is never a beat speaker.
 narratorName :: String
 narratorName = "_narrator"
+
+-- | The player-controlled character (the first cast member marked @playable@).
+scriptPlayer :: Script -> String
+scriptPlayer scr = case [ castName c | c <- scriptCast scr, castPlayable c ] of
+  (p : _) -> p
+  []      -> error "Prax.Script.scriptPlayer: no playable cast member"
 
 -- | The id of the currently-active scene, if any.
 currentSceneOf :: PraxState -> Maybe String

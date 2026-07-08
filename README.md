@@ -63,9 +63,13 @@ utility. See the design writeups:
   fires junctions automatically; `flowChart` renders the scene graph (`cabal run prax -- flow`), and
   the stress-tester reports scene coverage. `Prax.Worlds.Play` recasts the Rome conspiracy as a
   two-scene play in ~30% fewer authored lines than the hand-coded `Intrigue`.
+- `Prax.Script.Json` (v12) — play-scripts round-trip through **readable JSON** (`Prax.Script.Json`),
+  the editable authoring/exchange format (chosen over maintaining a bespoke `.prompter` grammar).
+  `cabal run prax -- dump-play` prints the built-in play as JSON; `cabal run prax -- play
+  examples/play.json` loads and plays an edited one. See `examples/play.json`.
 
-See `docs/LEDGER.md` for what's next (a text `.prompter` parser onto the same AST, character
-prose-sketches, timed junctions, memories, the player as DM, …).
+See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
+player as DM, …).
 
 ## Build, test, play
 
@@ -78,6 +82,8 @@ cabal run prax             # play the bar demo — you are 'you'; pick from the 
 cabal run prax -- intrigue  # play the dramatic episode (a Roman conspiracy)
 cabal run prax -- play      # play the same drama authored as a Prompter-lite play-script
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
+cabal run prax -- dump-play         # print the play-script as JSON
+cabal run prax -- play examples/play.json  # load and play a play-script from JSON
 ```
 
 In the bar demo, NPCs act autonomously: order a drink and the bartender (ada) will serve you,

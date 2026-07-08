@@ -4,11 +4,14 @@
 -- @prax@ (the bar, default) or @prax intrigue@ (the dramatic episode).
 module Main (main) where
 
+import           Data.List (isSuffixOf)
 import           Data.Maybe (listToMaybe)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import           System.Environment (getArgs)
-import           System.IO (BufferMode (NoBuffering), hSetBuffering, isEOF, stdout)
+import           System.Exit (exitFailure)
+import           System.IO (BufferMode (NoBuffering), hPutStrLn, hSetBuffering, isEOF, stderr, stdout)
 import           Text.Read (readMaybe)
 
 import           Prax.Db (Bindings, unify, valToString)
@@ -17,7 +20,8 @@ import           Prax.Engine (possibleActions, performAction)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Stress
 import           Prax.Persist (saveState, loadState)
-import           Prax.Script (flowChart)
+import           Prax.Script (Script, compile, flowChart, scriptPlayer)
+import           Prax.Script.Json (encodeScript, loadScript)
 import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
 import qualified Prax.Worlds.Play as Play
@@ -56,8 +60,35 @@ main = do
   args <- getArgs
   case args of
     ("stress" : rest) -> runStress rest
-    ("flow" : _)      -> putStr (flowChart Play.playScript)
+    ("dump-play" : _) -> BLC.putStrLn (encodeScript Play.playScript)
+    ("flow" : rest)   -> do scr <- scriptFrom rest; putStr (flowChart scr)
+    ("play" : file : _) | ".json" `isSuffixOf` file -> playFile file
     _                 -> play args
+
+-- A play-script from a @.json@ file argument if given, else the built-in one.
+scriptFrom :: [String] -> IO Script
+scriptFrom args = case [ f | f <- args, ".json" `isSuffixOf` f ] of
+  (f : _) -> loadOrDie f
+  []      -> pure Play.playScript
+
+-- Load a play-script or exit loudly (no silent fallback).
+loadOrDie :: FilePath -> IO Script
+loadOrDie f = do
+  r <- loadScript f
+  case r of
+    Right s -> pure s
+    Left e  -> do hPutStrLn stderr ("could not load " ++ f ++ ": " ++ e)
+                  exitFailure
+
+-- Play a script loaded from a file.
+playFile :: FilePath -> IO ()
+playFile file = do
+  scr <- loadOrDie file
+  let title = "prax — " ++ file
+  putStrLn (replicate (length title + 4) '=')
+  putStrLn ("  " ++ title)
+  putStrLn (replicate (length title + 4) '=')
+  loop (scriptPlayer scr) (compile scr)
 
 play :: [String] -> IO ()
 play args = do

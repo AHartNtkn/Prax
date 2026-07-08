@@ -14,7 +14,8 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 - **v11** — persistence: save/load a session (`Prax.Persist`), CLI save + resume.
 - **v12** — a Prompter-lite scene-authoring layer (`Prax.Script`) that compiles a
   CAST + scene-graph play-script to practices, with an auto flow-chart + scene coverage;
-  demonstrated by `Prax.Worlds.Play`.
+  demonstrated by `Prax.Worlds.Play`. Play-scripts round-trip through readable JSON
+  (`Prax.Script.Json`) — the editable authoring format, chosen over a bespoke parser.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
   logic paper) or an unsettled design question.
@@ -76,7 +77,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 |---|---------|--------|--------|-------|
 | 30 | DM / story manager as a special practice | v6 | P§VI, XI | bar `director`: a bound metalevel agent with story-level wants; injects a rivalry |
 | 31 | Player as DM | planned | P§XI | |
-| 32 | Text authoring language (`.prax`/`.prompter` parser) | planned | P§VII-VIII | Stage F: a text front-end onto the v12 `Script` AST (writer readability) |
+| 32 | Readable serialization for play-scripts (JSON) | v12 | P§VII-VIII | `Prax.Script.Json`: round-trips a `Script` to/from JSON — an editable authoring/exchange format with no bespoke grammar to maintain; `prax play <file.json>`, `prax dump-play`, `examples/play.json`. (Chosen over a custom `.prompter` parser.) |
 | 33 | Prompter-style play-script front end (scene/beat/junction → practices) | v12 | P§XII | `Prax.Script`: CAST + scene-graph eDSL, `compile`, auto `flowChart`; a bodiless narrator fires junctions. Text parser + prose sketches + timed junctions + memories deferred (Stage F) |
 | 34 | Deontic `should` / obligation operator; norm-conflict resolution | research-needed | DEON 2010 | **need the paywalled paper** |
 
