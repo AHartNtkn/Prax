@@ -39,15 +39,21 @@ module Prax.Script
   , Scene(..)
   , Beat(..)
   , Junction(..)
+  , Memory(..)
     -- * Smart constructors
   , member
   , player
   , wanting
+  , concernedWith
+  , withTraits
   , scene
   , beat
   , quip
   , goto
   , ending
+  , after
+  , timeout
+  , memory
     -- * Compilation and tooling
   , narratorName
   , scriptPlayer
@@ -57,11 +63,11 @@ module Prax.Script
   ) where
 
 import           Data.Char (isAlphaNum)
-import           Data.List (find)
+import           Data.List (find, isPrefixOf)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (unify, valToString)
-import           Prax.Query (Condition (..))
+import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome)
 import           Prax.Core (coreLib)
@@ -76,22 +82,36 @@ data Script = Script
   }
   deriving (Eq, Show)
 
--- | A character in the cast, with its desires written as FOL 'Want's.
+-- | A character in the cast, with its desires written as FOL 'Want's. A
+-- character /sketch/ adds 'concernedWith' (concerns compiled to wants) and
+-- 'withTraits' (personality tags stored as queryable facts).
 data CastMember = CastMember
   { castName     :: String
   , castPlayable :: Bool           -- ^ marks the player-controlled character
   , castDesires  :: [Want]
+  , castTraits   :: [String]       -- ^ personality tags → @trait.\<who\>.\<t\>@ facts
   }
   deriving (Eq, Show)
 
 -- | One scene: the unit of grouping. Its beats are available only while it is
--- current; its junctions are the ways it can end or hand off to another scene.
+-- current; its junctions are the ways it can end or hand off to another scene;
+-- its memories are one-shot exposition fired the first time a trigger holds.
 data Scene = Scene
   { sceneId      :: String
   , sceneOpening :: String         -- ^ narration shown on entering the scene
   , sceneSetup   :: [Outcome]      -- ^ facts asserted when the scene becomes current
   , sceneBeats   :: [Beat]
   , sceneJunctions :: [Junction]
+  , sceneMemories :: [Memory]
+  }
+  deriving (Eq, Show)
+
+-- | A memory: a one-shot line of exposition fired (as narration) the first time
+-- @memoryWhen@ holds while its scene is current. Generalizes Prompter's "the
+-- first time a conversation reaches a topic" to any first-time condition.
+data Memory = Memory
+  { memoryText :: String
+  , memoryWhen :: [Condition]
   }
   deriving (Eq, Show)
 
@@ -122,7 +142,7 @@ data Junction = Junction
 
 -- | A non-player cast member with no desires (override with 'wanting').
 member :: String -> CastMember
-member n = CastMember { castName = n, castPlayable = False, castDesires = [] }
+member n = CastMember { castName = n, castPlayable = False, castDesires = [], castTraits = [] }
 
 -- | The player-controlled cast member.
 player :: String -> CastMember
@@ -130,13 +150,32 @@ player n = (member n) { castPlayable = True }
 
 -- | Give a cast member desires: @member "cassia" \`wanting\` [Want …]@.
 wanting :: CastMember -> [Want] -> CastMember
-wanting c ws = c { castDesires = ws }
+wanting c ws = c { castDesires = castDesires c ++ ws }
+
+-- | Sketch a character's __concerns__: each @(dimension, weight)@ appends a want
+-- that the character be regarded positively on that dimension — @+weight@ for
+-- every other whose evaluation of them on @dimension@ is above zero (the natural
+-- positive/negative boundary; the weight is author-supplied, so no magic
+-- constants). Composes with 'wanting'.
+concernedWith :: CastMember -> [(String, Int)] -> CastMember
+concernedWith c pairs = c { castDesires = castDesires c ++ map want pairs }
+  where
+    want (dim, w) = Want
+      [ Match ("Other.relationship." ++ castName c ++ "." ++ dim ++ ".score!N")
+      , Neq "Other" (castName c)
+      , Cmp Gt "N" "0" ] w
+
+-- | Give a character personality __traits__ — stored as queryable
+-- @trait.\<who\>.\<t\>@ facts (usable in preconditions). They are deliberately
+-- /not/ compiled to behaviour: no source specifies a trait→desire mapping.
+withTraits :: CastMember -> [String] -> CastMember
+withTraits c ts = c { castTraits = castTraits c ++ ts }
 
 -- | An empty scene with the given id; fill fields with record syntax.
 scene :: String -> Scene
 scene sid = Scene
   { sceneId = sid, sceneOpening = "", sceneSetup = []
-  , sceneBeats = [], sceneJunctions = [] }
+  , sceneBeats = [], sceneJunctions = [], sceneMemories = [] }
 
 -- | A beat open to any cast member: @beat label conditions effects@.
 beat :: String -> [Condition] -> [Outcome] -> Beat
@@ -153,6 +192,26 @@ goto name to = Junction name (Just to)
 -- | An ending junction: @ending name when@ (ending key = @name@).
 ending :: String -> [Condition] -> Junction
 ending name = Junction name Nothing
+
+-- The scene clock has ticked at least @n@ times (a scene-local turn counter,
+-- reset on entry). Used to build timed junctions.
+clockReached :: Int -> [Condition]
+clockReached n = [ Match "sceneClock!Clk", Cmp Gte "Clk" (show n) ]
+
+-- | A __timed transition__: @after name n toScene@ — hand off to @toScene@ once
+-- @n@ turns have elapsed in the current scene (Prompter's timeout transition).
+after :: String -> Int -> String -> Junction
+after name n to = Junction name (Just to) (clockReached n)
+
+-- | A __timeout ending__: @timeout name n@ — end the story with key @name@ after
+-- @n@ turns in the scene (Prompter's @timeout_conclusion@).
+timeout :: String -> Int -> Junction
+timeout name n = Junction name Nothing (clockReached n)
+
+-- | A __memory__: @memory text when@ — the one-shot exposition @text@, shown the
+-- first time @when@ holds while the scene is current.
+memory :: String -> [Condition] -> Memory
+memory = Memory
 
 -- Compilation -----------------------------------------------------------------
 
@@ -181,16 +240,18 @@ compile scr = foldl (flip performOutcome) base setup
   where
     scenes = scriptScenes scr
 
-    base = (definePractices [coreLib, beatsP, junctionsP] emptyState)
-             { characters = castChars ++ [narrator] }
+    base = (definePractices ([coreLib, beatsP, junctionsP] ++ [clockP | usesClock]) emptyState)
+             { characters = castChars ++ [narrator] ++ [clockChar | usesClock] }
 
     beatsP = practice
       { practiceId = "beats", practiceName = "scene dialogue", roles = ["Stage"]
       , actions = concatMap compileBeats scenes }
 
+    -- Junctions and memories are both narrator-fired (they raise its
+    -- @storyAdvanced@ utility), so they live in one practice.
     junctionsP = practice
       { practiceId = "junctions", practiceName = "story flow", roles = ["Stage"]
-      , actions = concatMap compileJunctions scenes }
+      , actions = concatMap compileJunctions scenes ++ concatMap compileMemories scenes }
 
     compileBeats s = map (compileBeat (sceneId s)) (sceneBeats s)
     compileBeat sid b = action (beatLabel b)
@@ -212,20 +273,54 @@ compile scr = foldl (flip performOutcome) base setup
           Nothing   -> [ Insert ("ending!" ++ junctionName j)
                        , Insert ("storyAdvanced." ++ junctionName j) ] )
 
-    setupOf sid = maybe [] sceneSetup (find ((== sid) . sceneId) scenes)
+    -- A memory: fired once (label = its text ⇒ shown as narration) the first
+    -- time its trigger holds while the scene is current.
+    compileMemories s = zipWith (compileMemory (sceneId s)) [0 :: Int ..] (sceneMemories s)
+    compileMemory sid i m =
+      let key = sid ++ "_mem" ++ show i
+      in action (memoryText m)
+           ( [ Eq "Actor" narratorName
+             , Match ("currentScene!" ++ sid)
+             , Absent [ Match "ending.E" ]
+             , Not ("memoryFired." ++ key) ]
+             ++ memoryWhen m )
+           [ Insert ("memoryFired." ++ key), Insert ("storyAdvanced." ++ key) ]
+
+    -- The scene clock (only when the script uses a timed junction): a bound,
+    -- silent character whose one affordance ticks @sceneClock@ each round, so
+    -- time passes passively. Reset to 0 on every scene entry.
+    usesClock = any (any timed . sceneJunctions) scenes
+      where timed j = any isClock (junctionWhen j)
+            isClock (Match s) = "sceneClock!" `isPrefixOf` s
+            isClock _         = False
+    clockName = "_clock"
+    clockChar = (character clockName) { charBoundTo = Just "clock" }
+    clockP = practice
+      { practiceId = "clock", practiceName = "time passes", roles = ["Stage"]
+      , actions =
+          [ action ""            -- empty label ⇒ silent in narration
+              [ Eq "Actor" clockName, Match "sceneClock!N"
+              , Absent [ Match "ending.E" ], Calc "M" Add "N" "1" ]
+              [ Insert "sceneClock!M" ] ] }
+
+    setupOf sid = [ Insert "sceneClock!0" | usesClock ]
+                  ++ maybe [] sceneSetup (find ((== sid) . sceneId) scenes)
 
     castChars = [ (character (castName c)) { charWants = castDesires c }
                 | c <- scriptCast scr ]
-    -- The narrator's one desire: advance the story. Every junction it fires
-    -- asserts a @storyAdvanced.\<name\>@ marker, so firing any available junction
-    -- strictly raises its utility — it acts the instant a junction is enabled.
+    -- The narrator's one desire: advance the story. Every junction/memory it
+    -- fires asserts a @storyAdvanced.\<key\>@ marker, so firing any available one
+    -- strictly raises its utility — it acts the instant one is enabled.
     narrator = (character narratorName)
       { charWants = [ Want [ Match "storyAdvanced.J" ] 100 ]
       , charBoundTo = Just "junctions" }
 
     setup =
       [ Insert "practice.beats.stage", Insert "practice.junctions.stage" ]
+      ++ [ Insert "practice.clock.stage" | usesClock ]
       ++ [ Insert ("character." ++ castName c) | c <- scriptCast scr ]
+      ++ [ Insert ("trait." ++ castName c ++ "." ++ t)
+         | c <- scriptCast scr, t <- castTraits c ]
       ++ [ Insert ("currentScene!" ++ scriptStart scr) ]
       ++ setupOf (scriptStart scr)
 

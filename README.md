@@ -64,7 +64,12 @@ utility. See the design writeups:
   the stress-tester reports scene coverage. `Prax.Worlds.Play` is a *faithful* recasting of
   `Prax.Worlds.Intrigue` — same cast, affordances (confide, poison, warn, self-poison, romance),
   and endings — as a two-scene play in ~25% fewer authored lines, *plus* the scene transition,
-  flow-chart, and story manager the layer supplies for free.
+  flow-chart, and story manager the layer supplies for free. The scene layer also compiles the rest
+  of Prompter's authoring constructs (v18): **memories** (`memory` — one-shot exposition fired the
+  first time a trigger holds), **timed junctions** (`after`/`timeout` — a scene transition/ending
+  after N turns, via a passive scene clock), and **character sketches** (`concernedWith` turns
+  concerns into desires; `withTraits` records personality as queryable facts). Scene *bounds* are
+  subsumed by scene-local beats, and the readable text playtext is intentionally replaced by JSON.
 - `Prax.Script.Json` (v12) — play-scripts round-trip through **readable JSON** (`Prax.Script.Json`),
   the editable authoring/exchange format (chosen over maintaining a bespoke `.prompter` grammar).
   `cabal run prax -- dump-play` prints the built-in play as JSON; `cabal run prax -- play

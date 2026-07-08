@@ -90,6 +90,11 @@ banquet = (scene "banquet")
       , ending "loyalty"    [ Match "foiled" ]
       , ending "complicity" [ Match "poisoned.artus.byMarcus" ]
       ]
+    -- exposition, interleaved: recalled once Marcus is in on the plot
+  , sceneMemories =
+      [ memory "(Marcus remembers the last poet who crossed Cassia — and was never seen again.)"
+          [ Match "marcusKnows" ]
+      ]
   }
 
 -- | The compiled, ready-to-run world.

@@ -168,8 +168,8 @@ loop player st =
         else do
           let (mga, st2) = npcAct lookaheadDepth actor st1
           case mga of
-            Just ga -> putStrLn ("  " ++ gaLabel ga)
-            Nothing -> pure ()          -- idle NPCs stay quiet to reduce noise
+            Just ga | not (all (== ' ') (gaLabel ga)) -> putStrLn ("  " ++ gaLabel ga)
+            _ -> pure ()   -- idle NPCs (and the silent clock tick) stay quiet
           loop player st2
 
 -- @savePoint@ is the state *before* advancing to the player, so resuming from it

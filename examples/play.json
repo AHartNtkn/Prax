@@ -3,12 +3,14 @@
     {
       "desires": [],
       "name": "marcus",
-      "playable": true
+      "playable": true,
+      "traits": []
     },
     {
       "desires": [],
       "name": "artus",
-      "playable": false
+      "playable": false,
+      "traits": []
     },
     {
       "desires": [
@@ -22,7 +24,8 @@
         }
       ],
       "name": "cassia",
-      "playable": false
+      "playable": false,
+      "traits": []
     }
   ],
   "scenes": [
@@ -70,6 +73,7 @@
           ]
         }
       ],
+      "memories": [],
       "opening": "A quiet portico. Cassia draws Marcus aside.",
       "setup": []
     },
@@ -244,6 +248,16 @@
           "when": [
             {
               "match": "poisoned.artus.byMarcus"
+            }
+          ]
+        }
+      ],
+      "memories": [
+        {
+          "text": "(Marcus remembers the last poet who crossed Cassia — and was never seen again.)",
+          "when": [
+            {
+              "match": "marcusKnows"
             }
           ]
         }

@@ -135,14 +135,15 @@ instance FromJSON Want where
 -- Script AST ------------------------------------------------------------------
 
 instance ToJSON CastMember where
-  toJSON (CastMember n p ds) =
-    object [ "name" .= n, "playable" .= p, "desires" .= ds ]
+  toJSON (CastMember n p ds ts) =
+    object [ "name" .= n, "playable" .= p, "desires" .= ds, "traits" .= ts ]
 
 instance FromJSON CastMember where
   parseJSON = withObject "CastMember" $ \o ->
     CastMember <$> o .: "name"
                <*> o .:? "playable" .!= False
                <*> o .:? "desires"  .!= []
+               <*> o .:? "traits"   .!= []
 
 instance ToJSON Beat where
   toJSON (Beat lbl spk cs es) =
@@ -167,10 +168,16 @@ instance FromJSON Junction where
              <*> o .:? "to"
              <*> o .:? "when" .!= []
 
+instance ToJSON Memory where
+  toJSON (Memory t whn) = object [ "text" .= t, "when" .= whn ]
+
+instance FromJSON Memory where
+  parseJSON = withObject "Memory" $ \o -> Memory <$> o .: "text" <*> o .:? "when" .!= []
+
 instance ToJSON Scene where
-  toJSON (Scene sid op setup beats juncs) =
+  toJSON (Scene sid op setup beats juncs mems) =
     object [ "id" .= sid, "opening" .= op, "setup" .= setup
-           , "beats" .= beats, "junctions" .= juncs ]
+           , "beats" .= beats, "junctions" .= juncs, "memories" .= mems ]
 
 instance FromJSON Scene where
   parseJSON = withObject "Scene" $ \o ->
@@ -179,6 +186,7 @@ instance FromJSON Scene where
           <*> o .:? "setup"     .!= []
           <*> o .:? "beats"     .!= []
           <*> o .:? "junctions" .!= []
+          <*> o .:? "memories"  .!= []
 
 instance ToJSON Script where
   toJSON (Script cast scenes start) =

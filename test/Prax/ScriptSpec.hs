@@ -7,8 +7,10 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Db (exists, unify, valToString)
+import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction)
+import           Prax.Core (adjustScore)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Script
 import           Prax.Worlds.Play (playScript, playWorld)
@@ -101,4 +103,49 @@ tests = testGroup "Prax.Script"
       mapM_ (\needle -> assertBool (needle ++ " in chart") (needle `isInfixOf` chart))
             [ "confidence", "banquet", "toBanquet"
             , "betrayal", "loyalty", "complicity", "graph TD" ]
+
+    -- Prompter compilation features ------------------------------------------
+  , testCase "a memory fires once, the first time its trigger holds" $ do
+      let sc = Script
+            { scriptStart = "s"
+            , scriptCast  = [ player "p", member "npc" `wanting` [ Want [ Match "done" ] 10 ] ]
+            , scriptScenes =
+                [ (scene "s")
+                    { sceneBeats = [ quip "npc" "[Actor]: act"
+                                       [ Not "done" ] [ Insert "done", Insert "trigger" ] ]
+                    , sceneMemories = [ memory "RECALL" [ Match "trigger" ] ] } ] }
+          driven = driveIdle Nothing "p" 12 (compile sc)
+      assertBool "npc acted (trigger set)" (exists "trigger" (db driven))
+      assertBool "memory fired"            (exists "memoryFired.s_mem0" (db driven))
+      assertBool "one-shot: memory no longer on offer"
+        (not (any (("RECALL" `isInfixOf`) . gaLabel) (possibleActions driven narratorName)))
+
+  , testCase "a timed junction times out after N turns of inaction" $ do
+      let sc = Script
+            { scriptStart = "wait", scriptCast = [ player "p" ]
+            , scriptScenes = [ (scene "wait") { sceneJunctions = [ timeout "gaveUp" 3 ] } ] }
+          driven = driveIdle Nothing "p" 30 (compile sc)   -- nobody acts; the clock runs out
+      endingOf driven @?= Just "gaveUp"
+
+  , testCase "a character sketch compiles concerns to wants and traits to facts" $ do
+      let cm = member "vain" `concernedWith` [ ("beauty", 50) ] `withTraits` [ "proud" ]
+      castDesires cm @?=
+        [ Want [ Match "Other.relationship.vain.beauty.score!N"
+               , Neq "Other" "vain", Cmp Gt "N" "0" ] 50 ]
+      castTraits cm @?= [ "proud" ]
+
+  , testCase "a concern actually drives behaviour" $ do
+      let sc = Script
+            { scriptStart = "s"
+            , scriptCast  = [ player "p", member "vain" `concernedWith` [ ("beauty", 50) ] ]
+            , scriptScenes =
+                [ (scene "s")
+                    { sceneBeats = [ quip "vain" "[Actor]: preen for p"
+                                       [ Not "preened" ]
+                                       [ Insert "preened"
+                                       , adjustScore "p" "vain" "beauty" 5 "dazzled" ] ] } ] }
+          w0 = compile sc
+          driven = driveIdle Nothing "p" 12 w0
+      assertBool "trait/desire wiring lets vain be moved by regard: it preens"
+        (exists "preened" (db driven))
   ]
