@@ -26,13 +26,15 @@ import           Data.Ord (Down(..), comparing)
 
 import           Prax.Query (countSatisfying)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction)
+import           Prax.Engine (readView, possibleActions, performAction)
 
--- | Total utility of a world to a set of wants: @Σ utility × #satisfying@.
+-- | Total utility of a world to a set of wants: @Σ utility × #satisfying@. Wants
+-- are scored against 'readView', so a want over a /derived/ fact counts too.
 evaluate :: PraxState -> [Want] -> Int
 evaluate st wants =
-  sum [ wantUtility w * countSatisfying (db st) (wantConditions w) Map.empty
+  sum [ wantUtility w * countSatisfying view (wantConditions w) Map.empty
       | w <- wants ]
+  where view = readView st
 
 -- | The actions a character may actually take: all their affordances, filtered
 -- to a bound practice if the character is practice-bound.

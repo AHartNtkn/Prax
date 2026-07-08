@@ -11,6 +11,9 @@ import qualified Prax.BarSpec
 import qualified Prax.CoreSpec
 import qualified Prax.ReactionsSpec
 import qualified Prax.DeonticSpec
+import qualified Prax.ELSpec
+import qualified Prax.DeriveSpec
+import qualified Prax.FeudSpec
 import qualified Prax.BeliefsSpec
 import qualified Prax.ConversationSpec
 import qualified Prax.ArcSpec
@@ -32,6 +35,9 @@ main = defaultMain $ testGroup "prax"
   , Prax.CoreSpec.tests
   , Prax.ReactionsSpec.tests
   , Prax.DeonticSpec.tests
+  , Prax.ELSpec.tests
+  , Prax.DeriveSpec.tests
+  , Prax.FeudSpec.tests
   , Prax.BeliefsSpec.tests
   , Prax.ConversationSpec.tests
   , Prax.ArcSpec.tests

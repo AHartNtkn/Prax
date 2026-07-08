@@ -16,7 +16,7 @@ import           Text.Read (readMaybe)
 
 import           Prax.Db (Bindings, unify, valToString)
 import           Prax.Types
-import           Prax.Engine (performAction)
+import           Prax.Engine (performAction, readView)
 import           Prax.Planner (candidateActions)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Stress
@@ -26,6 +26,7 @@ import           Prax.Script.Json (encodeScript, loadScript)
 import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
 import qualified Prax.Worlds.Play as Play
+import qualified Prax.Worlds.Feud as Feud
 
 -- How many plies of lookahead the NPCs use.
 lookaheadDepth :: Int
@@ -40,6 +41,7 @@ worldNamed :: [String] -> (String, PraxState, String)
 worldNamed ("intrigue" : _) = ("Intrigue (Rome)", Intrigue.intrigueWorld, Intrigue.playerName)
 worldNamed ("play" : _)     = ("the conspiracy (a play)", Play.playWorld, Play.playerName)
 worldNamed ("dm" : _)       = ("the bar, and you direct it", Bar.barDirectorWorld, Bar.directorName)
+worldNamed ("feud" : _)     = ("the feud (emergent sandbox)", Feud.feudWorld, Feud.playerName)
 worldNamed _                = ("a night at the bar", Bar.barWorld, Bar.playerName)
 
 -- @prax stress [world]@ — a QA report over many random all-AI playthroughs.
@@ -107,6 +109,10 @@ play args = do
           ( "prax — you direct the evening"
           , "You are the drama manager: nudge the autonomous cast (ada, bex, cai)."
           , Bar.barDirectorWorld, Bar.directorName )
+        ("feud" : _) ->
+          ( "prax — the feud (emergent sandbox)"
+          , "You are Alice. One wrong, and a feud assembles itself — make amends to dissolve it."
+          , Feud.feudWorld, Feud.playerName )
         _ ->
           ( "prax — a night at the bar"
           , "You are 'you'. Others act on their own."
@@ -213,10 +219,22 @@ renderScene :: PraxState -> String
 renderScene st =
   unlines (map ("  - " ++)
             (act ++ locations ++ orders ++ held ++ tipsy ++ bell
-              ++ deaths ++ chats ++ pending ++ trouble ++ arcs ++ beliefs ++ moods ++ feelings))
+              ++ deaths ++ grudges ++ shuns ++ chats ++ pending ++ trouble
+              ++ arcs ++ beliefs ++ moods ++ feelings))
   where
-    rows sentence = unify sentence (db st) Map.empty
+    -- read the *closed* view, so derived facts (e.g. propagated enmity) are shown
+    rows sentence = unify sentence (readView st) Map.empty
     val k b = valToString <$> Map.lookup k (b :: Bindings)
+
+    -- derived (or authored) social structure in the emergent sandbox
+    grudges =
+      [ who ++ " resents " ++ target
+      | b <- rows "resents.Who.Target"
+      , Just who <- [val "Who" b], Just target <- [val "Target" b] ]
+    shuns =
+      [ who ++ " is shunning " ++ target
+      | b <- rows "shunned.Who.Target"
+      , Just who <- [val "Who" b], Just target <- [val "Target" b] ]
 
     -- the current act, in a play-script world
     act =

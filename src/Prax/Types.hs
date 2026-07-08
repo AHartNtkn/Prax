@@ -33,6 +33,7 @@ import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Bindings, Db, emptyDb, exists)
 import           Prax.Query (Condition)
+import           Prax.Derive (Axiom)
 
 -- | A social practice: a role-parameterized bundle of affordances.
 data Practice = Practice
@@ -124,12 +125,13 @@ data PraxState = PraxState
   , practiceDefs :: Map String Practice
   , characters   :: [Character]
   , cursor       :: Int          -- ^ round-robin index of the last actor
+  , axioms       :: [Axiom]       -- ^ domain rules; reads see their forward-chained closure (default none)
   }
 
 -- | An empty interpreter state (cursor before the first actor).
 emptyState :: PraxState
 emptyState = PraxState
-  { db = emptyDb, practiceDefs = Map.empty, characters = [], cursor = -1 }
+  { db = emptyDb, practiceDefs = Map.empty, characters = [], cursor = -1, axioms = [] }
 
 -- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead
 -- character stays in the cast list but is skipped in turn-taking and lookahead.

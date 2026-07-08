@@ -81,6 +81,15 @@ utility. See the design writeups:
   resolved *emergently* by the utility planner, and **contrary-to-duty** is the iterated `□□`
   (a reparative duty after a breach). The bar's "settle up" is now a real obligation: serving raises
   it, tipping discharges it, stiffing breaches it and creates a duty to make amends.
+- `Prax.EL` + `Prax.Derive` (v15) — a **forward-chaining derivation layer** for emergent worlds.
+  Domain rules (`body → head`) are closed to a fixpoint via the DEON paper's `m(X)` construction over
+  a faithful Exclusion-Logic lattice (`Prax.EL`: `meet`/`leq`, exact `⊥` on contradiction). Reads go
+  through a **defeasible closed view** (`readView`): derivations are recomputed from the base, never
+  persisted, so retracting a premise dissolves its conclusions — and it is opt-in (`axioms = []`
+  leaves a world untouched). Domain rules **auto-lift under `□`**, giving obligation-closure for free.
+  `Prax.Worlds.Feud` (`prax feud`) is the demo: from *one* authored wrong and three rules, a whole
+  feud emerges (people who never met come to resent someone through the alliance network) and
+  dissolves the moment amends are made.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).
@@ -96,6 +105,7 @@ cabal run prax             # play the bar demo — you are 'you'; pick from the 
 cabal run prax -- intrigue  # play the dramatic episode (a Roman conspiracy)
 cabal run prax -- play      # play the same drama authored as a Prompter-lite play-script
 cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
+cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + three rules
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
 cabal run prax -- dump-play         # print the play-script as JSON
 cabal run prax -- play examples/play.json  # load and play a play-script from JSON

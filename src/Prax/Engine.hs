@@ -10,6 +10,7 @@ module Prax.Engine
   ( definePractice
   , definePractices
   , renderText
+  , readView
   , possibleActions
   , performAction
   , performOutcome
@@ -22,6 +23,7 @@ import qualified Data.Map.Strict as Map
 import           Prax.Db
 import           Prax.Query (query)
 import           Prax.Types
+import           Prax.Derive (closure)
 
 -- | Register a practice and insert its static @dataFacts@ under
 -- @practiceData.<id>.@.
@@ -49,8 +51,20 @@ renderText template b = go template
         _ -> '[' : go rest      -- unterminated '['; emit literally
     go (c : rest) = c : go rest
 
+-- | The world as reads see it: the base DB forward-chained under the state's
+-- domain 'axioms' (the derived closure). With no axioms this is exactly @db st@,
+-- so un-axiomatised worlds are unaffected and pay nothing. A contradiction (@⊥@)
+-- is surfaced as a queryable @contradiction@ fact over the (still-consistent) base
+-- rather than crashing, so a world or drama-manager can react to it.
+readView :: PraxState -> Db
+readView st = case closure (axioms st) (db st) of
+  Right closed           -> closed
+  Left _                 -> insert "contradiction" (db st)
+
 -- | All actions the named actor can currently perform, across every
--- instantiated practice and every satisfying binding of each action.
+-- instantiated practice and every satisfying binding of each action. Conditions
+-- (and practice instances) are evaluated against 'readView', so derived facts are
+-- visible to preconditions.
 possibleActions :: PraxState -> String -> [GroundedAction]
 possibleActions st actor =
   [ GroundedAction
@@ -60,13 +74,14 @@ possibleActions st actor =
       , gaBindings   = binding
       , gaLabel      = renderText (actionName act) binding
       }
-  | pid <- childKeys "practice" (db st)
+  | pid <- childKeys "practice" view
   , Just def <- [Map.lookup pid (practiceDefs st)]
   , let instanceQuery = "practice." ++ pid ++ "." ++ intercalate "." (roles def)
-  , inst <- unify instanceQuery (db st) (Map.singleton "Actor" (VStr actor))
+  , inst <- unify instanceQuery view (Map.singleton "Actor" (VStr actor))
   , act  <- actions def
-  , binding <- query (db st) (actionConditions act) inst
+  , binding <- query view (actionConditions act) inst
   ]
+  where view = readView st
 
 -- | Apply every outcome of a grounded action, in order.
 performAction :: PraxState -> GroundedAction -> PraxState

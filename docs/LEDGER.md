@@ -21,6 +21,9 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 - **v14** — a first-class deontic `should`/obligation layer (`Prax.Deontic`): `□φ` as the
   fact `obliged.<who>.<φ>`, conflict detection via the `!` exclusion, and contrary-to-duty
   (`□□`); the bar's settle-up is now a real obligation.
+- **v15** — a forward-chaining **derivation layer** (`Prax.EL` + `Prax.Derive`): domain rules
+  closed to a fixpoint via the paper's `m(X)`, exact `⊥` detection, auto-`□`-lift (obligation
+  closure), a defeasible closed *view* on the read path; `Prax.Worlds.Feud` is the emergent demo.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -39,7 +42,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 5 | Unification / pattern match (vars = Capitalized) | v1 | Praxish `db.js` | list-monad over bindings |
 | 6 | Query ops: not / eq(assign) / neq / lt·lte·gt·gte / calc / subquery | v1 | Praxish `praxish.js` | typed `Condition` ADT |
 | 7 | Full FOL queries: ∀, ∃, ∨, → | v8 | P§VII | `Prax.Query` `Or`/`Absent`/`Exists` + `forAll`/`implies`; nests freely |
-| 8 | Static type inference / checker (ML-style) | research-needed | P§VII p.120 | design question: how far to go |
+| 8 | Static type inference / checker (ML-style) | research-needed | P§VII p.120 | design question: how far to go. **Substrate now exists** — `Prax.EL` (the LRT lattice + `meet`/`leq`) is the paper's decision-procedure machinery; a checker would add `⊔`/general entailment on top |
 
 ## Practices & actions
 
@@ -53,7 +56,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 14 | Constitutive affordances (only available in-practice) | v1 | P§VIII | |
 | 15 | Norms: violation-marking postconditions + norm desires | v3 | P§VIII-D | `Prax.Reactions` `markViolation`/`violationOf`; strong-negative want ⇒ planner avoids |
 | 16 | Reactions as practices (spawned by an action's outcomes) | v3 | P§X | `Prax.Reactions` `spawnReaction`/`endReaction`; `disapprovalP`; response chains |
-| 17 | Conditional effects / domain axioms in the action language | planned | P§VIII | partly via `call`/`functions` today |
+| 17 | Conditional effects / domain axioms in the action language | v15 | P§VIII | `Prax.Derive`: domain rules `body → head` forward-chained to a fixpoint (the paper's `m(X)`) over `Prax.EL`; reads see the closed **view** (`readView`), which is defeasible (derivations recompute from the base) and opt-in (`axioms=[]` ⇒ unchanged). Auto-`□`-lift gives obligation-closure (DEON property 1). Exact `⊥` detection. Demo: `Prax.Worlds.Feud` |
 
 ## Agents & action selection
 
