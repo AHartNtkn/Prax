@@ -126,12 +126,14 @@ data PraxState = PraxState
   , characters   :: [Character]
   , cursor       :: Int          -- ^ round-robin index of the last actor
   , axioms       :: [Axiom]       -- ^ domain rules; reads see their forward-chained closure (default none)
+  , sorts        :: [(String, [String])]  -- ^ sort → member constants, for the type checker (default none)
   }
 
 -- | An empty interpreter state (cursor before the first actor).
 emptyState :: PraxState
 emptyState = PraxState
-  { db = emptyDb, practiceDefs = Map.empty, characters = [], cursor = -1, axioms = [] }
+  { db = emptyDb, practiceDefs = Map.empty, characters = [], cursor = -1
+  , axioms = [], sorts = [] }
 
 -- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead
 -- character stays in the cast list but is skipped in turn-taking and lookahead.

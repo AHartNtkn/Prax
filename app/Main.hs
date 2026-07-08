@@ -74,6 +74,8 @@ runCheck args = do
       "relation " ++ slot ++ " is used both single-valued (!) and multi-valued (.)"
     describe (UndefinedRef w n) =
       "undefined reference " ++ n ++ " (" ++ w ++ ")"
+    describe (SortConflict w d) =
+      "sort conflict at " ++ w ++ ": " ++ d
 
 main :: IO ()
 main = do

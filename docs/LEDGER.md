@@ -26,6 +26,8 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   closure), a defeasible closed *view* on the read path; `Prax.Worlds.Feud` is the emergent demo.
 - **v16** — a static **well-formedness checker** (`Prax.TypeCheck`): unbound-variable,
   exclusion-cardinality, and dangling-reference checks over a world's authored sentences (`prax check`).
+- **v17** — **ML-style sort inference** completing #8: sorts declared by membership, every
+  position/variable sort inferred by unification, conflicts reported (`Prax.TypeCheck`).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -44,7 +46,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 5 | Unification / pattern match (vars = Capitalized) | v1 | Praxish `db.js` | list-monad over bindings |
 | 6 | Query ops: not / eq(assign) / neq / lt·lte·gt·gte / calc / subquery | v1 | Praxish `praxish.js` | typed `Condition` ADT |
 | 7 | Full FOL queries: ∀, ∃, ∨, → | v8 | P§VII | `Prax.Query` `Or`/`Absent`/`Exists` + `forAll`/`implies`; nests freely |
-| 8 | Static type inference / checker (ML-style) | v16\* | P§VII p.120 | `Prax.TypeCheck` `typeCheck` — the sound, declaration-free subset: unbound variables (ungroundable outcomes/heads), exclusion-cardinality consistency (a relation is `!` or `.`, never both — over asserting sentences only), dangling `Call`/spawn references. Every shipped world checks clean; `prax check`. \*ML-style *sort* inference (agent-vs-gender) needs a declaration layer and is the remaining extension |
+| 8 | Static type inference / checker (ML-style) | v16–17 | P§VII p.120 | `Prax.TypeCheck` `typeCheck`. **v16** (declaration-free, sound): unbound variables, exclusion-cardinality consistency, dangling `Call`/spawn refs. **v17** (ML-style *sort* inference): sorts declared by membership (`sorts` on `PraxState`), every position/variable sort inferred by union-find and conflicts reported (agent-vs-gender). Every shipped world checks clean; the bar declares `beverage`/`place`/…; `prax check`. Sort-checking is a conservative type system (may reject genuinely-polymorphic positions; declare only monomorphic ones) |
 
 ## Practices & actions
 
@@ -107,13 +109,12 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 42 | PWIM embedding-based free-text player input | research-needed | arXiv 2406.00942 | external model dependency |
 
 ## Open research to close
-- **DEON 2010 paper** — Richard Evans, "Introducing Exclusion Logic as a Deontic Logic" — *obtained*
-  (`references/papers/EVAIEL.pdf`, open-access https://philarchive.org/archive/EVAIEL) and distilled
-  (`docs/research/deon-notes.md`). It unblocked #34 (done, v14). It also underpins #8 (static type
-  checking): the `m(X)`/LRT decision procedure it defines is the machinery a full type checker needs.
-- Full static type checking (#8) — the well-formedness subset is done (v16); the remaining part is
-  ML-style *sort* inference (agent-vs-gender), which needs a sort-declaration layer added to worlds
-  and then position/variable-sort inference with unification.
+- Only **#42** (PWIM free-text input) remains research-needed, and it is an external-model dependency,
+  not a paper to obtain.
+- The **DEON 2010 paper** (`references/papers/EVAIEL.pdf`, distilled in `docs/research/deon-notes.md`)
+  is obtained and fully applied: it grounded the deontic layer #34 (v14) and the `m(X)` derivation
+  closure #17 (v15). #8's type checker (v16–17) turned out to need only sentence-structure analysis,
+  not the full LRT decision procedure.
 
 ## Future ideas to investigate
 - **Incremental view maintenance for the derivation layer (#17).** Closure is now semi-naive and

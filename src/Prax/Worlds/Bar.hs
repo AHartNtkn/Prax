@@ -456,6 +456,17 @@ directorPlayer = (character directorName) { charBoundTo = Just "direct" }
 
 -- Initial world ----------------------------------------------------------------
 
+-- Sort declarations for the type checker (`Prax.TypeCheck`): the clearly
+-- monomorphic slots of the bar. Positions like a mood's target are deliberately
+-- left unsorted, since they are genuinely polymorphic (you can feel a way toward
+-- a person or a place).
+barSorts :: [(String, [String])]
+barSorts =
+  [ ("beverage",     ["beer", "cider", "soda", "water"])
+  , ("beverageKind", ["alcoholic", "nonalcoholic"])
+  , ("place",        ["bar", "entrance"])
+  ]
+
 -- | The fully initialized bar: practices (core-model + reaction libraries)
 -- defined, instances spawned, cast placed.
 barWorld :: PraxState
@@ -468,7 +479,7 @@ barWorld =
          , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
          , arcP ]
          emptyState)
-        { characters = [you, ada, bex, director] }
+        { characters = [you, ada, bex, director], sorts = barSorts }
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"
       , Insert "practice.world.world.connected.bar.entrance"
@@ -498,7 +509,7 @@ barDirectorWorld =
          , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, directP
          , arcP ]
          emptyState)
-        { characters = [ada, bex, cai, directorPlayer] }
+        { characters = [ada, bex, cai, directorPlayer], sorts = barSorts }
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"
       , Insert "practice.world.world.connected.bar.entrance"

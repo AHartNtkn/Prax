@@ -40,6 +40,8 @@ data TypeError
     -- ^ the (variable-normalized) slot @teSlot@ is used both @!@ and @.@.
   | UndefinedRef { teWhere :: String, teName :: String }
     -- ^ a @Call@/spawn (at @teWhere@) names something never defined.
+  | SortConflict { teWhere :: String, teDetail :: String }
+    -- ^ a position/variable (@teWhere@) is inferred to have two sorts (@teDetail@).
   deriving (Eq, Show)
 
 -- | Every well-formedness problem in a world (empty ⇒ the world is well-formed).
@@ -49,6 +51,7 @@ typeCheck st =
   ++ concatMap unboundInAxiom (axioms st)
   ++ cardinalityErrors (assertedSentences st)
   ++ refErrors st
+  ++ sortErrors st
   where ps = Map.elems (practiceDefs st)
 
 -- Variables mentioned in a sentence / condition -------------------------------
@@ -165,3 +168,100 @@ assertedSentences st =
   where
     ps = Map.elems (practiceDefs st)
     inserts os = [ s | Insert s <- os ]
+
+-- Check 4: ML-style sort inference (only when sorts are declared) -------------
+
+-- Infer a sort for every predicate position and variable by unification, and
+-- report positions/variables forced to two sorts. Sorts are declared by
+-- membership; a segment that is a variable or a declared member is an
+-- /object\/value/ (normalized to @_@ in a position key), everything else is a
+-- /structural field-name/ (kept), which is how the checker tells them apart.
+sortErrors :: PraxState -> [TypeError]
+sortErrors st
+  | null (sorts st) = []
+  | otherwise       = dupErrors ++ conflictErrors
+  where
+    memberPairs = [ (c, s) | (s, cs) <- sorts st, c <- cs ]
+    memberSort  = Map.fromList memberPairs
+    isMember c  = c `Map.member` memberSort
+
+    -- a constant declared in two sorts is itself a conflict
+    dupErrors =
+      [ SortConflict c ("declared in " ++ intercalate ", " (nub ss))
+      | (c, ss) <- Map.toList byConst, length (nub ss) > 1 ]
+      where byConst = Map.fromListWith (++) [ (c, [s]) | (c, s) <- memberPairs ]
+
+    -- object/value occurrences of a sentence: (segment, position key)
+    occs sentence =
+      [ (seg, intercalate "." (map norm (take (i + 1) segs)))
+      | let segs = pathNames sentence
+      , (i, seg) <- zip [0 :: Int ..] segs, isVariable seg || isMember seg ]
+      where norm seg = if isVariable seg || isMember seg then "_" else seg
+
+    scoped = [ (sc, s) | (sc, ss) <- sentencesByScope st, s <- ss ]
+
+    -- per scope, the positions each variable occupies (drives the unions)
+    varPositions =
+      Map.elems $ Map.fromListWith (++)
+        [ ((sc, seg), [key]) | (sc, s) <- scoped, (seg, key) <- occs s, isVariable seg ]
+
+    -- positions labelled by a member constant landing there (global)
+    posLabels =
+      Map.fromListWith (++)
+        [ (key, [memberSort Map.! seg]) | (_, s) <- scoped, (seg, key) <- occs s, isMember seg ]
+
+    -- union positions that a variable connects, then group labels by class
+    uf     = foldl unionAll Map.empty varPositions
+    byRep  = Map.fromListWith (++) [ (find uf key, labs) | (key, labs) <- Map.toList posLabels ]
+    conflictErrors =
+      [ SortConflict (readable rep) (intercalate " vs " ss)
+      | (rep, labs) <- Map.toList byRep, let ss = nub labs, length ss > 1 ]
+    readable key = case filter (/= "_") (pathNames key) of
+      [] -> key
+      ns -> intercalate "." ns
+
+-- A tiny union-find over position-key strings.
+find :: Map.Map String String -> String -> String
+find uf x = case Map.lookup x uf of
+  Just p | p /= x -> find uf p
+  _               -> x
+
+unionAll :: Map.Map String String -> [String] -> Map.Map String String
+unionAll uf []       = uf
+unionAll uf (x : xs) = foldl (\u y -> link u x y) uf xs
+  where link u a b = let ra = find u a; rb = find u b
+                     in if ra == rb then u else Map.insert ra rb u
+
+-- Every sentence, grouped by the scope its variables belong to (a practice; each
+-- axiom; the live facts). Used for the sort pass — conditions and outcomes both
+-- constrain a variable's sort.
+sentencesByScope :: PraxState -> [(String, [String])]
+sentencesByScope st =
+     [ (practiceId p, practiceSents p) | p <- Map.elems (practiceDefs st) ]
+  ++ zipWith (\i ax -> ("axiom" ++ show i, condSents (axiomWhen ax) ++ axiomThen ax))
+             [0 :: Int ..] (axioms st)
+  ++ [ ("<facts>", dbToLabeledSentences (db st)) ]
+  where
+    practiceSents p =
+         concatMap (\a -> condSents (actionConditions a) ++ outcomeSents (actionOutcomes a)) (actions p)
+      ++ outcomeSents (initOutcomes p)
+      ++ concatMap (\f -> concatMap (\c -> condSents (caseConditions c)
+                                           ++ outcomeSents (caseOutcomes c)) (fnCases f)) (functions p)
+
+condSents :: [Condition] -> [String]
+condSents = concatMap go
+  where
+    go (Match s)        = [s]
+    go (Not s)          = [s]
+    go (Absent cs)      = condSents cs
+    go (Exists cs)      = condSents cs
+    go (Or clauses)     = concatMap condSents clauses
+    go (Subquery _ _ w) = condSents w
+    go _                = []
+
+outcomeSents :: [Outcome] -> [String]
+outcomeSents = concatMap go
+  where
+    go (Insert s) = [s]
+    go (Delete s) = [s]
+    go (Call _ _) = []

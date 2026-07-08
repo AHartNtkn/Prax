@@ -90,12 +90,14 @@ utility. See the design writeups:
   `Prax.Worlds.Feud` (`prax feud`) is the demo: from *one* authored wrong and three rules, a whole
   feud emerges (people who never met come to resent someone through the alliance network) and
   dissolves the moment amends are made.
-- `Prax.TypeCheck` (v16) — a static **well-formedness checker** (`prax check [world]`), the sound,
-  declaration-free first cut of Versu's implicit type system. It reads a world's authored sentences and
-  flags **unbound variables** (an outcome/axiom-head variable no precondition can bind — a silent
-  no-op), **exclusion-cardinality clashes** (a relation asserted both `!` and `.`), and **dangling
-  references** (`Call`/spawn of something undefined). Every shipped world checks clean. (Full ML-style
-  *sort* inference — agent-vs-gender — needs a sort-declaration layer and is the noted next step.)
+- `Prax.TypeCheck` (v16–17) — a static **type checker** (`prax check [world]`), Versu's implicit type
+  system. The declaration-free, sound layer flags **unbound variables** (an outcome/axiom-head variable
+  no precondition can bind — a silent no-op), **exclusion-cardinality clashes** (a relation asserted both
+  `!` and `.`), and **dangling references** (`Call`/spawn of something undefined). On top, **ML-style
+  sort inference**: declare each base sort's members (`sorts` on a world — the bar declares
+  `beverage`/`place`/…), and it infers every position's and variable's sort by unification and rejects
+  conflicts (a gender where an agent goes). Every shipped world checks clean. Like any type system it is
+  conservative — you declare only the monomorphic positions you want checked.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).
