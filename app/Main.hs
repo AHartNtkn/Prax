@@ -96,7 +96,7 @@ renderScene :: PraxState -> String
 renderScene st =
   unlines (map ("  - " ++)
             (locations ++ orders ++ held ++ tipsy ++ bell
-              ++ pending ++ trouble ++ beliefs ++ moods ++ feelings))
+              ++ chats ++ pending ++ trouble ++ beliefs ++ moods ++ feelings))
   where
     rows sentence = unify sentence (db st) Map.empty
     val k b = valToString <$> Map.lookup k (b :: Bindings)
@@ -123,6 +123,12 @@ renderScene st =
     bell =
       [ "the bar is busy — " ++ b' ++ " rang the bell"
       | b <- rows "practice.tendBar.Pl.Bartender.rang", Just b' <- [val "Bartender" b] ]
+
+    -- ongoing conversations and their current topic
+    chats =
+      [ a ++ " and " ++ bb ++ " are chatting (" ++ topic ++ ")"
+      | b <- rows "practice.converse.A.B.topic.T"
+      , Just a <- [val "A" b], Just bb <- [val "B" b], Just topic <- [val "T" b] ]
 
     -- pending reactions / obligations
     pending =

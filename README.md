@@ -36,9 +36,12 @@ utility. See the design writeups:
 - `Prax.Beliefs` (v4) — per-agent beliefs that can diverge from the shared world. A rumour plants a
   possibly-false belief; a character who believes someone resents them won't be friendly to them
   even when their actual warmth is high; evidence can dispel the belief.
+- `Prax.Conversation` (v5) — conversations with a selected speaker, turn-taking, and topics. Quips
+  are dialogue lines whose effects flow through the core model and beliefs (small talk, compliments,
+  and gossip that plants a belief). Friends strike up chats on their own once warm.
 
 See `docs/LEDGER.md` for what's next (public bonds in play, richer norms, a generic event bus,
-conversation, a story manager, character arcs, a text authoring language, …).
+multi-party conversation, a story manager, character arcs, a text authoring language, …).
 
 ## Build, test, play
 

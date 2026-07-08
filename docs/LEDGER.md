@@ -5,6 +5,7 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 - **v2** — the core-model round (emotions & relationships), built as `Prax.Core`.
 - **v3** — reactions-as-practices & a first norm, built as `Prax.Reactions`.
 - **v4** — per-agent beliefs (incl. false beliefs), built as `Prax.Beliefs`.
+- **v5** — conversation (speakers, topics, quips), built as `Prax.Conversation`.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
   logic paper) or an unsettled design question.
@@ -58,7 +59,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 26 | Public symmetric relationship state | v2 | P§X | `Prax.Core` `setBond` writes both orderings |
 | 27 | Beliefs: shared world + per-issue divergence | v4 | P§X | `Prax.Beliefs` `believe`/`believesThat`/`forget`; `X.believes.<issue>!V` |
 | 28 | Quantified / nested beliefs | research-needed | P§XI | Versu itself couldn't do this |
-| 29 | Conversation: speakers, topics, quips (template + effects) | planned | P§X / ES blog | |
+| 29 | Conversation: speakers, topics, quips (template + effects) | v5 | P§X / ES blog | `Prax.Conversation` `quip`/`changeSubject`; speaker turn-taking; quips shift core model & beliefs |
 
 ## Story management & authoring
 

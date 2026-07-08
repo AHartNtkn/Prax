@@ -229,6 +229,37 @@ believed grudges.
 thinks …" — which Versu itself couldn't represent; and there's no single "believe-or-else-the-truth"
 query operator, since that needs disjunction, a later item.)*
 
+### 10. Conversation — quips, topics, and taking turns (v5)
+
+Two characters who like each other can actually *talk*, and what they say changes the world.
+
+- **Strike up a chat.** Once you're warm enough toward someone (the same threshold as buying a
+  drink), **`Strike up a conversation with [them]`** appears. It opens on *small talk*; the scene
+  shows *"you and ada are chatting (smallTalk)"*.
+  → features: a conversation is a spawned practice with a *selected speaker* and a *topic*. code:
+  `Prax.Conversation` `beginConversation`; the "Strike up …" action in `Prax.Worlds.Bar`.
+
+- **Quips are lines with consequences, and you take turns.** Only the current **speaker** may
+  quip, and only on the current **topic**; saying a quip applies its effect and hands the floor to
+  the other person. On *small talk* you can make small talk (a little mutual warmth); steer to
+  *rapport* and you can **compliment** them (raising their regard for you); steer to *gossip* and,
+  if you're cross with a third party, you can **confide that they resent your companion** — a
+  gossip quip that plants a (possibly-false) **belief**, exactly the v4 mechanic delivered through
+  dialogue.
+  → features: `quip` (speaker + topic gated, one-shot, passes the turn), `changeSubject`; effects
+  reuse `Prax.Core` and `Prax.Beliefs`. "A response is just a normal action … the same planner."
+
+- **You stay on topic until you change it.** Off-topic quips simply aren't offered; to say them you
+  first steer the conversation there. That models conversational coherence without any special
+  rule.
+
+- **It emerges on its own, too.** Once the cast has warmed up, an idle character will strike up a
+  chat with a friend (bounded to one conversation per pair) — so late in a run you'll see NPCs
+  talking, complimenting, and even gossiping without you.
+
+*(Deferred, per `docs/LEDGER.md`: multi-party conversations, a richer quip library, and keeping
+participants engaged in the chat rather than wandering off mid-sentence.)*
+
 ---
 
 ## Feature coverage map
@@ -263,14 +294,15 @@ Everything implemented in v1, where it lives, and how the demo shows it:
 | Norm avoidance in the planner | `Prax.Planner` + a `Want` | NPCs tip rather than stiff |
 | Beliefs (per-agent, can be false) | `Prax.Beliefs` | a rumour → "… believes ada resents them" |
 | Belief-gated behaviour / revision | `Prax.Beliefs` | a false belief suppresses friendliness; evidence dispels it |
+| Conversation (speaker turns, topics, quips) | `Prax.Conversation` | "… are chatting (rapport)"; compliment / gossip quips |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
 same behaviours are asserted in the test suite (`cabal test`): see `Prax.QuerySpec`,
 `Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.ReactionsSpec`
-(reactions, norms, norm-avoidance), `Prax.BeliefsSpec` (per-agent & false beliefs), `Prax.BarSpec`
-(drunkenness + bell + warmth/mood gates + greeting chain + tipping + rumours), and `Prax.LoopSpec`
-(a deterministic 15-turn replay of the emergent greet → serve → greet-back → take-offense →
-buy-a-drink → tip arc).
+(reactions, norms, norm-avoidance), `Prax.BeliefsSpec` (per-agent & false beliefs), `Prax.ConversationSpec`
+(speaker turns, topics, one-shot quips), `Prax.BarSpec` (drunkenness + bell + warmth/mood gates +
+greeting chain + tipping + rumours + a driven conversation), and `Prax.LoopSpec` (a deterministic
+15-turn replay of the emergent greet → serve → greet-back → take-offense → buy-a-drink → tip arc).
 
 ---
 
@@ -287,9 +319,9 @@ buy-a-drink → tip arc).
 
 ## What is *not* yet modeled
 
-The bar exercises the whole engine including the v2 core model, v3 reactions & norms, and v4
-beliefs, but the engine is still deliberately smaller than Versu. Not yet built (see
+The bar exercises the whole engine including the v2 core model, v3 reactions & norms, v4 beliefs,
+and v5 conversation, but the engine is still deliberately smaller than Versu. Not yet built (see
 `docs/LEDGER.md`): public "bonds" in play, richer norms & eviction, a generic "react to any action"
-event bus, quantified/nested beliefs, conversation (speakers/topics/quips), a story-manager
-practice, character arcs, the full first-order query grammar (`∀`/`∃`/`∨`/`→`), and a text
-authoring language. Those are the next milestones.
+event bus, quantified/nested beliefs, multi-party conversation, a story-manager practice, character
+arcs, the full first-order query grammar (`∀`/`∃`/`∨`/`→`), and a text authoring language. Those are
+the next milestones.
