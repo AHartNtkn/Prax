@@ -196,10 +196,10 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
                    [ adjustScore "ada" "bex" warmth 25 "friends"
                    , adjustScore "bex" "ada" warmth 25 "friends" ]
       -- The director's only move is its metalevel one (it is bound; it has no body).
-      let dirOpts = map gaLabel (possibleActions warm "director")
-      assertBool "director can now act" (not (null dirOpts))
-      assertBool "director only does metalevel direction"
-        (all ("director)" `isInfixOf`) dirOpts)
+      let dirActs = possibleActions warm "director"
+      assertBool "director can now act" (not (null dirActs))
+      assertBool "director only acts through its own (dm) practice"
+        (all ((== "dm") . gaPracticeId) dirActs)
       -- It turns the two friends against each other (once).
       stirred <- runSteps warm [ ("director", "turn ada against bex") ]
       let fs = dbToSentences (db stirred)

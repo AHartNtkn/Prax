@@ -39,9 +39,13 @@ utility. See the design writeups:
 - `Prax.Conversation` (v5) — conversations with a selected speaker, turn-taking, and topics. Quips
   are dialogue lines whose effects flow through the core model and beliefs (small talk, compliments,
   and gossip that plants a belief). Friends strike up chats on their own once warm.
+- **Story manager (v6)** — the bar's `director` is Versu's Drama Manager: an autonomous agent with
+  no body and only *metalevel* desires. It watches for a too-cosy room and injects a falling-out
+  between two friends, then lets the autonomous cast play it out — "the DM is just a particular
+  type of practice."
 
 See `docs/LEDGER.md` for what's next (public bonds in play, richer norms, a generic event bus,
-multi-party conversation, a story manager, character arcs, a text authoring language, …).
+multi-party conversation, the player as DM, character arcs, a text authoring language, …).
 
 ## Build, test, play
 

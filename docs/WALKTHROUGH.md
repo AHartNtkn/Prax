@@ -260,6 +260,34 @@ Two characters who like each other can actually *talk*, and what they say change
 *(Deferred, per `docs/LEDGER.md`: multi-party conversations, a richer quip library, and keeping
 participants engaged in the chat rather than wandering off mid-sentence.)*
 
+### 11. The director — a story manager that shapes the drama (v6)
+
+There is a fourth character you never see: **`director`**, Versu's Drama Manager. It has no body
+(no location — it can't be greeted, and never orders a drink) and only *metalevel* desires about
+the shape of the evening. It doesn't puppet anyone; it nudges the situation and lets the autonomous
+cast react.
+
+- **Watch for the beat.** Play (or press `m`) until the room has warmed up — two characters who
+  genuinely like each other. Then, on one of its turns, the narration shows
+  **`director: turn ada against bex to stir up the evening`**. The director has decided the evening
+  is too cosy and injected a **falling-out**: it sets one against the other (an `annoyed` mood, a
+  grievance, and a sharp drop in warmth).
+  → features: a DM modeled as an ordinary agent — a metalevel `Want` plus a practice of metalevel
+  actions — "the DM is just a particular type of practice." code: `dmPractice` + the `director`
+  character in `Prax.Worlds.Bar`.
+
+- **The drama then plays itself out.** The director doesn't script what happens next. Its injected
+  grievance flows through the *same* systems you've already seen: the wronged pair stop being
+  friendly (belief/mood/warmth gates), can take offense, gossip about each other, and so on. The
+  director sets the spark; the autonomous characters supply the fire.
+
+- **It knows when to stop.** The intervention fires once (a metalevel want it can satisfy just one
+  way), so the director doesn't grind the room into endless conflict — exactly the "high-level
+  director who does not like to micromanage."
+
+*(Deferred, per `docs/LEDGER.md`: the player *as* the DM, richer metalevel repertoire and pacing,
+and a generic event stream the director could watch.)*
+
 ---
 
 ## Feature coverage map
@@ -295,14 +323,16 @@ Everything implemented in v1, where it lives, and how the demo shows it:
 | Beliefs (per-agent, can be false) | `Prax.Beliefs` | a rumour → "… believes ada resents them" |
 | Belief-gated behaviour / revision | `Prax.Beliefs` | a false belief suppresses friendliness; evidence dispels it |
 | Conversation (speaker turns, topics, quips) | `Prax.Conversation` | "… are chatting (rapport)"; compliment / gossip quips |
+| Story manager (DM) as a metalevel agent | `dmPractice` / `director` | "director: turn ada against bex to stir up the evening" |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
 same behaviours are asserted in the test suite (`cabal test`): see `Prax.QuerySpec`,
 `Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.ReactionsSpec`
 (reactions, norms, norm-avoidance), `Prax.BeliefsSpec` (per-agent & false beliefs), `Prax.ConversationSpec`
 (speaker turns, topics, one-shot quips), `Prax.BarSpec` (drunkenness + bell + warmth/mood gates +
-greeting chain + tipping + rumours + a driven conversation), and `Prax.LoopSpec` (a deterministic
-15-turn replay of the emergent greet → serve → greet-back → take-offense → buy-a-drink → tip arc).
+greeting chain + tipping + rumours + a driven conversation + the director), and `Prax.LoopSpec` (a
+deterministic 20-turn replay of the emergent greet → serve → take-offense → buy → tip arc, capped by
+the director turning two friends against each other).
 
 ---
 
@@ -320,8 +350,8 @@ greeting chain + tipping + rumours + a driven conversation), and `Prax.LoopSpec`
 ## What is *not* yet modeled
 
 The bar exercises the whole engine including the v2 core model, v3 reactions & norms, v4 beliefs,
-and v5 conversation, but the engine is still deliberately smaller than Versu. Not yet built (see
-`docs/LEDGER.md`): public "bonds" in play, richer norms & eviction, a generic "react to any action"
-event bus, quantified/nested beliefs, multi-party conversation, a story-manager practice, character
-arcs, the full first-order query grammar (`∀`/`∃`/`∨`/`→`), and a text authoring language. Those are
-the next milestones.
+v5 conversation, and a v6 story manager, but the engine is still deliberately smaller than Versu.
+Not yet built (see `docs/LEDGER.md`): public "bonds" in play, richer norms & eviction, a generic
+"react to any action" event bus, quantified/nested beliefs, multi-party conversation, the player as
+DM, character arcs, the full first-order query grammar (`∀`/`∃`/`∨`/`→`), and a text authoring
+language. Those are the next milestones.

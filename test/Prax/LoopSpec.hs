@@ -28,7 +28,7 @@ expectedTrace =
   , "you: Go to entrance"
   , "ada: Take offense that you ignored your greeting"
   , "bex: Buy ada a drink"
-  , "director: (as director) turn ada against bex to stir up the evening"
+  , "director: turn ada against bex to stir up the evening"
   , "you: Go to bar"
   , "ada: Wait a moment"
   , "bex: Tip ada"

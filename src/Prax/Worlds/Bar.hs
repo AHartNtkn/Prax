@@ -282,7 +282,7 @@ dmPractice = practice
   , practiceName = "the director shapes the evening"
   , roles = ["Director"]
   , actions =
-      [ action "[Actor]: (as director) turn [X] against [Y] to stir up the evening"
+      [ action "[Actor]: turn [X] against [Y] to stir up the evening"
           ( [ Eq "Actor" "Director"
             , Not "dm.stirred" ]                  -- one dramatic beat per evening
             ++ scoreAtLeast "X" "Y" warmth 20     -- bind two who currently like each other…

@@ -6,6 +6,7 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 - **v3** — reactions-as-practices & a first norm, built as `Prax.Reactions`.
 - **v4** — per-agent beliefs (incl. false beliefs), built as `Prax.Beliefs`.
 - **v5** — conversation (speakers, topics, quips), built as `Prax.Conversation`.
+- **v6** — a story manager (DM) as a metalevel agent (the bar `director`).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
   logic paper) or an unsettled design question.
@@ -65,7 +66,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 
 | # | Feature | Status | Source | Notes |
 |---|---------|--------|--------|-------|
-| 30 | DM / story manager as a special practice | planned | P§VI, XI | reactive, per-episode |
+| 30 | DM / story manager as a special practice | v6 | P§VI, XI | bar `director`: a bound metalevel agent with story-level wants; injects a rivalry |
 | 31 | Player as DM | planned | P§XI | |
 | 32 | Text authoring language (`.prax` parser: `process … end`) | planned | P§VII-VIII | v1 uses a Haskell eDSL instead |
 | 33 | Prompter-style play-script front end | research-needed | P§XII | compiles script → practices |
