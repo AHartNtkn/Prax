@@ -47,6 +47,10 @@ utility. See the design writeups:
   lonely) that gates its wants, so advancing the arc reshapes what it pursues. The against-desires
   transformation (giving up) is offered to everyone but never taken by the utility planner — so
   "true transformation" is, in practice, the player's alone.
+- First-order query connectives (v8) — `Or`/`Absent`/`Exists` + `forAll`/`implies` in `Prax.Query`,
+  so preconditions and desires can be disjunctive/quantified.
+- Cast removal + `Prax.Worlds.Intrigue` (v9) — a character can die and leave the cast; a branching
+  dramatic episode verifies Versu-style drama end-to-end.
 
 See `docs/LEDGER.md` for what's next (public bonds in play, richer norms, a generic event bus,
 multi-party conversation, the player as DM, a text authoring language, …).
@@ -58,11 +62,15 @@ Requires GHC 9.x + Cabal.
 ```sh
 cabal build       # compile everything
 cabal test        # run the test suite (tasty)
-cabal run prax    # play the bar demo — you are 'you'; pick actions from the menu
+cabal run prax             # play the bar demo — you are 'you'; pick from the menu
+cabal run prax -- intrigue  # play the dramatic episode (a Roman conspiracy)
 ```
 
-In the demo, NPCs act autonomously: order a drink at the bar and the bartender (ada) will
-serve you, while the patron (bex) pursues a beer of their own.
+In the bar demo, NPCs act autonomously: order a drink and the bartender (ada) will serve you,
+while the patron (bex) pursues a beer of their own. In **Intrigue** you are Marcus: a conspirator
+means to poison your patron — do nothing and the plot runs its course (a character dies), or warn
+him, do the deed yourself, or romance the conspirator. It reaches distinct endings and demonstrates
+Blood & Laurels-style drama (murder, death, betrayal, branching) on the same engine.
 
 **New here? Read `docs/WALKTHROUGH.md`** — a guided playthrough that names each thing to try and
 explains which engine feature it demonstrates. The bar world exercises every v1 feature.

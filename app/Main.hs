@@ -1,9 +1,12 @@
--- | Interactive CLI for the bar storyworld: round-robin turns, NPCs act
+-- | Interactive CLI for the storyworlds: round-robin turns, NPCs act
 -- autonomously, and on the player's turn a numbered action menu is offered
--- (Versu's \"act / more\" interface).
+-- (Versu's \"act / more\" interface). Choose a world on the command line:
+-- @prax@ (the bar, default) or @prax intrigue@ (the dramatic episode).
 module Main (main) where
 
+import           Data.Maybe (listToMaybe)
 import qualified Data.Map.Strict as Map
+import           System.Environment (getArgs)
 import           System.IO (BufferMode (NoBuffering), hSetBuffering, isEOF, stdout)
 import           Text.Read (readMaybe)
 
@@ -11,7 +14,8 @@ import           Prax.Db (Bindings, unify, valToString)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction)
 import           Prax.Loop (advance, npcAct)
-import           Prax.Worlds.Bar (barWorld, playerName)
+import qualified Prax.Worlds.Bar as Bar
+import qualified Prax.Worlds.Intrigue as Intrigue
 
 -- How many plies of lookahead the NPCs use.
 lookaheadDepth :: Int
@@ -20,26 +24,49 @@ lookaheadDepth = 2
 main :: IO ()
 main = do
   hSetBuffering stdout NoBuffering
-  putStrLn "============================================"
-  putStrLn "  prax — a night at the bar"
-  putStrLn "============================================"
-  putStrLn "You are 'you'. Others act on their own."
-  loop barWorld
+  args <- getArgs
+  let (title, blurb, world, player) = case args of
+        ("intrigue" : _) ->
+          ( "prax — Intrigue (Rome)"
+          , "You are Marcus, the poet. The others act on their own."
+          , Intrigue.intrigueWorld, Intrigue.playerName )
+        _ ->
+          ( "prax — a night at the bar"
+          , "You are 'you'. Others act on their own."
+          , Bar.barWorld, Bar.playerName )
+  putStrLn (replicate (length title + 4) '=')
+  putStrLn ("  " ++ title)
+  putStrLn (replicate (length title + 4) '=')
+  putStrLn blurb
+  loop player world
 
-loop :: PraxState -> IO ()
-loop st = do
-  let (actor, st1) = advance st
-  if charName actor == playerName
-    then playerTurn st1 actor
-    else do
-      let (mga, st2) = npcAct lookaheadDepth actor st1
-      case mga of
-        Just ga -> putStrLn ("  " ++ gaLabel ga)
-        Nothing -> pure ()          -- idle NPCs stay quiet to reduce noise
-      loop st2
+-- The first reached ending, if any (an @ending.\<key\>@ fact).
+endingOf :: PraxState -> Maybe String
+endingOf st =
+  listToMaybe [ e | b <- unify "ending.E" (db st) Map.empty
+                  , Just e <- [valToString <$> Map.lookup "E" b] ]
 
-playerTurn :: PraxState -> Character -> IO ()
-playerTurn st actor = do
+loop :: String -> PraxState -> IO ()
+loop player st =
+  case endingOf st of
+    Just e -> do
+      putStrLn ""
+      putStrLn "=============================="
+      putStrLn ("  THE END — " ++ e)
+      putStrLn "=============================="
+    Nothing -> do
+      let (actor, st1) = advance st
+      if charName actor == player
+        then playerTurn player st1 actor
+        else do
+          let (mga, st2) = npcAct lookaheadDepth actor st1
+          case mga of
+            Just ga -> putStrLn ("  " ++ gaLabel ga)
+            Nothing -> pure ()          -- idle NPCs stay quiet to reduce noise
+          loop player st2
+
+playerTurn :: String -> PraxState -> Character -> IO ()
+playerTurn player st actor = do
   putStrLn ""
   putStrLn "-------------------- scene --------------------"
   putStr (renderScene st)
@@ -51,16 +78,16 @@ playerTurn st actor = do
   putStrLn "  q) quit"
   choice <- prompt
   case choice of
-    Quit -> putStrLn "Bye. The night winds down."
-    Wait -> loop st
+    Quit -> putStrLn "Bye."
+    Wait -> loop player st
     Pick i
       | i >= 1 && i <= length acts -> do
           let ga = acts !! (i - 1)
           putStrLn ("> " ++ gaLabel ga)
-          loop (performAction st ga)
+          loop player (performAction st ga)
       | otherwise -> do
           putStrLn "No such option."
-          playerTurn st actor
+          playerTurn player st actor
 
 -- The player already has `m` to pass, so pure no-op actions (empty outcomes,
 -- e.g. the world's "Wait a moment") are noise in the menu. They remain
@@ -96,7 +123,7 @@ renderScene :: PraxState -> String
 renderScene st =
   unlines (map ("  - " ++)
             (locations ++ orders ++ held ++ tipsy ++ bell
-              ++ chats ++ pending ++ trouble ++ arcs ++ beliefs ++ moods ++ feelings))
+              ++ deaths ++ chats ++ pending ++ trouble ++ arcs ++ beliefs ++ moods ++ feelings))
   where
     rows sentence = unify sentence (db st) Map.empty
     val k b = valToString <$> Map.lookup k (b :: Bindings)
@@ -123,6 +150,11 @@ renderScene st =
     bell =
       [ "the bar is busy — " ++ b' ++ " rang the bell"
       | b <- rows "practice.tendBar.Pl.Bartender.rang", Just b' <- [val "Bartender" b] ]
+
+    -- who has died / been removed from play
+    deaths =
+      [ who ++ " is dead"
+      | b <- rows "dead.Who", Just who <- [val "Who" b] ]
 
     -- ongoing conversations and their current topic
     chats =

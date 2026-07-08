@@ -9,6 +9,7 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 - **v6** — a story manager (DM) as a metalevel agent (the bar `director`).
 - **v7** — character arcs (internal high-level state), built as `Prax.Arc`.
 - **v8** — first-order connectives in the query language (∀/∃/∨/→).
+- **v9** — cast removal + a dramatic vertical slice (`Prax.Worlds.Intrigue`).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on material we haven't obtained (mainly the DEON 2010 exclusion-
   logic paper) or an unsettled design question.
@@ -84,7 +85,8 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 38 | Runtime inspector ("why is X true / why did preconds fail") | planned | P§VI | reuse `killsPerStep` idea |
 | 39 | Stress-test harness (many auto-played runs) | planned | P§VI | |
 | 40 | Serializable world state (save/load) | planned | P§VI | trivial given #1 |
-| 41 | Rich branching multi-character episode (content) | planned | P§XII | |
+| 41 | Rich branching multi-character episode (content) | v9 | P§XII | `Prax.Worlds.Intrigue`: murder, character death (cast-removal), betrayal/loyalty/complicity endings, romance |
+| 43 | Cast removal (death / eviction) | v9 | P§VIII-D | `dead.<name>` fact; `Prax.Types.livingCharacters`; loop/planner skip the dead |
 | 42 | PWIM embedding-based free-text player input | research-needed | arXiv 2406.00942 | external model dependency |
 
 ## Open research to close
