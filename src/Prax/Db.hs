@@ -1,9 +1,14 @@
 -- | The exclusion-logic database underlying Praxis/Versu.
 --
--- The world state is a trie: @newtype Db = Db (Map String Db)@. Every fact is a
+-- The world state is a trie: @data Db = Db Bool (Map String Db)@, where the 'Bool'
+-- records whether the node's outgoing edges are __exclusive__. Every fact is a
 -- path built from two operators — @.@ (ordinary, multi-valued descent) and @!@
 -- (exclusion: the parent has exactly one child). Queries treat @.@ and @!@
--- identically; the distinction only matters on 'insert'.
+-- identically, but the distinction is now /retained/ in the trie (not just applied
+-- and forgotten at insert), so the world state is a faithful Exclusion-Logic model
+-- — which is what lets 'Prax.EL.meet' detect a contradiction from either side of a
+-- clash. 'dbToSentences' flattens the labels (for display/matching);
+-- 'dbToLabeledSentences' re-emits them (for exact serialization).
 --
 -- See @docs/research/praxis-praxish-notes.md@ for the correspondence to Praxish's
 -- @db.js@, including the corrected @!@ semantics (Praxish's own @insert@ has a
@@ -11,6 +16,7 @@
 module Prax.Db
   ( Db(..)
   , emptyDb
+  , dbExcl
   , Val(..)
   , Bindings
   , valToString
@@ -22,6 +28,7 @@ module Prax.Db
   , unifyAll
   , ground
   , dbToSentences
+  , dbToLabeledSentences
   , childKeys
   , exists
   , pathNames
@@ -32,13 +39,18 @@ import           Data.List (sort)
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
--- | The world state: a trie whose edges are symbols and whose nodes carry no
--- other data. A leaf is a node with an empty child map.
-newtype Db = Db (Map String Db)
+-- | The world state: a trie whose edges are symbols. The 'Bool' is the node's
+-- __exclusion flag__ — 'True' when its edges are single-valued (@!@); a valid
+-- exclusive node has one child. A leaf is a node with an empty child map.
+data Db = Db Bool (Map String Db)
   deriving (Eq, Show)
 
+-- | Whether a node's outgoing edges are exclusive (@!@).
+dbExcl :: Db -> Bool
+dbExcl (Db e _) = e
+
 emptyDb :: Db
-emptyDb = Db Map.empty
+emptyDb = Db False Map.empty
 
 -- | A value a logic variable can be bound to. 'unify' only ever produces
 -- 'VStr' (trie keys are strings); 'VNum' and 'VSet' arise from query operators
@@ -102,15 +114,17 @@ insert = insertToks . tokens
 
 insertToks :: [(String, Maybe Char)] -> Db -> Db
 insertToks [] db = db
-insertToks ((n, op) : rest) (Db m) =
-  let Db existing = Map.findWithDefault emptyDb n m
-      base = case (op, rest) of
+insertToks ((n, op) : rest) (Db e m) =
+  let Db _ existing = Map.findWithDefault emptyDb n m
+      -- @n@'s node is exclusive iff this insert reaches it via a @!@ operator.
+      childExcl = op == Just '!'
+      cleared = case (op, rest) of
         (Just '!', (nextName, _) : _) ->
           -- Exclusion: n keeps only the next child, with its subtree intact.
-          Db (Map.filterWithKey (\k _ -> k == nextName) existing)
-        _ -> Db existing
-      child' = insertToks rest base
-  in Db (Map.insert n child' m)
+          Map.filterWithKey (\k _ -> k == nextName) existing
+        _ -> existing
+      child' = insertToks rest (Db childExcl cleared)
+  in Db e (Map.insert n child' m)
 
 -- | Insert many sentences left to right.
 insertAll :: [String] -> Db -> Db
@@ -122,22 +136,22 @@ retract :: String -> Db -> Db
 retract = retractNames . parseNames
   where
     retractNames [] db = db
-    retractNames [n] (Db m) = Db (Map.delete n m)
-    retractNames (n : ns) (Db m) =
+    retractNames [n] (Db e m) = Db e (Map.delete n m)
+    retractNames (n : ns) (Db e m) =
       case Map.lookup n m of
-        Nothing    -> Db m
-        Just child -> Db (Map.insert n (retractNames ns child) m)
+        Nothing    -> Db e m
+        Just child -> Db e (Map.insert n (retractNames ns child) m)
 
 -- | Unify one sentence against the database under existing @bindings@, yielding
 -- every consistent extension. An unbound uppercase segment branches over all
 -- keys of the current subtree (the list-monad nondeterminism at the core of
 -- pattern matching); a bound variable or constant descends deterministically.
 unify :: String -> Db -> Bindings -> [Bindings]
-unify sentence (Db root) bindings =
-  map snd (foldl step [(Db root, bindings)] (parseNames sentence))
+unify sentence db0 bindings =
+  map snd (foldl step [(db0, bindings)] (parseNames sentence))
   where
     step worlds part = concatMap (descend part) worlds
-    descend part (Db m, b)
+    descend part (Db _ m, b)
       | isVariable part =
           case Map.lookup part b of
             Just v  -> case Map.lookup (valToString v) m of
@@ -168,24 +182,37 @@ ground sentence b = concatMap emit (tokens sentence)
 -- the path is absent. Used to enumerate instantiated practices.
 childKeys :: String -> Db -> [String]
 childKeys path db = case walk (parseNames path) db of
-  Just (Db m) -> Map.keys m
-  Nothing     -> []
+  Just (Db _ m) -> Map.keys m
+  Nothing       -> []
   where
-    walk [] d          = Just d
-    walk (n : ns) (Db m) = Map.lookup n m >>= walk ns
+    walk [] d            = Just d
+    walk (n : ns) (Db _ m) = Map.lookup n m >>= walk ns
 
 -- | Whether any node exists at the given constant path.
 exists :: String -> Db -> Bool
 exists path db = not (null (unify path db Map.empty))
 
 -- | Enumerate all leaf paths (facts) in the database, sorted, joined by @.@.
--- Loses the @.@/@!@ distinction; intended for display and tests.
+-- Flattens the @.@/@!@ distinction; intended for display, matching and tests.
 dbToSentences :: Db -> [String]
 dbToSentences = sort . go
   where
-    go (Db m)
+    go (Db _ m)
       | Map.null m = []
       | otherwise  = concatMap expand (Map.toList m)
-    expand (k, child@(Db cm))
+    expand (k, child@(Db _ cm))
       | Map.null cm = [k]
       | otherwise   = map ((k ++ ".") ++) (go child)
+
+-- | Like 'dbToSentences' but __label-faithful__: each edge is re-emitted with
+-- @!@ when its parent node is exclusive, else @.@. Inverse of 'insertAll' — the
+-- basis for exact serialization ('Prax.Persist').
+dbToLabeledSentences :: Db -> [String]
+dbToLabeledSentences = sort . go
+  where
+    go (Db _ m) = concat
+      [ case go child of
+          []   -> [k]
+          subs -> [ k ++ sep (dbExcl child) ++ s | s <- subs ]
+      | (k, child) <- Map.toList m ]
+    sep e = if e then "!" else "."

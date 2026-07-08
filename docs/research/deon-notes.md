@@ -140,22 +140,19 @@ Our engine already realises the EL substrate. To add a *faithful* deontic layer:
 5. **Contrary-to-duty via iterated `□`.** `□□φ` = `Ob.Ob.φ` — the "ideal" obligation
    that would have held. Useful for reparative/second-best norms (Chisholm).
 
-### Honest gaps between the paper's model and our engine
-- **Closure under implication (property 1) is semantic, not automatic.** Our engine
-  *queries* facts; it does not *derive* them. `Ob.P` + (`P→Q`) does **not** auto-yield
-  `Ob.Q` unless we add forward-chaining/derivation. Versu's practical use was direct
-  (assert the obligations you mean), so a first cut can **query obligations directly
-  and document that entailment-closure is not computed** — but we must not *claim*
-  closure we don't implement (per the repo's faithfulness edicts).
-- **Incompatibility handling differs.** The paper makes `□P∧□Q` unsatisfiable (`⊥`);
-  our `!`-insert would silently overwrite the earlier obligation. Faithful conflict
-  *detection* therefore needs an explicit check at assert time, not reliance on the
-  trie's overwrite.
-- **Full LRT lattice / `m(X)` decision procedure is overkill** for our needs — we
-  don't need entailment between arbitrary EL expressions, only to assert/query
-  obligation facts over the existing trie. Implementing the polynomial `m(X)`
-  entailment engine is possible but out of scope unless we later want #8 (the static
-  type checker), which *does* rest on this machinery.
+### Gaps at v14, all closed by v15 (`Prax.EL` + `Prax.Derive`)
+These were the honest limitations when the deontic layer (v14) first shipped. The
+derivation layer (v15) closed them by implementing the paper's machinery for real:
+- **Closure under implication (property 1) — DONE.** `Prax.Derive` forward-chains
+  domain rules to a fixpoint (`m(X)`), and every rule auto-lifts under `□`, so
+  `Ob.P` + `P→Q` now yields `Ob.Q`.
+- **Incompatibility detection — DONE, faithfully.** `Prax.Db` retains the `!`/`.`
+  labels (the world state is a real Exclusion-Logic model), so `Prax.EL.meet`
+  detects `□P∧□Q ⇒ ⊥` from either side of the clash — no silent overwrite, and no
+  schema needed.
+- **The `m(X)` decision procedure — BUILT.** `Prax.EL` is the LRT lattice
+  (`meet`/`leq`); it is also the substrate #8 (the static type checker) will reuse,
+  which would add `⊔`/general entailment on top.
 
 ## 4. References cited by the paper (p.18), for onward reading if needed
 Alchourrón & Makinson, *Hierarchies of Regulations and their Logic* (1981) [1];

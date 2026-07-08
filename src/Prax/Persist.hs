@@ -17,12 +17,13 @@ module Prax.Persist
 
 import           Text.Read (readMaybe)
 
-import           Prax.Db (dbToSentences, emptyDb, insertAll)
+import           Prax.Db (dbToLabeledSentences, emptyDb, insertAll)
 import           Prax.Types (PraxState (..))
 
--- | Serialize the mutable state (@cursor@ + all facts) to text.
+-- | Serialize the mutable state (@cursor@ + all facts) to text, with @!@/@.@
+-- labels so the reload rebuilds the exclusion structure exactly.
 serializeState :: PraxState -> String
-serializeState st = unlines (("cursor " ++ show (cursor st)) : dbToSentences (db st))
+serializeState st = unlines (("cursor " ++ show (cursor st)) : dbToLabeledSentences (db st))
 
 -- | Rebuild a saved state onto @world@ (a fresh world of the same kind, which
 -- supplies the practice definitions and cast). Crashes loudly on malformed input.

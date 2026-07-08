@@ -72,4 +72,13 @@ tests = testGroup "Prax.Derive (m(X) closure)"
           base = build ["wedding.bex"]
       assertBool "no contradiction" (isRight (closure axs base))
       assertBool "status derived" (has "status.bex.married" (closedFacts axs base))
+
+  , testCase "⊥ from EITHER side: a derived multi value clashes with a base EXCLUSIVE fact" $ do
+      -- The base marks the slot exclusive with `!`; the rule derives a *different*
+      -- value with `.`. Because the world state retains its labels, meet catches
+      -- this even though the derived head is not itself exclusive.
+      let axs  = [ axiom [ Match "summoned.W" ] [ "place.W.hall" ] ]
+          base = build [ "place.bex!bar", "summoned.bex" ]   -- bex is exclusively at the bar
+      assertBool "contradiction detected" (not (isRight (closure axs base)))
+      contradiction axs base @?= Just "place.bex.hall"
   ]

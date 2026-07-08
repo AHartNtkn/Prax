@@ -36,9 +36,9 @@ import           Control.Monad (foldM)
 import           Data.Maybe (mapMaybe)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Db, dbToSentences, insertAll, emptyDb, ground)
+import           Prax.Db (Db, insert, emptyDb, ground, dbToSentences)
 import           Prax.Query (Condition (..), query)
-import           Prax.EL (fromSentences, toSentences, sentenceToNode, meet)
+import           Prax.EL (meet)
 
 -- | An implication rule @axiomWhen → axiomThen@: when the body holds for some
 -- binding of its variables, assert each (grounded) head sentence. Heads are
@@ -65,25 +65,22 @@ newtype Contradiction = Contradiction String
 -- returned unchanged (the identity that keeps un-axiomatised worlds free).
 closure :: [Axiom] -> Db -> Either Contradiction Db
 closure []  db0 = Right db0
-closure axs db0 =
-  fmap (\m -> insertAll (toSentences m) emptyDb) (fixpoint model0)
+closure axs db0 = fixpoint db0
   where
-    rules  = axs ++ mapMaybe liftObliged axs
-    model0 = fromSentences (dbToSentences db0)
+    rules = axs ++ mapMaybe liftObliged axs
 
     fixpoint m = case stepAll m of
       Left c -> Left c
       Right m'
-        | toSentences m' == toSentences m -> Right m'
-        | otherwise                       -> fixpoint m'
+        | m' == m   -> Right m'      -- fixpoint (compares labels too, so it is exact)
+        | otherwise -> fixpoint m'
 
-    -- one round: query every rule body against the round-start projection, meet
-    -- each grounded head into the growing model
-    stepAll m = foldM (fire (project m)) m rules
-    project m = insertAll (toSentences m) emptyDb
+    -- one round: query every rule body against the round-start model, meet each
+    -- grounded head into the growing model (⊥ if it clashes on an exclusive slot)
+    stepAll m = foldM (fire m) m rules
     fire qdb m (Axiom body heads) =
       foldM meetOne m [ ground h b | b <- query qdb body Map.empty, h <- heads ]
-    meetOne m h = maybe (Left (Contradiction h)) Right (meet m (sentenceToNode h))
+    meetOne m h = maybe (Left (Contradiction h)) Right (meet m (insert h emptyDb))
 
 -- Lift a purely-conjunctive domain rule under the obligation operator: prefix
 -- @obliged.\<fresh\>.@ to every body match and head, so □A ⊢ □B whenever A ⊢ B.

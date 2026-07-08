@@ -36,9 +36,10 @@ tests = testGroup "Prax.Persist"
       assertBool "reaches the loyalty ending after reload"
         ("ending.loyalty" `elem` dbToSentences (db st))
 
-  , testCase "the serialized form is human-readable facts" $ do
+  , testCase "the serialized form is human-readable, label-faithful facts" $ do
       let text = serializeState mid
+      -- the value edge is single-valued, so it round-trips with its @!@ label
       assertBool "carries the belief Marcus formed"
-        ("marcus.believes.plotAgainst.artus.yes" `isInfixOf` text)
+        ("marcus.believes.plotAgainst.artus!yes" `isInfixOf` text)
       assertBool "has a cursor header" ("cursor " `isInfixOf` text)
   ]
