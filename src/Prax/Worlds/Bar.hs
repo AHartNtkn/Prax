@@ -17,6 +17,8 @@
 module Prax.Worlds.Bar
   ( barWorld
   , playerName
+  , barDirectorWorld
+  , directorName
   ) where
 
 import           Prax.Query
@@ -328,6 +330,53 @@ dmPractice = practice
       ]
   }
 
+-- Player-as-DM (Versu §XI): the same metalevel role as the autonomous
+-- `director`, but a palette of authorial nudges for a *human* to steer an
+-- otherwise autonomous cast — stirring conflict, kindling warmth, or souring the
+-- mood — without ever embodying a character. The player is bound to this
+-- practice in `barDirectorWorld`, so their menu is these nudges and nothing else.
+-- Each nudge is one dramatic beat per participants (it can't be spammed), and it
+-- reshapes the story only indirectly: the cast then reacts through the ordinary
+-- greeting / conversation / arc machinery.
+directP :: Practice
+directP = practice
+  { practiceId   = "direct"
+  , practiceName = "you direct the evening"
+  , roles        = ["Director"]
+  , actions =
+      [ action "[Actor]: stir up a rivalry between [X] and [Y]"
+          [ Eq "Actor" "Director"
+          , Match "practice.world.world.at.X!Px"
+          , Match "practice.world.world.at.Y!Py"
+          , Neq "X" "Y", Neq "X" "Director", Neq "Y" "Director"
+          , Not "direct.stirred.X.Y" ]
+          [ Insert "direct.stirred.X.Y"
+          , setMood "X" annoyed "Y" "aSuddenCoolness"
+          , adjustScore "X" "Y" warmth (-30) "aFallingOut"
+          , Insert "practice.greet.world.grievance.X.Y" ]
+
+      , action "[Actor]: kindle warmth between [X] and [Y]"
+          [ Eq "Actor" "Director"
+          , Match "practice.world.world.at.X!Px"
+          , Match "practice.world.world.at.Y!Py"
+          , Neq "X" "Y", Neq "X" "Director", Neq "Y" "Director"
+          , Not "direct.kindled.X.Y" ]
+          [ Insert "direct.kindled.X.Y"
+          , adjustScore "X" "Y" warmth 15 "aWarmFeeling"
+          , adjustScore "Y" "X" warmth 15 "aWarmFeeling"
+          , setMood "X" pleased "Y" "aSuddenFondness"
+          , setMood "Y" pleased "X" "aSuddenFondness" ]
+
+      , action "[Actor]: cast a pall over [X]'s evening"
+          [ Eq "Actor" "Director"
+          , Match "practice.world.world.at.X!Px"
+          , Neq "X" "Director"
+          , Not "direct.unsettled.X" ]
+          [ Insert "direct.unsettled.X"
+          , setMood "X" sad "here" "aCreepingUnease" ]
+      ]
+  }
+
 -- Cast --------------------------------------------------------------------------
 
 you :: Character
@@ -373,6 +422,30 @@ director = (character "director")
   { charWants   = [ Want [ Match "dm.stirred" ] 20 ]  -- wants the evening to have a spark
   , charBoundTo = Just "dm" }
 
+-- A second patron, so the player-DM has a lively cast to play off (stir bex
+-- against cai, kindle either toward ada, …). Wants a cider and, like bex, to
+-- belong.
+cai :: Character
+cai = (character "cai")
+  { charWants =
+      [ Want [ Match "practice.tendBar.Place.ada.customer.cai!order!cider" ] 4
+      , Want [ Match "practice.tendBar.Place.ada.customer.cai!beverage!cider" ] 9
+      , Want [ Match "practice.world.world.at.cai!bar" ] 1
+      , Want [ Match "practice.greet.world.greeted.cai.Other" ] 2
+      , Want [ Match "practice.greet.world.bought.cai.Friend" ] 6
+      , Want [ arcIs "cai" "belonging" ] 25
+      , Want [ arcIs "cai" "lonely" ] (-25)
+      ] }
+
+-- | The name of the drama-manager the player controls in 'barDirectorWorld'.
+directorName :: String
+directorName = "director"
+
+-- The player-controlled DM: bound to 'directP', no wants of its own — the human
+-- supplies the intent, choosing nudges from a menu each turn.
+directorPlayer :: Character
+directorPlayer = (character directorName) { charBoundTo = Just "direct" }
+
 -- Initial world ----------------------------------------------------------------
 
 -- | The fully initialized bar: practices (core-model + reaction libraries)
@@ -401,4 +474,34 @@ barWorld =
       , Insert "practice.dm.director"
       , Insert "practice.arc.you"
       , Insert "practice.arc.bex"
+      ]
+
+-- | The same bar, but the human is the __drama manager__ (Versu §XI): the player
+-- controls 'directorPlayer', steering an autonomous cast (ada, bex, cai) with
+-- authorial nudges instead of embodying a character. There is no @you@ — the
+-- player is the unseen hand shaping the evening.
+barDirectorWorld :: PraxState
+barDirectorWorld =
+  foldl' (flip performOutcome) withPractices setup
+  where
+    withPractices =
+      (definePractices
+         [ coreLib, disapprovalP
+         , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, directP
+         , arcP ]
+         emptyState)
+        { characters = [ada, bex, cai, directorPlayer] }
+    setup =
+      [ Insert "practice.world.world.connected.entrance.bar"
+      , Insert "practice.world.world.connected.bar.entrance"
+      , Insert "practice.world.world.at.ada!bar"
+      , Insert "practice.world.world.at.bex!bar"   -- patrons already in the room
+      , Insert "practice.world.world.at.cai!bar"   -- with the bartender, for the DM to play off
+      , Insert "practice.patron.bex"
+      , Insert "practice.patron.cai"
+      , Insert "practice.greet.world"
+      , Insert "practice.tendBar.bar.ada"
+      , Insert "practice.direct.director"
+      , Insert "practice.arc.bex"
+      , Insert "practice.arc.cai"
       ]

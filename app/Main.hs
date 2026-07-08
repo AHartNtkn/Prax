@@ -16,7 +16,8 @@ import           Text.Read (readMaybe)
 
 import           Prax.Db (Bindings, unify, valToString)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction)
+import           Prax.Engine (performAction)
+import           Prax.Planner (candidateActions)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Stress
 import           Prax.Persist (saveState, loadState)
@@ -38,6 +39,7 @@ saveFile = "prax.save"
 worldNamed :: [String] -> (String, PraxState, String)
 worldNamed ("intrigue" : _) = ("Intrigue (Rome)", Intrigue.intrigueWorld, Intrigue.playerName)
 worldNamed ("play" : _)     = ("the conspiracy (a play)", Play.playWorld, Play.playerName)
+worldNamed ("dm" : _)       = ("the bar, and you direct it", Bar.barDirectorWorld, Bar.directorName)
 worldNamed _                = ("a night at the bar", Bar.barWorld, Bar.playerName)
 
 -- @prax stress [world]@ — a QA report over many random all-AI playthroughs.
@@ -101,6 +103,10 @@ play args = do
           ( "prax — the conspiracy (a play)"
           , "You are Marcus. The scene plays out around you (see `prax flow`)."
           , Play.playWorld, Play.playerName )
+        ("dm" : _) ->
+          ( "prax — you direct the evening"
+          , "You are the drama manager: nudge the autonomous cast (ada, bex, cai)."
+          , Bar.barDirectorWorld, Bar.directorName )
         _ ->
           ( "prax — a night at the bar"
           , "You are 'you'. Others act on their own."
@@ -173,9 +179,11 @@ playerTurn player savePoint st actor = do
 -- The player already has `m` to pass, so pure no-op actions (empty outcomes,
 -- e.g. the world's "Wait a moment") are noise in the menu. They remain
 -- available to NPCs, who need a "do nothing" affordance to avoid being forced
--- to act. Hide them from the player only.
+-- to act. Hide them from the player only. Uses 'candidateActions' so a
+-- practice-bound player (e.g. the drama manager) is offered only the affordances
+-- of its bound practice.
 playerActions :: PraxState -> Character -> [GroundedAction]
-playerActions st actor = filter (not . isNoOp) (possibleActions st (charName actor))
+playerActions st actor = filter (not . isNoOp) (candidateActions st actor)
   where
     isNoOp ga = case Map.lookup (gaPracticeId ga) (practiceDefs st) of
       Just def | (a : _) <- filter ((== gaActionId ga) . actionName) (actions def)
@@ -276,7 +284,8 @@ renderScene st =
     arcs =
       [ who ++ " feels " ++ arcPhrase stage
       | b <- rows "Who.arc!Stage"
-      , Just who <- [val "Who" b], Just stage <- [val "Stage" b] ]
+      , Just who <- [val "Who" b], Just stage <- [val "Stage" b]
+      , who `elem` map charName (characters st) ]  -- a real character's arc, not a practice.arc.<who> instance
 
     -- beliefs that diverge from the truth (here: believed grudges)
     beliefs =

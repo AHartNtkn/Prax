@@ -81,3 +81,4 @@ test-suite prax-test
                       Prax.PersistSpec
                       Prax.ScriptSpec
                       Prax.Script.JsonSpec
+                      Prax.DirectorSpec

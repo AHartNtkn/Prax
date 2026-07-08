@@ -69,6 +69,11 @@ utility. See the design writeups:
   the editable authoring/exchange format (chosen over maintaining a bespoke `.prompter` grammar).
   `cabal run prax -- dump-play` prints the built-in play as JSON; `cabal run prax -- play
   examples/play.json` loads and plays an edited one. See `examples/play.json`.
+- **Player as DM (v13)** — the human can occupy Versu's drama-manager slot instead of a character.
+  In `barDirectorWorld` (`prax dm`) you are the *director*: bound to a metalevel `direct` practice,
+  your menu is authorial nudges — stir a rivalry, kindle warmth, cast a pall — over an autonomous
+  cast (ada, bex, cai), who then play out the consequences through the ordinary social machinery.
+  (A practice-bound player is offered only its practice's affordances, via `candidateActions`.)
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).
@@ -83,6 +88,7 @@ cabal test        # run the test suite (tasty)
 cabal run prax             # play the bar demo — you are 'you'; pick from the menu
 cabal run prax -- intrigue  # play the dramatic episode (a Roman conspiracy)
 cabal run prax -- play      # play the same drama authored as a Prompter-lite play-script
+cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
 cabal run prax -- dump-play         # print the play-script as JSON
 cabal run prax -- play examples/play.json  # load and play a play-script from JSON
