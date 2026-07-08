@@ -90,6 +90,12 @@ utility. See the design writeups:
   `Prax.Worlds.Feud` (`prax feud`) is the demo: from *one* authored wrong and three rules, a whole
   feud emerges (people who never met come to resent someone through the alliance network) and
   dissolves the moment amends are made.
+- `Prax.TypeCheck` (v16) — a static **well-formedness checker** (`prax check [world]`), the sound,
+  declaration-free first cut of Versu's implicit type system. It reads a world's authored sentences and
+  flags **unbound variables** (an outcome/axiom-head variable no precondition can bind — a silent
+  no-op), **exclusion-cardinality clashes** (a relation asserted both `!` and `.`), and **dangling
+  references** (`Call`/spawn of something undefined). Every shipped world checks clean. (Full ML-style
+  *sort* inference — agent-vs-gender — needs a sort-declaration layer and is the noted next step.)
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).
@@ -107,6 +113,10 @@ cabal run prax -- play      # play the same drama authored as a Prompter-lite pl
 cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
 cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + three rules
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
+cabal run prax -- check feud   # static well-formedness check of a world
+```
+
+```sh
 cabal run prax -- dump-play         # print the play-script as JSON
 cabal run prax -- play examples/play.json  # load and play a play-script from JSON
 ```

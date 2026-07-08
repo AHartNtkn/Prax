@@ -21,6 +21,7 @@ import           Prax.Planner (candidateActions)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Stress
 import           Prax.Persist (saveState, loadState)
+import           Prax.TypeCheck (TypeError (..), typeCheck)
 import           Prax.Script (Script, compile, flowChart, scriptPlayer)
 import           Prax.Script.Json (encodeScript, loadScript)
 import qualified Prax.Worlds.Bar as Bar
@@ -58,12 +59,29 @@ runStress args = do
   putStrLn ("  dead ends: " ++ show (srDeadEnds r))
   putStrLn ("  no ending: " ++ show (srNoEnding r) ++ " / " ++ show (srRuns r) ++ " runs")
 
+-- @prax check [world]@ — static well-formedness report for a world.
+runCheck :: [String] -> IO ()
+runCheck args = do
+  let (name, world, _) = worldNamed args
+  case typeCheck world of
+    [] -> putStrLn ("well-formed: " ++ name)
+    es -> do putStrLn (name ++ " — " ++ show (length es) ++ " problem(s):")
+             mapM_ (putStrLn . ("  - " ++) . describe) es
+  where
+    describe (UnboundVar w v s) =
+      "unbound variable " ++ v ++ " in \"" ++ s ++ "\" (" ++ w ++ ")"
+    describe (CardinalityClash slot) =
+      "relation " ++ slot ++ " is used both single-valued (!) and multi-valued (.)"
+    describe (UndefinedRef w n) =
+      "undefined reference " ++ n ++ " (" ++ w ++ ")"
+
 main :: IO ()
 main = do
   hSetBuffering stdout NoBuffering
   args <- getArgs
   case args of
     ("stress" : rest) -> runStress rest
+    ("check" : rest)  -> runCheck rest
     ("dump-play" : _) -> BLC.putStrLn (encodeScript Play.playScript)
     ("flow" : rest)   -> do scr <- scriptFrom rest; putStr (flowChart scr)
     ("play" : file : _) | ".json" `isSuffixOf` file -> playFile file

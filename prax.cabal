@@ -33,6 +33,7 @@ library
                       Prax.Deontic
                       Prax.EL
                       Prax.Derive
+                      Prax.TypeCheck
                       Prax.Beliefs
                       Prax.Conversation
                       Prax.Arc
@@ -81,6 +82,7 @@ test-suite prax-test
                       Prax.ELSpec
                       Prax.DeriveSpec
                       Prax.FeudSpec
+                      Prax.TypeCheckSpec
                       Prax.BeliefsSpec
                       Prax.ConversationSpec
                       Prax.ArcSpec

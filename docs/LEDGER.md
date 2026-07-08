@@ -24,6 +24,8 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 - **v15** — a forward-chaining **derivation layer** (`Prax.EL` + `Prax.Derive`): domain rules
   closed to a fixpoint via the paper's `m(X)`, exact `⊥` detection, auto-`□`-lift (obligation
   closure), a defeasible closed *view* on the read path; `Prax.Worlds.Feud` is the emergent demo.
+- **v16** — a static **well-formedness checker** (`Prax.TypeCheck`): unbound-variable,
+  exclusion-cardinality, and dangling-reference checks over a world's authored sentences (`prax check`).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -42,7 +44,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 5 | Unification / pattern match (vars = Capitalized) | v1 | Praxish `db.js` | list-monad over bindings |
 | 6 | Query ops: not / eq(assign) / neq / lt·lte·gt·gte / calc / subquery | v1 | Praxish `praxish.js` | typed `Condition` ADT |
 | 7 | Full FOL queries: ∀, ∃, ∨, → | v8 | P§VII | `Prax.Query` `Or`/`Absent`/`Exists` + `forAll`/`implies`; nests freely |
-| 8 | Static type inference / checker (ML-style) | research-needed | P§VII p.120 | design question: how far to go. **Substrate now exists** — `Prax.EL` (the LRT lattice + `meet`/`leq`) is the paper's decision-procedure machinery; a checker would add `⊔`/general entailment on top |
+| 8 | Static type inference / checker (ML-style) | v16\* | P§VII p.120 | `Prax.TypeCheck` `typeCheck` — the sound, declaration-free subset: unbound variables (ungroundable outcomes/heads), exclusion-cardinality consistency (a relation is `!` or `.`, never both — over asserting sentences only), dangling `Call`/spawn references. Every shipped world checks clean; `prax check`. \*ML-style *sort* inference (agent-vs-gender) needs a declaration layer and is the remaining extension |
 
 ## Practices & actions
 
@@ -109,8 +111,9 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   (`references/papers/EVAIEL.pdf`, open-access https://philarchive.org/archive/EVAIEL) and distilled
   (`docs/research/deon-notes.md`). It unblocked #34 (done, v14). It also underpins #8 (static type
   checking): the `m(X)`/LRT decision procedure it defines is the machinery a full type checker needs.
-- Extent of static type checking (#8) — decide how much of Versu's implicit type system to port
-  (rests on the DEON paper's decision procedure, now available).
+- Full static type checking (#8) — the well-formedness subset is done (v16); the remaining part is
+  ML-style *sort* inference (agent-vs-gender), which needs a sort-declaration layer added to worlds
+  and then position/variable-sort inference with unification.
 
 ## Future ideas to investigate
 - **Incremental view maintenance for the derivation layer (#17).** Closure is now semi-naive and

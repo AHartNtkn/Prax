@@ -32,6 +32,7 @@ module Prax.Db
   , childKeys
   , exists
   , pathNames
+  , tokens
   ) where
 
 import           Data.Char (isUpper)
