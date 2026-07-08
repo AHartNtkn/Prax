@@ -29,6 +29,7 @@ library
                       Prax.Core
                       Prax.Reactions
                       Prax.Beliefs
+                      Prax.Conversation
                       Prax.Loop
                       Prax.Worlds.Bar
 
@@ -61,3 +62,4 @@ test-suite prax-test
                       Prax.CoreSpec
                       Prax.ReactionsSpec
                       Prax.BeliefsSpec
+                      Prax.ConversationSpec
