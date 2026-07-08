@@ -6,7 +6,6 @@
 module Prax.Loop
   ( advance
   , npcAct
-  , narrate
   , runNpcTicks
   ) where
 
@@ -30,18 +29,14 @@ npcAct depth actor st = case pickAction depth st actor of
   Just ga -> (Just ga, performAction st ga)
   Nothing -> (Nothing, st)
 
--- | One line of narration for a (possibly idle) turn.
-narrate :: Character -> Maybe GroundedAction -> String
-narrate actor Nothing   = "(" ++ charName actor ++ " has nothing to do)"
-narrate _     (Just ga) = gaLabel ga
-
--- | Run @steps@ NPC turns from the given state, collecting narration. Every
--- character is driven by the planner (used for deterministic replay tests).
+-- | Run @steps@ NPC turns from the given state, collecting the narration of
+-- each performed action (idle turns produce no line). Every character is driven
+-- by the planner (used for deterministic replay tests).
 runNpcTicks :: Int -> Int -> PraxState -> ([String], PraxState)
 runNpcTicks depth steps = go steps []
   where
     go 0 acc st = (reverse acc, st)
     go k acc st =
-      let (actor, st1) = advance st
-          (mga, st2)   = npcAct depth actor st1
-      in go (k - 1) (narrate actor mga : acc) st2
+      let (_actor, st1) = advance st
+          (mga, st2)    = npcAct depth _actor st1
+      in go (k - 1) (maybe acc (\ga -> gaLabel ga : acc) mga) st2
