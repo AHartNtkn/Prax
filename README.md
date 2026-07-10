@@ -140,7 +140,8 @@ him, do the deed yourself, or romance the conspirator. It reaches distinct endin
 Blood & Laurels-style drama (murder, death, betrayal, branching) on the same engine.
 
 **New here? Read `docs/WALKTHROUGH.md`** — a guided playthrough that names each thing to try and
-explains which engine feature it demonstrates. The bar world exercises every v1 feature.
+explains which feature it demonstrates. Part I tours the whole engine core by playing the bar;
+Part II walks the rest (intrigue, stress, save/resume, play/flow, dm, feud, check, audience).
 
 ## References
 
