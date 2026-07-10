@@ -41,21 +41,21 @@ import           Prax.Witness (CoPresence)
 -- many provenance edges there are — no duplicate tells for a teller who both
 -- saw and heard.
 gossip :: CoPresence -> [Condition] -> String -> String -> Action
-gossip copresence gate pattern label =
-  action label conds [ Insert (beliefAbout "Hearer" pattern ++ ".heard.Actor") ]
+gossip copresence gate pat label =
+  action label conds [ Insert (beliefAbout "Hearer" pat ++ ".heard.Actor") ]
   where
-    subject = case filter isVariable (pathNames pattern) of
+    subject = case filter isVariable (pathNames pat) of
       (v : _) -> v
-      []      -> error ("gossip: event pattern " ++ show pattern
+      []      -> error ("gossip: event pattern " ++ show pat
                         ++ " names no one (a rumor is about someone)")
     forHearer = map (groundCondition (Map.singleton "Witness" (VStr "Hearer")))
     conds =
-      [ Match (beliefAbout "Actor" pattern) ]   -- any evidence; binds the pattern's variables
+      [ Match (beliefAbout "Actor" pat) ]   -- any evidence; binds the pattern's variables
       ++ forHearer copresence
       ++ [ Neq "Hearer" "Actor"
          , Neq "Hearer" subject
-         , Absent [ Match (beliefAbout "Hearer" pattern ++ ".seen") ]
-         , Not (beliefAbout "Hearer" pattern ++ ".heard.Actor") ]
+         , Absent [ Match (beliefAbout "Hearer" pat ++ ".seen") ]
+         , Not (beliefAbout "Hearer" pat ++ ".heard.Actor") ]
       ++ gate
 
 -- | Condition: @who@ has hearsay evidence of @event@ (from anyone). A boolean
