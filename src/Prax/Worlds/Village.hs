@@ -2,18 +2,20 @@
 -- @docs/specs/2026-07-10-v19-witnessing-design.md@). v19 seeds it with the
 -- witnessing keystone: bob steals a loaf in the square; whoever is /there/
 -- comes to believe it and can act on the belief — whoever isn't, doesn't and
--- can't. Rumor (v20) and reputation (v21) grow from here.
+-- can't. v20 makes the news travel: carol tells; hearsay licenses suspicion,
+-- not confrontation. Reputation (v21) grows from here.
 module Prax.Worlds.Village
   ( villageWorld
   , playerName
   , together
   ) where
 
-import           Prax.Query (Condition (..))
+import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome)
 import           Prax.Core (coreLib, adjustScore)
 import           Prax.Witness
+import           Prax.Rumor
 
 -- | You are a villager — one agent among many.
 playerName :: String
@@ -65,6 +67,28 @@ villageP = practice
           , Not "confronted.Actor.Thief" ]
           [ Insert "confronted.Actor.Thief"
           , adjustScore "Actor" "Thief" "trust" (-10) "sawTheft" ]
+
+        -- Word travels: anyone with evidence can pass it on. Never told: bob
+        -- (the subject), an eyewitness (no news value), or the same hearer
+        -- twice. The village's own gate: you don't gossip with someone you
+        -- distrust.
+      , gossip together
+          [ Absent [ Match "Actor.relationship.Hearer.trust.score!TrustScore"
+                   , Cmp Lt "TrustScore" "0" ] ]
+          "stole.Culprit.loaf"
+          "[Actor]: tell [Hearer] that [Culprit] stole the loaf"
+
+        -- Hearsay licenses suspicion, not confrontation — and an eyewitness
+        -- confronts instead (seen suppresses the milder act).
+      , action "[Actor]: eye [Thief] with suspicion"
+          [ Match "practice.world.world.at.Actor!P"
+          , Match "practice.world.world.at.Thief!P"
+          , Neq "Thief" "Actor"
+          , heard "Actor" "stole.Thief.loaf"
+          , Absent [ Match "Actor.believes.stole.Thief.loaf.seen" ]
+          , Not "eyed.Actor.Thief" ]
+          [ Insert "eyed.Actor.Thief"
+          , adjustScore "Actor" "Thief" "trust" (-5) "heardOfTheft" ]
       ]
   }
 
@@ -77,9 +101,11 @@ villageWorld = foldl (flip performOutcome) base setup
                  , (character "bob")
                      { charWants = [ Want [ Match "holding.bob.loaf" ] 10 ] }
                  , (character "carol")
-                     { charWants = [ Want [ Match "confronted.carol.T" ] 5 ] }
+                     { charWants = [ Want [ Match "confronted.carol.T" ] 5
+                                   , Want [ Match "Other.believes.stole.bob.loaf.heard.carol" ] 5 ] }
                  , (character "dana")
-                     { charWants = [ Want [ Match "confronted.dana.T" ] 5 ] }
+                     { charWants = [ Want [ Match "confronted.dana.T" ] 5
+                                   , Want [ Match "eyed.dana.T" ] 5 ] }
                  ] }
     setup =
       [ Insert "practice.village.here"
