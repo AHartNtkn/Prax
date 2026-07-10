@@ -11,8 +11,9 @@ and — wired straight into "settling up" — the deontic obligation layer.
 **Part II — beyond the bar** is a shorter tour of the capabilities the bar *doesn't* show, each in
 its own world or tool: a branching dramatic episode with a death (`intrigue`), the QA tooling
 (`stress`), save/resume, scene-authored drama (`play`, `flow`), playing the drama manager yourself
-(`dm`), emergent derivation (`feud`), the static checker (`check`), and the Prompter compilation
-features (`audience`).
+(`dm`), emergent derivation (`feud`), the static checker (`check`), the Prompter compilation
+features (`audience`), and the sandbox seed where who sees and who's told decides who can act
+(`village`, witnessing and gossip).
 
 Start with the bar:
 
@@ -595,16 +596,16 @@ You were co-present too, so the same affordance opens up for you next turn:
 
 dana never gets it — not on this turn, and not later, even once she walks over and stands beside
 everyone in the square. Witnessing is fixed at the moment of the act, not by later proximity:
-`carol.believes.stole.bob.loaf!seen` and `you.believes.stole.bob.loaf!seen` are asserted the
-instant bob steals; `dana` holds no such belief, ever, unless she hears it from someone (v20's
-rumor layer — not built yet).
+`carol.believes.stole.bob.loaf.seen` and `you.believes.stole.bob.loaf.seen` are asserted the
+instant bob steals; `dana` holds no such belief, ever, unless she hears it from someone — which,
+per §23, she eventually does.
 
 The theft is wrapped in `observable together "stole.Actor.loaf"`; the plain `Go to [Place]` /
 `Wait a moment` actions in the same world are not — so **movement is not news**: nobody, not even
 someone standing next to bob the whole time, comes to believe `went.bob`, because no author
 declared it an event. Observability is a property the world author states about an action, not
 something the engine infers from watching it execute — the same action could be authored to *look*
-like something else entirely (a hook v20's deception work will use).
+like something else entirely (a hook the backlog's secrets/deception tier will use).
 
 Underneath, this is `ForEach [Condition] [Outcome]`, the outcome-language quantifier v8 never
 gave: `Insert`/`Delete` act on one sentence, `Call` dispatches to one function case, but "for every
@@ -618,6 +619,102 @@ sharing an `at` fact) — the engine itself has no notion of place.
 
 → code: `Prax.Engine` (`ForEach`, `performOutcome`), `Prax.Witness` (`observable`/`saw`),
 `Prax.Worlds.Village`; asserted in `Prax.WitnessSpec`, `Prax.VillageSpec`.
+
+### 23. Rumor — the news travels (`prax village`) (v20)
+
+`Prax.Rumor` closes the loop §22 left open: a belief someone holds — witnessed or already
+secondhand — can now be *told* to a co-present hearer. Same world, played further:
+
+```sh
+cabal run prax -- village
+```
+
+Wait a turn after bob steals and carol, standing right there, confronts him — and dana, off at the
+mill when it happened, drifts back into the square on her own, before anyone has told her anything:
+
+```
+-------------------- scene --------------------
+  - bob is at the square
+  - carol is at the square
+  - dana is at the mill
+  - you is at the square
+Your move (you):
+  1) you: steal the loaf from the stall
+  2) you: Go to mill
+  m) wait and let others act
+  s) save    q) quit
+>   bob: steal the loaf from the stall
+  carol: confront bob about the theft
+  dana: Go to square
+```
+
+The very next beat, with everyone now together in the square, carol tells dana what she saw — and
+dana, who acts later in that same round, already has the hearsay to act on it, in the same beat:
+
+```
+-------------------- scene --------------------
+  - bob is at the square
+  - carol is at the square
+  - dana is at the square
+  - you is at the square
+Your move (you):
+  1) you: confront bob about the theft
+  2) you: tell dana that bob stole the loaf
+  3) you: Go to mill
+  m) wait and let others act
+  s) save    q) quit
+>   bob: Wait a moment
+  carol: tell dana that bob stole the loaf
+  dana: eye bob with suspicion
+```
+
+What actually drives this is less tidy than "carol carries the news": `gossip` only requires teller
+and hearer to be co-present, and in this run that co-presence happens in the square, because dana
+walks over — not because she's chasing news (she holds no belief yet, so nothing in her wants or
+lookahead points her at carol) but because, with no location want of her own, ties between her
+available moves resolve by list order (`Go to` sorts before `Wait a moment`) — the same tie-break
+`Prax.Worlds.Village`'s own comment on bob's anchoring want describes ("an idle character needs a
+place it wants to be, or it drifts on tie-break"). Once she's told and has acted on it, dana and
+carol go on oscillating square↔mill for the same reason, visible over the following turns of this
+same run. The mechanism doesn't route anyone toward anyone; it only fires when the two happen to be
+in the same place.
+
+You were offered the identical tell (`2) you: tell dana that bob stole the loaf`) — telling is an
+ordinary affordance, open to the player exactly as witnessing was in §22.
+
+**The saw/heard affordance asymmetry.** dana, hearsay-only, gets `eye [Thief] with suspicion` — a
+milder trust hit (−5, reason `heardOfTheft`) — but never `confront`, which stays gated on `saw`
+(−10, reason `sawTheft`): hearsay doesn't license "I saw you." The asymmetry cuts the other way too:
+`VillageSpec`'s "hearsay licenses suspicion, not confrontation" confirms carol, the eyewitness, is
+never offered mere suspicion — `eye` is gated on `heard "Actor" "<event>"` **and**
+`Absent [Match "Actor.believes.<event>.seen"]`, so seeing subsumes hearing for the milder act.
+
+**Sourced-hearsay vocabulary.** Provenance is no longer the single exclusive value v19 shipped
+(`!seen`) — it's multi-valued: `<W>.believes.<event>.seen` for direct witness, one
+`<W>.believes.<event>.heard.<source>` edge per teller, coexisting under the same `believes.<event>`
+node. A witness who is *also* told keeps their `.seen` edge rather than losing it to an overwriting
+`!heard` — the capture bug the v19 review flagged and banked for this round. Each further teller
+adds another `.heard.<source>` edge, so corroboration is just counting distinct sources; `heard`
+itself is a boolean `Exists` over that subtree, so two sources still yield one row in the menu, not
+a duplicate tell.
+
+**The distrust gate.** `gossip`'s world-supplied gate (worlds add their own extra conditions, the
+way `Prax.Witness`'s `together` co-presence template is world-supplied) is "you don't gossip with
+someone you distrust":
+
+```haskell
+Absent [ Match "Actor.relationship.Hearer.trust.score!TrustScore", Cmp Lt "TrustScore" "0" ]
+```
+
+The spec sketch named this variable `V`; the shipped code calls it `TrustScore`, because the
+village practice's own role is *also* named `V` (`roles = ["V"]` in `Prax.Worlds.Village`) — reusing
+`V` here would have silently captured that binding instead of introducing a fresh condition
+variable, a real bug caught before it shipped rather than a stylistic choice. With no trust score
+recorded, gossip flows freely; once trust drops below zero the tell disappears from the menu, same
+as any other gated affordance.
+
+→ code: `Prax.Rumor` (`gossip`/`heard`), `Prax.Worlds.Village`; asserted in `Prax.RumorSpec`,
+`Prax.VillageSpec`.
 
 ---
 
@@ -671,9 +768,10 @@ bar, Part I); the second is Part II, one row per world/tool.
 | Static type checker + sort inference | `Prax.TypeCheck` | `prax check <world>` |
 | Memories, timed junctions, character sketches | `Prax.Script` / `Worlds.Audience` | `prax audience` |
 | Quantified outcomes (`ForEach`) + authored witnessing | `Prax.Engine` / `Prax.Witness` | `prax village`: carol (co-present) believes bob's theft and can confront him; dana (elsewhere) doesn't |
+| Gossip / sourced hearsay (`gossip`/`heard`, multi-valued `.seen`/`.heard.<source>` provenance) | `Prax.Rumor` | `prax village`: carol tells dana what she saw; hearsay licenses suspicion, not confrontation |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
-same behaviours are asserted in the test suite (`cabal test`, 196 tests). Part I: `Prax.QuerySpec`,
+same behaviours are asserted in the test suite (`cabal test`, 215 tests). Part I: `Prax.QuerySpec`,
 `Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.ReactionsSpec`
 (reactions, norms, norm-avoidance), `Prax.BeliefsSpec` (per-agent & false beliefs), `Prax.ConversationSpec`
 (speaker turns, topics, one-shot quips), `Prax.ArcSpec` (arc stages), `Prax.DeonticSpec` (□, discharge,
@@ -682,7 +780,8 @@ II: `Prax.IntrigueSpec` (death + branching endings), `Prax.StressSpec`, `Prax.Pe
 `Prax.ScriptSpec` + `Prax.Script.JsonSpec` (scene layer + JSON, incl. memories/timed junctions/sketches
 and the `audience`), `Prax.DirectorSpec` (player-as-DM), `Prax.ELSpec` + `Prax.DeriveSpec` (the
 exclusion-logic lattice and forward chaining), `Prax.TypeCheckSpec`, and `Prax.WitnessSpec` +
-`Prax.VillageSpec` (`ForEach` witnessing, co-presence, the confront affordance).
+`Prax.VillageSpec` + `Prax.RumorSpec` (`ForEach` witnessing, co-presence, the confront affordance,
+sourced hearsay and the gossip gate).
 
 ---
 

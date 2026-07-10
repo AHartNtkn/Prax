@@ -112,11 +112,23 @@ utility. See the design writeups:
   one binding never changes which others exist) — the dual of v8, which quantified conditions but
   left outcomes singular. `Prax.Witness` compiles it into **authored observability**: `observable`
   declares an action's public appearance, and every co-present non-actor comes to believe it
-  happened (`<W>.believes.<event>!seen`, the `!seen` recording direct-observation provenance).
+  happened (`<W>.believes.<event>.seen`, the `.seen` edge recording direct-observation provenance;
+  multi-valued from v20, below, so it coexists with hearsay evidence for the same event).
   Observability is a semantic property the author states — undeclared actions (like moving) deposit
   no belief, preserving the looks-like/is gap deception will later exploit. `Prax.Worlds.Village`
   demonstrates it: bob steals a loaf in the square; carol and you, both present, come to believe it
   and can confront him; dana, at the mill, can't.
+- `Prax.Rumor` (v20) — **sourced rumor propagation**: `gossip` (authored per event-pattern, like
+  `observable`) lets a character tell a co-present hearer what they have evidence for, planting the
+  same event-belief with hearsay provenance (`.heard.<teller>`, one edge per source) beside any
+  `.seen` edge — provenance is now **multi-valued**, so witnessing and hearsay for the same event
+  coexist and evidence accumulates instead of one overwriting the other, and `heard` (a boolean ∃
+  over sources) makes corroboration countable. Spreading is want-driven, not automatic: a
+  gossip-inclined character is authored with a want that others know what it knows, and the
+  ordinary planner carries the news. `Prax.Worlds.Village` grows: carol, having witnessed bob's
+  theft, carries the news on her own; hearsay licenses suspicion (`eye … with suspicion`, a milder
+  trust hit) but never confrontation — that stays eyewitness-only — and a world-authored
+  relationship gate lets distrust close the gossip channel.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).
@@ -134,7 +146,7 @@ cabal run prax -- play      # play the same drama authored as a Prompter-lite pl
 cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
 cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + three rules
 cabal run prax -- audience  # a Prompter demo: memory + timed junction + character-sketch in one scene
-cabal run prax -- village   # witnessing seed: who sees a theft — and who doesn't — decides who can act
+cabal run prax -- village   # witnessing + rumor: what you see licenses confronting, what you hear only suspecting
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
 cabal run prax -- check feud   # static well-formedness check of a world
 ```

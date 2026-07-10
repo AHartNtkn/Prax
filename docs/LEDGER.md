@@ -32,8 +32,17 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   exposition), timed junctions (a scene clock), and character sketches (concerns→wants, traits→facts).
 - **v19** — **quantified outcomes** (`ForEach`, the dual of v8's condition quantifiers) and
   **authored witnessing** (`Prax.Witness`): co-present characters come to believe an action
-  happened, with `!seen` provenance; observability is a semantic property the author states, not
-  an automatic event log. `Prax.Worlds.Village` seeds the sandbox arc (`prax village`).
+  happened, with `.seen` provenance (multi-valued from v20 — see below); observability is a
+  semantic property the author states, not an automatic event log. `Prax.Worlds.Village` seeds the
+  sandbox arc (`prax village`).
+- **v20** — **sourced rumor propagation** (`Prax.Rumor` `gossip`/`heard`): a character tells a
+  co-present hearer what they have evidence for, planting the same event-belief with hearsay
+  provenance. Provenance becomes **multi-valued** (`.seen`/`.heard.<source>`, replacing v19's
+  exclusive `!seen`), so witnessing and hearsay for the same event coexist instead of one
+  overwriting the other, and corroboration (multiple named `.heard.<source>` edges) is countable.
+  `Prax.Worlds.Village` grows: carol spreads the theft on her own; hearsay licenses
+  `eye … with suspicion`, never `confront` (eyewitness-only); a world-authored relationship gate
+  lets distrust close the gossip channel.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -156,11 +165,13 @@ outcome over every binding) plus a compiled-per-action combinator (`observable`)
 a separate hook. Unlocks information asymmetry — the root of reputation, rumor, secrets, alibis.
 
 Tier 1 — compiled social structures:
-- **⤷K Gossip / rumor propagation** (`Prax.Rumor`): share a held belief with a co-located,
-  relationship-gated hearer, planting the same belief. Reuses `Prax.Beliefs`; false rumors already
-  work. Reputation travels. *Design note from the v19 review:* the belief slot is `!`-exclusive, so
-  `!heard` would *overwrite* `!seen` for someone who witnessed **and** later hears the same event —
-  decide deliberately whether provenance should be multi-valued (`.seen`/`.heard`) before building.
+- **⤷K Gossip / rumor propagation** (`Prax.Rumor`) *(done — v20: `gossip`/`heard`, authored per
+  event-pattern like `observable`; evidence is a prefix match on `believes.<event>`; spreading is
+  want-driven)*: share a held belief with a co-located, relationship-gated hearer, planting the
+  same belief. Reuses `Prax.Beliefs`; false rumors already work. Reputation travels. *Resolved in
+  v20:* provenance is multi-valued (`.seen`/`.heard.<source>`), so a `.heard.<source>` edge for
+  someone who witnessed **and** later hears the same event sits *beside* their `.seen` edge instead
+  of overwriting it — evidence accumulates and corroboration (multiple named sources) is countable.
 - **⤷K Reputation** (`Prax.Repute`): derivation axioms from believed deeds to standing
   (`believes.X.(stole.Y._) ⇒ regards.X.Y.thief`) + score effects. Defeasible for free — clear the
   belief and the standing dissolves (the feud pattern).
