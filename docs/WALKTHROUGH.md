@@ -837,9 +837,11 @@ notoriety snap straight back — the same −15 he'd only just paid off, payable
 spot. An unatoned bob was tipped into atoning; an atoned bob, seeing that future, doesn't
 re-offend. `bob has made amends` and `bob: Wait a moment` repeat for the rest of the run — every
 beat still offering the *player* the theft bob himself now refuses. This 16-beat run only shows
-the shape of it; `VillageSpec`'s "re-offense revokes atonement: standing snaps back from memory"
-and "an atoned thief is deterred: the planner sees the snap-back" cases drive the same two facts
-— the snap-back, then the refusal — out to 60 and 90 autonomous turns respectively.
+the shape of it; `VillageSpec` pins both facts — "re-offense revokes atonement: standing snaps
+back from memory" forces a second theft by hand and asserts the regards return, and "an atoned
+thief is deterred: the planner sees the snap-back" drives 90 autonomous turns past the atonement
+and asserts the stall stays stocked (the full arc itself is driven for 60 turns in "the whole
+arc runs itself").
 
 The shun/relent/tell options never resurface either — with no live regard, the wants that drove
 them (carol and dana's shun-want is *conditioned* on `regardedAs`, per the design spec, so it
