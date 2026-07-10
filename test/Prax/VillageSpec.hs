@@ -68,7 +68,9 @@ tests = testGroup "Prax.Worlds.Village"
         (not (any (("confront bob" `isInfixOf`) . gaLabel) (possibleActions st "carol")))
 
   , testCase "the rumor spreads on its own: carol carries the news to the mill" $ do
-      let st = driveIdle "you" 24 (doAct "bob" "steal the loaf" villageWorld)
+      -- 36 turns = the original 6 full rounds over the grown 6-member cast
+      -- (24 was 6 rounds of the pre-ticker, pre-eve 4-member village).
+      let st = driveIdle "you" 36 (doAct "bob" "steal the loaf" villageWorld)
       assertBool "dana heard it from carol"
         (exists "dana.believes.stole.bob.loaf.heard.carol" (db st))
 
@@ -186,12 +188,12 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "bob holds no loaf" (not (exists "holding.bob.loaf" (db st)))
 
   , testCase "the village keeps a perception clock and sightings" $ do
-      -- after one full round of driveIdle (all five cast members, ending
-      -- with the sight ticker), the perception clock has advanced and the
-      -- square-mates (you, bob, and carol) hold sightings of each other;
-      -- dana, at the mill the whole round, holds none of bob (and bob none
-      -- of her).
-      let st = driveIdle "you" 5 villageWorld
+      -- after one full round of driveIdle (all six cast members -- you, bob,
+      -- carol, dana, eve -- ending with the sight ticker), the perception
+      -- clock has advanced and the square-mates (you, bob, and carol) hold
+      -- sightings of each other; dana, at the mill the whole round, holds
+      -- none of bob (and bob none of her).
+      let st = driveIdle "you" 6 villageWorld
       assertBool "the clock ticked once" (exists "turn!1" (db st))
       assertBool "you sighted bob in the square"
         (exists "you.believes.at.bob!square" (db st))
@@ -244,4 +246,37 @@ tests = testGroup "Prax.Worlds.Village"
                   []       -> error "the sight ticker has no action"
       assertBool "co-present after the shared-room tick: dana is now in scope"
         (inScopeOf st3 "dana" "bob")
+
+  , testCase "a secret keeps: bob will not steal while the square watches" $ do
+      let st = driveIdle "you" 20 villageWorld
+      assertBool "the loaf is still on the stall" (exists "stall.loaf" (db st))
+      assertBool "no one believes any theft by bob"
+        (not (any (\w -> exists (w ++ ".believes.stole.bob.loaf") (db st))
+                  ["you", "carol", "dana", "eve"]))
+
+  , testCase "the perfect crime: alone, bob steals and no one ever knows" $ do
+      let st0 = doAct "carol" "Go to mill" (doAct "you" "Go to mill" villageWorld)
+          st  = driveIdle "you" 12 st0
+      assertBool "bob took it" (exists "holding.bob.loaf" (db st))
+      assertBool "nobody saw"
+        (not (any (\w -> exists (w ++ ".believes.stole.bob.loaf") (db st))
+                  ["you", "carol", "dana", "eve"]))
+      assertBool "no standing about bob ever derives"
+        (not (exists "regards.carol.bob.thief" (readView st)))
+
+  , testCase "the frame-up: eve's whisper becomes reputation and shunning" $ do
+      let st = driveIdle "you" 40 villageWorld
+      assertBool "dana heard the lie from eve"
+        (exists "dana.believes.stole.carol.loaf.heard.eve" (db st))
+      assertBool "the falsehood settled into standing"
+        (exists "regards.dana.carol.thief" (readView st))
+      assertBool "carol ends up wrongly shunned"
+        (exists "shunned.dana.carol" (db st))
+
+  , testCase "the framed have no amends: carol is offered no return" $ do
+      let st = driveIdle "you" 40 villageWorld
+      assertBool "carol was framed" (exists "regards.dana.carol.thief" (readView st))
+      assertBool "carol cannot 'return' a loaf she never took"
+        (not (any (("return the loaf" `isInfixOf`) . gaLabel)
+                  (possibleActions st "carol")))
   ]

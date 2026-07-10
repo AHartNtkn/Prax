@@ -5,10 +5,15 @@
 -- can't. v20 makes the news travel: carol tells; hearsay licenses suspicion,
 -- not confrontation. v21 completes the arc: evidence settles into derived
 -- standing, notoriety tips the thief into atonement, and forgiveness
--- follows; nothing is ever forgotten. v23 wires 'Prax.Sight' in: everyone
--- perceives (and, within a short horizon, remembers) where everyone else
--- is, which is what lets the planner's realistic, belief-relative
--- lookahead (@Prax.Planner@) predict a co-villager's next move at all.
+-- follows; nothing is ever forgotten. v22 adds the adversarial layer: bob
+-- keeps his secret by planning (waiting for an empty square), and eve's
+-- whispered fabrication cascades through the same rumor/reputation
+-- machinery as truth; the framed have no recourse (exculpation needs ground
+-- truth the vocabulary deliberately lacks). v23 wires 'Prax.Sight' in:
+-- everyone perceives (and, within a short horizon, remembers) where
+-- everyone else is, which is what lets the planner's realistic,
+-- belief-relative lookahead (@Prax.Planner@) predict a co-villager's next
+-- move at all.
 module Prax.Worlds.Village
   ( villageWorld
   , playerName
@@ -24,6 +29,7 @@ import           Prax.Witness
 import           Prax.Rumor
 import           Prax.Repute
 import           Prax.Sight
+import           Prax.Deceit
 
 -- | You are a villager — one agent among many.
 playerName :: String
@@ -130,6 +136,17 @@ villageP = practice
           [ Match "shunned.Actor.T"
           , Absent [ Match "regards.Actor.T.thief" ] ]
           [ Delete "shunned.Actor.T" ]
+
+        -- Fabrication: assert a theft you have no evidence for, binding the
+        -- scapegoat from the village roster. The deceived hold real hearsay --
+        -- the whole rumor/reputation stack cascades on the falsehood, and
+        -- nobody in the village can tell it from truth.
+      , lie together
+          [ Absent [ Match "Actor.relationship.Hearer.trust.score!TrustScore"
+                   , Cmp Lt "TrustScore" "0" ] ]
+          [ Match "practice.world.world.at.Culprit!AnywhereQ" ]
+          "stole.Culprit.loaf"
+          "[Actor]: whisper to [Hearer] that [Culprit] stole the loaf"
       ]
   }
 
@@ -164,10 +181,24 @@ villageWorld = (foldl (flip performOutcome) base setup)
                                    , Want [ Match "practice.world.world.at.bob!square" ] 1
                                      -- bob can live with individuals' contempt; being the
                                      -- village's NOTORIOUS thief outweighs the bread
-                                   , Want [ Match "notorious.bob.thief" ] (-15) ] }
+                                   , Want [ Match "notorious.bob.thief" ] (-15)
+                                     -- and better still that no one ever knows: the bread
+                                     -- is worth +10, the secret is worth more
+                                     -- (unnamed charWants are inherently unreadable in
+                                     -- prediction — this is how bob's concealment stays secret)
+                                   , conceal "stole.bob.loaf" 12 ] }
                  , (character "carol")
                      { charWants = [ Want [ Match "confronted.carol.T" ] 5
-                                   , Want [ Match "Other.believes.stole.bob.loaf.heard.carol" ] 5
+                                     -- keeps to the square unless something needs doing (the
+                                     -- anchoring idiom; genuinely needed once bob conceals —
+                                     -- with no early theft her first turns are zero-utility
+                                     -- ties, and unanchored she wanders off on tie-break)
+                                   , Want [ Match "practice.world.world.at.carol!square" ] 1
+                                     -- carol wants others to hear *what she knows* from her --
+                                     -- an unconditioned "believe it from me" would be
+                                     -- satisfiable by fabrication once `lie` exists
+                                   , Want [ Match "carol.believes.stole.bob.loaf"
+                                          , Match "Other.believes.stole.bob.loaf.heard.carol" ] 5
                                    , Want [ Match "shunned.carol.T", Match "regards.carol.T.thief" ] 5
                                    , Want [ Match "shunned.carol.T"
                                           , Absent [ Match "regards.carol.T.thief" ] ] (-5) ] }
@@ -180,6 +211,11 @@ villageWorld = (foldl (flip performOutcome) base setup)
                                      -- loiters near the mill: she keeps to her own place
                                      -- rather than drifting on the wander/wait tie-break
                                    , Want [ Match "practice.world.world.at.dana!mill" ] 1 ] }
+                 , (character "eve")
+                     { charWants = [ -- authored malice: eve wants carol ill-regarded, per head
+                                     -- (unnamed charWants are inherently unreadable in
+                                     -- prediction — this is how eve's malice stays secret)
+                                     Want [ Match "regards.W.carol.thief" ] 4 ] }
                  , sightChar
                  ] }
     setup =
@@ -190,5 +226,6 @@ villageWorld = (foldl (flip performOutcome) base setup)
       , Insert "practice.world.world.at.bob!square"
       , Insert "practice.world.world.at.carol!square"
       , Insert "practice.world.world.at.dana!mill"
+      , Insert "practice.world.world.at.eve!mill"
       , Insert "stall.loaf"
       ] ++ sightSetup

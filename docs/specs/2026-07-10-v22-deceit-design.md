@@ -113,6 +113,20 @@ tested, not authored:
   action class (here: fabrication) obliges an audit of existing wants. The other village wants
   audit clean: dana's are gated on her own evidence/deeds, eve's malice is meant to be satisfied
   by lying, bob's are self-directed.
+- **Carol gains a square anchor** (`Want [at.carol!square] 1`, the bar's/bob's/dana's anchoring
+  idiom) — a consequence of *concealment*, not of the lie action. Pre-v22, bob stole on his own
+  first turn, so carol always had a live want (confront) by her first decision; with `conceal`
+  landed, no theft happens at t=0 in autonomous play, carol's first turns are zero-utility ties,
+  and unanchored she wanders off the square on the deterministic tie-break — breaking the v20/v23
+  village arcs (she misses the sight tick, and later the theft she is supposed to witness).
+  History, recorded honestly: this same anchor was added *during the v23 round* under a false
+  necessity trace ("carol wanders") and deleted with proof (bob's immediate theft meant she never
+  idled); bob's concealment now makes that trace true for the first time, and the anchor is
+  sanctioned on it. Player-facing consequence: §2's "walk to the mill and it does" is now
+  literally about an *empty square* — carol, anchored, keeps watch even when the player leaves,
+  so in free play bob's theft requires the square to genuinely empty (the perfect-crime test
+  moves carol out explicitly); the stall surviving the player's absence is the stealth mechanic
+  working, not failing.
 
 ## 4. Tests (TDD)
 
