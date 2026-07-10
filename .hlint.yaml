@@ -1,0 +1,6 @@
+# Parse with the language this project actually declares (`default-language:
+# Haskell2010` in prax.cabal). Without this, hlint's default extension
+# inference enables PatternSynonyms, under which `pattern` is a keyword and
+# any module using it as an ordinary identifier (e.g. Prax.Rumor's `gossip`)
+# fails to parse.
+- arguments: [-XHaskell2010]
