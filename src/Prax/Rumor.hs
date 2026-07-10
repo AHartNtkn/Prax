@@ -31,7 +31,7 @@ import           Prax.Witness (CoPresence, asRole)
 -- themself, an eyewitness (no news value), and anyone this teller has already
 -- told (@.heard.\<teller\>@ doubles as the one-shot marker). The world adds its
 -- own gate (e.g. "not someone you distrust") and its 'CoPresence' template —
--- written over @Witness@, mechanically renamed here to bind the @Hearer@.
+-- written over @Witness@, retargeted at the @Hearer@ via 'Prax.Witness.asRole'.
 --
 -- The evidence condition is a /prefix/ match on @believes.\<event\>@: the node
 -- exists iff some provenance edge sits beneath it, and matching the prefix
