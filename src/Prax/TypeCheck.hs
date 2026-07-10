@@ -80,13 +80,12 @@ condVars c = case c of
 
 -- The variables an outcome /uses/, paired with the text they appear in.
 outcomeUses :: Outcome -> [(String, String)]
-outcomeUses (Insert s)     = [ (v, s) | v <- varsOf s ]
-outcomeUses (Delete s)     = [ (v, s) | v <- varsOf s ]
-outcomeUses (Call fn args) = [ (v, fn) | a <- args, v <- varsOf a ]
-outcomeUses (ForEach _ _)  = []
-  -- A ForEach's own conditions bind fresh variables for its sub-outcomes, so
-  -- this outcome-only view lacks the local binding set needed to check them
-  -- soundly; not yet checked.
+outcomeUses (Insert s)           = [ (v, s) | v <- varsOf s ]
+outcomeUses (Delete s)           = [ (v, s) | v <- varsOf s ]
+outcomeUses (Call fn args)       = [ (v, fn) | a <- args, v <- varsOf a ]
+outcomeUses (ForEach conds outs) =
+  [ (v, s) | (v, s) <- concatMap outcomeUses outs
+           , v `notElem` concatMap condVars conds ]
 
 -- Check 1: unbound variables --------------------------------------------------
 
@@ -172,7 +171,7 @@ assertedSentences st =
   ++ dbToLabeledSentences (db st)
   where
     ps = Map.elems (practiceDefs st)
-    inserts os = [ s | Insert s <- os ]
+    inserts os = [ s | Insert s <- os ] ++ concat [ inserts subs | ForEach _ subs <- os ]
 
 -- Check 4: ML-style sort inference (only when sorts are declared) -------------
 

@@ -101,5 +101,31 @@ tests = testGroup "Prax.TypeCheck"
       assertBool "SortConflict on x"
         (any (\case SortConflict "x" d -> "agent" `elem` words' d && "beverage" `elem` words' d
                     _                  -> False) (typeCheck w))
+
+    -- ForEach support --------------------------------------------------------
+  , testCase "a variable bound by ForEach conditions is not unbound" $ do
+      let p = practice
+            { practiceId = "w", roles = ["R"]
+            , actions = [ action "[Actor]: broadcast" []
+                            [ ForEach [ Match "member.X" ] [ Insert "told.X" ] ] ] }
+      typeCheck (world1 p) @?= []
+
+  , testCase "a genuinely unbound variable inside ForEach is flagged" $ do
+      let p = practice
+            { practiceId = "w", roles = ["R"]
+            , actions = [ action "[Actor]: broadcast" []
+                            [ ForEach [ Match "member.X" ] [ Insert "told.Ghost" ] ] ] }
+      assertBool "UnboundVar Ghost"
+        (any (\case UnboundVar _ "Ghost" _ -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "ForEach sub-inserts join the cardinality corpus" $ do
+      -- The same relation asserted '!' at top level and '.' inside a ForEach must clash.
+      let p = practice
+            { practiceId = "w", roles = ["R"]
+            , actions = [ action "[Actor]: a" [] [ Insert "mark.R!x" ]
+                        , action "[Actor]: b" []
+                            [ ForEach [ Match "member.X" ] [ Insert "mark.X.y" ] ] ] }
+      assertBool "CardinalityClash detected"
+        (any (\case CardinalityClash {} -> True; _ -> False) (typeCheck (world1 p)))
   ]
   where words' = words . map (\c -> if c == ',' then ' ' else c)
