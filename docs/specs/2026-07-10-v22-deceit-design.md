@@ -90,7 +90,7 @@ tested, not authored:
   against) — banked as a future item with the calendar/deed-token note, not paved over here.
 - The player gets the same `lie` affordance (whisper campaigns are available to you too).
 
-## 3. Interaction with existing tests (verified reasoning, to be re-verified empirically)
+## 3. Interaction with existing content (amended after implementation surfaced an exploit)
 
 - All v19–21 arc tests force the theft via `doAct`, so bob's concealment (a *pre-theft* deterrent
   in autonomous play) does not affect them. His post-theft behavior is unchanged: once witnessed,
@@ -100,6 +100,19 @@ tested, not authored:
   are unaffected by carol-directed facts.
 - The "three regards make notoriety" arithmetic holds: eve at the mill sees neither scripted
   theft; witnesses stay you+carol, hearsay stays dana.
+- **Carol's v20 spread-want must become evidence-conditioned.** The original analysis above
+  checked bob's wants and missed hers: `Want [Match "Other.believes.stole.bob.loaf.heard.carol"]`
+  says *"others should believe it from me"*, and once `lie` exists, fabrication satisfies it —
+  having no evidence is exactly what makes the lie available, so at t=0 carol's best move is to
+  frame bob preemptively (observed, twice, independently). The want meant "spread what I
+  witnessed"; with deception in the action space its letter and intent diverge. Corrected:
+  `Want [ Match "carol.believes.stole.bob.loaf", Match "Other.believes.stole.bob.loaf.heard.carol" ] 5`
+  — carol wants others to have heard *the thing she knows* from her. **The general lesson,
+  recorded**: a want is satisfied by any available means — that is the whole point of a utility
+  planner — so authored wants must be written against the *full* action space, and every new
+  action class (here: fabrication) obliges an audit of existing wants. The other village wants
+  audit clean: dana's are gated on her own evidence/deeds, eve's malice is meant to be satisfied
+  by lying, bob's are self-directed.
 
 ## 4. Tests (TDD)
 
