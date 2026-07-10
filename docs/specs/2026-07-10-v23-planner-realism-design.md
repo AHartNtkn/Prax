@@ -134,18 +134,17 @@ all just facts arriving.
 1. `st₁ = performAction st a`; `score = evaluate st₁ (selfWants actor)`.
 2. If `depth > 0`: walk the **other living characters within the actor's prediction scope,
    once each, in the loop's turn order starting after the actor** (the round-robin `cursor`
-   order, skipping the dead). The scope is spatial and world-supplied: `PraxState` gains
+   order, skipping the dead). The scope is epistemic and world-supplied: `PraxState` gains
    `predictionScope :: CoPresence` (the v19 template vocabulary, over `Actor`/`Witness`;
-   default `[]` = vacuously true = everyone, so scopeless worlds are unchanged). A mover `m` is
-   in scope iff the template holds with `Actor` := the actor and `Witness` := `m` **in the
-   current simulated state** — you deliberate about the people in the room (and about the room
-   you are walking into, since the check runs mid-simulation), while distant events reach you
-   as arriving information to react to, not minds to simulate. This is the banked Rawlsian
-   third layer in spatial form, and it bounds the per-node cost to local density instead of
-   cast size. (A recency/salience dimension — "hasn't interacted with me lately" — is
-   deliberately NOT built: it needs interaction-history bookkeeping and a decay window with no
-   principled value; banked with the decay/calendar items.) For each in-scope character `m` in
-   sequence:
+   default `[]` = vacuously true = everyone, so scopeless worlds are unchanged). A mover `m`
+   is in scope iff the template holds with `Actor` := the actor and `Witness` := `m` in the
+   current simulated state. Worlds with places author the template as **"co-present now, or
+   sighted within the world's horizon"** (§4a): you deliberate about the people you know are
+   around — the room you are in, the colleague who just stepped out — while someone whose
+   location you do not know **simply does not participate in your predictions**, and distant
+   events reach you as arriving information to react to. This is the banked Rawlsian third
+   layer in epistemic form, and it bounds per-node cost to local density instead of cast
+   size. For each in-scope character `m` in sequence:
    - **Predict** `m`'s move with `predictMove st' actor m`: `m`'s best candidate action in the
      current simulated state, chosen myopically (depth 0) against **the actor's believed model
      of `m`** — `wantFor m d` for every vocabulary desire `d` such that the view satisfies the
@@ -171,6 +170,33 @@ Notes:
   `candidateActions`, `scoreActions`, `pickAction`, plus
   `predictMove :: PraxState -> Character{-predictor-} -> Character{-mover-} -> Maybe GroundedAction`.
 
+### 4a. Sightings: knowing where people are is itself information (`Prax.Sight`)
+
+Locations are learned, not known. A **sighting** is an ordinary location-belief:
+
+```
+P.believes.at.M!<place>        -- best guess, single-slot (a new sighting overwrites)
+P.believes.atSince.M!<turn>    -- when it was formed
+```
+
+maintained by a compiled, v18-`_clock`-idiom **ticker practice** (`Prax.Sight`): a bodiless
+per-round character whose one silent action (i) advances a global turn counter `turn!N`
+(single-slot; the first brick of the banked calendar/decay tier) and (ii) refreshes sightings
+for every pair satisfying the world's co-presence template, via `ForEach` — deposits are
+world-vocabulary, so the engine still knows nothing about places. Sightings persist after
+separation: "last known location" stays queryable (the substrate future *search* behavior —
+hunting an identified murderer toward where you last saw them — will be authored against).
+
+The **horizon** — how long you assume people stay put — is an authored world parameter with
+stated meaning, written directly into the world's `predictionScope` template in the existing
+condition language (`Or` of co-present-now and
+`believes.at`-fresh-within-horizon via `Calc`/`Cmp` over `turn!N`). It is not an engine
+constant; a village might set it near a square↔mill round trip.
+
+**Honest residual (banked):** scope participation is belief-limited, but an in-scope mover is
+still *simulated at their true position*. Imagining them at your believed position requires
+counterfactual placement — per-agent world-view machinery — banked alongside it.
+
 ## 5. Authored in shipped worlds, this round
 
 - **Intrigue**: a one-entry vocabulary — `Desire "kill-artus" (Want [Match (deadSentence
@@ -181,9 +207,10 @@ Notes:
   `predictMove` of cassia is the poisoning; the victim's is not — and if the plot is *rumored*
   to artus (motive-gossip over the same pattern), his prediction changes, because a leak
   genuinely changes who can see the plan.
-- **Prediction scopes wired** where worlds have place vocabularies: the village
-  (`predictionScope = together`) and the bar (its `at`-based template). Locationless worlds
-  (feud, deontic fixtures, script worlds) keep the default everyone-scope.
+- **Prediction scopes wired** where worlds have place vocabularies: the village and the bar
+  each run the `Prax.Sight` ticker and author their scope as co-present-or-recently-sighted
+  (horizon an authored per-world parameter). Locationless worlds (feud, deontic fixtures,
+  script worlds) keep the default everyone-scope and no ticker.
 - Other worlds: otherwise unchanged this round (their behaviors are self-want-driven; verified
   above). The village's eve/bob secrets are marked when the parked v22 resumes on top.
 
@@ -223,8 +250,12 @@ bread; the intensity comes with the concept) — per-observer intensities are ou
   first's effects); unnamed wants are unreadable (a director-like mover predicts still);
   misprediction (false belief → predicted move ≠ mover's actual pick); secret coordination
   (accomplice enables iff believing); **scope**: an out-of-scope mover is not predicted even
-  under a held motive-belief, an in-scope one is, and a mover the actor is *walking toward*
-  enters scope in the simulated state; the empty scope predicts everyone.
+  under a held motive-belief, an in-scope one is; the empty scope predicts everyone.
+- `SightSpec` (new): the ticker advances `turn!N`; co-presence refreshes `believes.at`/
+  `atSince` (and a new sighting overwrites the old); after separation the sighting persists;
+  a mover sighted within the horizon still participates in prediction from the next room;
+  past the horizon they drop out ("anyone whose location is unknown simply doesn't participate");
+  a never-sighted mover never participates.
 - Motive-information stack smoke: `gossip` over a `desires.…` pattern spreads a motive-belief
   that flips a third party's `predictMove`; a `lie` plants a false one.
 - Behavioral regression: full suite green — bar (norm avoidance, director), intrigue (plot still
