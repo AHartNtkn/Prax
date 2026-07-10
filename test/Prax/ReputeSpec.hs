@@ -74,4 +74,10 @@ tests = testGroup "Prax.Repute"
       r <- try (evaluate (length (show (standing "somethinghappened" "x"))))
       assertBool "standing on a subject-less pattern is an error"
         (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "a defeater variable outside the deed pattern errors loudly" $ do
+      r <- try (evaluate (length (show
+             (standingUnless "stole.Culprit.loaf" "atoned.Someone" "thief"))))
+      assertBool "mis-scoped defeater is an error, not a silent global amnesty"
+        (isLeft (r :: Either ErrorCall Int))
   ]

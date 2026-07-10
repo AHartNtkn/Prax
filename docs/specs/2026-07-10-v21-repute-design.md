@@ -71,8 +71,9 @@ notoriety      :: String -> Int -> Axiom               -- label → threshold
 - `standing pat label` = `axiom [ Match ("Regarder.believes." ++ pat) ]
   [ "regards.Regarder." ++ subject ++ "." ++ label ]` where `subject` is the pattern's **first
   variable** (the same subject convention as `gossip`; loud `error` if the pattern has none).
-- `standingUnless pat defeater label` adds `Not defeater` to the body (the defeater may use the
-  pattern's variables, e.g. `"atoned.Culprit"`).
+- `standingUnless pat defeater label` adds `Not defeater` to the body (the defeater may use only
+  the pattern's variables, e.g. `"atoned.Culprit"` — checked; a mis-scoped variable would defeat
+  globally via negation-as-failure).
 - Reserved variable: **`Regarder`** (the `Witness`/`Hearer`/`Actor` convention) — deed patterns
   must not use it. `notoriety` uses its own internal variables (`W0`/`W`/`T`/`Rs`/`N`).
 
@@ -126,8 +127,9 @@ throughout (beliefs are never deleted).
   autonomous arc reaches `atoned.bob` and ends with **no** `shunned` facts and **no** derived
   regards — while all three beliefs still exist (forgiveness without forgetting); amends is not
   offered before anyone regards bob.
-- Regression: full suite green; all worlds `prax check` clean (the type checker's axiom analysis
-  covers the new axioms — unbound head variables would be caught); bar/play goldens untouched.
+- Regression: full suite green; all worlds `prax check` clean (unbound head variables are caught
+  when bound by a positive `Match`; the checker's `condVars` over-approximates for `Not`/`Absent`,
+  a documented limitation); bar/play goldens untouched.
 
 ## 7. Out of scope (parked)
 

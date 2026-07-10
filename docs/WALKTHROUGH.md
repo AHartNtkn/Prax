@@ -742,6 +742,7 @@ Your move (you):
   2) you: tell dana that bob stole the loaf
   3) you: shun bob
   4) you: Go to mill
+  ...
 ```
 
 Standing has teeth: `you: shun bob` is offered to the player on the very same gate

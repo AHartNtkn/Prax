@@ -38,10 +38,24 @@ import           Prax.Derive (Axiom, axiom)
 standing :: String -> String -> Axiom
 standing pat = standingWith pat []
 
--- | 'standing', defeated by a base-fact pattern (which may use the deed
--- pattern's variables): derives only while the defeater is absent.
+-- | 'standing', defeated by a base-fact pattern (which may use only the deed
+-- pattern's variables — checked, loud error otherwise): derives only while
+-- the defeater is absent.
 standingUnless :: String -> String -> String -> Axiom
-standingUnless pat defeater = standingWith pat [ Not defeater ]
+standingUnless pat defeater = standingWith pat [ Not (checkedDefeater pat defeater) ]
+
+-- A defeater may use only the deed pattern's variables: negation-as-failure
+-- would silently turn any OTHER variable into a global existential guard
+-- (one unrelated fact dissolving everyone's standing).
+checkedDefeater :: String -> String -> String
+checkedDefeater pat defeater
+  | all (`elem` patVars) defVars = defeater
+  | otherwise = error ("standingUnless: defeater " ++ show defeater
+                       ++ " uses variables outside the deed pattern "
+                       ++ show pat ++ " (would defeat globally, not per-subject)")
+  where
+    patVars = filter isVariable (pathNames pat)
+    defVars = filter isVariable (pathNames defeater)
 
 standingWith :: String -> [Condition] -> String -> Axiom
 standingWith pat extra label =
