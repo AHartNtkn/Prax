@@ -22,18 +22,18 @@ tests = testGroup "Prax.Worlds.Village"
   [ testCase "the theft is witnessed by the square, not the mill" $ do
       let st = doAct "bob" "steal the loaf" villageWorld
       assertBool "carol (in the square) saw it"
-        (exists "carol.believes.stole.bob.loaf!seen" (db st))
+        (exists "carol.believes.stole.bob.loaf.seen" (db st))
       assertBool "you (in the square) saw it"
-        (exists "you.believes.stole.bob.loaf!seen" (db st))
+        (exists "you.believes.stole.bob.loaf.seen" (db st))
       assertBool "dana (at the mill) holds no such belief"
-        (not (exists "dana.believes.stole.bob.loaf!seen" (db st)))
+        (not (exists "dana.believes.stole.bob.loaf.seen" (db st)))
       assertBool "bob is not his own witness"
-        (not (exists "bob.believes.stole.bob.loaf!seen" (db st)))
+        (not (exists "bob.believes.stole.bob.loaf.seen" (db st)))
 
   , testCase "movement is not news (undeclared actions deposit nothing)" $ do
       let st = doAct "bob" "Go to mill" villageWorld
       assertBool "no one 'believes' bob walked"
-        (not (any (\w -> exists (w ++ ".believes.went.bob!seen") (db st))
+        (not (any (\w -> exists (w ++ ".believes.went.bob.seen") (db st))
                   ["you", "carol", "dana"]))
 
   , testCase "only a witness can confront the thief" $ do

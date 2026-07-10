@@ -29,6 +29,6 @@ tests = testGroup "Prax.Script.Json"
 
   , testCase "a ForEach outcome round-trips through JSON" $ do
       let o = ForEach [ Match "at.Witness!P", Neq "Witness" "Actor" ]
-                      [ Insert "Witness.believes.stole.Actor.loaf!seen" ]
+                      [ Insert "Witness.believes.stole.Actor.loaf.seen" ]
       decode (encode o) @?= Just o
   ]
