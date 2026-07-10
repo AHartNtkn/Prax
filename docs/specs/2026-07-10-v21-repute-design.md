@@ -85,9 +85,12 @@ information stack):
 - **Amends**: `[Actor]: return the loaf with apologies`, gated on `Match "holding.Actor.loaf"` +
   `Exists [ Match "regards.W.Actor.thief" ]` (you only make amends when someone thinks ill of
   you); effect `Delete "holding.Actor.loaf"`, `Insert "stall.loaf"`, `Insert "atoned.Actor"`.
-  **Bob's motivation is authored**: he values his standing at `Want [ Match
-  "regards.Other.bob.thief" ] (-10)` per regarder against the loaf's `+10` — one person knowing
-  is a wash; **the whole village knowing is what tips him** into giving the bread back.
+  **Bob's motivation is authored and keys on notoriety, not per-regarder counts**:
+  `Want [ Match "notorious.bob.thief" ] (-15)` against the loaf's `+10`. (A per-regarder want
+  doesn't tell the intended story: *two* villagers witness the theft instantly, so any weight
+  that eventually tips him would tip him before the rumor even spreads. Keyed on notoriety, bob
+  can live with individuals' contempt — **being the village's notorious thief is what he cannot
+  bear** — and the threshold mechanic becomes a driver of behaviour, not just a scene line.)
 - **Relent** (the forgiveness beat): `[Actor]: relent toward [T]`, gated on
   `Match "shunned.Actor.T"` + `Absent [ Match "regards.Actor.T.thief" ]`; effect
   `Delete "shunned.Actor.T"`. Driven by a want *against* stale shuns: carol and dana get
