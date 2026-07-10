@@ -13,6 +13,7 @@ import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
 import qualified Prax.Worlds.Play as Play
 import qualified Prax.Worlds.Feud as Feud
+import qualified Prax.Worlds.Village as Village
 
 -- A one-practice world for the seeded-bug cases.
 world1 :: Practice -> PraxState
@@ -33,6 +34,7 @@ tests = testGroup "Prax.TypeCheck"
       typeCheck Intrigue.intrigueWorld @?= []
       typeCheck Play.playWorld        @?= []
       typeCheck Feud.feudWorld        @?= []
+      typeCheck Village.villageWorld  @?= []
 
   , testCase "an outcome variable bound by nothing is caught" $ do
       let p = practice

@@ -29,6 +29,7 @@ import qualified Prax.Worlds.Intrigue as Intrigue
 import qualified Prax.Worlds.Play as Play
 import qualified Prax.Worlds.Feud as Feud
 import qualified Prax.Worlds.Audience as Audience
+import qualified Prax.Worlds.Village as Village
 
 -- How many plies of lookahead the NPCs use.
 lookaheadDepth :: Int
@@ -45,6 +46,7 @@ worldNamed ("play" : _)     = ("the conspiracy (a play)", Play.playWorld, Play.p
 worldNamed ("dm" : _)       = ("the bar, and you direct it", Bar.barDirectorWorld, Bar.directorName)
 worldNamed ("feud" : _)     = ("the feud (emergent sandbox)", Feud.feudWorld, Feud.playerName)
 worldNamed ("audience" : _) = ("the royal audience", Audience.audienceWorld, Audience.playerName)
+worldNamed ("village" : _)  = ("the village", Village.villageWorld, Village.playerName)
 worldNamed _                = ("a night at the bar", Bar.barWorld, Bar.playerName)
 
 -- @prax stress [world]@ — a QA report over many random all-AI playthroughs.
@@ -139,6 +141,10 @@ play args = do
           ( "prax — the royal audience"
           , "You are the envoy. Flatter the king, then petition — before the moment (or the Duke) passes."
           , Audience.audienceWorld, Audience.playerName )
+        ("village" : _) ->
+          ( "prax — the village"
+          , "You are a villager. What you see — and what you miss — decides what you can do."
+          , Village.villageWorld, Village.playerName )
         _ ->
           ( "prax — a night at the bar"
           , "You are 'you'. Others act on their own."
