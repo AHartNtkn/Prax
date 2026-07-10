@@ -20,6 +20,7 @@ import qualified Prax.WitnessSpec
 import qualified Prax.RumorSpec
 import qualified Prax.ReputeSpec
 import qualified Prax.DeceitSpec
+import qualified Prax.MindsSpec
 import qualified Prax.ConversationSpec
 import qualified Prax.ArcSpec
 import qualified Prax.IntrigueSpec
@@ -50,6 +51,7 @@ main = defaultMain $ testGroup "prax"
   , Prax.RumorSpec.tests
   , Prax.ReputeSpec.tests
   , Prax.DeceitSpec.tests
+  , Prax.MindsSpec.tests
   , Prax.ConversationSpec.tests
   , Prax.ArcSpec.tests
   , Prax.IntrigueSpec.tests

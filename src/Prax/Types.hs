@@ -21,6 +21,7 @@ module Prax.Types
   , Character(..)
   , character
   , Want(..)
+  , Desire(..)
   , GroundedAction(..)
   , PraxState(..)
   , emptyState
@@ -96,19 +97,30 @@ data FnCase = FnCase
 data Character = Character
   { charName    :: String
   , charWants   :: [Want]
+  , charDesires :: [String]       -- ^ names of vocabulary 'Desire's this character holds
   , charBoundTo :: Maybe String   -- ^ restrict actions to this practice id
   }
   deriving (Eq, Show)
 
--- | A character with no wants and no binding.
+-- | A character with no wants, no desires, and no binding.
 character :: String -> Character
-character n = Character { charName = n, charWants = [], charBoundTo = Nothing }
+character n = Character
+  { charName = n, charWants = [], charDesires = [], charBoundTo = Nothing }
 
 -- | A desire: a query whose every satisfying instantiation adds 'wantUtility'
 -- to the utility of a candidate future world (Versu §IX-A).
 data Want = Want
   { wantConditions :: [Condition]
   , wantUtility    :: Int
+  }
+  deriving (Eq, Show)
+
+-- | A nameable desire: a 'Want' whose conditions may use the reserved variable
+-- @Owner@, instantiated per character ('Prax.Minds.wantFor'). Naming a desire is
+-- what makes it a possible object of belief.
+data Desire = Desire
+  { desireName :: String
+  , desireWant :: Want
   }
   deriving (Eq, Show)
 
@@ -130,13 +142,15 @@ data PraxState = PraxState
   , cursor       :: Int          -- ^ round-robin index of the last actor
   , axioms       :: [Axiom]       -- ^ domain rules; reads see their forward-chained closure (default none)
   , sorts        :: [(String, [String])]  -- ^ sort → member constants, for the type checker (default none)
+  , desires      :: [Desire]      -- ^ the vocabulary of nameable desires (default none)
+  , predictionScope :: [Condition]  -- ^ conditions the planner predicts over (default none)
   }
 
 -- | An empty interpreter state (cursor before the first actor).
 emptyState :: PraxState
 emptyState = PraxState
   { db = emptyDb, practiceDefs = Map.empty, characters = [], cursor = -1
-  , axioms = [], sorts = [] }
+  , axioms = [], sorts = [], desires = [], predictionScope = [] }
 
 -- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead
 -- character stays in the cast list but is skipped in turn-taking and lookahead.
