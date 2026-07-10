@@ -37,6 +37,7 @@ library
                       Prax.Beliefs
                       Prax.Witness
                       Prax.Rumor
+                      Prax.Repute
                       Prax.Conversation
                       Prax.Arc
                       Prax.Loop
@@ -91,6 +92,7 @@ test-suite prax-test
                       Prax.BeliefsSpec
                       Prax.WitnessSpec
                       Prax.RumorSpec
+                      Prax.ReputeSpec
                       Prax.ConversationSpec
                       Prax.ArcSpec
                       Prax.IntrigueSpec
