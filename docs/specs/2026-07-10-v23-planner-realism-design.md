@@ -132,9 +132,20 @@ all just facts arriving.
 `scoreActions depth st actor` scores each candidate action `a` of the actor:
 
 1. `st₁ = performAction st a`; `score = evaluate st₁ (selfWants actor)`.
-2. If `depth > 0`: walk the **other living characters once each, in the loop's turn order
-   starting after the actor** (the round-robin `cursor` order, skipping the dead). For each
-   other character `m` in sequence:
+2. If `depth > 0`: walk the **other living characters within the actor's prediction scope,
+   once each, in the loop's turn order starting after the actor** (the round-robin `cursor`
+   order, skipping the dead). The scope is spatial and world-supplied: `PraxState` gains
+   `predictionScope :: CoPresence` (the v19 template vocabulary, over `Actor`/`Witness`;
+   default `[]` = vacuously true = everyone, so scopeless worlds are unchanged). A mover `m` is
+   in scope iff the template holds with `Actor` := the actor and `Witness` := `m` **in the
+   current simulated state** — you deliberate about the people in the room (and about the room
+   you are walking into, since the check runs mid-simulation), while distant events reach you
+   as arriving information to react to, not minds to simulate. This is the banked Rawlsian
+   third layer in spatial form, and it bounds the per-node cost to local density instead of
+   cast size. (A recency/salience dimension — "hasn't interacted with me lately" — is
+   deliberately NOT built: it needs interaction-history bookkeeping and a decay window with no
+   principled value; banked with the decay/calendar items.) For each in-scope character `m` in
+   sequence:
    - **Predict** `m`'s move with `predictMove st' actor m`: `m`'s best candidate action in the
      current simulated state, chosen myopically (depth 0) against **the actor's believed model
      of `m`** — `wantFor m d` for every vocabulary desire `d` such that the view satisfies the
@@ -170,8 +181,11 @@ Notes:
   `predictMove` of cassia is the poisoning; the victim's is not — and if the plot is *rumored*
   to artus (motive-gossip over the same pattern), his prediction changes, because a leak
   genuinely changes who can see the plan.
-- Other worlds: unchanged this round (their behaviors are self-want-driven; verified above).
-  The village's eve/bob secrets are marked when the parked v22 resumes on top.
+- **Prediction scopes wired** where worlds have place vocabularies: the village
+  (`predictionScope = together`) and the bar (its `at`-based template). Locationless worlds
+  (feud, deontic fixtures, script worlds) keep the default everyone-scope.
+- Other worlds: otherwise unchanged this round (their behaviors are self-want-driven; verified
+  above). The village's eve/bob secrets are marked when the parked v22 resumes on top.
 
 ### The honest residual
 
@@ -208,7 +222,9 @@ bread; the intensity comes with the concept) — per-observer intensities are ou
   mind with nothing to gain predicts still); sequential round (second prediction sees the
   first's effects); unnamed wants are unreadable (a director-like mover predicts still);
   misprediction (false belief → predicted move ≠ mover's actual pick); secret coordination
-  (accomplice enables iff believing).
+  (accomplice enables iff believing); **scope**: an out-of-scope mover is not predicted even
+  under a held motive-belief, an in-scope one is, and a mover the actor is *walking toward*
+  enters scope in the simulated state; the empty scope predicts everyone.
 - Motive-information stack smoke: `gossip` over a `desires.…` pattern spreads a motive-belief
   that flips a third party's `predictMove`; a `lie` plants a false one.
 - Behavioral regression: full suite green — bar (norm avoidance, director), intrigue (plot still
