@@ -34,6 +34,14 @@ guard over a base fact:
 - **Constraint (documented in the haddock):** the defeater pattern must name only *base* facts
   (never derived heads), keeping the closure stratified. Village obeys it (`atoned.*` is written
   only by the amends action).
+- **Atonement lapses on re-offense.** Deed vocabulary is type-level (`stole.bob.loaf` carries no
+  instance token), so a permanent `atoned.bob` would pre-forgive every future identical deed —
+  one apology, then theft with impunity (found in v21 review, confirmed permanent by probe). The
+  world-level resolution: **committing the deed again revokes the atonement** (the deed action
+  deletes `atoned.Actor`). Since the beliefs never went away, standing and notoriety snap back
+  instantly on a repeat offense — and because the planner can see that future, an atoned thief
+  facing a restocked stall is *deterred* (+10 loaf < −15 notoriety). Reputation ends the arc as
+  a deterrent. (True per-instance deeds need a time dimension — banked with the calendar item.)
 
 ## 3. Notoriety: corroboration cashed
 
