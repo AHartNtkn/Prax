@@ -18,6 +18,7 @@ module Prax.Query
   , Condition(..)
   , forAll
   , implies
+  , groundCondition
   , query
   , satisfies
   , countSatisfying
@@ -87,6 +88,22 @@ forAll guard body = Absent (guard ++ [Absent body])
 -- from the current binding, or @b@ holds).
 implies :: [Condition] -> [Condition] -> Condition
 implies a b = Or [ [Absent a], b ]
+
+-- | Substitute bindings into every sentence/operand of a condition. Variables
+-- not present in the bindings are left for the query to quantify.
+groundCondition :: Bindings -> Condition -> Condition
+groundCondition b c = case c of
+  Match s          -> Match (ground s b)
+  Not s            -> Not (ground s b)
+  Eq x y           -> Eq (ground x b) (ground y b)
+  Neq x y          -> Neq (ground x b) (ground y b)
+  Cmp op x y       -> Cmp op (ground x b) (ground y b)
+  Calc r op x y    -> Calc (ground r b) op (ground x b) (ground y b)
+  Count r s        -> Count (ground r b) (ground s b)
+  Subquery s f w   -> Subquery (ground s b) (map (`ground` b) f) (map (groundCondition b) w)
+  Or clauses       -> Or (map (map (groundCondition b)) clauses)
+  Absent cs        -> Absent (map (groundCondition b) cs)
+  Exists cs        -> Exists (map (groundCondition b) cs)
 
 -- | Evaluate a conjunctive list of conditions from a starting binding, yielding
 -- every consistent binding that satisfies them all.

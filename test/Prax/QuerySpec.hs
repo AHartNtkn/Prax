@@ -5,7 +5,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, (@?=))
 
 import           Prax.Db
-import           Prax.Query
+import           Prax.Query (CmpOp(..), CalcOp(..), Condition(..), forAll, implies, groundCondition, query)
 
 build :: [String] -> Db
 build ss = insertAll ss emptyDb
@@ -97,6 +97,24 @@ tests = testGroup "Prax.Query"
               ]
         in query db conds (Map.fromList [("Actor", VStr "solo")]) @?= []
           -- solo sees only tim dancing (count 1), so eq 2 fails.
+    ]
+
+  , testGroup "groundCondition"
+    [ testCase "groundCondition substitutes bindings through every constructor" $ do
+        let b = Map.fromList [("A", VStr "bob")]
+        groundCondition b (Match "at.A!P")        @?= Match "at.bob!P"
+        groundCondition b (Not "seen.A")          @?= Not "seen.bob"
+        groundCondition b (Eq "A" "X")            @?= Eq "bob" "X"
+        groundCondition b (Neq "W" "A")           @?= Neq "W" "bob"
+        groundCondition b (Cmp Gt "A" "N")        @?= Cmp Gt "bob" "N"
+        groundCondition b (Calc "R" Add "A" "1")  @?= Calc "R" Add "bob" "1"
+        groundCondition b (Count "R" "A")         @?= Count "R" "bob"
+        groundCondition b (Subquery "S" ["A"] [Match "p.A"])
+                                                  @?= Subquery "S" ["bob"] [Match "p.bob"]
+        groundCondition b (Or [[Match "p.A"], [Match "q.A"]])
+                                                  @?= Or [[Match "p.bob"], [Match "q.bob"]]
+        groundCondition b (Absent [Match "p.A"])  @?= Absent [Match "p.bob"]
+        groundCondition b (Exists [Match "p.A"])  @?= Exists [Match "p.bob"]
     ]
 
   , testGroup "first-order connectives (∨, ¬compound, ∃, ∀, →)"
