@@ -116,6 +116,8 @@ instance ToJSON Outcome where
   toJSON (Insert s)     = object [ "insert" .= s ]
   toJSON (Delete s)     = object [ "delete" .= s ]
   toJSON (Call fn args) = object [ "call" .= object [ "fn" .= fn, "args" .= args ] ]
+  toJSON (ForEach conds outs) =
+    object [ "forEach" .= object [ "when" .= conds, "outcomes" .= outs ] ]
 
 instance FromJSON Outcome where
   parseJSON = withObject "Outcome" $ \o ->

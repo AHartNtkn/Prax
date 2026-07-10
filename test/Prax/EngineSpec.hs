@@ -4,7 +4,7 @@ import           Data.List (isInfixOf)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, (@?=), assertBool, assertFailure)
 
-import           Prax.Db (dbToSentences)
+import           Prax.Db (dbToSentences, exists)
 import           Prax.Query
 import           Prax.Types
 import           Prax.Engine
@@ -146,4 +146,57 @@ tests = testGroup "Prax.Engine"
       st2 <- step st1 "alice" "Double"
       assertBool "n doubled to 6"
         ("practice.math.box.n.6" `elem` dbToSentences (db st2))
+
+  , testCase "ForEach applies its outcomes for every binding" $ do
+      let st = foldl (flip performOutcome) emptyState
+                 [ Insert "member.a", Insert "member.b", Insert "member.c" ]
+          st' = performOutcome (ForEach [ Match "member.X" ] [ Insert "greeted.X" ]) st
+      mapM_ (\n -> assertBool ("greeted." ++ n) (exists ("greeted." ++ n) (db st')))
+            ["a", "b", "c"]
+
+  , testCase "ForEach with zero bindings is a no-op" $ do
+      let st  = performOutcome (Insert "unrelated") emptyState
+          st' = performOutcome (ForEach [ Match "member.X" ] [ Insert "greeted.X" ]) st
+      db st' @?= db st
+
+  , testCase "ForEach snapshots its bindings: mutations cannot extend the quantification" $ do
+      -- Inserting a new member from inside the fold must NOT add a binding:
+      -- quantification is over the state at entry.
+      let st  = performOutcome (Insert "member.a") emptyState
+          st' = performOutcome
+                  (ForEach [ Match "member.X" ]
+                           [ Insert "member.b", Insert "visited.X" ]) st
+      assertBool "visited the original member" (exists "visited.a" (db st'))
+      assertBool "did NOT visit the member inserted mid-fold"
+        (not (exists "visited.b" (db st')))
+
+  , testCase "ForEach grounds the enclosing action's bindings first" $ do
+      let p = practice
+            { practiceId = "tell", roles = ["R"]
+            , actions = [ action "[Actor]: tell friends about [Target]"
+                            [ Match "target.Target" ]
+                            [ ForEach [ Match "friend.Target.W" ]
+                                      [ Insert "told.W.Target" ] ] ] }
+          st = foldl (flip performOutcome)
+                 ((definePractices [p] emptyState)
+                    { characters = [ character "ann" ] })
+                 [ Insert "practice.tell.stage"
+                 , Insert "target.bob"
+                 , Insert "friend.bob.carol", Insert "friend.bob.dave"
+                 , Insert "friend.eve.mallory" ]   -- a different target's friend: must not fire
+          st' = case possibleActions st "ann" of
+                  (ga : _) -> performAction st ga
+                  []       -> error "tell action not offered"
+      assertBool "told carol about bob" (exists "told.carol.bob" (db st'))
+      assertBool "told dave about bob"  (exists "told.dave.bob" (db st'))
+      assertBool "eve's friend untouched" (not (exists "told.mallory.eve" (db st')))
+
+  , testCase "ForEach nests: outer bindings ground the inner quantifier" $ do
+      let st = foldl (flip performOutcome) emptyState
+                 [ Insert "row.a", Insert "row.b", Insert "col.x", Insert "col.y" ]
+          st' = performOutcome
+                  (ForEach [ Match "row.R" ]
+                           [ ForEach [ Match "col.C" ] [ Insert "cell.R.C" ] ]) st
+      mapM_ (\s -> assertBool s (exists s (db st')))
+            [ "cell.a.x", "cell.a.y", "cell.b.x", "cell.b.y" ]
   ]

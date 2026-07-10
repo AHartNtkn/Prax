@@ -21,7 +21,7 @@ import           Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db
-import           Prax.Query (query)
+import           Prax.Query (query, groundCondition)
 import           Prax.Types
 import           Prax.Derive (closure)
 
@@ -96,9 +96,11 @@ performAction st ga =
 
 -- | Substitute bound variables into an outcome's sentence(s)/args.
 groundOutcome :: Outcome -> Bindings -> Outcome
-groundOutcome (Insert s)     b = Insert (ground s b)
-groundOutcome (Delete s)     b = Delete (ground s b)
-groundOutcome (Call fn args) b = Call fn (map (`ground` b) args)
+groundOutcome (Insert s)          b = Insert (ground s b)
+groundOutcome (Delete s)          b = Delete (ground s b)
+groundOutcome (Call fn args)      b = Call fn (map (`ground` b) args)
+groundOutcome (ForEach conds outs) b =
+  ForEach (map (groundCondition b) conds) (map (`groundOutcome` b) outs)
 
 -- | Apply a single, already-grounded outcome to the state.
 performOutcome :: Outcome -> PraxState -> PraxState
@@ -124,6 +126,9 @@ performOutcome (Call fn args) st =
            ((outs, res) : _) ->
              foldl' (\s o -> performOutcome (groundOutcome o res) s) st outs
            [] -> st
+performOutcome (ForEach conds outs) st =
+  let bs = query (readView st) conds Map.empty   -- snapshot: all bindings up front
+  in foldl' (\s b -> foldl' (\s2 o -> performOutcome (groundOutcome o b) s2) s outs) st bs
 
 -- If inserting @s@ brings a not-yet-existing practice instance into being,
 -- return its definition and the role values (so its @init@ can run once).

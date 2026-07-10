@@ -83,6 +83,10 @@ outcomeUses :: Outcome -> [(String, String)]
 outcomeUses (Insert s)     = [ (v, s) | v <- varsOf s ]
 outcomeUses (Delete s)     = [ (v, s) | v <- varsOf s ]
 outcomeUses (Call fn args) = [ (v, fn) | a <- args, v <- varsOf a ]
+outcomeUses (ForEach _ _)  = []
+  -- A ForEach's own conditions bind fresh variables for its sub-outcomes, so
+  -- this outcome-only view lacks the local binding set needed to check them
+  -- soundly; not yet checked.
 
 -- Check 1: unbound variables --------------------------------------------------
 
@@ -263,6 +267,7 @@ condSents = concatMap go
 outcomeSents :: [Outcome] -> [String]
 outcomeSents = concatMap go
   where
-    go (Insert s) = [s]
-    go (Delete s) = [s]
-    go (Call _ _) = []
+    go (Insert s)          = [s]
+    go (Delete s)          = [s]
+    go (Call _ _)          = []
+    go (ForEach conds outs) = condSents conds ++ outcomeSents outs

@@ -71,6 +71,9 @@ data Outcome
   = Insert String            -- ^ assert a sentence (may spawn a practice)
   | Delete String            -- ^ retract a subtree
   | Call String [String]     -- ^ invoke a practice 'Function' by name with args
+  | ForEach [Condition] [Outcome]
+    -- ^ Quantified effect: for /every/ binding of the conditions (evaluated
+    -- against the closed view, snapshot at entry), apply the sub-outcomes.
   deriving (Eq, Show)
 
 -- | A named function: guarded conditional effects (used for e.g. win-condition
