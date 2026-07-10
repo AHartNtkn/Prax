@@ -30,6 +30,10 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   position/variable sort inferred by unification, conflicts reported (`Prax.TypeCheck`).
 - **v18** — the remaining **Prompter compilation features** in `Prax.Script`: memories (one-shot
   exposition), timed junctions (a scene clock), and character sketches (concerns→wants, traits→facts).
+- **v19** — **quantified outcomes** (`ForEach`, the dual of v8's condition quantifiers) and
+  **authored witnessing** (`Prax.Witness`): co-present characters come to believe an action
+  happened, with `!seen` provenance; observability is a semantic property the author states, not
+  an automatic event log. `Prax.Worlds.Village` seeds the sandbox arc (`prax village`).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -143,12 +147,13 @@ Target frame: a **large-cast, long-time sandbox** where the player is one agent 
 Unless marked foundational, each compiles onto the existing layers and can be taken or left in
 isolation. **K is the keystone**: most of Tier 1–3 stacks on it (marked ⤷K).
 
-**K. Witnessing / event deposits** *(chosen first — in design)*. When an action is performed,
-co-located characters acquire a persistent *belief that it happened*; characters elsewhere don't.
-Generalizes v3's per-action authored reactions into "react to any action" (the old event-bus idea).
-The one design question is where the quantified deposit ("for every co-located W…") runs: fully
-compiled per-practice, or a small engine hook. Unlocks information asymmetry — the root of
-reputation, rumor, secrets, alibis.
+**K. Witnessing / event deposits** *(done — v19: `ForEach` quantified outcomes in the engine;
+`Prax.Witness` authored observability; `Prax.Worlds.Village` seed, CLI `prax village`)*. When an
+action is performed, co-located characters acquire a persistent *belief that it happened*;
+characters elsewhere don't. Generalizes v3's per-action authored reactions into "react to any
+action" (the old event-bus idea). Resolved as a small engine primitive (`ForEach`, quantifying an
+outcome over every binding) plus a compiled-per-action combinator (`observable`) built on it — not
+a separate hook. Unlocks information asymmetry — the root of reputation, rumor, secrets, alibis.
 
 Tier 1 — compiled social structures:
 - **⤷K Gossip / rumor propagation** (`Prax.Rumor`): share a held belief with a co-located,

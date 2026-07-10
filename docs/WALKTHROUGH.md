@@ -556,6 +556,69 @@ cabal run prax -- audience
 
 → code: `Prax.Script` (compilation), `Prax.Worlds.Audience`; asserted in `Prax.ScriptSpec`.
 
+### 22. Witnessing — who knows what (`prax village`) (v19)
+
+Everything so far has one shared fact database everyone reads. `Prax.Witness` breaks that: what a
+character comes to *believe* now depends on where they were standing when something happened.
+
+```sh
+cabal run prax -- village
+```
+
+> *"You are a villager. What you see — and what you miss — decides what you can do."*
+
+bob, carol, and you start in the square; dana is off at the mill. Wait a beat and bob, who wants
+the loaf, takes it — and carol, standing right there, acts on what she just saw in the very same
+beat:
+
+```
+  - bob is at the square
+  - carol is at the square
+  - dana is at the mill
+  - you is at the square
+Your move (you):
+  1) you: steal the loaf from the stall
+  2) you: Go to mill
+  m) wait and let others act
+  s) save    q) quit
+>   bob: steal the loaf from the stall
+  carol: confront bob about the theft
+  dana: Go to square
+```
+
+You were co-present too, so the same affordance opens up for you next turn:
+
+```
+  1) you: confront bob about the theft
+  2) you: Go to mill
+```
+
+dana never gets it — not on this turn, and not later, even once she walks over and stands beside
+everyone in the square. Witnessing is fixed at the moment of the act, not by later proximity:
+`carol.believes.stole.bob.loaf!seen` and `you.believes.stole.bob.loaf!seen` are asserted the
+instant bob steals; `dana` holds no such belief, ever, unless she hears it from someone (v20's
+rumor layer — not built yet).
+
+The theft is wrapped in `observable together "stole.Actor.loaf"`; the plain `Go to [Place]` /
+`Wait a moment` actions in the same world are not — so **movement is not news**: nobody, not even
+someone standing next to bob the whole time, comes to believe `went.bob`, because no author
+declared it an event. Observability is a property the world author states about an action, not
+something the engine infers from watching it execute — the same action could be authored to *look*
+like something else entirely (a hook v20's deception work will use).
+
+Underneath, this is `ForEach [Condition] [Outcome]`, the outcome-language quantifier v8 never
+gave: `Insert`/`Delete` act on one sentence, `Call` dispatches to one function case, but "for every
+co-present character, deposit a belief" needs to range over a whole query's worth of bindings at
+once. `ForEach` takes a **snapshot** — it queries all bindings before applying any sub-outcome — so
+depositing carol's belief can't change who else counts as a witness mid-fold. `Prax.Witness.observable`
+is the one built-in use of it: it appends
+`ForEach (copresence ++ [Neq "Witness" "Actor"]) [Insert <the belief>]` to an action's outcomes,
+where `copresence` is a *world-supplied* template (the village's `together` relates two characters
+sharing an `at` fact) — the engine itself has no notion of place.
+
+→ code: `Prax.Engine` (`ForEach`, `performOutcome`), `Prax.Witness` (`observable`/`saw`),
+`Prax.Worlds.Village`; asserted in `Prax.WitnessSpec`, `Prax.VillageSpec`.
+
 ---
 
 ## Feature coverage map
@@ -607,9 +670,10 @@ bar, Part I); the second is Part II, one row per world/tool.
 | Forward-chaining derivation (defeasible) | `Prax.EL` / `Prax.Derive` | `prax feud`: 1 wrong + 3 rules → a feud; amends dissolves it |
 | Static type checker + sort inference | `Prax.TypeCheck` | `prax check <world>` |
 | Memories, timed junctions, character sketches | `Prax.Script` / `Worlds.Audience` | `prax audience` |
+| Quantified outcomes (`ForEach`) + authored witnessing | `Prax.Engine` / `Prax.Witness` | `prax village`: carol (co-present) believes bob's theft and can confront him; dana (elsewhere) doesn't |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
-same behaviours are asserted in the test suite (`cabal test`, 178 tests). Part I: `Prax.QuerySpec`,
+same behaviours are asserted in the test suite (`cabal test`, 196 tests). Part I: `Prax.QuerySpec`,
 `Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.ReactionsSpec`
 (reactions, norms, norm-avoidance), `Prax.BeliefsSpec` (per-agent & false beliefs), `Prax.ConversationSpec`
 (speaker turns, topics, one-shot quips), `Prax.ArcSpec` (arc stages), `Prax.DeonticSpec` (□, discharge,
@@ -617,7 +681,8 @@ breach, contrary-to-duty), `Prax.BarSpec`, and `Prax.LoopSpec` (a deterministic 
 II: `Prax.IntrigueSpec` (death + branching endings), `Prax.StressSpec`, `Prax.PersistSpec` (save/resume),
 `Prax.ScriptSpec` + `Prax.Script.JsonSpec` (scene layer + JSON, incl. memories/timed junctions/sketches
 and the `audience`), `Prax.DirectorSpec` (player-as-DM), `Prax.ELSpec` + `Prax.DeriveSpec` (the
-exclusion-logic lattice and forward chaining), and `Prax.TypeCheckSpec`.
+exclusion-logic lattice and forward chaining), `Prax.TypeCheckSpec`, and `Prax.WitnessSpec` +
+`Prax.VillageSpec` (`ForEach` witnessing, co-presence, the confront affordance).
 
 ---
 

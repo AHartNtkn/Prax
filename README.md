@@ -107,6 +107,16 @@ utility. See the design writeups:
   `beverage`/`place`/…), and it infers every position's and variable's sort by unification and rejects
   conflicts (a gender where an agent goes). Every shipped world checks clean. Like any type system it is
   conservative — you declare only the monomorphic positions you want checked.
+- `ForEach` + `Prax.Witness` (v19) — **quantified outcomes**: `ForEach [Condition] [Outcome]` applies
+  its sub-outcomes to *every* binding of its conditions (a snapshot taken at entry, so mutating for
+  one binding never changes which others exist) — the dual of v8, which quantified conditions but
+  left outcomes singular. `Prax.Witness` compiles it into **authored observability**: `observable`
+  declares an action's public appearance, and every co-present non-actor comes to believe it
+  happened (`<W>.believes.<event>!seen`, the `!seen` recording direct-observation provenance).
+  Observability is a semantic property the author states — undeclared actions (like moving) deposit
+  no belief, preserving the looks-like/is gap deception will later exploit. `Prax.Worlds.Village`
+  demonstrates it: bob steals a loaf in the square; carol and you, both present, come to believe it
+  and can confront him; dana, at the mill, can't.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).
@@ -124,6 +134,7 @@ cabal run prax -- play      # play the same drama authored as a Prompter-lite pl
 cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
 cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + three rules
 cabal run prax -- audience  # a Prompter demo: memory + timed junction + character-sketch in one scene
+cabal run prax -- village   # witnessing seed: who sees a theft — and who doesn't — decides who can act
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
 cabal run prax -- check feud   # static well-formedness check of a world
 ```
@@ -141,7 +152,7 @@ Blood & Laurels-style drama (murder, death, betrayal, branching) on the same eng
 
 **New here? Read `docs/WALKTHROUGH.md`** — a guided playthrough that names each thing to try and
 explains which feature it demonstrates. Part I tours the whole engine core by playing the bar;
-Part II walks the rest (intrigue, stress, save/resume, play/flow, dm, feud, check, audience).
+Part II walks the rest (intrigue, stress, save/resume, play/flow, dm, feud, check, audience, village).
 
 ## References
 
