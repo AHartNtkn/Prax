@@ -19,9 +19,13 @@ module Prax.Witness
   ( CoPresence
   , observable
   , saw
+  , asRole
   ) where
 
-import           Prax.Query (Condition (..))
+import qualified Data.Map.Strict as Map
+
+import           Prax.Db (Val (..))
+import           Prax.Query (Condition (..), groundCondition)
 import           Prax.Types (Action (..), Outcome (..))
 import           Prax.Beliefs (beliefAbout)
 
@@ -44,3 +48,9 @@ observable copresence event act =
 -- | Condition: @who@ directly witnessed @event@.
 saw :: String -> String -> Condition
 saw who event = Match (beliefAbout who event ++ ".seen")
+
+-- | Retarget a co-presence template: substitute a different variable for
+-- @Witness@ (e.g. @Hearer@), so the template stays single-sourced in the
+-- world while other layers quantify over their own role.
+asRole :: String -> CoPresence -> [Condition]
+asRole v = map (groundCondition (Map.singleton "Witness" (VStr v)))

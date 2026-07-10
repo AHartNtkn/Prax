@@ -17,13 +17,11 @@ module Prax.Rumor
   , heard
   ) where
 
-import qualified Data.Map.Strict as Map
-
-import           Prax.Db (Val (..), isVariable, pathNames)
-import           Prax.Query (Condition (..), groundCondition)
+import           Prax.Db (isVariable, pathNames)
+import           Prax.Query (Condition (..))
 import           Prax.Types (Action, Outcome (..), action)
 import           Prax.Beliefs (beliefAbout)
-import           Prax.Witness (CoPresence)
+import           Prax.Witness (CoPresence, asRole)
 
 -- | An action: tell a co-present hearer about an event you have evidence for.
 --
@@ -50,10 +48,9 @@ gossip copresence gate pat label =
       (v : _) -> v
       []      -> error ("gossip: event pattern " ++ show pat
                         ++ " names no one (a rumor is about someone)")
-    forHearer = map (groundCondition (Map.singleton "Witness" (VStr "Hearer")))
     conds =
       [ Match (beliefAbout "Actor" pat) ]   -- any evidence; binds the pattern's variables
-      ++ forHearer copresence
+      ++ asRole "Hearer" copresence
       ++ [ Neq "Hearer" "Actor"
          , Neq "Hearer" subject
          , Absent [ Match (beliefAbout "Hearer" pat ++ ".seen") ]
