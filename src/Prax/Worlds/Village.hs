@@ -3,7 +3,9 @@
 -- witnessing keystone: bob steals a loaf in the square; whoever is /there/
 -- comes to believe it and can act on the belief — whoever isn't, doesn't and
 -- can't. v20 makes the news travel: carol tells; hearsay licenses suspicion,
--- not confrontation. Reputation (v21) grows from here.
+-- not confrontation. v21 completes the arc: evidence settles into derived
+-- standing, notoriety tips the thief into atonement, and forgiveness
+-- follows; nothing is ever forgotten.
 module Prax.Worlds.Village
   ( villageWorld
   , playerName
@@ -14,8 +16,10 @@ import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome)
 import           Prax.Core (coreLib, adjustScore)
+import           Prax.Derive (Axiom)
 import           Prax.Witness
 import           Prax.Rumor
+import           Prax.Repute
 
 -- | You are a villager — one agent among many.
 playerName :: String
@@ -89,11 +93,44 @@ villageP = practice
           , Not "eyed.Actor.Thief" ]
           [ Insert "eyed.Actor.Thief"
           , adjustScore "Actor" "Thief" "trust" (-5) "heardOfTheft" ]
+
+        -- Standing has teeth: anyone who has come to regard [T] a thief may
+        -- shun them — reputation (a derived fact) gating behaviour.
+      , action "[Actor]: shun [T]"
+          [ regardedAs "Actor" "T" "thief"
+          , Neq "T" "Actor"
+          , Not "shunned.Actor.T" ]
+          [ Insert "shunned.Actor.T" ]
+
+        -- Atonement, not amnesia: returning the loaf defeats the standing --
+        -- every regard dissolves on the next read -- while every belief (the
+        -- memory of the deed) persists untouched.
+      , action "[Actor]: return the loaf with apologies"
+          [ Match "holding.Actor.loaf"
+          , Exists [ Match "regards.W.Actor.thief" ] ]
+          [ Delete "holding.Actor.loaf"
+          , Insert "stall.loaf"
+          , Insert "atoned.Actor" ]
+
+        -- Forgiveness: you don't keep shunning someone you no longer condemn.
+      , action "[Actor]: relent toward [T]"
+          [ Match "shunned.Actor.T"
+          , Absent [ Match "regards.Actor.T.thief" ] ]
+          [ Delete "shunned.Actor.T" ]
       ]
   }
 
+-- Reputation: evidence settles into standing (defeated by atonement, not by
+-- forgetting), and three regarders -- the whole village save the thief --
+-- make it common knowledge.
+villageAxioms :: [Axiom]
+villageAxioms =
+  [ standingUnless "stole.Culprit.loaf" "atoned.Culprit" "thief"
+  , notoriety "thief" 3
+  ]
+
 villageWorld :: PraxState
-villageWorld = foldl (flip performOutcome) base setup
+villageWorld = (foldl (flip performOutcome) base setup) { axioms = villageAxioms }
   where
     base = (definePractices [coreLib, worldP, villageP] emptyState)
              { characters =
@@ -103,13 +140,22 @@ villageWorld = foldl (flip performOutcome) base setup
                                      -- loiters near the stall (the bar's anchoring idiom:
                                      -- an idle character needs a place it wants to be,
                                      -- or it drifts on tie-break)
-                                   , Want [ Match "practice.world.world.at.bob!square" ] 1 ] }
+                                   , Want [ Match "practice.world.world.at.bob!square" ] 1
+                                     -- bob can live with individuals' contempt; being the
+                                     -- village's NOTORIOUS thief outweighs the bread
+                                   , Want [ Match "notorious.bob.thief" ] (-15) ] }
                  , (character "carol")
                      { charWants = [ Want [ Match "confronted.carol.T" ] 5
-                                   , Want [ Match "Other.believes.stole.bob.loaf.heard.carol" ] 5 ] }
+                                   , Want [ Match "Other.believes.stole.bob.loaf.heard.carol" ] 5
+                                   , Want [ Match "shunned.carol.T", Match "regards.carol.T.thief" ] 5
+                                   , Want [ Match "shunned.carol.T"
+                                          , Absent [ Match "regards.carol.T.thief" ] ] (-5) ] }
                  , (character "dana")
                      { charWants = [ Want [ Match "confronted.dana.T" ] 5
-                                   , Want [ Match "eyed.dana.T" ] 5 ] }
+                                   , Want [ Match "eyed.dana.T" ] 5
+                                   , Want [ Match "shunned.dana.T", Match "regards.dana.T.thief" ] 5
+                                   , Want [ Match "shunned.dana.T"
+                                          , Absent [ Match "regards.dana.T.thief" ] ] (-5) ] }
                  ] }
     setup =
       [ Insert "practice.village.here"

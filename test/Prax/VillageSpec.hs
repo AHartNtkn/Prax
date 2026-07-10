@@ -6,7 +6,7 @@ import           Test.Tasty.HUnit (testCase, assertBool)
 
 import           Prax.Db (exists, dbToSentences)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction, performOutcome)
+import           Prax.Engine (possibleActions, performAction, performOutcome, readView)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Core (adjustScore)
 import           Prax.Worlds.Village
@@ -113,4 +113,50 @@ tests = testGroup "Prax.Worlds.Village"
       let st1 = performOutcome (adjustScore "carol" "dana" "trust" (-5) "aSlight") st0
       assertBool "distrust closes the channel"
         (not (any (("tell dana" `isInfixOf`) . gaLabel) (possibleActions st1 "carol")))
+
+  , testCase "three regards make notoriety; standing has teeth" $ do
+      let st0 = doAct "bob" "steal the loaf" villageWorld
+      assertBool "two witnesses are not notoriety"
+        (not (exists "notorious.bob.thief" (readView st0)))
+      let st = doAct "carol" "tell dana" (doAct "carol" "Go to mill" st0)
+          v  = readView st
+      assertBool "carol regards bob a thief" (exists "regards.carol.bob.thief" v)
+      assertBool "dana (hearsay) regards too" (exists "regards.dana.bob.thief" v)
+      assertBool "you (eyewitness) regard"    (exists "regards.you.bob.thief" v)
+      assertBool "bob holds no self-regard"   (not (exists "regards.bob.bob.thief" v))
+      assertBool "the whole village knows: notorious" (exists "notorious.bob.thief" v)
+      assertBool "carol may shun bob"
+        (any (("shun bob" `isInfixOf`) . gaLabel) (possibleActions st "carol"))
+      assertBool "bob may return the loaf"
+        (any (("return the loaf" `isInfixOf`) . gaLabel) (possibleActions st "bob"))
+
+  , testCase "amends is only offered under someone's regard" $ do
+      let st = performOutcome (Insert "holding.bob.loaf") villageWorld
+      assertBool "no regard, no apology affordance"
+        (not (any (("return the loaf" `isInfixOf`) . gaLabel) (possibleActions st "bob")))
+
+  , testCase "atonement dissolves standing while memory persists" $ do
+      let st0 = doAct "bob" "steal the loaf" villageWorld
+          st1 = doAct "carol" "shun bob" st0
+          st2 = doAct "bob" "return the loaf" st1
+          v   = readView st2
+      assertBool "atoned" (exists "atoned.bob" (db st2))
+      assertBool "no regard survives"    (not (exists "regards.carol.bob.thief" v))
+      assertBool "no notoriety survives" (not (exists "notorious.bob.thief" v))
+      assertBool "carol still remembers seeing it"
+        (exists "carol.believes.stole.bob.loaf.seen" (db st2))
+      assertBool "carol may now relent"
+        (any (("relent toward bob" `isInfixOf`) . gaLabel) (possibleActions st2 "carol"))
+      assertBool "the stall is restocked" (exists "stall.loaf" (db st2))
+
+  , testCase "the whole arc runs itself: notoriety tips bob; forgiveness follows" $ do
+      let st = driveIdle "you" 60 (doAct "bob" "steal the loaf" villageWorld)
+          v  = readView st
+      assertBool "bob atoned on his own" (exists "atoned.bob" (db st))
+      assertBool "no regard survives"    (not (exists "regards.carol.bob.thief" v))
+      assertBool "every shun relented"
+        (not (any (\w -> exists ("shunned." ++ w ++ ".bob") (db st))
+                  ["you", "carol", "dana"]))
+      assertBool "memory persists throughout"
+        (exists "carol.believes.stole.bob.loaf.seen" (db st))
   ]

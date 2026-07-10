@@ -251,7 +251,8 @@ renderScene :: PraxState -> String
 renderScene st =
   unlines (map ("  - " ++)
             (act ++ locations ++ orders ++ held ++ tipsy ++ bell
-              ++ deaths ++ grudges ++ shuns ++ chats ++ pending ++ trouble
+              ++ deaths ++ grudges ++ shuns ++ regardsL ++ notorietyL ++ atonedL
+              ++ chats ++ pending ++ trouble
               ++ arcs ++ beliefs ++ moods ++ feelings))
   where
     -- read the *closed* view, so derived facts (e.g. propagated enmity) are shown
@@ -267,6 +268,21 @@ renderScene st =
       [ who ++ " is shunning " ++ target
       | b <- rows "shunned.Who.Target"
       , Just who <- [val "Who" b], Just target <- [val "Target" b] ]
+
+    -- derived standing (reputation) and its public consequences
+    regardsL =
+      [ who ++ " regards " ++ target ++ " as a " ++ lbl
+      | b <- rows "regards.Who.Target.Label"
+      , Just who <- [val "Who" b], Just target <- [val "Target" b]
+      , Just lbl <- [val "Label" b] ]
+    notorietyL =
+      [ who ++ " is notorious as a " ++ lbl
+      | b <- rows "notorious.Who.Label"
+      , Just who <- [val "Who" b], Just lbl <- [val "Label" b] ]
+    atonedL =
+      [ who ++ " has made amends"
+      | b <- rows "atoned.Who"
+      , Just who <- [val "Who" b] ]
 
     -- the current act, in a play-script world
     act =
