@@ -129,5 +129,17 @@ tests = testGroup "Prax.TypeCheck"
                             [ ForEach [ Match "member.X" ] [ Insert "mark.X.y" ] ] ] }
       assertBool "CardinalityClash detected"
         (any (\case CardinalityClash {} -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "a dangling Call or spawn inside ForEach is caught" $ do
+      let p = practice
+            { practiceId = "w", roles = ["R"]
+            , actions = [ action "[Actor]: broadcast" []
+                            [ ForEach [ Match "member.X" ]
+                                      [ Call "nope" ["X"]
+                                      , Insert "practice.ghost.X" ] ] ] }
+      assertBool "UndefinedRef nope"
+        (any (\case UndefinedRef _ "nope" -> True; _ -> False) (typeCheck (world1 p)))
+      assertBool "UndefinedRef practice.ghost"
+        (any (\case UndefinedRef _ "practice.ghost" -> True; _ -> False) (typeCheck (world1 p)))
   ]
   where words' = words . map (\c -> if c == ',' then ' ' else c)

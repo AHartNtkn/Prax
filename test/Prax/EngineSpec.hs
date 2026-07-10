@@ -199,4 +199,23 @@ tests = testGroup "Prax.Engine"
                            [ ForEach [ Match "col.C" ] [ Insert "cell.R.C" ] ]) st
       mapM_ (\s -> assertBool s (exists s (db st')))
             [ "cell.a.x", "cell.a.y", "cell.b.x", "cell.b.y" ]
+
+  , testCase "ForEach snapshot holds for Delete: removing a member mid-fold still visits all" $ do
+      let st = foldl (flip performOutcome) emptyState
+                 [ Insert "member.a", Insert "member.b" ]
+          st' = performOutcome
+                  (ForEach [ Match "member.X" ]
+                           [ Delete "member.X", Insert "visited.X" ]) st
+      assertBool "visited a" (exists "visited.a" (db st'))
+      assertBool "visited b" (exists "visited.b" (db st'))
+      assertBool "member a gone" (not (exists "member.a" (db st')))
+      assertBool "member b gone" (not (exists "member.b" (db st')))
+
+  , testCase "ForEach with no conditions applies its outcomes exactly once" $ do
+      let st = foldl (flip performOutcome) emptyState [ Insert "counter!0" ]
+          st' = performOutcome
+                  (ForEach [] [ ForEach [ Match "counter!N", Calc "M" Add "N" "1" ]
+                                        [ Insert "counter!M" ] ]) st
+      assertBool "ran exactly once" (exists "counter!1" (db st'))
+      assertBool "not twice" (not (exists "counter!2" (db st')))
   ]

@@ -55,7 +55,8 @@ bindings first, then quantifies the rest).
   unbound-variable analysis so a sub-outcome variable bound by the `ForEach` conditions (or the
   enclosing action's conditions) is not flagged; a genuinely unbound one still is. Sub-outcome
   `Insert`s join the asserting-sentence corpus for cardinality/sort analysis; the conditions join
-  the condition corpus.
+  the condition corpus; and `ForEach` sub-outcomes' `Call`s and spawns join the dangling-reference
+  analysis, so an undefined function or practice named inside a `ForEach` is caught too.
 - **JSON** (`Prax.Script.Json`): `{"forEach": {"when": [...conds], "do": [...outcomes]}}`,
   round-tripping like the existing outcome encodings.
 - **Inspect/Stress/Persist**: no changes — outcomes are opaque to them; state stays a fact DB.

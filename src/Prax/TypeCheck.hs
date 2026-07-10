@@ -153,6 +153,7 @@ refErrors st = concatMap practiceRefs ps
     outcomeRef loc (Insert s)
       | ("practice" : pid : _) <- pathNames s
       , pid `notElem` definedPrac = [ UndefinedRef loc ("practice." ++ pid) ]
+    outcomeRef loc (ForEach _ subs) = concatMap (outcomeRef loc) subs
     outcomeRef _ _ = []
 
 -- The world's __asserting__ sentences, for the cardinality pass. Only inserts,
