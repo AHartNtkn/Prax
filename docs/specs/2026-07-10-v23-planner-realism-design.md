@@ -1,4 +1,4 @@
-# v23 — Realistic lookahead: round-walk prediction over public minds
+# v23 — Realistic lookahead: round-walk prediction over believed minds
 
 ## Provenance, stated honestly
 
@@ -26,8 +26,21 @@ Three observed failures of the current model (all first-hand, in the v22 record 
    chose single-prediction-per-actor to avoid it.
 
 One redesign addresses all three: **predict each other character's single next move, from the
-part of their mind you can see, in turn order.** It is a pruning that makes the model *more*
-realistic.
+predictor's *beliefs about* that character's mind, in turn order.** A pruning that makes the
+model *more* realistic.
+
+### Design history (second-round review)
+
+Two simpler models were considered and rejected:
+
+- A flat **secret/public flag** on wants — rejected because it makes every secret universally
+  opaque: two NPCs could never coordinate in secret (the accomplice must anticipate the
+  conspirator's move; the victim must not).
+- **SecretWant with unlock sentences** (relational secrecy as bespoke machinery) — rejected on
+  second-round review as a special case of something the system already has: *beliefs*. "Public
+  want" just means "commonly believed want," so the general mechanism is to make others' minds
+  an object of belief like everything else — witnessable, gossipable, liable to be lied about,
+  derivable, defeasible, and sometimes wrong.
 
 ### Philosophical continuity (Rawls, via the paper)
 
@@ -35,133 +48,177 @@ The paper's own answer to combinatorial overwhelm is §VIII-A's **constitutive v
 practices** — "first articulated explicitly by Rawls" (*Two Concepts of Rules*, Philosophical
 Review LXIV, 1955; the paper's ref [20]): actions do not exist outside the practice (Rawls'
 chess example), so "the agent is not overwhelmed by an infinite number of choices because he
-only sees the affordances that are provided by the social practices he is in." We implement
-that literally already (LEDGER #13/#14) — it is pruning layer one, and the v22 blowup happened
-*inside* it. This round adds layer two in the same spirit: when predicting others, model them as
-the paper's goal-pursuers within their practice-bounded options — one motivated move each, from
-the mind you can actually see — where "the mind you can see" is itself relational (§2). (A
-third, banked layer is also continuous with the constitutive view: limiting prediction to
-practices the predictor *shares* — you cannot anticipate moves in a game you cannot see.)
+only sees the affordances that are provided by the social practices he is in." We implement that
+literally already (LEDGER #13/#14) — pruning layer one, and the v22 blowup happened *inside*
+it. This round adds layer two in the same spirit: when predicting others, model them as the
+paper's goal-pursuers within their practice-bounded options — one motivated move each, from the
+mind you *believe* they have. (A third, banked layer is also continuous with the constitutive
+view: limiting prediction to practices the predictor *shares* — you cannot anticipate moves in a
+game you cannot see.)
 
-## 1. Semantics: the round-walk
+## 1. The desire vocabulary (`Prax.Minds`)
 
-`scoreActions depth st actor` scores each candidate action `a` of the actor as follows:
+To believe something about a mind, minds must be nameable. A world declares **named,
+owner-parameterized desire templates**:
 
-1. `st₁ = performAction st a`; `score = evaluate st₁ (allWants actor)`.
+```haskell
+-- | A nameable desire: a Want whose conditions may use the reserved variable
+-- @Owner@, instantiated per character.
+data Desire = Desire
+  { desireName :: String
+  , desireWant :: Want        -- conditions over the reserved variable Owner
+  } deriving (Eq, Show)
+
+wantFor :: String -> Desire -> Want   -- ground Owner := the character's name
+```
+
+- `PraxState` gains `desires :: [Desire]` (default `[]` — a world without a vocabulary is
+  unchanged).
+- `Character` gains `charDesires :: [String]` — the names of the vocabulary desires this
+  character actually has. **Self-planning uses** `charWants ++ [wantFor me d | d named in
+  charDesires]`.
+- `charWants` (unnamed wants) remain, with new semantics falling out for free: **an unnamed
+  want has no name to believe, so it is inherently unreadable** — never used in prediction.
+  This is exactly right for the story manager's metalevel desires (nobody should foresee the
+  director stirring a rivalry) and for idiosyncratic interior wants. Verified against the
+  shipped worlds: their load-bearing behaviors are self-wants and self-chains (e.g. bex's norm
+  avoidance is his own `Want [violationOf …] (-40)`, not a prediction of ada), so existing
+  worlds keep their `charWants` unmigrated and behave identically — the vocabulary is adopted
+  where theory-of-mind is the point.
+
+## 2. Beliefs about minds
+
+A motive-belief is an ordinary belief in the v20 provenance shape, over the issue
+`desires.<owner>.<name>`:
+
+```
+P.believes.desires.cassia.kill-artus.seen          -- P inferred it from what P saw
+P.believes.desires.cassia.kill-artus.heard.marcus  -- P was told, sourced
+P.believes.desires.cassia.kill-artus.presumed      -- derived: convention/profession (§3)
+```
+
+Because the shape is the standard event-belief shape, **the whole information stack works on
+minds with zero new machinery**:
+
+- `gossip`/`lie` (v20/v22) take `desires.M.<name>` patterns as-is — motives can be told,
+  corroborated, one-shot-per-teller, **and lied about** (framing someone's *intentions*).
+- A **confide** is just an action inserting the sourced belief in the confidant.
+- **Learning by observation** is the v21 pattern aimed at minds: *authored* inference axioms
+  from evidence to believed motive (e.g. `Regarder.believes.stole.bob.loaf ⇒
+  Regarder.believes.desires.bob.covets-bread.presumed`). Automatic inverse planning — inferring
+  motives from actions without authored rules — is explicitly rejected as a heuristic swamp.
+- `forget` retracts a motive-belief subtree like any other.
+
+## 3. Common knowledge, recovered by derivation (not by flag)
+
+"Public" was a flag pretending to be a primitive. It is recovered as **derived common
+knowledge**, defeasible, via two axiom builders in `Prax.Minds` (worlds assert `character.<n>`
+facts for their cast so the axioms can quantify — script worlds already do):
+
+- `professed`: the fact `professes.<owner>.<name>` (this character's desire is openly held)
+  derives `P.believes.desires.<owner>.<name>.presumed` for every character P.
+- `conventional`: the fact `conventional.<name>` (a desire everyone is presumed to have —
+  norm-respect, ordinary appetites) derives `P.believes.desires.M.<name>.presumed` for every
+  pair of characters — **even where M does not actually have it**: you expect strangers to be
+  conventional, and can be wrong. Mispredicting the unconventional is a feature of the model,
+  not a bug.
+
+Secrecy is now nothing at all: a desire that is neither professed nor conventional nor yet
+believed by anyone is simply unknown. Sharing it, witnessing its exercise, or hearing of it are
+all just facts arriving.
+
+## 4. Semantics: the round-walk
+
+`scoreActions depth st actor` scores each candidate action `a` of the actor:
+
+1. `st₁ = performAction st a`; `score = evaluate st₁ (selfWants actor)`.
 2. If `depth > 0`: walk the **other living characters once each, in the loop's turn order
-   starting after the actor** (the round-robin `cursor` order `Prax.Loop` uses, skipping the
-   dead). For each other character `m` in sequence:
-   - **Predict** `m`'s move: `m`'s best candidate action in the *current simulated state*,
-     chosen myopically (depth 0) against **the part of `m`'s mind readable by the actor** —
-     `m`'s public wants plus any secrets the actor is in on (§2) — and only if that move
-     **strictly improves** that readable evaluation over doing nothing (doing nothing is always
-     available, so an unmotivated move is not a prediction; this deliberately refuses to treat
-     tie-break wandering as intent, a divergence from Praxish's always-predict which would
-     model noise as plan). An unreadable mind — no candidates, or only secret motives — is
-     modeled as still, not as helpful.
-   - If a move is predicted, **perform it** (the simulation advances — later predictions see
-     earlier ones, as a real round would) and add `0.5 × evaluate (allWants actor)` of the
-     resulting state to `score`.
+   starting after the actor** (the round-robin `cursor` order, skipping the dead). For each
+   other character `m` in sequence:
+   - **Predict** `m`'s move with `predictMove st' actor m`: `m`'s best candidate action in the
+     current simulated state, chosen myopically (depth 0) against **the actor's believed model
+     of `m`** — `wantFor m d` for every vocabulary desire `d` such that the view satisfies the
+     prefix `actor.believes.desires.m.<name>` (any provenance) — and only if that move
+     **strictly improves** the believed model's evaluation over doing nothing (an unmotivated
+     move is not a prediction: tie-break wandering is noise, not plan — a deliberate divergence
+     from Praxish's always-predict). A mind the actor holds no beliefs about is modeled as
+     still, not as helpful. Note the model can be **wrong**: prediction uses the actor's
+     beliefs, not `m`'s true wants.
+   - If a move is predicted, **perform it** (later predictions see earlier ones, as a real
+     round would) and add `0.5 × evaluate (selfWants actor)` of the resulting state to `score`.
 3. After the full round of others, recurse for the actor's own next move:
    `score += 0.9 × best (scoreActions (depth − 1))` over the actor's candidates in the
    simulated state (0 if none).
 
 Notes:
 - Accumulation is over **absolute momentary utilities** (a discounted utility stream over the
-  simulated round), the reference's shape; candidates are compared under the identical structure
-  so the ranking is well-defined. Ties keep the deterministic label order.
-- `depth` counts the actor's *own* future choices (each own-ply includes one full predicted
-  round of others). The CLI/loop keep `lookaheadDepth = 2`.
-- Others are predicted **myopically** (depth 0). Deeper opponent models are out of scope.
-- `worldValue` in its current form is deleted (no wrappers, no compatibility); `evaluate`,
-  `candidateActions`, `scoreActions`, `pickAction` remain the API, plus a new exported
-  `predictMove :: PraxState -> Character -> Character -> Maybe GroundedAction`
-  (predictor → mover; the §2 prediction, testable in isolation).
+  simulated round), the reference's shape; candidates share the structure so the ranking is
+  well-defined. Ties keep the deterministic label order.
+- `depth` counts the actor's *own* future choices. The CLI/loop keep `lookaheadDepth = 2`.
+- Others are predicted **myopically** (depth 0); deeper nested opponent models are out of scope.
+- `worldValue` in its current form is **deleted** (no wrappers); API: `evaluate`,
+  `candidateActions`, `scoreActions`, `pickAction`, plus
+  `predictMove :: PraxState -> Character{-predictor-} -> Character{-mover-} -> Maybe GroundedAction`.
 
-## 2. Public and secret minds — and who is in on the secret
+## 5. Authored in shipped worlds, this round
 
-A flat secret/public split is insufficient: it would make every secret universally opaque, so
-two NPCs could never **coordinate in secret** (an accomplice must anticipate the conspirator's
-move; the victim must not). Secrecy is *relational* — secret from most, shared with some — so
-the model is **secret-unless-in-on-it**:
-
-```haskell
-data Character = Character
-  { charName        :: String
-  , charWants       :: [Want]         -- public: what anyone can sensibly expect of you
-  , charSecretWants :: [SecretWant]   -- motives readable only by those in on them
-  , charBoundTo     :: Maybe String
-  }
-
-data SecretWant = SecretWant
-  { secretKnownBy :: Maybe String   -- ^ unlock sentence over the reserved variable
-                                    --   @Knower@ (e.g. @"confided.cassia.Knower"@,
-                                    --   @"conspirator.Knower"@); 'Nothing' = nobody
-  , secretWant    :: Want
-  }
-```
-
-- **Planning yourself** uses `charWants ++ map secretWant charSecretWants` (you know your own
-  mind, unlocks irrelevant).
-- **Predictor P predicting mover M** uses M's `charWants` **plus** every `SecretWant` of M whose
-  unlock sentence, with `Knower` bound to P's name, holds in the current (view of the) state.
-  `predictMove` therefore takes the predictor: `predictMove :: PraxState -> Character{-predictor-}
-  -> Character{-mover-} -> Maybe GroundedAction`.
-- **Default is public** (`charSecretWants = []`; the `character` constructor unchanged in
-  shape) — the source's epistemics ("shared by default; divergence opt-in"). Norms stay
-  predictable *because they are public*: bex still avoids stiffing ada because ada's
-  disapproval-want is common knowledge — which is what makes it a norm.
-- **The unlock is an ordinary sentence, so being in on a secret is world state** — insertable by
-  a confide action, a faction membership (`conspirator.Knower` gives *group* secrets), or even
-  the information stack itself: if the plot is witnessed or *rumored to you* (v19/v20 facts),
-  an unlock written over those sentences means a leak genuinely changes who can see the plan —
-  preemption becomes possible exactly when, and only when, the preemptor has a clue.
-- Authored in shipped worlds, this round: **cassia's murder motive** becomes
-  `SecretWant (Just "confided.cassia.Knower") (Want [Match (deadSentence "artus")] 100)` (the
-  unlock written over Intrigue's actual confide vocabulary — exact sentence pinned in the plan):
-  her confidant can anticipate the poisoning; the victim, with no clue, cannot. (The village's
-  eve/bob secrets belong to the parked v22 content and are marked when v22 resumes.)
+- **Intrigue**: a one-entry vocabulary — `Desire "kill-artus" (Want [Match (deadSentence
+  "artus")] 100)`... generalized as authored (`Owner`-parameterized where sensible). Cassia's
+  motive moves from `charWants` to `charDesires = ["kill-artus"]`, neither professed nor
+  conventional; the existing confide action additionally inserts
+  `<Target>.believes.desires.cassia.kill-artus.heard.cassia`. Result, as tests: the confidant's
+  `predictMove` of cassia is the poisoning; the victim's is not — and if the plot is *rumored*
+  to artus (motive-gossip over the same pattern), his prediction changes, because a leak
+  genuinely changes who can see the plan.
+- Other worlds: unchanged this round (their behaviors are self-want-driven; verified above).
+  The village's eve/bob secrets are marked when the parked v22 resumes on top.
 
 ### The honest residual
 
 Base **facts** remain common knowledge inside predictions, exactly as the shared-by-default
-model keeps them: a predicted move that is *publicly motivated* but gated on a secret fact can
+model keeps them: a predicted move that is *believably motivated* but gated on a secret fact can
 still leak. Documented, not hidden; per-agent world-views are the machinery Versu itself
-declined to build.
+declined to build. Believed *weights* are also template-fixed (you believe *that* bob covets
+bread; the intensity comes with the concept) — per-observer intensities are out of scope.
 
-## 3. Expected consequences (each becomes a test)
+## 6. Expected consequences (each becomes a test)
 
-- **Speculative lying dies**: predicted moves are moves the mover would pick for their own
-  (public) reasons — carol's whisper scores below honest options; the v22-parked stealth and
-  frame-up beats become implementable as designed.
-- **The murder is a surprise to the victim, not the accomplice**: `predictMove` of cassia is
-  the poison move for a predictor the unlock admits (the confidant) and NOT for one it doesn't
-  (the victim) — the minimal relational pair. And **NPCs can coordinate in secret**: an
-  accomplice whose own payoff depends on the conspirator's next (secret) move takes the enabling
-  action iff they are in on the secret.
-- **Norm avoidance survives**: bar/deontic/feud/village behavioral suites green.
-- **Performance collapses to linear-per-ply**: one predicted move per other character instead of
-  all moves of everyone. Master's suite must stay in its current time class; the real referee is
-  the parked v22 village suite (621s → expected seconds) measured when v22 resumes.
+- **Speculative lying dies**: predicted moves are moves the predictor believes the mover wants —
+  carol's whisper scores below honest options; the parked v22 stealth/frame-up beats become
+  implementable as designed.
+- **The murder is a surprise to the victim, not the accomplice** — and **NPCs coordinate in
+  secret**: an accomplice whose payoff depends on the conspirator's next move takes the enabling
+  action iff they hold the motive-belief.
+- **Mispredictions are real**: a false planted motive-belief produces a predicted move the mover
+  never takes.
+- **Norms and the bar unchanged**: full behavioral suite green with no world edits outside
+  Intrigue's §5 change.
+- **Performance collapses to linear-per-ply**: one predicted move per other character. Master's
+  suite stays in its time class; the true referee is the parked v22 village suite (621s →
+  expected seconds) measured when v22 resumes.
 
-## 4. Tests (TDD)
+## 7. Tests (TDD)
 
-- `PlannerSpec` (rewritten where it encoded the old arithmetic, e.g. the `worldValue 1 … @?= 9.0`
-  case): evaluate unchanged; the walk-up-to-order story still chosen at depth 1 under round-walk
-  scoring (with the new expected numbers, derived in the test's comments); `predictMove` is
-  relational (the confidant/victim pair over one secret want; an unlock over a group sentence
-  admits several); secret coordination (accomplice enables iff in on it); prediction is myopic;
-  the round advances
-  sequentially (a fixture where the second predicted mover's options depend on the first's move);
-  unreadable minds are inert (a character with only secret wants is predicted to do nothing).
-- Behavioral regression: the full suite green — bar (norm avoidance, director), intrigue (plot
-  runs to betrayal when unimpeded), play/audience goldens, feud, village (v21 arc: spread,
-  notoriety, atonement, deterrence, relent). Where a spec-level story changes, the change must be
-  argued from this spec's semantics — never tuned into place.
-- `prax check` clean everywhere; `-Wall`/hlint clean.
+- `MindsSpec` (new): `wantFor` grounds `Owner`; `professed`/`conventional` axioms derive
+  `.presumed` beliefs for the cast (and are defeasible — retract the profession, the presumption
+  dissolves); the vocabulary is inert when empty.
+- `PlannerSpec` (rewritten where it encoded the old arithmetic, e.g. `worldValue 1 … @?= 9.0`):
+  the walk-up-to-order story still chosen at depth 1 (new expected numbers derived in comments);
+  `predictMove` is belief-relative (confidant/victim pair); myopic; motivated-only (a believed
+  mind with nothing to gain predicts still); sequential round (second prediction sees the
+  first's effects); unnamed wants are unreadable (a director-like mover predicts still);
+  misprediction (false belief → predicted move ≠ mover's actual pick); secret coordination
+  (accomplice enables iff believing).
+- Motive-information stack smoke: `gossip` over a `desires.…` pattern spreads a motive-belief
+  that flips a third party's `predictMove`; a `lie` plants a false one.
+- Behavioral regression: full suite green — bar (norm avoidance, director), intrigue (plot still
+  runs to betrayal unimpeded; new confide-belief wiring), play/audience goldens, feud, village
+  v19–21 arcs. Any story change must be argued from this spec's semantics, never tuned into
+  place. `prax check` clean everywhere (the new axioms pass the axiom analysis); `-Wall`/hlint
+  clean.
 
-## 5. Sequencing
+## 8. Sequencing
 
 v23 lands on committed master (v22 Task 1 is in; Task 2's working-tree content is parked on a
-side branch first, and v22 resumes on top of v23 — its own tests then validate the exploit's
-death and the runtime).
+side branch first, and v22 resumes on top — its village suite then validates the exploit's death
+and the runtime).
