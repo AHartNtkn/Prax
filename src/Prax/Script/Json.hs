@@ -117,7 +117,7 @@ instance ToJSON Outcome where
   toJSON (Delete s)     = object [ "delete" .= s ]
   toJSON (Call fn args) = object [ "call" .= object [ "fn" .= fn, "args" .= args ] ]
   toJSON (ForEach conds outs) =
-    object [ "forEach" .= object [ "when" .= conds, "outcomes" .= outs ] ]
+    object [ "forEach" .= object [ "when" .= conds, "do" .= outs ] ]
 
 instance FromJSON Outcome where
   parseJSON = withObject "Outcome" $ \o ->
@@ -125,6 +125,8 @@ instance FromJSON Outcome where
     <|> (Delete <$> o .: "delete")
     <|> (o .: "call" >>= withObject "call"
            (\c -> Call <$> c .: "fn" <*> c .: "args"))
+    <|> (o .: "forEach" >>= withObject "forEach"
+           (\f -> ForEach <$> f .: "when" <*> f .: "do"))
 
 -- Wants -----------------------------------------------------------------------
 

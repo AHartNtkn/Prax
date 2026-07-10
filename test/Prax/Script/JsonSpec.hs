@@ -1,10 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Prax.Script.JsonSpec (tests) where
 
+import           Data.Aeson (decode, encode)
 import           Data.Either (isLeft)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
+import           Prax.Query (Condition (..))
+import           Prax.Types (Outcome (..))
 import           Prax.Script (compile, currentSceneOf)
 import           Prax.Script.Json (encodeScript, decodeScript)
 import           Prax.Worlds.Play (playScript)
@@ -23,4 +26,9 @@ tests = testGroup "Prax.Script.Json"
 
   , testCase "malformed JSON reports an error rather than failing silently" $
       assertBool "expected a Left" (isLeft (decodeScript "{ \"start\": 3 }"))
+
+  , testCase "a ForEach outcome round-trips through JSON" $ do
+      let o = ForEach [ Match "at.Witness!P", Neq "Witness" "Actor" ]
+                      [ Insert "Witness.believes.stole.Actor.loaf!seen" ]
+      decode (encode o) @?= Just o
   ]

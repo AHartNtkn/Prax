@@ -68,6 +68,7 @@ test-suite prax-test
     build-depends:    base
                     , containers
                     , bytestring
+                    , aeson
                     , prax
                     , tasty
                     , tasty-hunit
