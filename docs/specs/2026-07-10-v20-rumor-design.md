@@ -58,8 +58,9 @@ gossip :: CoPresence   -- who can be told (world vocabulary, as in Prax.Witness)
        -> String       -- action label, e.g. "[Actor]: tell [Hearer] that [Culprit] stole the [Item]"
        -> Action
 
--- | Condition: @who@ has hearsay evidence of @event@ (from anyone).
-heard :: String -> String -> Condition   -- Match (who .believes. event .heard.Src)
+-- | Condition: @who@ has hearsay evidence of @event@ (from anyone). A boolean
+-- ∃ — 'Exists' — so multiple sources yield ONE row, not one binding per teller.
+heard :: String -> String -> Condition   -- Exists [ Match (who .believes. event .heard.Src) ]
 ```
 
 `gossip copresence gate pattern label` builds `action label conds [effect]` where, with
@@ -68,9 +69,7 @@ heard :: String -> String -> Condition   -- Match (who .believes. event .heard.S
 
 ```haskell
 conds =
-  [ Or [ [ Match ("Actor.believes." ++ pattern ++ ".seen") ]
-       , [ Match ("Actor.believes." ++ pattern ++ ".heard.Src") ] ]  -- any evidence
-  ]
+  [ Match ("Actor.believes." ++ pattern) ]   -- any evidence; binds the pattern's variables
   ++ copresenceForHearer          -- copresence with "Witness" renamed to "Hearer"
   ++ [ Neq "Hearer" "Actor"
      , Neq "Hearer" subject       -- you don't tell bob about bob's theft
@@ -80,6 +79,14 @@ conds =
 
 effect = Insert ("Hearer.believes." ++ pattern ++ ".heard.Actor")
 ```
+
+The evidence condition is a **prefix match**: `believes.<event>` nodes exist iff some provenance
+edge was deposited beneath them (witness and rumor deposits are the only writers, both write a
+provenance leaf; `forget` retracts the whole subtree), and matching the prefix binds the
+pattern's variables exactly once per known event regardless of how many provenance edges sit
+below — no duplicate menu rows for a teller who both saw and heard. (An `Or` over the two
+provenance shapes was considered and rejected: it unions bindings, so a teller with two evidence
+paths — or two `heard` sources — would be offered duplicate rows of the same tell.)
 
 `CoPresence` templates are written over the fixed variables `Witness`/`Actor` (v19). `gossip`
 reuses them for the hearer by substituting the variable name `Witness` → `Hearer` in the
