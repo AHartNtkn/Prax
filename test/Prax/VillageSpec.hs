@@ -68,6 +68,11 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "dana heard it from carol"
         (exists "dana.believes.stole.bob.loaf.heard.carol" (db st))
 
+  , testCase "the arc completes on its own: dana eventually eyes bob" $ do
+      let st = driveIdle "you" 40 (doAct "bob" "steal the loaf" villageWorld)
+      assertBool "dana acted on the hearsay"
+        (exists "eyed.dana.bob" (db st))
+
   , testCase "hearsay licenses suspicion, not confrontation" $ do
       let st0 = doAct "bob" "steal the loaf" villageWorld
       assertBool "carol (eyewitness) is never offered mere suspicion"

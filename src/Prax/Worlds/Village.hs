@@ -99,7 +99,11 @@ villageWorld = foldl (flip performOutcome) base setup
              { characters =
                  [ character "you"
                  , (character "bob")
-                     { charWants = [ Want [ Match "holding.bob.loaf" ] 10 ] }
+                     { charWants = [ Want [ Match "holding.bob.loaf" ] 10
+                                     -- loiters near the stall (the bar's anchoring idiom:
+                                     -- an idle character needs a place it wants to be,
+                                     -- or it drifts on tie-break)
+                                   , Want [ Match "practice.world.world.at.bob!square" ] 1 ] }
                  , (character "carol")
                      { charWants = [ Want [ Match "confronted.carol.T" ] 5
                                    , Want [ Match "Other.believes.stole.bob.loaf.heard.carol" ] 5 ] }
