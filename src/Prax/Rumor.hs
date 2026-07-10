@@ -39,7 +39,9 @@ import           Prax.Witness (CoPresence)
 -- exists iff some provenance edge sits beneath it, and matching the prefix
 -- binds the pattern's variables exactly once per known event no matter how
 -- many provenance edges there are — no duplicate tells for a teller who both
--- saw and heard.
+-- saw and heard. The event pattern's namespace must not overlap any valued-belief
+-- issue path in the same world — 'Witness' and gossip deposits must be the only
+-- writers under the pattern's @believes.@ prefix.
 gossip :: CoPresence -> [Condition] -> String -> String -> Action
 gossip copresence gate pat label =
   action label conds [ Insert (beliefAbout "Hearer" pat ++ ".heard.Actor") ]

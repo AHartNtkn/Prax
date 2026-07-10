@@ -61,6 +61,23 @@ tests = testGroup "Prax.Rumor"
   , testCase "the subject of the rumor is never offered as hearer" $
       assertBool "no telling tess about tess" (not (offers "sam" "tess" world))
 
+  , testCase "in a multi-variable pattern only the FIRST variable is the subject" $ do
+      -- 'Borrower' is the subject; 'Item' is just quantified.
+      let lent = gossip together [] "borrowed.Borrower.Item"
+                   "[Actor]: tell [Hearer] that [Borrower] borrowed the [Item]"
+          w' = foldl (flip performOutcome)
+                 ((definePractices [ practice { practiceId = "yard2", roles = ["R"]
+                                              , actions = [lent] } ] emptyState)
+                    { characters = map character ["sam", "hana", "tess", "pip"] })
+                 [ Insert "practice.yard2.here"
+                 , Insert "at.sam!yard2", Insert "at.hana!yard2"
+                 , Insert "at.tess!yard2", Insert "at.pip!yard2"
+                 , Insert "sam.believes.borrowed.tess.pip.seen" ]  -- tess borrowed pip(!)
+      assertBool "tess (first variable: the subject) is excluded as hearer"
+        (not (any (("tell tess" `isInfixOf`) . gaLabel) (possibleActions w' "sam")))
+      assertBool "pip (second variable: not the subject) may be told"
+        (any (("tell pip" `isInfixOf`) . gaLabel) (possibleActions w' "sam"))
+
   , testCase "a hearer who saw the event is not told (no news value)" $
       assertBool "sam not offered telling rita (an eyewitness)"
         (not (offers "sam" "rita" world))
