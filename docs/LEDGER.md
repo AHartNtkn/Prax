@@ -158,7 +158,9 @@ a separate hook. Unlocks information asymmetry — the root of reputation, rumor
 Tier 1 — compiled social structures:
 - **⤷K Gossip / rumor propagation** (`Prax.Rumor`): share a held belief with a co-located,
   relationship-gated hearer, planting the same belief. Reuses `Prax.Beliefs`; false rumors already
-  work. Reputation travels.
+  work. Reputation travels. *Design note from the v19 review:* the belief slot is `!`-exclusive, so
+  `!heard` would *overwrite* `!seen` for someone who witnessed **and** later hears the same event —
+  decide deliberately whether provenance should be multi-valued (`.seen`/`.heard`) before building.
 - **⤷K Reputation** (`Prax.Repute`): derivation axioms from believed deeds to standing
   (`believes.X.(stole.Y._) ⇒ regards.X.Y.thief`) + score effects. Defeasible for free — clear the
   belief and the standing dissolves (the feud pattern).
