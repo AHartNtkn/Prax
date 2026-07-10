@@ -135,3 +135,60 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   Praxish's alt selector, whereas we (faithfully) use Versu's utility planner — and combining hard
   tiers with N-ply lookahead (prune forbidden branches, propagate required) is the non-trivial part.
   A "beyond Versu" enhancement, not a parity gap.
+
+## Sandbox extension backlog (brainstormed 2026-07-10)
+
+Target frame: a **large-cast, long-time sandbox** where the player is one agent among many;
+**symbolic only** (no external models — PWIM #42 stays parked). All of these are *beyond Versu*.
+Unless marked foundational, each compiles onto the existing layers and can be taken or left in
+isolation. **K is the keystone**: most of Tier 1–3 stacks on it (marked ⤷K).
+
+**K. Witnessing / event deposits** *(chosen first — in design)*. When an action is performed,
+co-located characters acquire a persistent *belief that it happened*; characters elsewhere don't.
+Generalizes v3's per-action authored reactions into "react to any action" (the old event-bus idea).
+The one design question is where the quantified deposit ("for every co-located W…") runs: fully
+compiled per-practice, or a small engine hook. Unlocks information asymmetry — the root of
+reputation, rumor, secrets, alibis.
+
+Tier 1 — compiled social structures:
+- **⤷K Gossip / rumor propagation** (`Prax.Rumor`): share a held belief with a co-located,
+  relationship-gated hearer, planting the same belief. Reuses `Prax.Beliefs`; false rumors already
+  work. Reputation travels.
+- **⤷K Reputation** (`Prax.Repute`): derivation axioms from believed deeds to standing
+  (`believes.X.(stole.Y._) ⇒ regards.X.Y.thief`) + score effects. Defeasible for free — clear the
+  belief and the standing dissolves (the feud pattern).
+- **Factions & membership** (`Prax.Faction`): membership facts + the feud axioms generalized
+  ("my faction's enemy is my enemy"), join/leave/exile practices, and faction-/place-scoped deontic
+  norm-sets (what's obligatory in the temple isn't at the tavern). Composes Derive + Deontic.
+- **Debt & favors** (`Prax.Debt`): a debt *is* an obligation — `oblige` on borrowing, `discharge`
+  on repayment, `breach` → reputation damage. Zero new semantics.
+- **Kinship & households** (`Prax.Kin`): family relations + axioms (sibling symmetry, in-law
+  derivation), marriage as bond+obligations, inheritance on death (cast removal exists). Offices as
+  single-slot `!` facts (`mayor!bob`) — exclusion semantics are succession semantics.
+
+Tier 2 — agent interiority for long time-spans:
+- **Projects / endeavors** (`Prax.Project`): staged external arcs (build a house = timber → plot →
+  build), each stage gating wants — long horizons become chains of local utility, no planner change.
+  The symbolic answer to bounded lookahead.
+- **Personality → volition** (`Prax.Persona`): define our own trait semantics as documented
+  want-packages (`vengeful` ≡ want [my grudges avenged] +k); turns v18 sketches into a cast
+  generator. Principled because the mapping is a stated model, not per-world tuning.
+- **⤷K Secrets & deception**: a secret = fact + concealment want (`Want [Absent [anyone believes
+  X]]`) — the planner then avoids witnesses automatically; lying = planting a belief the speaker
+  doesn't hold; blackmail = obligation extracted under threat of gossip.
+- **Decay & drift**: scores cool toward baseline via a bodiless ticker (the v18 `_clock` pattern);
+  rates must be authored world parameters with stated semantics, not tuned constants.
+- **Calendar & gatherings**: recurring clock-gated scene spawns (market day, festival) — the mixing
+  dynamic that makes gossip percolate.
+
+Tier 3 — host-game boundary:
+- **⤷K Chronicler / salience queries** (`Prax.Chronicle`): derived summaries over the event stream
+  ("a feud started", "the mayorship changed hands") — quest-hook generation, and the answer to
+  emergence nobody can see.
+- **Embedding API**: a `step / inject / query` surface for a host engine; design once a host exists.
+
+Foundational watchlist (high bar; none currently urgent): hard priority tiers (above) — wait for a
+demonstrated soft-norm failure; incremental view maintenance (above) — Tier 1 multiplies axioms ×
+cast, so measure then decide; locality-scoped action discovery / level-of-detail — premature before
+a large world exists to profile. Notably *not* foundational: runtime want injection (#21) — a want
+gated on a fact is injectable by inserting the fact.
