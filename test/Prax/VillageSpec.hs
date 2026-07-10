@@ -159,4 +159,25 @@ tests = testGroup "Prax.Worlds.Village"
                   ["you", "carol", "dana"]))
       assertBool "memory persists throughout"
         (exists "carol.believes.stole.bob.loaf.seen" (db st))
+
+  , testCase "re-offense revokes atonement: standing snaps back from memory" $ do
+      let st0 = doAct "bob" "steal the loaf" villageWorld
+          st1 = doAct "carol" "tell dana" (doAct "carol" "Go to mill" st0)
+          st2 = doAct "bob" "return the loaf" st1
+      assertBool "atoned, no standing" (not (exists "regards.carol.bob.thief" (readView st2)))
+      let st3 = doAct "bob" "steal the loaf" st2
+          v3  = readView st3
+      assertBool "atonement revoked" (not (exists "atoned.bob" (db st3)))
+      assertBool "carol's regard is back — nobody forgot anything"
+        (exists "regards.carol.bob.thief" v3)
+      assertBool "notoriety is back too" (exists "notorious.bob.thief" v3)
+
+  , testCase "an atoned thief is deterred: the planner sees the snap-back" $ do
+      -- run the whole arc, then keep driving: the stall is restocked, bob's
+      -- loaf-want is live again, but stealing would instantly restore his
+      -- notoriety (-15 > +10) — so he never takes it.
+      let st = driveIdle "you" 90 (doAct "bob" "steal the loaf" villageWorld)
+      assertBool "bob atoned along the way" (exists "atoned.bob" (db st))
+      assertBool "the loaf is still on the stall" (exists "stall.loaf" (db st))
+      assertBool "bob holds no loaf" (not (exists "holding.bob.loaf" (db st)))
   ]

@@ -60,7 +60,10 @@ villageP = practice
           [ Match "practice.world.world.at.Actor!square"
           , Match "stall.loaf" ]
           [ Delete "stall.loaf"
-          , Insert "holding.Actor.loaf" ]
+          , Insert "holding.Actor.loaf"
+            -- stealing again forfeits any amends you'd made: standing (and
+            -- notoriety) re-derive instantly from the beliefs nobody lost
+          , Delete "atoned.Actor" ]
 
         -- Only someone who SAW the theft can call it out; it cools them toward
         -- the thief. dana, who was elsewhere, never gets this affordance.
