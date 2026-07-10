@@ -52,4 +52,18 @@ tests = testGroup "Prax.Witness"
 
   , testCase "saw is the seen-provenance belief condition" $
       saw "W" "waved.ann" @?= Match "W.believes.waved.ann.seen"
+
+  , testCase "the seen deposit is multi-valued: other evidence survives beside it" $ do
+      -- Pre-plant hearsay under the same belief node, then let the witness
+      -- deposit fire: with multi-valued (.) storage both edges coexist; an
+      -- exclusive (!) deposit would destroy the hearsay. (Regression guard for
+      -- the v20 provenance vocabulary.)
+      let planted = performOutcome (Insert "bea.believes.waved.ann.heard.cal") world
+          st = case possibleActions planted "ann" of
+                 (ga : _) -> performAction planted ga
+                 []       -> error "wave not offered to ann"
+      assertBool "the witness deposit landed"
+        (exists "bea.believes.waved.ann.seen" (db st))
+      assertBool "the pre-existing hearsay edge survived the deposit"
+        (exists "bea.believes.waved.ann.heard.cal" (db st))
   ]
