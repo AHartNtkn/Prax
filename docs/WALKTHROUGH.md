@@ -12,8 +12,8 @@ and — wired straight into "settling up" — the deontic obligation layer.
 its own world or tool: a branching dramatic episode with a death (`intrigue`), the QA tooling
 (`stress`), save/resume, scene-authored drama (`play`, `flow`), playing the drama manager yourself
 (`dm`), emergent derivation (`feud`), the static checker (`check`), the Prompter compilation
-features (`audience`), and the sandbox seed where who sees and who's told decides who can act
-(`village`, witnessing and gossip).
+features (`audience`), and the sandbox where who sees, who's told, and what that settles
+into decides how people treat you (`village` — witnessing, gossip, and reputation).
 
 Start with the bar:
 
@@ -716,6 +716,142 @@ as any other gated affordance.
 → code: `Prax.Rumor` (`gossip`/`heard`), `Prax.Worlds.Village`; asserted in `Prax.RumorSpec`,
 `Prax.VillageSpec`.
 
+### 24. Reputation — standing, notoriety, atonement, and a thief who learns (`prax village`) (v21)
+
+`Prax.Repute` closes the loop §§22–23 opened: evidence that reached someone — witnessed or only
+heard — now *settles into what they think of you*, a derived standing that shapes behaviour
+without anyone storing a reputation fact. Same world, played through to the end:
+
+```sh
+cabal run prax -- village
+```
+
+The instant carol (an eyewitness) believes the theft, she also comes to *regard* bob a thief — a
+fact nobody wrote, derived from her belief:
+
+```
+-------------------- scene --------------------
+  - bob is at the square
+  - carol is at the square
+  - dana is at the square
+  - you is at the square
+  - carol regards bob as a thief
+  - you regards bob as a thief
+Your move (you):
+  1) you: confront bob about the theft
+  2) you: tell dana that bob stole the loaf
+  3) you: shun bob
+  4) you: Go to mill
+```
+
+Standing has teeth: `you: shun bob` is offered to the player on the very same gate
+(`regardedAs "Actor" "T" "thief"`) that lets carol shun him a beat later:
+
+```
+  - carol is shunning bob
+  - carol regards bob as a thief
+  - you regards bob as a thief
+```
+
+carol then tells dana what she saw, and dana — hearsay-only — comes to regard bob too: §23's
+saw/heard asymmetry (suspicion, not confrontation) carries straight into standing, since hearsay
+is evidence enough to *regard* exactly as it's evidence enough to *believe*. With carol, dana, and
+you all regarding bob a thief, the third regard tips `notoriety "thief" 3` — "the whole village
+knows" — and bob's want against `notorious.bob.thief` (−15) now outweighs the loaf in his hands
+(+10): he returns it, the very same beat carol relents:
+
+```
+-------------------- scene --------------------
+  - bob is at the square
+  - carol is at the square
+  - dana is at the square
+  - you is at the square
+  - carol is shunning bob
+  - carol regards bob as a thief
+  - dana regards bob as a thief
+  - you regards bob as a thief
+  - bob is notorious as a thief
+Your move (you):
+  1) you: confront bob about the theft
+  2) you: tell dana that bob stole the loaf
+  3) you: shun bob
+  4) you: Go to mill
+  m) wait and let others act
+  s) save    q) quit
+>   bob: return the loaf with apologies
+  carol: relent toward bob
+  dana: Go to mill
+```
+
+**Atonement, not amnesia.** One beat later every derived line vanishes from the scene at once —
+not because anyone forgot, but because their only support (the absence of `atoned.bob`) is gone:
+
+```
+-------------------- scene --------------------
+  - bob is at the square
+  - carol is at the square
+  - dana is at the mill
+  - you is at the square
+  - bob has made amends
+```
+
+No `regards`, no `notorious`, no `shunned` — `standingUnless`'s defeater dissolved all of them on
+the same read. Nobody's belief moved: carol still holds `carol.believes.stole.bob.loaf.seen`
+exactly as before (the scene never renders raw beliefs, only derived standing, so this is the
+`VillageSpec` case "atonement dissolves standing while memory persists," not something the CLI
+shows directly). Forgiveness without forgetting — the standing was never *stored*, so there was
+nothing to erase but the derivation's own support.
+
+**Deterrence: the stall stays stocked.** Keep pressing `m` — sixteen in total from the top of
+this same run — and every beat from here to the end repeats this shape, bob never touching the
+stall again:
+
+```
+-------------------- scene --------------------
+  - bob is at the square
+  - carol is at the square
+  - dana is at the mill
+  - you is at the square
+  - bob has made amends
+Your move (you):
+  1) you: steal the loaf from the stall
+  2) you: confront bob about the theft
+  3) you: Go to mill
+  m) wait and let others act
+  s) save    q) quit
+>   bob: Wait a moment
+  carol: Go to mill
+  dana: Go to square
+```
+
+(Every one of the eleven beats still left in the run — `carol`/`dana` oscillating
+square↔mill, same as §23's tie-break — repeats exactly this: `bob has made amends`, `bob: Wait a
+moment`, and the steal still sitting first in the player's menu, right up to the last `m` and
+`Bye.`)
+
+That `1) you: steal the loaf from the stall` option is not a leftover — `stall.loaf` really is
+still there, and bob's `Want [Match "holding.bob.loaf"] 10` is live again (atonement deleted his
+*holding*, not his want). He just never takes it: the deed's own outcome deletes `atoned.Actor`
+the instant it fires, so a planner looking one step ahead at "steal again" sees standing and
+notoriety snap straight back — the same −15 he'd only just paid off, payable again on the
+spot. An unatoned bob was tipped into atoning; an atoned bob, seeing that future, doesn't
+re-offend. `bob has made amends` and `bob: Wait a moment` repeat for the rest of the run — every
+beat still offering the *player* the theft bob himself now refuses. This 16-beat run only shows
+the shape of it; `VillageSpec`'s "re-offense revokes atonement: standing snaps back from memory"
+and "an atoned thief is deterred: the planner sees the snap-back" cases drive the same two facts
+— the snap-back, then the refusal — out to 60 and 90 autonomous turns respectively.
+
+The shun/relent/tell options never resurface either — with no live regard, the wants that drove
+them (carol and dana's shun-want is *conditioned* on `regardedAs`, per the design spec, so it
+evaporates with the regard rather than fighting a stale shun to a tie-break) simply have nothing
+left to pursue. The full mechanism — `standing`, `standingUnless`, `regardedAs`, `notoriety`, and
+the world's choice to key bob's shame on notoriety rather than any one regarder's contempt — is
+documented in `docs/specs/2026-07-10-v21-repute-design.md`.
+
+→ code: `Prax.Repute` (`standing`/`standingUnless`/`regardedAs`/`notoriety`), `Prax.Worlds.Village`
+(`shun`, `return the loaf with apologies`, `relent`, `villageAxioms`); asserted in
+`Prax.ReputeSpec`, `Prax.VillageSpec`.
+
 ---
 
 ## Feature coverage map
@@ -769,9 +905,10 @@ bar, Part I); the second is Part II, one row per world/tool.
 | Memories, timed junctions, character sketches | `Prax.Script` / `Worlds.Audience` | `prax audience` |
 | Quantified outcomes (`ForEach`) + authored witnessing | `Prax.Engine` / `Prax.Witness` | `prax village`: carol (co-present) believes bob's theft and can confront him; dana (elsewhere) doesn't |
 | Gossip / sourced hearsay (`gossip`/`heard`, multi-valued `.seen`/`.heard.<source>` provenance) | `Prax.Rumor` | `prax village`: carol tells dana what she saw; hearsay licenses suspicion, not confrontation |
+| `standing`/`standingUnless`/`regardedAs`/`notoriety` (derived reputation, base-fact atonement defeater) | `Prax.Repute` | `prax village`: three regards tip `notorious.bob.thief`; atonement dissolves every regard while the belief persists; re-offense revokes it and an atoned bob is deterred from a restocked stall |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
-same behaviours are asserted in the test suite (`cabal test`, 215 tests). Part I: `Prax.QuerySpec`,
+same behaviours are asserted in the test suite (`cabal test`, 229 tests). Part I: `Prax.QuerySpec`,
 `Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.ReactionsSpec`
 (reactions, norms, norm-avoidance), `Prax.BeliefsSpec` (per-agent & false beliefs), `Prax.ConversationSpec`
 (speaker turns, topics, one-shot quips), `Prax.ArcSpec` (arc stages), `Prax.DeonticSpec` (□, discharge,
@@ -779,9 +916,12 @@ breach, contrary-to-duty), `Prax.BarSpec`, and `Prax.LoopSpec` (a deterministic 
 II: `Prax.IntrigueSpec` (death + branching endings), `Prax.StressSpec`, `Prax.PersistSpec` (save/resume),
 `Prax.ScriptSpec` + `Prax.Script.JsonSpec` (scene layer + JSON, incl. memories/timed junctions/sketches
 and the `audience`), `Prax.DirectorSpec` (player-as-DM), `Prax.ELSpec` + `Prax.DeriveSpec` (the
-exclusion-logic lattice and forward chaining), `Prax.TypeCheckSpec`, and `Prax.WitnessSpec` +
+exclusion-logic lattice and forward chaining), `Prax.TypeCheckSpec`, `Prax.WitnessSpec` +
 `Prax.VillageSpec` + `Prax.RumorSpec` (`ForEach` witnessing, co-presence, the confront affordance,
-sourced hearsay and the gossip gate).
+sourced hearsay and the gossip gate), and `Prax.ReputeSpec` (derived standing, the base-fact
+atonement defeater, and notoriety at threshold — `VillageSpec`'s later cases carry the same
+mechanisms through the full autonomous arc, the re-offense snap-back, and the resulting
+deterrence).
 
 ---
 

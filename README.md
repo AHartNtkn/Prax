@@ -129,6 +129,19 @@ utility. See the design writeups:
   theft, carries the news on her own; hearsay licenses suspicion (`eye … with suspicion`, a milder
   trust hit) but never confrontation — that stays eyewitness-only — and a world-authored
   relationship gate lets distrust close the gossip channel.
+- `Prax.Repute` (v21) — **derived reputation**: nobody *stores* a standing. `regards.<observer>.
+  <subject>.<label>` is an axiom-derived fact, read straight off an observer's evidence (seen or
+  heard alike), so it inherits information asymmetry for free and dissolves the instant its
+  support does. `standingUnless` defeats it with a *base-fact* defeater rather than deleting the
+  belief — atonement, not amnesia, so the memory of the deed survives even as the standing it once
+  supported disappears; committing the deed again simply revokes the defeater, snapping standing
+  back from memory nobody lost. `notoriety` turns corroboration into a threshold-gated fact — an
+  authored world parameter (`notoriety "thief" 3` means "the whole village knows") — and it
+  *drives* behaviour: bob's shame is keyed on being the village's *notorious* thief, not on any
+  one person's contempt. `Prax.Worlds.Village` closes its arc on this: theft → witnessing → rumor
+  → three regards → notoriety tips bob into returning the loaf → the village relents, memory
+  intact throughout — and because the planner can see standing snap back on a repeat, an atoned
+  bob is *deterred*, leaving a restocked stall untouched for the rest of the run.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).
@@ -146,7 +159,7 @@ cabal run prax -- play      # play the same drama authored as a Prompter-lite pl
 cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
 cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + three rules
 cabal run prax -- audience  # a Prompter demo: memory + timed junction + character-sketch in one scene
-cabal run prax -- village   # witnessing + rumor: what you see licenses confronting, what you hear only suspecting
+cabal run prax -- village   # witnessing + rumor + reputation: what you see or hear settles into standing, notoriety tips the thief into atoning, and an atoned thief is deterred from stealing again
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
 cabal run prax -- check feud   # static well-formedness check of a world
 ```

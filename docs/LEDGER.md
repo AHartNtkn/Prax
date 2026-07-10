@@ -43,6 +43,17 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   `Prax.Worlds.Village` grows: carol spreads the theft on her own; hearsay licenses
   `eye … with suspicion`, never `confront` (eyewitness-only); a world-authored relationship gate
   lets distrust close the gossip channel.
+- **v21** — **derived reputation** (`Prax.Repute` `standing`/`standingUnless`/`regardedAs`/
+  `notoriety`): `regards.<observer>.<subject>.<label>` is never stored, only *derived* from an
+  observer's evidence (seen or heard alike) — so it inherits information asymmetry and
+  defeasibility for free. Standing is defeated by **atonement, not amnesia**: `standingUnless`
+  guards the derivation with a *base-fact* defeater, dissolving every regard on one insertion while
+  every belief (the memory of the deed) persists untouched — and because the belief never went
+  away, **re-offense revokes the defeater**, so standing and notoriety snap back instantly on a
+  repeat. `notoriety` turns corroboration into a threshold-gated global fact (an authored world
+  parameter). `Prax.Worlds.Village` completes its arc: theft → witnessing → rumor → three regards
+  → notoriety tips bob into atonement → the village relents — and, because the planner can see the
+  snap-back, an atoned thief facing a restocked stall is *deterred*, never touching it again.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -172,9 +183,13 @@ Tier 1 — compiled social structures:
   v20:* provenance is multi-valued (`.seen`/`.heard.<source>`), so a `.heard.<source>` edge for
   someone who witnessed **and** later hears the same event sits *beside* their `.seen` edge instead
   of overwriting it — evidence accumulates and corroboration (multiple named sources) is countable.
-- **⤷K Reputation** (`Prax.Repute`): derivation axioms from believed deeds to standing
-  (`believes.X.(stole.Y._) ⇒ regards.X.Y.thief`) + score effects. Defeasible for free — clear the
-  belief and the standing dissolves (the feud pattern).
+- **⤷K Reputation** (`Prax.Repute`) *(done — v21: `standing`/`standingUnless`/`regardedAs`/
+  `notoriety` — per-observer standing derived from believed deeds
+  (`believes.X.(stole.Y._) ⇒ regards.X.Y.thief`); defeated by a *base-fact* defeater, not by
+  deleting the belief — atonement, not amnesia, so re-offense (which revokes the defeater fact)
+  makes standing snap back from memory that was never lost; `notoriety` counts derived regards at
+  an authored threshold)*. Score effects from standing (a reaction, not an axiom) remain unbuilt —
+  not needed for the village's arc.
 - **Factions & membership** (`Prax.Faction`): membership facts + the feud axioms generalized
   ("my faction's enemy is my enemy"), join/leave/exile practices, and faction-/place-scoped deontic
   norm-sets (what's obligatory in the temple isn't at the tavern). Composes Derive + Deontic.
