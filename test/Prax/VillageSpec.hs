@@ -11,7 +11,7 @@ import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, performOutcome, readView)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Core (adjustScore)
-import           Prax.Planner (predictMove)
+import           Prax.Planner (predictMove, pickAction)
 import           Prax.Sight (sightName)
 import           Prax.Worlds.Village
 
@@ -33,6 +33,12 @@ driveIdle idle = go
           st2 | charName actor == idle = st1
               | otherwise              = snd (npcAct 2 actor st1)
       in go (k - 1) st2
+
+-- The named villager from the cast.
+villager :: String -> Character
+villager n = case [ c | c <- characters villageWorld, charName c == n ] of
+  (c : _) -> c
+  []      -> error ("no such villager: " ++ n)
 
 tests :: TestTree
 tests = testGroup "Prax.Worlds.Village"
@@ -179,13 +185,21 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "notoriety is back too" (exists "notorious.bob.thief" v3)
 
   , testCase "an atoned thief is deterred: the planner sees the snap-back" $ do
+      -- amended under v24 (spec §3): asserts non-re-offense directly, not the
+      -- old holds-no-loaf proxy.
       -- run the whole arc, then keep driving: the stall is restocked, bob's
       -- loaf-want is live again, but stealing would instantly restore his
       -- notoriety (-15 > +10) — so he never takes it.
       let st = driveIdle "you" 90 (doAct "bob" "steal the loaf" villageWorld)
-      assertBool "bob atoned along the way" (exists "atoned.bob" (db st))
-      assertBool "the loaf is still on the stall" (exists "stall.loaf" (db st))
-      assertBool "bob holds no loaf" (not (exists "holding.bob.loaf" (db st)))
+      assertBool "his atonement stands" (exists "atoned.bob" (db st))
+      assertBool "the stall's loaf is untouched" (exists "stall.loaf" (db st))
+      -- "bob holds no loaf" was a proxy for "he never re-steals"; v24's
+      -- redemption falsifies the proxy (bob EARNS a loaf via earnBread) while
+      -- strengthening the property. A re-steal would falsify both asserts
+      -- above (it deletes stall.loaf AND atoned.bob); the loaf bob holds is
+      -- the one he earned:
+      assertBool "the loaf he holds is the one he earned"
+        (exists "practice.earnBread.bob.done.s3" (db st))
 
   , testCase "the village keeps a perception clock and sightings" $ do
       -- after one full round of driveIdle (all six cast members -- you, bob,
@@ -279,4 +293,45 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "carol cannot 'return' a loaf she never took"
         (not (any (("return the loaf" `isInfixOf`) . gaLabel)
                   (possibleActions st "carol")))
+
+  , testCase "deterrence plus opportunity yields industry: watched bob earns his loaf" $ do
+      -- from t=0 free play, with the whole square watching, bob undertakes
+      -- honest work and completes it: he ends holding a loaf he BAKED —
+      -- the stall's loaf untouched, no theft beliefs about him anywhere.
+      let st = driveIdle "you" 42 villageWorld
+      assertBool "bob undertook the endeavor" (exists "practice.earnBread.bob" (db st))
+      assertBool "and finished it" (exists "practice.earnBread.bob.done.s3" (db st))
+      assertBool "he holds a loaf" (exists "holding.bob.loaf" (db st))
+      assertBool "the stall's loaf untouched" (exists "stall.loaf" (db st))
+      assertBool "no one believes any theft by bob"
+        (not (any (\w -> exists (w ++ ".believes.stole.bob.loaf") (db st))
+                  ["you", "carol", "dana", "eve"]))
+
+  , testCase "the opportunism stays honest: an empty square mid-project still tempts" $ do
+      -- bob has undertaken and swept; then the square empties. Stealing (+10,
+      -- secret kept) beats the next +3 stage — industry under observation,
+      -- larceny in the dark.
+      let st0 = doAct "bob" "sweep the square"
+                  (doAct "bob" "take up honest work" villageWorld)
+          st1 = doAct "carol" "Go to mill" (doAct "you" "Go to mill" st0)
+      fmap gaLabel (pickAction 2 st1 (villager "bob"))
+        @?= Just "bob: steal the loaf from the stall"
+
+  , testCase "watching him work teaches the village his purpose" $ do
+      -- carol witnesses the sweep -> the inference axiom presumes his pursuit.
+      -- predictMove is MYOPIC, so the flour prediction fires once bob stands
+      -- at the mill (the model must gain from an AVAILABLE move). dana never
+      -- saw the sweep — co-present with bob at the mill, she STILL predicts
+      -- nothing: prediction is belief-relative, not proximity-relative.
+      let st0 = doAct "bob" "sweep the square"
+                  (doAct "bob" "take up honest work" villageWorld)
+      assertBool "carol saw the sweep" (exists "carol.believes.swept.bob.seen" (db st0))
+      assertBool "and presumes the pursuit"
+        (exists "carol.believes.desires.bob.pursues-earnBread.presumed" (readView st0))
+      -- at the square, even carol's model gains from no available move:
+      predictMove st0 (villager "carol") (villager "bob") @?= Nothing
+      let st1 = doAct "bob" "Go to mill" st0
+      fmap gaLabel (predictMove st1 (villager "carol") (villager "bob"))
+        @?= Just "bob: fetch flour from the mill"
+      predictMove st1 (villager "dana") (villager "bob") @?= Nothing
   ]

@@ -13,7 +13,9 @@
 -- everyone perceives (and, within a short horizon, remembers) where
 -- everyone else is, which is what lets the planner's realistic,
 -- belief-relative lookahead (@Prax.Planner@) predict a co-villager's next
--- move at all.
+-- move at all. v24 completes the moral arc: deterrence plus opportunity
+-- yields industry (bob earns the loaf he cannot safely steal), with the
+-- opportunism honestly kept.
 module Prax.Worlds.Village
   ( villageWorld
   , playerName
@@ -24,7 +26,8 @@ import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome)
 import           Prax.Core (coreLib, adjustScore)
-import           Prax.Derive (Axiom)
+import           Prax.Derive (Axiom, axiom)
+import           Prax.Project
 import           Prax.Witness
 import           Prax.Rumor
 import           Prax.Repute
@@ -62,6 +65,30 @@ worldP = practice
           []
       ]
   }
+
+-- Honest work: the lawful path to bread. Progress itself satisfies (+3 a
+-- stage — real, but no substitute for bread in hand); the final stage earns
+-- the loaf bob's +10 want has stared at since v19. Sweeping is public —
+-- honest work is done in the open — so watching bob work teaches the
+-- village his purpose (the inference axiom below).
+earnBreadTake :: Action
+earnBreadP :: Practice
+earnBreadPursuit :: Desire
+(earnBreadTake, earnBreadP, earnBreadPursuit) =
+  endeavor "earnBread" 3 "[Actor]: take up honest work at the stall"
+    [ Match "practice.world.world.at.Actor!square" ]
+    [ Stage "[Actor]: sweep the square"
+        [ Match "practice.world.world.at.Actor!square" ]
+        [ witnessed together "swept.Actor" ]
+    , Stage "[Actor]: fetch flour from the mill"
+        [ Match "practice.world.world.at.Actor!mill" ]
+        [ Insert "carrying.Actor.flour" ]
+    , Stage "[Actor]: bake and earn the loaf"
+        [ Match "practice.world.world.at.Actor!square"
+        , Match "carrying.Actor.flour" ]
+        [ Delete "carrying.Actor.flour"
+        , Insert "holding.Actor.loaf" ]
+    ]
 
 -- Village life: the theft (observable) and the belief-gated confrontation.
 villageP :: Practice
@@ -147,6 +174,9 @@ villageP = practice
           [ Match "practice.world.world.at.Culprit!AnywhereQ" ]
           "stole.Culprit.loaf"
           "[Actor]: whisper to [Hearer] that [Culprit] stole the loaf"
+
+        -- The lawful alternative to the stall's temptation.
+      , earnBreadTake
       ]
   }
 
@@ -157,11 +187,16 @@ villageAxioms :: [Axiom]
 villageAxioms =
   [ standingUnless "stole.Culprit.loaf" "atoned.Culprit" "thief"
   , notoriety "thief" 3
+    -- Watching him work teaches you his purpose: a witnessed sweep is enough
+    -- to presume the pursuit (v21's inference pattern, aimed at a mind).
+  , axiom [ Match "Regarder.believes.swept.bob" ]
+          [ "Regarder.believes.desires.bob.pursues-earnBread.presumed" ]
   ]
 
 villageWorld :: PraxState
 villageWorld = (foldl (flip performOutcome) base setup)
   { axioms = villageAxioms
+  , desires = [ earnBreadPursuit ]
     -- an epistemic prediction scope: you credit another's predicted move only
     -- if you're with them now, or you sighted them within the last 2 ticks —
     -- one tick per round, and two rounds is roughly a square<->mill round
@@ -170,7 +205,7 @@ villageWorld = (foldl (flip performOutcome) base setup)
   , predictionScope = [ Or [ together, sightedWithin 2 ] ]
   }
   where
-    base = (definePractices [coreLib, worldP, villageP, sightP villageSighting] emptyState)
+    base = (definePractices [coreLib, worldP, villageP, earnBreadP, sightP villageSighting] emptyState)
              { characters =
                  [ character "you"
                  , (character "bob")
@@ -186,7 +221,10 @@ villageWorld = (foldl (flip performOutcome) base setup)
                                      -- is worth +10, the secret is worth more
                                      -- (unnamed charWants are inherently unreadable in
                                      -- prediction — this is how bob's concealment stays secret)
-                                   , conceal "stole.bob.loaf" 12 ] }
+                                   , conceal "stole.bob.loaf" 12 ]
+                       -- his disposition to honest work: dormant until he
+                       -- takes it up (undertaking is a live planner choice)
+                     , charDesires = ["pursues-earnBread"] }
                  , (character "carol")
                      { charWants = [ Want [ Match "confronted.carol.T" ] 5
                                      -- keeps to the square unless something needs doing (the
