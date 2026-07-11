@@ -13,7 +13,10 @@
 --   * being served spawns a @settleUp@ obligation — tip (norm respected, warms
 --     the bartender) or leave the tab (a norm violation that spawns the
 --     bartender's disapproval). Agents given a strong aversion to their own
---     violation will tip rather than stiff.
+--     violation will tip rather than stiff;
+--   * a silent 'Prax.Sight' ticker keeps everyone's sense of where everyone
+--     else is (or was, recently) current, which is what the planner's
+--     belief-relative lookahead needs to ever predict someone else's move.
 module Prax.Worlds.Bar
   ( barWorld
   , playerName
@@ -30,6 +33,8 @@ import           Prax.Deontic
 import           Prax.Beliefs
 import           Prax.Conversation
 import           Prax.Arc
+import           Prax.Sight
+import           Prax.Witness (CoPresence)
 
 -- | The character the human player controls.
 playerName :: String
@@ -40,6 +45,17 @@ buyThreshold :: Int
 buyThreshold = 15
 
 -- Practices ---------------------------------------------------------------------
+
+-- | Co-presence at the bar: sharing a place.
+together :: CoPresence
+together = [ Match "practice.world.world.at.Actor!P"
+           , Match "practice.world.world.at.Witness!P" ]
+
+-- | The bar's sighting template, over the same movement vocabulary as
+-- 'together': whoever shares a place with you is someone you see.
+barSighting :: [Condition]
+barSighting = [ Match "practice.world.world.at.Seer!Spot"
+               , Match "practice.world.world.at.Seen!Spot" ]
 
 -- Locations and movement between connected places.
 worldP :: Practice
@@ -471,15 +487,21 @@ barSorts =
 -- defined, instances spawned, cast placed.
 barWorld :: PraxState
 barWorld =
-  foldl' (flip performOutcome) withPractices setup
+  (foldl' (flip performOutcome) withPractices setup)
+    -- an epistemic prediction scope: you credit another's predicted move only
+    -- if you're with them now, or you sighted them within the last 2 ticks —
+    -- one tick per round, and two rounds is roughly a there-and-back trip to
+    -- the next room: "you assume people stay put for about as long as it
+    -- takes to walk one room away and back."
+    { predictionScope = [ Or [ together, sightedWithin 2 ] ] }
   where
     withPractices =
       (definePractices
          [ coreLib, disapprovalP
          , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
-         , arcP ]
+         , arcP, sightP barSighting ]
          emptyState)
-        { characters = [you, ada, bex, director], sorts = barSorts }
+        { characters = [you, ada, bex, director, sightChar], sorts = barSorts }
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"
       , Insert "practice.world.world.connected.bar.entrance"
@@ -493,7 +515,7 @@ barWorld =
       , Insert "practice.dm.director"
       , Insert "practice.arc.you"
       , Insert "practice.arc.bex"
-      ]
+      ] ++ sightSetup
 
 -- | The same bar, but the human is the __drama manager__ (Versu §XI): the player
 -- controls 'directorPlayer', steering an autonomous cast (ada, bex, cai) with
@@ -501,15 +523,18 @@ barWorld =
 -- player is the unseen hand shaping the evening.
 barDirectorWorld :: PraxState
 barDirectorWorld =
-  foldl' (flip performOutcome) withPractices setup
+  (foldl' (flip performOutcome) withPractices setup)
+    -- same epistemic prediction scope, and the same stated horizon
+    -- rationale, as 'barWorld'.
+    { predictionScope = [ Or [ together, sightedWithin 2 ] ] }
   where
     withPractices =
       (definePractices
          [ coreLib, disapprovalP
          , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, directP
-         , arcP ]
+         , arcP, sightP barSighting ]
          emptyState)
-        { characters = [ada, bex, cai, directorPlayer], sorts = barSorts }
+        { characters = [ada, bex, cai, directorPlayer, sightChar], sorts = barSorts }
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"
       , Insert "practice.world.world.connected.bar.entrance"
@@ -523,4 +548,4 @@ barDirectorWorld =
       , Insert "practice.direct.director"
       , Insert "practice.arc.bex"
       , Insert "practice.arc.cai"
-      ]
+      ] ++ sightSetup

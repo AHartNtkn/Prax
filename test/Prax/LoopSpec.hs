@@ -12,7 +12,10 @@ import           Prax.Loop (runNpcTicks)
 import           Prax.Worlds.Bar (barWorld)
 
 -- Deterministic narration from driving every character with the planner (depth
--- 2) for 20 round-robin turns (idle turns produce no line). A golden replay of
+-- 2) for 25 round-robin turns (idle turns, and the silent sight ticker's turns,
+-- produce no line). 25, not 20: the bar's cast now includes the bodiless sight
+-- ticker (Prax.Sight), so each round is 5 turns, not 4 — the same 5 rounds this
+-- golden trace always covered (20 = 5x4) now take 25 (5x5). A golden replay of
 -- the whole emergent arc: greet, serve, respond, take offense at a snub, buy a
 -- friend a drink, and then — once the room is warm — the director steps in and
 -- turns two friends against each other, after which they cool. ('you' has no
@@ -39,11 +42,11 @@ expectedTrace =
 
 tests :: TestTree
 tests = testGroup "Prax.Loop"
-  [ testCase "20-turn NPC replay matches the golden narration" $
-      fst (runNpcTicks 2 20 barWorld) @?= expectedTrace
+  [ testCase "25-turn NPC replay matches the golden narration" $
+      fst (runNpcTicks 2 25 barWorld) @?= expectedTrace
 
   , testCase "the emergent + director-driven outcomes hold after the replay" $ do
-      let facts = dbToSentences (db (snd (runNpcTicks 2 20 barWorld)))
+      let facts = dbToSentences (db (snd (runNpcTicks 2 25 barWorld)))
           has f = assertBool f (f `elem` facts)
       -- bex responded to ada's greeting via the reaction
       has "practice.greet.world.greeted.bex.ada"

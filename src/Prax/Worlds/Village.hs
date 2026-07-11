@@ -5,7 +5,10 @@
 -- can't. v20 makes the news travel: carol tells; hearsay licenses suspicion,
 -- not confrontation. v21 completes the arc: evidence settles into derived
 -- standing, notoriety tips the thief into atonement, and forgiveness
--- follows; nothing is ever forgotten.
+-- follows; nothing is ever forgotten. v23 wires 'Prax.Sight' in: everyone
+-- perceives (and, within a short horizon, remembers) where everyone else
+-- is, which is what lets the planner's realistic, belief-relative
+-- lookahead (@Prax.Planner@) predict a co-villager's next move at all.
 module Prax.Worlds.Village
   ( villageWorld
   , playerName
@@ -20,6 +23,7 @@ import           Prax.Derive (Axiom)
 import           Prax.Witness
 import           Prax.Rumor
 import           Prax.Repute
+import           Prax.Sight
 
 -- | You are a villager — one agent among many.
 playerName :: String
@@ -29,6 +33,12 @@ playerName = "you"
 together :: CoPresence
 together = [ Match "practice.world.world.at.Actor!P"
            , Match "practice.world.world.at.Witness!P" ]
+
+-- | The village's sighting template, over the same movement vocabulary as
+-- 'together': whoever shares a place with you is someone you see.
+villageSighting :: [Condition]
+villageSighting = [ Match "practice.world.world.at.Seer!Spot"
+                   , Match "practice.world.world.at.Seen!Spot" ]
 
 -- Places and movement, in the bar's idiom.
 worldP :: Practice
@@ -133,9 +143,17 @@ villageAxioms =
   ]
 
 villageWorld :: PraxState
-villageWorld = (foldl (flip performOutcome) base setup) { axioms = villageAxioms }
+villageWorld = (foldl (flip performOutcome) base setup)
+  { axioms = villageAxioms
+    -- an epistemic prediction scope: you credit another's predicted move only
+    -- if you're with them now, or you sighted them within the last 2 ticks —
+    -- one tick per round, and two rounds is roughly a square<->mill round
+    -- trip: "you assume people stay put for about as long as it takes to
+    -- walk there and back."
+  , predictionScope = [ Or [ together, sightedWithin 2 ] ]
+  }
   where
-    base = (definePractices [coreLib, worldP, villageP] emptyState)
+    base = (definePractices [coreLib, worldP, villageP, sightP villageSighting] emptyState)
              { characters =
                  [ character "you"
                  , (character "bob")
@@ -152,13 +170,22 @@ villageWorld = (foldl (flip performOutcome) base setup) { axioms = villageAxioms
                                    , Want [ Match "Other.believes.stole.bob.loaf.heard.carol" ] 5
                                    , Want [ Match "shunned.carol.T", Match "regards.carol.T.thief" ] 5
                                    , Want [ Match "shunned.carol.T"
-                                          , Absent [ Match "regards.carol.T.thief" ] ] (-5) ] }
+                                          , Absent [ Match "regards.carol.T.thief" ] ] (-5)
+                                     -- loiters near the square (the same anchoring idiom as
+                                     -- bob's): with nothing to do, she waits where the
+                                     -- village's business happens rather than drifting on
+                                     -- the wander/wait tie-break
+                                   , Want [ Match "practice.world.world.at.carol!square" ] 1 ] }
                  , (character "dana")
                      { charWants = [ Want [ Match "confronted.dana.T" ] 5
                                    , Want [ Match "eyed.dana.T" ] 5
                                    , Want [ Match "shunned.dana.T", Match "regards.dana.T.thief" ] 5
                                    , Want [ Match "shunned.dana.T"
-                                          , Absent [ Match "regards.dana.T.thief" ] ] (-5) ] }
+                                          , Absent [ Match "regards.dana.T.thief" ] ] (-5)
+                                     -- loiters near the mill: she keeps to her own place
+                                     -- rather than drifting on the wander/wait tie-break
+                                   , Want [ Match "practice.world.world.at.dana!mill" ] 1 ] }
+                 , sightChar
                  ] }
     setup =
       [ Insert "practice.village.here"
@@ -169,4 +196,4 @@ villageWorld = (foldl (flip performOutcome) base setup) { axioms = villageAxioms
       , Insert "practice.world.world.at.carol!square"
       , Insert "practice.world.world.at.dana!mill"
       , Insert "stall.loaf"
-      ]
+      ] ++ sightSetup

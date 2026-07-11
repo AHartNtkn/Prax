@@ -34,8 +34,10 @@ npcAct depth actor st = case pickAction depth st actor of
   Nothing -> (Nothing, st)
 
 -- | Run @steps@ NPC turns from the given state, collecting the narration of
--- each performed action (idle turns produce no line). Every character is driven
--- by the planner (used for deterministic replay tests).
+-- each performed action (idle turns produce no line, and neither do silent
+-- bodiless tickers — an empty label is the authored signal for "acts, but
+-- says nothing", the same convention the interactive CLI applies). Every
+-- character is driven by the planner (used for deterministic replay tests).
 runNpcTicks :: Int -> Int -> PraxState -> ([String], PraxState)
 runNpcTicks depth steps = go steps []
   where
@@ -43,4 +45,7 @@ runNpcTicks depth steps = go steps []
     go k acc st =
       let (_actor, st1) = advance st
           (mga, st2)    = npcAct depth _actor st1
-      in go (k - 1) (maybe acc (\ga -> gaLabel ga : acc) mga) st2
+      in go (k - 1) (maybe acc (narrate acc) mga) st2
+    narrate acc ga
+      | all (== ' ') (gaLabel ga) = acc
+      | otherwise                 = gaLabel ga : acc

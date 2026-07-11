@@ -1,14 +1,18 @@
 module Prax.VillageSpec (tests) where
 
 import           Data.List (isInfixOf)
+import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
-import           Test.Tasty.HUnit (testCase, assertBool)
+import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
-import           Prax.Db (exists, dbToSentences)
+import           Prax.Db (Val (..), exists, dbToSentences)
+import           Prax.Query (Condition (..), groundCondition, query)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, performOutcome, readView)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Core (adjustScore)
+import           Prax.Planner (predictMove)
+import           Prax.Sight (sightName)
 import           Prax.Worlds.Village
 
 -- Perform the named actor's action whose label mentions @needle@.
@@ -180,4 +184,64 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "bob atoned along the way" (exists "atoned.bob" (db st))
       assertBool "the loaf is still on the stall" (exists "stall.loaf" (db st))
       assertBool "bob holds no loaf" (not (exists "holding.bob.loaf" (db st)))
+
+  , testCase "the village keeps a perception clock and sightings" $ do
+      -- after one full round of driveIdle (all five cast members, ending
+      -- with the sight ticker), the perception clock has advanced and the
+      -- square-mates (you, bob, and carol) hold sightings of each other;
+      -- dana, at the mill the whole round, holds none of bob (and bob none
+      -- of her).
+      let st = driveIdle "you" 5 villageWorld
+      assertBool "the clock ticked once" (exists "turn!1" (db st))
+      assertBool "you sighted bob in the square"
+        (exists "you.believes.at.bob!square" (db st))
+      assertBool "bob sighted you back"
+        (exists "bob.believes.at.you!square" (db st))
+      assertBool "carol sighted bob"
+        (exists "carol.believes.at.bob!square" (db st))
+      assertBool "bob sighted carol back"
+        (exists "bob.believes.at.carol!square" (db st))
+      assertBool "dana, at the mill, holds no sighting of bob"
+        (not (exists "dana.believes.at.bob" (db st)))
+      assertBool "and bob holds none of dana"
+        (not (exists "bob.believes.at.dana" (db st)))
+
+  , testCase "out of sight, out of mind: an unsighted mover is not predicted" $ do
+      -- dana holds a planted motive-belief that bob craves the loaf (not
+      -- derived from gossip or sight — just planted directly, to isolate the
+      -- scope gate). predictMove finds bob's motivated best move the moment
+      -- we ask: the mind-reading itself is live and correct...
+      let vocab = [ Desire "wantsLoaf" (Want [ Match "holding.Owner.loaf" ] 10) ]
+          st0   = villageWorld { desires = vocab }
+          st1   = performOutcome (Insert "dana.believes.desires.bob.wantsLoaf.seen") st0
+          charByName n = case [ c | c <- characters st1, charName c == n ] of
+            (c : _) -> c
+            []      -> error ("no character named " ++ n)
+          dana  = charByName "dana"
+          bob   = charByName "bob"
+          -- the wiring under test: villageWorld's own predictionScope,
+          -- grounded to the dana/bob pair (the same check the planner's
+          -- round-walk performs before ever calling predictMove).
+          inScopeOf st actor witness =
+            not (null (query (readView st) (groundedScope st actor witness) Map.empty))
+          groundedScope st actor witness =
+            map (groundCondition
+                   (Map.fromList [ ("Actor", VStr actor), ("Witness", VStr witness) ]))
+                (predictionScope st)
+      fmap gaLabel (predictMove st1 dana bob) @?= Just "bob: steal the loaf from the stall"
+      -- ...but dana (at the mill) has never sighted bob (at the square, and
+      -- the clock has never ticked): out of scope, so the planner's
+      -- round-walk would never call predictMove for him at all.
+      assertBool "unsighted: dana is out of bob's prediction scope"
+        (not (inScopeOf st1 "dana" "bob"))
+      -- one shared-room tick: dana walks to the square (co-presence with bob)
+      -- and the perception clock ticks once, both bringing her into scope
+      -- directly (co-presence, "together") and depositing a fresh sighting
+      -- ("sightedWithin") that would outlast the moment.
+      let st2 = performOutcome (Insert "practice.world.world.at.dana!square") st1
+          st3 = case possibleActions st2 sightName of
+                  (ga : _) -> performAction st2 ga
+                  []       -> error "the sight ticker has no action"
+      assertBool "co-present after the shared-room tick: dana is now in scope"
+        (inScopeOf st3 "dana" "bob")
   ]
