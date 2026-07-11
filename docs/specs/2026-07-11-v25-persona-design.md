@@ -65,7 +65,7 @@ residue is a **mark on the liar**, not a record in the world:
   wants count the bearer's lies exactly (per hearer × per event).
 - **Marks, not records — a design commitment**: history persists only through the marks it
   makes, and the truth must be able to become unrecoverable. The mark is owned (the liar's
-  psyche), forgettable (`forget` retracts subtrees), and perishes with its bearer. Nothing can
+  psyche), forgettable (a `Delete` on its root retracts it), and perishes with its bearer. Nothing can
   consult it as an oracle: a frame-up stays undisprovable unless a mark-bearer acts — the liar
   confesses, or someone who witnessed the whispering speaks. Truth recovery, wherever it is
   ever built, flows through people.
@@ -89,17 +89,23 @@ data Trait = Trait { traitName :: String        -- single path segment (loud err
 
 personaVocabulary :: [Trait] -> [Desire]        -- loud error on duplicate desire names
 bearing           :: Trait -> Character -> Character   -- charDesires ++ names
-personaSetup      :: [Trait] -> [(String, [Trait])] -> [Outcome]
-                     -- trait.<who>.<name> per bearing; traitDesire.<trait>.<desire> data
-                     -- facts once per trait; character.<who> for roster members
 transparent       :: Axiom
   -- trait.M.T ∧ traitDesire.T.D ∧ character.P ⇒ P.believes.desires.M.D.presumed
   -- (temperament is legible: everyone presumes a bearer's conduct-valuations —
   --  probe-verified through closure and predictMove in the first-draft review)
 
-cast :: [Trait] -> [(String, [Trait])] -> ([Character], [Outcome])
-  -- deterministic roster assembly (sampling stays banked with the stress tooling)
+cast :: [Trait] -> [(Character, [Trait])] -> ([Character], [Outcome])
+  -- deterministic roster assembly over hand-authored base characters: each
+  -- member `bearing` their traits, plus the facts transparent reads
+  -- (trait.<who>.<t> per bearing, traitDesire.<t>.<d> once per trait,
+  -- character.<who> per member). Loud errors: a non-segment trait name; a
+  -- borne trait missing from the vocabulary list (silently illegible
+  -- valuations). Sampling stays banked with the stress tooling.
 ```
+
+The first draft's separate `personaSetup` is folded into `cast`: a roster of hand-authored
+characters is the general case (the village's members carry wants and anchors a String-keyed
+roster couldn't), and one entry point means the facts and the bearings can never drift apart.
 
 No duplicate desire names may reach `desires` (the guard, plus the world's own care where a
 bundle overlaps standalone entries).
@@ -129,11 +135,11 @@ The village gains **gale** (via `cast`), the contrast pair to eve:
 ## 5. Tests (TDD)
 
 - `DeceitSpec` additions: the lie deposits the liar's mark `<liar>.lied.<hearer>.<event>`
-  (exact shape); truthful `gossip` deposits no such mark; the mark is forgettable
-  (`forget` on the `lied` subtree clears it — and the conscience-cost with it); existing lie
-  tests unchanged (the mark is additive).
+  (exact shape); truthful `gossip` deposits no such mark; the mark is forgettable (a `Delete`
+  on the `lied` root clears it — and PersonaSpec shows the conscience-cost clearing with it);
+  existing lie tests unchanged (the mark is additive).
 - `PersonaSpec` (fixture pins the first-draft probe plus the new semantics): `bearing`/
-  `personaVocabulary` (+ duplicate/path-segment guards)/`personaSetup`/`cast` mechanics;
+  `personaVocabulary`/`cast` mechanics (+ duplicate/path-segment/stray-borne-trait guards);
   `transparent` derives presumption for bearers only, defeasibly; **the conduct-valuation
   core**: a bearer with a temptation (a want a lie would serve) declines it while an
   unprincipled twin takes it — asserted via `pickAction` on both; the marginal-lie property
