@@ -12,8 +12,16 @@
 -- /could/ frame) rather than from a belief. The effect is identical to
 -- gossip's — the deceived hold real hearsay, indistinguishable from truth, and
 -- the whole rumor/reputation stack cascades on the falsehood unmodified.
--- Nobody in-world holds ground truth; exculpation would need an event record
--- (a banked future item), and this module deliberately does not fake one.
+--
+-- __A lie marks the liar.__ The only residue is the liar's own memory —
+-- @\<liar\>.lied.\<hearer\>.\<event\>@, rooted under their name like all
+-- mental state: owned, forgettable (one 'Delete' on its root), perishing with
+-- its bearer. There is deliberately no objective record: history persists
+-- only through the marks it makes, and the truth can become unrecoverable.
+-- Exculpation, if ever authored, flows through mark-bearers (confession,
+-- testimony), never through consulting a ledger. What the mark buys now is
+-- conscience: a trait that values your own @lied@ marks negatively
+-- ("Prax.Persona") is a reason not to.
 module Prax.Deceit
   ( conceal
   , lie
@@ -49,7 +57,11 @@ lie :: CoPresence   -- ^ who can be told
     -> String       -- ^ action label
     -> Action
 lie copresence gate fabrication pat label =
-  action label conds [ Insert (beliefAbout "Hearer" pat ++ ".heard.Actor") ]
+  action label conds
+    [ Insert (beliefAbout "Hearer" pat ++ ".heard.Actor")
+      -- the liar's own memory of the deed — a mark on their psyche, rooted
+      -- under their name like all mental state; there is no world ledger
+    , Insert ("Actor.lied.Hearer." ++ pat) ]
   where
     subject = case filter isVariable (pathNames pat) of
       (v : _) -> v

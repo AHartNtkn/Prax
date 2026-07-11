@@ -171,4 +171,27 @@ tests = testGroup "Prax.Deceit"
         (not (exists "nia.believes.desires.kit.revenge" (db st)))
       assertBool "kit is never offered as hearer (subject cannot be hearer)"
         (not (offered "nia" "whisper to kit that kit wants" motiveLieWorld))
+
+  , testCase "a lie marks the liar's own memory (marks, not records)" $ do
+      let st = doAct "nia" "whisper to oz that kit took the gem" world
+      assertBool "nia carries the mark of her own lie"
+        (exists "nia.lied.oz.took.kit.gem" (db st))
+      assertBool "the deceived carry no such mark"
+        (not (exists "oz.lied" (db st)))
+      -- the mark is the liar's psyche, not a world ledger: one Delete on its
+      -- root retracts the memory (PersonaSpec shows the conscience-cost
+      -- clearing with it)
+      let st' = performOutcome (Delete "nia.lied") st
+      assertBool "forgetting clears it" (not (exists "nia.lied" (db st')))
+
+  , testCase "truthful gossip leaves no lie-mark" $ do
+      -- sid takes the gem before witnesses; oz (an eyewitness) honestly tells
+      -- mia, who is walked over from the shed to be a valid hearer.
+      let st0 = doAct "sid" "take the gem" world
+          st1 = performOutcome (Insert "at.mia!yard") st0
+          st2 = doAct "oz" "tell mia that sid took the gem" st1
+      assertBool "mia holds the hearsay"
+        (exists "mia.believes.took.sid.gem.heard.oz" (db st2))
+      assertBool "an honest telling marks nothing"
+        (not (exists "oz.lied" (db st2)))
   ]
