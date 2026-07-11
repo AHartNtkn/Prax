@@ -26,7 +26,7 @@ import           Data.Ord (Down(..))
 import           Prax.Db (Val (..), exists)
 import           Prax.Query (countSatisfying, groundCondition, query)
 import           Prax.Types
-import           Prax.Engine (readView, possibleActions, performAction)
+import           Prax.Engine (possibleActions, performAction)
 import           Prax.Minds (selfWants, believedWants)
 
 -- | Total utility of a world to a set of wants: @Σ utility × #satisfying@.

@@ -8,7 +8,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (Db, dbToSentences, emptyDb, insertAll, valToString)
 import           Prax.Query (Condition (..), query)
 import           Prax.Types (Outcome (..), PraxState (..), emptyState)
-import           Prax.Engine (performOutcome)
+import           Prax.Engine (performOutcome, withDb)
 import           Prax.Beliefs
 
 -- Apply a list of outcomes to an empty state, return the resulting facts.
@@ -43,7 +43,7 @@ tests = testGroup "Prax.Beliefs"
   , testCase "a belief can be false — diverging from the shared world" $ do
       -- Shared world: ada is actually pleased. bex nonetheless believes she is cross.
       let world = insertAll [ "ada.mood!pleased" ] emptyDb :: Db
-          st    = performOutcome (believe "bex" "adaMood" "cross") (emptyState { db = world })
+          st    = performOutcome (believe "bex" "adaMood" "cross") (withDb (const world) emptyState)
           fs    = dbToSentences (db st)
       assertBool "world truth stands"   ("ada.mood.pleased" `elem` fs)
       assertBool "bex's belief diverges" ("bex.believes.adaMood.cross" `elem` fs)

@@ -5,7 +5,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome)
+import           Prax.Engine (definePractices, performOutcome, setAxioms)
 import           Prax.Query (Condition (..))
 import           Prax.Derive (Axiom (..))
 import           Prax.TypeCheck
@@ -44,7 +44,7 @@ tests = testGroup "Prax.TypeCheck"
         (any (\case UnboundVar _ "Ghost" _ -> True; _ -> False) (typeCheck (world1 p)))
 
   , testCase "an axiom head variable absent from the body is caught" $ do
-      let w = emptyState { axioms = [ Axiom [ Match "p.X" ] [ "q.X.Y" ] ] }
+      let w = setAxioms [ Axiom [ Match "p.X" ] [ "q.X.Y" ] ] emptyState
       assertBool "UnboundVar Y"
         (any (\case UnboundVar "axiom" "Y" _ -> True; _ -> False) (typeCheck w))
 

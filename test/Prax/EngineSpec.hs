@@ -8,6 +8,7 @@ import           Prax.Db (dbToSentences, exists)
 import           Prax.Query
 import           Prax.Types
 import           Prax.Engine
+import           Prax.Derive (axiom)
 
 -- Practices ported from praxish demos/test/tests.js into the eDSL. --------------
 
@@ -218,4 +219,15 @@ tests = testGroup "Prax.Engine"
                                         [ Insert "counter!M" ] ]) st
       assertBool "ran exactly once" (exists "counter!1" (db st'))
       assertBool "not twice" (not (exists "counter!2" (db st')))
+
+  , testCase "setAxioms re-derives the cached view on a built state" $ do
+      let ax = axiom [ Match "parent.X.Y" ] [ "elder.X" ]
+          st0 = performOutcome (Insert "parent.ada.bea") emptyState
+      assertBool "no axioms: nothing derived"
+        (not (exists "elder.ada" (readView st0)))
+      let st1 = setAxioms [ax] st0
+      assertBool "derived after setAxioms" (exists "elder.ada" (readView st1))
+      -- and the view tracks subsequent writes through the helpers
+      let st2 = performOutcome (Insert "parent.bea.cal") st1
+      assertBool "new base fact derives too" (exists "elder.bea" (readView st2))
   ]

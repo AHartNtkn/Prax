@@ -8,7 +8,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, readView)
+import           Prax.Engine (definePractices, performOutcome, setAxioms)
 import qualified Prax.Planner as Planner
 import           Prax.Minds (selfWants)
 import           Prax.Witness (CoPresence)
@@ -35,12 +35,12 @@ world = foldl (flip performOutcome) base (personaFacts ++ setup)
       , ( (character "bea") { charDesires = ["covets-credulity"] }, [] )
       , ( character "oz", [] )
       , ( character "kit", [] ) ]
-    base = (definePractices [p] emptyState)
+    base = (setAxioms [transparent] (definePractices [p] emptyState))
              { characters = roster
              , desires = Desire "covets-credulity"
                            (Want [ Match "oz.believes.took.kit.gem" ] 4)
                          : personaVocabulary [plainspoken]
-             , axioms = [transparent] }
+             }
     p = practice
       { practiceId = "yard", roles = ["R"]
       , actions =

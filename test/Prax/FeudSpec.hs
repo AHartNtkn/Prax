@@ -9,7 +9,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, assertFailure)
 
 import           Prax.Db (dbToSentences)
 import           Prax.Types
-import           Prax.Engine (readView, possibleActions, performAction)
+import           Prax.Engine (possibleActions, performAction)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Worlds.Feud (feudWorld, bigFeud)
 

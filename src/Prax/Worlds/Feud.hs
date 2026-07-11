@@ -20,7 +20,7 @@ module Prax.Worlds.Feud
 
 import           Prax.Query
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome)
+import           Prax.Engine (definePractices, performOutcome, setAxioms)
 import           Prax.Derive (Axiom, axiom)
 
 -- | You are Alice — the one who gave offence.
@@ -73,7 +73,7 @@ alice = (character playerName)
 -- assembles itself.
 feudWorld :: PraxState
 feudWorld =
-  (foldl (flip performOutcome) withPractices setup) { axioms = feudAxioms }
+  setAxioms feudAxioms (foldl (flip performOutcome) withPractices setup)
   where
     withPractices =
       (definePractices [ societyP ] emptyState)
@@ -90,7 +90,7 @@ feudWorld =
 -- closure derives @O(n)@ enmities and the planner has @n+1@ movers per node.
 bigFeud :: Int -> PraxState
 bigFeud n =
-  (foldl (flip performOutcome) withPractices setup) { axioms = feudAxioms }
+  setAxioms feudAxioms (foldl (flip performOutcome) withPractices setup)
   where
     names = [ "a" ++ show i | i <- [1 .. n] ]
     withPractices =

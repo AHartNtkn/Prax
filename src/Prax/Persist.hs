@@ -19,6 +19,7 @@ import           Text.Read (readMaybe)
 
 import           Prax.Db (dbToLabeledSentences, emptyDb, insertAll)
 import           Prax.Types (PraxState (..))
+import           Prax.Engine (withDb)
 
 -- | Serialize the mutable state (@cursor@ + all facts) to text, with @!@/@.@
 -- labels so the reload rebuilds the exclusion structure exactly.
@@ -32,7 +33,7 @@ deserializeState text world =
   case lines text of
     (hd : rest)
       | ["cursor", n] <- words hd, Just c <- readMaybe n ->
-          world { db = insertAll (filter (not . null) rest) emptyDb, cursor = c }
+          (withDb (const (insertAll (filter (not . null) rest) emptyDb)) world) { cursor = c }
     _ -> error "Prax.Persist.deserializeState: malformed save (expected a 'cursor <n>' header)"
 
 -- | Save a session to a file.

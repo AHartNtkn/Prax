@@ -144,13 +144,18 @@ data PraxState = PraxState
   , sorts        :: [(String, [String])]  -- ^ sort → member constants, for the type checker (default none)
   , desires      :: [Desire]      -- ^ the vocabulary of nameable desires (default none)
   , predictionScope :: [Condition]  -- ^ conditions the planner predicts over (default none)
+  , readView     :: Db
+    -- ^ The db closed under the axioms — established (lazily) whenever the
+    -- state is built, so reads share one closure per state. Change 'db' or
+    -- 'axioms' ONLY through 'Prax.Engine.withDb' / 'Prax.Engine.setAxioms',
+    -- which rebuild it; a raw record update of either leaves this stale.
   }
 
 -- | An empty interpreter state (cursor before the first actor).
 emptyState :: PraxState
 emptyState = PraxState
   { db = emptyDb, practiceDefs = Map.empty, characters = [], cursor = -1
-  , axioms = [], sorts = [], desires = [], predictionScope = [] }
+  , axioms = [], sorts = [], desires = [], predictionScope = [], readView = emptyDb }
 
 -- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead
 -- character stays in the cast list but is skipped in turn-taking and lookahead.

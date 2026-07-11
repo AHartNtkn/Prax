@@ -24,7 +24,6 @@ import qualified Data.Map.Strict as Map
 import           Prax.Db (Val (..), exists)
 import           Prax.Query (Condition (..), groundCondition)
 import           Prax.Types
-import           Prax.Engine (readView)
 import           Prax.Derive (Axiom, axiom)
 
 -- | Instantiate a desire template for its owner (grounds @Owner@).

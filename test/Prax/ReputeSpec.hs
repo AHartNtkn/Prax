@@ -9,16 +9,16 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, possibleActions, readView)
+import           Prax.Engine (definePractices, performOutcome, possibleActions, setAxioms)
 import           Prax.Derive (Axiom (..))
 import           Prax.Repute
 
 -- The tale: kai is believed (variously) to have kicked the dog. Standing is
 -- derived from the evidence, defeated by forgiveness, and notorious at two.
 world :: PraxState
-world = (foldl (flip performOutcome) base setup)
-          { axioms = [ standingUnless "kicked.Brute.dog" "forgiven.Brute" "brute"
-                     , notoriety "brute" 2 ] }
+world = setAxioms [ standingUnless "kicked.Brute.dog" "forgiven.Brute" "brute"
+                   , notoriety "brute" 2 ]
+                   (foldl (flip performOutcome) base setup)
   where
     base = (definePractices [p] emptyState)
              { characters = map character ["ana", "ben", "kai"] }

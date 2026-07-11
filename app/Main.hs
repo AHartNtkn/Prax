@@ -16,7 +16,7 @@ import           Text.Read (readMaybe)
 
 import           Prax.Db (Bindings, unify, valToString)
 import           Prax.Types
-import           Prax.Engine (performAction, readView)
+import           Prax.Engine (performAction)
 import           Prax.Planner (candidateActions)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Stress

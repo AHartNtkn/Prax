@@ -10,7 +10,8 @@ module Prax.Engine
   ( definePractice
   , definePractices
   , renderText
-  , readView
+  , withDb
+  , setAxioms
   , possibleActions
   , performAction
   , performOutcome
@@ -23,15 +24,14 @@ import qualified Data.Map.Strict as Map
 import           Prax.Db
 import           Prax.Query (query, groundCondition)
 import           Prax.Types
-import           Prax.Derive (closure)
+import           Prax.Derive (Axiom, closure)
 
 -- | Register a practice and insert its static @dataFacts@ under
 -- @practiceData.<id>.@.
 definePractice :: Practice -> PraxState -> PraxState
-definePractice p st = st
-  { practiceDefs = Map.insert (practiceId p) p (practiceDefs st)
-  , db = insertAll (map (prefix ++) (dataFacts p)) (db st)
-  }
+definePractice p st =
+  (withDb (insertAll (map (prefix ++) (dataFacts p))) st)
+    { practiceDefs = Map.insert (practiceId p) p (practiceDefs st) }
   where prefix = "practiceData." ++ practiceId p ++ "."
 
 -- | Register several practices in order.
@@ -51,15 +51,25 @@ renderText template b = go template
         _ -> '[' : go rest      -- unterminated '['; emit literally
     go (c : rest) = c : go rest
 
--- | The world as reads see it: the base DB forward-chained under the state's
--- domain 'axioms' (the derived closure). With no axioms this is exactly @db st@,
--- so un-axiomatised worlds are unaffected and pay nothing. A contradiction (@⊥@)
--- is surfaced as a queryable @contradiction@ fact over the (still-consistent) base
--- rather than crashing, so a world or drama-manager can react to it.
-readView :: PraxState -> Db
-readView st = case closure (axioms st) (db st) of
-  Right closed           -> closed
-  Left _                 -> insert "contradiction" (db st)
+-- | Rebuild the cached closed view: the base DB forward-chained under the
+-- state's domain 'axioms' (the derived closure). With no axioms this is
+-- exactly @db st@, so un-axiomatised worlds are unaffected and pay nothing.
+-- A contradiction (@⊥@) is surfaced as a queryable @contradiction@ fact over
+-- the (still-consistent) base rather than crashing, so a world or
+-- drama-manager can react to it. Internal: every helper that changes 'db' or
+-- 'axioms' must end here.
+reclose :: PraxState -> PraxState
+reclose st = st { readView = case closure (axioms st) (db st) of
+                               Right closed -> closed
+                               Left _       -> insert "contradiction" (db st) }
+
+-- | The only sanctioned way to change the fact base of a built state.
+withDb :: (Db -> Db) -> PraxState -> PraxState
+withDb f st = reclose st { db = f (db st) }
+
+-- | The only sanctioned way to change the axioms of a built state.
+setAxioms :: [Axiom] -> PraxState -> PraxState
+setAxioms axs st = reclose st { axioms = axs }
 
 -- | All actions the named actor can currently perform, across every
 -- instantiated practice and every satisfying binding of each action. Conditions
@@ -104,9 +114,9 @@ groundOutcome (ForEach conds outs) b =
 
 -- | Apply a single, already-grounded outcome to the state.
 performOutcome :: Outcome -> PraxState -> PraxState
-performOutcome (Delete s) st = st { db = retract s (db st) }
+performOutcome (Delete s) st = withDb (retract s) st
 performOutcome (Insert s) st =
-  let st' = st { db = insert s (db st) }
+  let st' = withDb (insert s) st
   in case spawnedInstance s st of
        Just (def, roleVals) ->
          let roleBindings = Map.fromList (zip (roles def) (map VStr roleVals))

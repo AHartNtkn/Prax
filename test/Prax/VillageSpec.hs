@@ -8,7 +8,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (Val (..), exists, dbToSentences)
 import           Prax.Query (Condition (..), groundCondition, query)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction, performOutcome, readView)
+import           Prax.Engine (possibleActions, performAction, performOutcome)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Core (adjustScore)
 import           Prax.Planner (predictMove, pickAction)

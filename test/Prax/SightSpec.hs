@@ -8,7 +8,7 @@ import           Prax.Db (Val (..), exists)
 import           Prax.Query (Condition (..), groundCondition, query)
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome, possibleActions,
-                               performAction, readView)
+                               performAction)
 import           Prax.TypeCheck (typeCheck)
 import           Prax.Sight
 

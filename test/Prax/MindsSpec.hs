@@ -7,7 +7,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, readView, possibleActions, performAction)
+import           Prax.Engine (definePractices, performOutcome, setAxioms, possibleActions, performAction)
 import           Prax.Minds
 import           Prax.Planner (predictMove)
 import           Prax.Rumor (gossip)
@@ -21,9 +21,8 @@ vocab =
   ]
 
 world :: PraxState
-world = (foldl (flip performOutcome) base setup)
-          { axioms  = [ professed, conventional ]
-          , desires = vocab }
+world = (setAxioms [ professed, conventional ] (foldl (flip performOutcome) base setup))
+          { desires = vocab }
   where
     base = (definePractices [] emptyState)
              { characters = [ character "ida"

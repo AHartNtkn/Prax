@@ -29,7 +29,7 @@ module Prax.Worlds.Village
 
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome)
+import           Prax.Engine (definePractices, performOutcome, setAxioms)
 import           Prax.Core (coreLib, adjustScore)
 import           Prax.Derive (Axiom, axiom)
 import           Prax.Project
@@ -220,9 +220,9 @@ villageAxioms =
   ]
 
 villageWorld :: PraxState
-villageWorld = (foldl (flip performOutcome) base (setup ++ personaFacts))
-  { axioms = villageAxioms
-  , desires = [ earnBreadPursuit, spitesCarol ] ++ personaVocabulary [honest]
+villageWorld =
+  (setAxioms villageAxioms (foldl (flip performOutcome) base (setup ++ personaFacts)))
+  { desires = [ earnBreadPursuit, spitesCarol ] ++ personaVocabulary [honest]
     -- an epistemic prediction scope: you credit another's predicted move only
     -- if you're with them now, or you sighted them within the last 2 ticks —
     -- one tick per round, and two rounds is roughly a square<->mill round
