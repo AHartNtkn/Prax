@@ -36,7 +36,6 @@ module Prax.Db
   , childKeys
   , exists
   , pathNames
-  , parseNames
   , tokens
   ) where
 
@@ -184,6 +183,15 @@ unifyAll sentences db = foldl step [Map.empty] sentences
 -- | 'ground' at the token level: substitute bindings into already-split
 -- tokens. 'Prax.Derive.closure' grounds each axiom head once per binding —
 -- tokenizing the head template once per closure, not once per binding.
+--
+-- __Invariant:__ a substituted value replaces its token as a single segment —
+-- it is never re-split on @.@/@!@, unlike 'ground' followed by re-tokenizing.
+-- This is safe only because trie keys (what 'unify' ever binds a variable to)
+-- cannot themselves contain @.@ or @!@ (those characters are the tokenizer's
+-- own segment separators); a caller feeding this output straight to
+-- 'insertToks' (as 'Prax.Derive.closure' does) therefore relies on every
+-- bound value being separator-free — true for all unify-produced bindings,
+-- and required of any literal an axiom body binds via @Eq@.
 groundTokens :: [(String, Maybe Char)] -> Bindings -> [(String, Maybe Char)]
 groundTokens toks b = [ (value n, op) | (n, op) <- toks ]
   where

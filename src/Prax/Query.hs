@@ -126,9 +126,9 @@ queryWith inSub db conds b0 = foldl step [b0] conds
   where
     step matches cond = case cond of
       -- parse the pattern once per condition, not once per binding
-      Match s -> let names = parseNames s
+      Match s -> let names = pathNames s
                  in concatMap (unifyNames names db) matches
-      Not s   -> let names = parseNames s
+      Not s   -> let names = pathNames s
                  in concatMap (\b -> [ b | null (unifyNames names db b) ]) matches
       _       -> concatMap (evalCond inSub db cond) matches
 

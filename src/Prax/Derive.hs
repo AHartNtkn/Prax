@@ -76,6 +76,9 @@ closure axs db0 = go db0 db0
     -- re-derived. @delta@ starts as the whole base, then shrinks to just what is
     -- new. Terminates when a round produces no fresh fact.
     go model delta =
+      -- 'groundTokens' never re-splits a bound value on ./! (see its haddock
+      -- invariant in Prax.Db) — relies on axiom heads binding only
+      -- separator-free values, which holds for every unify-produced binding.
       let heads = [ groundTokens h b | (body, hs) <- rules
                                      , b <- deltaJoin model delta body, h <- hs ]
           fresh = nub (filter (not . entailed model) heads)
