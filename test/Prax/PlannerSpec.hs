@@ -71,16 +71,11 @@ tests = testGroup "Prax.Planner"
       all (== 0.0) others @?= True
 
   , testCase "lookahead: walking up is worthless immediately but valuable at depth 1" $ do
-      -- Before walking up, beth's only move is to walk up. That move yields no
-      -- immediate utility, but at depth 1 the 0.9-discounted future cider order
-      -- makes it worth 9.
-      case pickAction 0 barState bethWantsCider of
-        Nothing -> assertBool "expected a walk-up action" False
-        Just walk -> do
-          gaLabel walk @?= "beth: Walk up to bar"
-          let afterWalk = performAction barState walk
-          worldValue 0 afterWalk bethWantsCider @?= 0.0
-          worldValue 1 afterWalk bethWantsCider @?= 9.0
+      -- score(walk) at depth 1 = eval(after walk = 0) + others (none believed: 0)
+      --                        + 0.9 × best-next (order → 10) = 9.0   [§4 arithmetic]
+      let scored = scoreActions 1 barState bethWantsCider
+      lookup "beth: Walk up to bar" [ (gaLabel a, s) | (a, s) <- scored ] @?= Just 9.0
+      fmap gaLabel (pickAction 1 barState bethWantsCider) @?= Just "beth: Walk up to bar"
 
   , testCase "a universally-quantified desire drives the planner to complete it" $ do
       -- A host who wants EVERY guest to have a drink (a ∀ desire), where one guest
@@ -107,4 +102,152 @@ tests = testGroup "Prax.Planner"
                      (head [ ga | ga <- possibleActions st "host"
                                 , gaLabel ga == "host: pour a drink for b" ])
       evaluate served (charWants host) @?= 10   -- now the universal holds
+
+  , testCase "predictMove is belief-relative: no belief, no prediction" $ do
+      -- ada (a fresh character) holds no motive-beliefs about beth
+      predictMove walkedUp (character "ada") bethWantsCider @?= Nothing
+
+  , testCase "predictMove with a believed motive is the mover's motivated best" $ do
+      let vocab = [ Desire "cider-craving"
+                      (Want [ Match "practice.tendBar.Bartender.customer.Owner!order!cider" ] 10) ]
+          beth' = (character "beth") { charDesires = ["cider-craving"] }
+          st    = (walkedUp { desires = vocab
+                            , characters = [ beth', character "ada" ] })
+          st'   = performOutcome
+                    (Insert "ada.believes.desires.beth.cider-craving.heard.gossip") st
+      fmap gaLabel (predictMove st' (character "ada") beth') @?= Just "beth: Order cider"
+      -- and motivated-only: a believed mind with nothing to gain predicts still
+      let satisfied = performOutcome
+                        (Insert "practice.tendBar.ada.customer.beth!order!cider") st'
+      predictMove satisfied (character "ada") beth' @?= Nothing
+
+  , testCase "a false belief predicts a move the mover would never take" $ do
+      -- ada believes beth craves cider; beth actually wants nothing.
+      let vocab = [ Desire "cider-craving"
+                      (Want [ Match "practice.tendBar.Bartender.customer.Owner!order!cider" ] 10) ]
+          plainBeth = character "beth"
+          st  = walkedUp { desires = vocab, characters = [ plainBeth, character "ada" ] }
+          st' = performOutcome
+                  (Insert "ada.believes.desires.beth.cider-craving.presumed") st
+      fmap gaLabel (predictMove st' (character "ada") plainBeth) @?= Just "beth: Order cider"
+      pickAction 0 st' plainBeth @?= pickAction 0 st plainBeth   -- beth herself is unmoved
+
+  , testCase "the round-walk credits a predicted enabling world (secret coordination)" $ do
+      -- Conspirators: 'inge' will grab the relic once the gate is open (her
+      -- desire is in the vocabulary); 'olaf' wants the relic grabbed and can
+      -- open the gate. Olaf takes the enabling move IFF he is in on her motive.
+      let vocab = [ Desire "covet-relic" (Want [ Match "grabbed.Owner" ] 10) ]
+          grabP = practice
+            { practiceId = "heist", roles = ["R"]
+            , actions =
+                [ action "[Actor]: grab the relic"
+                    [ Match "gate.open", Not "grabbed.inge", Eq "Actor" "inge" ]
+                    [ Insert "grabbed.inge" ]
+                , action "[Actor]: open the gate"
+                    [ Eq "Actor" "olaf", Not "gate.open" ]
+                    [ Insert "gate.open" ]
+                , action "[Actor]: Wait about"
+                    [] [] ]
+            }
+          inge = (character "inge") { charDesires = ["covet-relic"] }
+          olaf = (character "olaf") { charWants = [ Want [ Match "grabbed.inge" ] 6 ] }
+          st0  = foldl (flip performOutcome)
+                    ((definePractices [grabP] emptyState)
+                       { characters = [ olaf, inge ], desires = vocab })
+                    [ Insert "practice.heist.here" ]
+          told = performOutcome
+                   (Insert "olaf.believes.desires.inge.covet-relic.heard.inge") st0
+      fmap gaLabel (pickAction 1 told olaf) @?= Just "olaf: open the gate"
+      assertBool "not in on it: opening the gate gains him nothing"
+        (fmap gaLabel (pickAction 1 st0 olaf) /= Just "olaf: open the gate")
+
+  , testCase "the round is sequential: the second prediction sees the first's effects" $ do
+      -- alice signals; bob (believed to want "relayed") relays once "signaled"
+      -- holds; carol (believed to want "delivered") delivers once "relayed"
+      -- holds — carol's precondition is only satisfiable because bob's move
+      -- (the FIRST prediction in the round) was actually applied to the state
+      -- the SECOND prediction sees. alice's own want is "delivered". The whole
+      -- chain fires in one imagined round only when alice holds both
+      -- motive-beliefs.
+      let vocab = [ Desire "relay-desire"   (Want [ Match "relayed"   ] 10)
+                  , Desire "deliver-desire" (Want [ Match "delivered" ] 10) ]
+          chainP = practice
+            { practiceId = "chain", roles = ["R"]
+            , actions =
+                [ action "[Actor]: signal"
+                    [ Eq "Actor" "alice", Not "signaled" ]
+                    [ Insert "signaled" ]
+                , action "[Actor]: relay"
+                    [ Eq "Actor" "bob", Match "signaled", Not "relayed" ]
+                    [ Insert "relayed" ]
+                , action "[Actor]: deliver"
+                    [ Eq "Actor" "carol", Match "relayed", Not "delivered" ]
+                    [ Insert "delivered" ]
+                , action "[Actor]: Wait about"
+                    [] [] ]
+            }
+          alice = (character "alice") { charWants = [ Want [ Match "delivered" ] 10 ] }
+          bob   = character "bob"
+          carol = character "carol"
+          st0   = foldl (flip performOutcome)
+                    ((definePractices [chainP] emptyState)
+                       { characters = [ alice, bob, carol ], desires = vocab })
+                    [ Insert "practice.chain.here" ]
+          believeBoth = foldl (flip performOutcome) st0
+            [ Insert "alice.believes.desires.bob.relay-desire.heard.gossip"
+            , Insert "alice.believes.desires.carol.deliver-desire.heard.gossip" ]
+          believeBobOnly = performOutcome
+            (Insert "alice.believes.desires.bob.relay-desire.heard.gossip") st0
+          scoreOf lbl st = lookup lbl [ (gaLabel a, s) | (a, s) <- scoreActions 1 st alice ]
+      -- both beliefs held: bob relays (predicted first), then carol delivers
+      -- (predicted second, seeing bob's "relayed") — the chain completes and
+      -- "signal" is credited for opening it.
+      scoreOf "alice: signal" believeBoth @?= Just 14.0
+      fmap gaLabel (pickAction 1 believeBoth alice) @?= Just "alice: signal"
+      -- only bob's motive believed: bob relays, but carol is never predicted
+      -- (no belief) — delivery never happens, so signal earns no credit.
+      scoreOf "alice: signal" believeBobOnly @?= Just 0.0
+      -- neither belief: nobody is predicted to move at all.
+      scoreOf "alice: signal" st0 @?= Just 0.0
+
+  , testCase "prediction scope gates participation" $ do
+      -- Reuse the heist: with a scope template requiring a shared room, and
+      -- the conspirators placed in different rooms, olaf no longer credits
+      -- inge's move even though he holds the motive-belief. Once they share a
+      -- room the coordination fires exactly as in the default (empty, i.e.
+      -- everyone-in-scope) case exercised above.
+      let vocab = [ Desire "covet-relic" (Want [ Match "grabbed.Owner" ] 10) ]
+          grabP = practice
+            { practiceId = "heist", roles = ["R"]
+            , actions =
+                [ action "[Actor]: grab the relic"
+                    [ Match "gate.open", Not "grabbed.inge", Eq "Actor" "inge" ]
+                    [ Insert "grabbed.inge" ]
+                , action "[Actor]: open the gate"
+                    [ Eq "Actor" "olaf", Not "gate.open" ]
+                    [ Insert "gate.open" ]
+                , action "[Actor]: Wait about"
+                    [] [] ]
+            }
+          inge = (character "inge") { charDesires = ["covet-relic"] }
+          olaf = (character "olaf") { charWants = [ Want [ Match "grabbed.inge" ] 6 ] }
+          sharedRoom = [ Match "at.Actor!Room", Match "at.Witness!Room" ]
+          st0  = foldl (flip performOutcome)
+                    ((definePractices [grabP] emptyState)
+                       { characters = [ olaf, inge ], desires = vocab
+                       , predictionScope = sharedRoom })
+                    [ Insert "practice.heist.here" ]
+          told = performOutcome
+                   (Insert "olaf.believes.desires.inge.covet-relic.heard.inge") st0
+          apart = foldl (flip performOutcome) told
+                    [ Insert "at.olaf!gatehouse", Insert "at.inge!vault" ]
+          together = foldl (flip performOutcome) told
+                    [ Insert "at.olaf!vault", Insert "at.inge!vault" ]
+      -- apart: the motive-belief is held, but inge is out of scope — no
+      -- credit, so olaf does not bother opening the gate for her.
+      assertBool "out of scope: opening the gate gains him nothing"
+        (fmap gaLabel (pickAction 1 apart olaf) /= Just "olaf: open the gate")
+      -- together: back in scope, the coordination fires as in the default
+      -- (empty-scope, everyone-in-scope) case above.
+      fmap gaLabel (pickAction 1 together olaf) @?= Just "olaf: open the gate"
   ]
