@@ -69,8 +69,13 @@ conservatively from authored vocabulary alone, once per world:
     positive `Match`, or `Insert` against an `Absent`/`Not` pattern.
   - Conservative TRUE wherever analysis is uncertain: `Call`/`ForEach`/`Calc`-dependent
     outcomes, `Subquery`/`Cmp` conditions, variable-heavy patterns. The filter may only ever
-    say "cannot improve" when that is provable; unsound skips are impossible by
-    construction.
+    say "cannot improve" when that is provable. One stated invariant carries the analysis
+    (found in implementation: without it, pattern unification anchored on nothing makes
+    every pair "unifiable" through variable slots and the filter is provably useless):
+    **entity names never collide with predicate-name literals** — may-unification requires
+    at least one aligned shared literal segment. This is an assumption about authored
+    worlds, documented in the module header, not a construction guarantee; the golden
+    decision-sequence tests would surface a violation as a dropped prediction.
 - The round-walk (and `predictMove`) skips a (predictor, mover) pair outright when **no
   action template available to the mover** (its practices' templates, respecting
   `charBoundTo`) may-improve **any** desire in the believed model — before any grounding,

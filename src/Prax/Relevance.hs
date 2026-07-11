@@ -4,13 +4,21 @@
 -- to skip predictions that are provably fruitless: a believed model none of
 -- whose desires any available action can improve admits no motivated move.
 --
--- The analysis is __conservative by construction__: it may only ever answer
--- "not improvable" when that is provable from the authored patterns. Anything
--- uncertain — outcomes behind unresolvable 'Call's, wants over facts an axiom
--- may derive, wants gated by 'Subquery'\/'Count'\/'Calc' — counts as
--- improvable. An unsound "not improvable" is a planner behavior change and a
--- defect; a spurious "improvable" merely costs the evaluation we would have
--- done anyway.
+-- The analysis is __conservative__: it answers "not improvable" only when
+-- that is provable from the authored patterns. Anything uncertain — outcomes
+-- behind unresolvable 'Call's, wants over facts an axiom may derive, wants
+-- gated by 'Subquery'\/'Count'\/'Calc' — counts as improvable. An unsound
+-- "not improvable" is a planner behavior change and a defect; a spurious
+-- "improvable" merely costs the evaluation we would have done anyway.
+--
+-- One stated invariant carries the conservativity (an assumption about
+-- authored worlds, not a construction guarantee): __entity names never
+-- collide with predicate-name literals__ — no character, place, or value is
+-- named @lied@, @believes@, @regards@, and so on. 'mayUnify' spends it in
+-- exactly one place (the anchor below). A world that named a character after
+-- a predicate segment would void the analysis; every shipped world satisfies
+-- the invariant, and the golden decision-sequence tests would surface a
+-- violation as a dropped prediction.
 module Prax.Relevance
   ( mayUnify
   , improvableDesires
@@ -33,10 +41,11 @@ import           Prax.Types
 -- variables carries no evidence the two patterns denote the same predicate
 -- at all (any string could occupy a variable slot, including another
 -- pattern's unrelated literal, e.g. a role variable coincidentally lining up
--- against someone else's "lied"). Requiring an anchor only ever removes
--- coincidental, evidence-free matches; every genuine correspondence between
--- an authored effect and a want (Match's own literal path segments) shares
--- at least one literal, so this never introduces a false negative.
+-- against someone else's "lied"). Discarding such evidence-free overlaps is
+-- where the module header's entity-names-vs-predicate-literals invariant is
+-- spent: under it, a genuine correspondence between an authored effect and a
+-- want always shares an aligned literal, so the anchor removes only
+-- coincidence.
 mayUnify :: String -> String -> Bool
 mayUnify a b = anchored && and (zipWith seg (pathNames a) (pathNames b))
   where
