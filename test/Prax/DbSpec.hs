@@ -80,6 +80,22 @@ tests = testGroup "Prax.Db"
         ground "all.Dancers" (Map.fromList [("Dancers", VSet [["a"], ["b"]])])
           @?= "all.<Set(2)>"
     ]
+
+  , testGroup "unifyNames"
+    [ testCase "unifyNames is unify with the parse hoisted out" $ do
+        let db = insertAll ["at.bob!square", "at.eve!mill"] emptyDb
+        unifyNames (pathNames "at.Who!Where") db Map.empty
+          @?= unify "at.Who!Where" db Map.empty
+    ]
+
+  , testGroup "groundTokens"
+    [ testCase "groundTokens substitutes bindings segment-wise, preserving operators" $ do
+        let toks = tokens "at.Who!Where"
+            b    = Map.fromList [("Who", VStr "bob"), ("Where", VStr "square")]
+        tokensToSentence (groundTokens toks b) @?= ground "at.Who!Where" b
+        tokensToSentence (groundTokens (tokens "plain.path") Map.empty)
+          @?= "plain.path"
+    ]
   ]
 
 -- Deterministic ordering for value lists (Val has no Ord instance).

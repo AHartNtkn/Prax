@@ -22,16 +22,21 @@ module Prax.Db
   , valToString
   , isVariable
   , insert
+  , insertToks
   , insertAll
   , retract
   , unify
+  , unifyNames
   , unifyAll
   , ground
+  , groundTokens
+  , tokensToSentence
   , dbToSentences
   , dbToLabeledSentences
   , childKeys
   , exists
   , pathNames
+  , parseNames
   , tokens
   ) where
 
@@ -143,13 +148,12 @@ retract = retractNames . parseNames
         Nothing    -> Db e m
         Just child -> Db e (Map.insert n (retractNames ns child) m)
 
--- | Unify one sentence against the database under existing @bindings@, yielding
--- every consistent extension. An unbound uppercase segment branches over all
--- keys of the current subtree (the list-monad nondeterminism at the core of
--- pattern matching); a bound variable or constant descends deterministically.
-unify :: String -> Db -> Bindings -> [Bindings]
-unify sentence db0 bindings =
-  map snd (foldl step [(db0, bindings)] (parseNames sentence))
+-- | 'unify' with the sentence already split into names — for callers that
+-- evaluate one pattern against many binding sets ('Prax.Query' hoists the
+-- parse out of that loop).
+unifyNames :: [String] -> Db -> Bindings -> [Bindings]
+unifyNames names db0 bindings =
+  map snd (foldl step [(db0, bindings)] names)
   where
     step worlds part = concatMap (descend part) worlds
     descend part (Db _ m, b)
@@ -165,19 +169,36 @@ unify sentence db0 bindings =
             Just sub -> [(sub, b)]
             Nothing  -> []
 
+-- | Unify one sentence against the database under existing @bindings@, yielding
+-- every consistent extension. An unbound uppercase segment branches over all
+-- keys of the current subtree (the list-monad nondeterminism at the core of
+-- pattern matching); a bound variable or constant descends deterministically.
+unify :: String -> Db -> Bindings -> [Bindings]
+unify sentence = unifyNames (parseNames sentence)
+
 -- | Conjunctively unify a list of sentences, threading bindings through.
 unifyAll :: [String] -> Db -> [Bindings]
 unifyAll sentences db = foldl step [Map.empty] sentences
   where step bss s = concatMap (unify s db) bss
 
--- | Substitute bound variables back into a sentence, preserving @.@/@!@.
-ground :: String -> Bindings -> String
-ground sentence b = concatMap emit (tokens sentence)
+-- | 'ground' at the token level: substitute bindings into already-split
+-- tokens. 'Prax.Derive.closure' grounds each axiom head once per binding —
+-- tokenizing the head template once per closure, not once per binding.
+groundTokens :: [(String, Maybe Char)] -> Bindings -> [(String, Maybe Char)]
+groundTokens toks b = [ (value n, op) | (n, op) <- toks ]
   where
-    emit (name, mop) = value name ++ maybe "" pure mop
     value name
       | isVariable name = maybe name valToString (Map.lookup name b)
       | otherwise       = name
+
+-- | Re-emit tokens as a sentence (inverse of 'tokens' up to trimming).
+tokensToSentence :: [(String, Maybe Char)] -> String
+tokensToSentence = concatMap emit
+  where emit (name, mop) = name ++ maybe "" pure mop
+
+-- | Substitute bound variables back into a sentence, preserving @.@/@!@.
+ground :: String -> Bindings -> String
+ground sentence b = tokensToSentence (groundTokens (tokens sentence) b)
 
 -- | The keys directly beneath the node at a (constant) dotted path, or @[]@ if
 -- the path is absent. Used to enumerate instantiated practices.

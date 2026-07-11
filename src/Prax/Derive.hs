@@ -37,7 +37,7 @@ import           Data.List (nub)
 import           Data.Maybe (mapMaybe)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Db, insert, insertAll, emptyDb, ground, dbToSentences)
+import           Prax.Db (Db, insertToks, emptyDb, tokens, groundTokens, tokensToSentence, dbToSentences)
 import           Prax.Query (Condition (..), query)
 import           Prax.EL (meet, leq)
 
@@ -68,24 +68,26 @@ closure :: [Axiom] -> Db -> Either Contradiction Db
 closure []  db0 = Right db0
 closure axs db0 = go db0 db0
   where
-    rules = axs ++ mapMaybe liftObliged axs
+    rules = [ (body, map tokens hs)
+            | Axiom body hs <- axs ++ mapMaybe liftObliged axs ]
 
     -- Semi-naive evaluation: each round fires the rules using at least one fact
     -- from @delta@ (the facts derived last round), so nothing already known is
     -- re-derived. @delta@ starts as the whole base, then shrinks to just what is
     -- new. Terminates when a round produces no fresh fact.
     go model delta =
-      let heads = [ ground h b | Axiom body hs <- rules
-                               , b <- deltaJoin model delta body, h <- hs ]
+      let heads = [ groundTokens h b | (body, hs) <- rules
+                                     , b <- deltaJoin model delta body, h <- hs ]
           fresh = nub (filter (not . entailed model) heads)
       in if null fresh
            then Right model
            else case foldM meetOne model fresh of
                   Left c  -> Left c
-                  Right m -> go m (insertAll fresh emptyDb)
+                  Right m -> go m (foldl (flip insertToks) emptyDb fresh)
 
-    meetOne m h = maybe (Left (Contradiction h)) Right (meet m (insert h emptyDb))
-    entailed m h = leq m (insert h emptyDb)     -- model already has h (labels included)
+    meetOne m h = maybe (Left (Contradiction (tokensToSentence h))) Right
+                        (meet m (insertToks h emptyDb))
+    entailed m h = leq m (insertToks h emptyDb)
 
     -- Bindings of @body@ in which at least one 'Match' atom is satisfied by a
     -- @delta@ fact (the others by the full model). With @delta@ = the base this is
