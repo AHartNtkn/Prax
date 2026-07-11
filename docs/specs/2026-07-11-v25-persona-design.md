@@ -1,124 +1,143 @@
-# v25 — Persona (`Prax.Persona`): traits as volition
+# v25 — Persona (`Prax.Persona`): traits as conduct, not goals
 
-Backlog item **Personality → volition** (`docs/LEDGER.md`, "Sandbox extension backlog", Tier 2),
-and the honest closure of v18's recorded gap: *"traits are NOT compiled to behaviour: no source
-gives a trait→desire mapping, so inventing one would be a heuristic."* The objection dissolves
-the right way — the mapping becomes **authored world vocabulary**, per trait, per world, built
-on `Prax.Minds`: a trait is a *named bundle of vocabulary desires*, and which desires a trait
-bundles is as much authored content as a practice's affordances.
+Backlog item **Personality → volition** (Tier 2), and the honest closure of v18's recorded gap
+("traits are NOT compiled to behaviour"). This spec was **rewritten after user review** — see
+Design history — from a goal-bundle model to a conduct-valuation model.
 
-The load-bearing mechanism was verified against the live engine before this spec was written:
-one **transparency axiom** (a three-way join over `trait.M.T` ∧ `traitDesire.T.D` ∧
-`character.P`) derives presumed motive-beliefs across the cast, `predictMove` fires from
-temperament alone (a stranger anticipates the industrious character's work having never seen
-it), absent trait facts derive nothing, and striking the trait fact dissolves the presumption.
+## Design history (why the first draft was wrong)
 
-## 1. The model
+- **Rejected: traits as goal-bundles** (first draft: `industrious` bundles `pursues-earnBread`).
+  Pressed, the layer added nothing real: a bearer behaves identically to a character assigned
+  the desires directly; the trait fact is just a fact; transparency ≈ auto-professing the
+  bundle. Authoring sugar and one presumption variant — not a round.
+- **Adopted: traits as conduct-valuations** (user's reframe, CK3-inspired, minus the stress
+  bookkeeping): a trait says how you're *willing to act*, orthogonal to what you're after. A
+  character can do anything, but **trait-contrary conduct carries negative utility** — costs,
+  not prohibitions, in keeping with the soft planner (hard tiers stay banked, separate). Traits
+  make kinds of action more or less likely; goal-bundles are demoted to what they always were —
+  plain desires needing no trait.
 
-A **trait** is three things at once, from one declaration:
+## 1. The mechanism: valuations over conduct-records
 
-1. **Volition** — its bundled desires join the world vocabulary, and a bearer carries their
-   names in `charDesires` (so the bearer *acts* on them: `selfWants`).
-2. **A fact** — `trait.<who>.<name>`, queryable by conditions and axioms like any world state
-   (v18's declarative traits, unchanged).
-3. **Legible temperament** — traits are *visible* folk psychology: everyone can see what sort
-   of person you are, so everyone presumes the bundled motives. One axiom serves every trait,
-   because the bundle itself is data (`traitDesire.<trait>.<desire>` facts).
+The engine evaluates *states*, not actions (Versu's apply-and-evaluate — unchanged). So an
+action's conduct-cost is expressed the way every cost in this system is: **the action leaves a
+record, and a desire values the record**. A trait is a named bundle of (mostly negative)
+desires over the bearer's *own conduct-records*:
 
-The contrast with v24 is the point, and becomes a shipped demo: **bob's pursuit had to be
-learned by observation** (someone watched him sweep); **a trait-borne disposition is presumed
-from temperament alone**. Between them: `professed`/`conventional` (v23). Four presumption
-sources, one belief shape, one prediction machinery.
-
-**Hidden dispositions need no machinery**: a trait *is* visible temperament by definition here;
-a secret inclination is just a plain desire that is neither trait-borne, professed, nor
-conventional — already expressible since v23.
-
-## 2. API (`Prax.Persona`)
-
-```haskell
-data Trait = Trait
-  { traitName    :: String     -- a single path segment (loud error otherwise)
-  , traitDesires :: [Desire]   -- the bundle (names should be distinctive; they join the
-  }                            --  world vocabulary as-is)
-
--- | All bundled desires of a trait vocabulary, for PraxState's `desires`.
---   Loud error on duplicate desire names across traits (a name is identity).
-personaVocabulary :: [Trait] -> [Desire]
-
--- | A character bears a trait: its desire names join their charDesires.
-bearing :: Trait -> Character -> Character
-
--- | Setup facts for a roster: trait.<who>.<name> per bearing, plus the
---   traitDesire.<trait>.<desire> data facts (once per trait).
-personaSetup :: [Trait] -> [(String, [Trait])] -> [Outcome]
-
--- | Temperament is legible: one axiom for every trait.
---   trait.M.T ∧ traitDesire.T.D ∧ character.P ⇒ P.believes.desires.M.D.presumed
-transparent :: Axiom
-
--- | The cast generator: characters from a roster of (name, traits), with the
---   setup facts to match — the v18 sketch, generating volition. Deterministic
---   assembly (sampling/randomized casts belong to the stress tooling, banked).
-cast :: [Trait] -> [(String, [Trait])] -> ([Character], [Outcome])
--- cast vocab roster = ( [ foldr bearing (character n) ts | (n, ts) <- roster ]
---                     , personaSetup vocab roster )   -- (plus character.<n> facts)
+```
+honest = Trait "honest"
+  [ Desire "clean-conscience"
+      (Want [ Match "lied.Owner.H.stole.C.loaf" ] (-6)) ]
+      -- −6 per lie told (per hearer × per fabricated subject), matching the
+      -- village's lie-record shape; the weight is authored: what a lie costs
+      -- HER, netted against whatever the lie would buy.
 ```
 
-Worlds using personas add `personaVocabulary traits` to `desires`, `transparent` to `axioms`,
-and fold `personaSetup`/`cast` into world assembly. `cast`/`personaSetup` emit `character.<n>`
-facts for roster members (the axiom quantifies over them); the world asserts them for any
-non-roster cast it wants inside the presumption audience. **No duplicate desire names may reach
-`desires`**: `personaVocabulary` guards within the trait vocabulary, and a desire that enters
-through a trait bundle must not ALSO be listed standalone — a duplicate entry would double-count
-the believed model's utility.
+- **Deterrence at depth 0**: the record appears in the very state the planner evaluates
+  (the concealment-want pattern, already proven in v22/v24). Each *additional* lie adds its
+  own record binding, so the marginal lie always costs — a conscience with a memory, not a
+  one-time fall from grace.
+- **Prediction for free**: a *believed* conscience nets against believed motives inside
+  `predictMove` — someone who knows both gale's spite and her honesty predicts she declines
+  the whisper. Temperament changes what others expect you to do, not just what you do.
+- Trait wants are **world-authored against world record shapes**, the same discipline as all
+  vocabulary (the trait lives with the world that defines its conduct-records).
 
-## 3. Demo: the village gains finn — and a legibility contrast
+## 2. Conduct-records: the `lied` deed-record
 
-- **Trait vocabulary**: `industrious = Trait "industrious" [ earnBreadPursuit ]` — the v24
-  synergy cashed: a trait bundles a *project disposition*, so temperament explains undertaking.
-  The pursuit now enters the village vocabulary **through the bundle**: the standalone
-  `desires = [earnBreadPursuit]` entry from v24 is replaced by
-  `desires = personaVocabulary [industrious]` (same one desire, no duplicate). bob keeps his
-  `charDesires = ["pursues-earnBread"]` **without** the trait fact — his disposition is
-  unheralded, which is exactly what makes the legibility contrast below possible.
-- **finn joins via the generator**: `cast` builds him bearing `industrious`, starting at the
-  mill. He undertakes his own `earnBread` instance (one per owner — two honest bakers don't
-  collide) and works it exactly as bob does.
-- **The legibility contrast, as tests**: from t=0, *before finn has done anything*, everyone
-  presumes his industry (`…presumed` in the view) and `predictMove` anticipates his next stage
-  once one is available — **temperament read at a glance**. bob, whose disposition is a plain
-  `charDesires` entry with no trait fact, still requires the v24 observation chain (the
-  witnessed sweep) before anyone can predict him. Same machinery, two epistemics, both honest.
-- The dormancy story composes: finn's presumed pursuit predicts nothing until he undertakes
-  (the believed model gains from no available move) — temperament tells you *what he's like*,
-  not *what he's doing*, until he's doing it.
+Conduct-valuation requires conduct to leave traces, and mostly it doesn't yet — the lie's only
+current trace (`.heard.<liar>` in the hearer) is indistinguishable from truthful gossip. So:
 
-## 4. Tests (TDD)
+- **`Prax.Deceit.lie` gains one effect**: `Insert ("lied.Actor.Hearer." ++ pat)` — a
+  ground-truth deed-record, `lied.<liar>.<hearer>.<full event>` (e.g.
+  `lied.eve.dana.stole.carol.loaf`). Fixed arity per lie-declaration, so world-authored trait
+  wants count lies exactly (per hearer × per event).
+- **This is the banked ground-truth/exculpation item arriving through the front door**: the
+  same records that make conscience expressible make frame-ups disprovable later. This round
+  ships only the `lied` record (the vocabulary conscience needs *now*); theft-records and
+  exculpation actions stay banked, with the pattern established.
+- **Privacy by convention, documented**: the trie is public, so conduct-records are readable
+  by anyone — conscience stays private only because no shipped action or axiom queries
+  `lied.*` except the bearer's own trait want. The same convention `conceal`'s vocabulary
+  already lives by. (Believed/witnessed lying — getting *caught* — is exactly what these
+  records enable later, deliberately not built now.)
+- **Conscience vs shame, expressible and distinct**: a want over `lied.Owner…` is conscience
+  (fires seen or unseen); a want over others' *beliefs* about you is shame. Both authorable;
+  the difference is now explicit rather than muddled.
 
-- `PersonaSpec` (minimal inline fixture, the probe pinned): `bearing` extends `charDesires`;
-  `personaVocabulary` collects bundles and errors loudly on duplicate desire names; trait-name
-  path-segment guard; `personaSetup` emits trait + traitDesire facts; `transparent` derives
-  presumption for bearers only, across the cast, defeasibly (strike the trait fact, the
-  presumption dissolves — while a `.heard`-sourced belief about the same desire would survive);
-  temperament-alone prediction (the probe's `Just`), and dormancy composition (presumed pursuit
-  of an instanceless project predicts `Nothing`); `cast` assembles characters + facts
-  deterministically.
-- `VillageSpec` additions: finn presumed industrious by all from t=0; finn undertakes and works
-  his own instance in free play alongside bob's (both complete; instances distinct); the
-  contrast — before any observation, `predictMove` works for finn (temperament) and not for bob
-  (needs the sweep); the older observation chain for bob still passes unchanged.
-- Regression: full suite green (278 baseline); `prax check` all 7 worlds (the new axiom passes
-  the axiom analysis); `cabal build all` zero warnings; hlint clean. Cast-size effects on drive
-  turn budgets are sanctioned parameters (state + trace), as established.
+## 3. The trait scaffolding (carried over, semantics changed)
 
-## 5. Out of scope (parked deliberately)
+The first draft's machinery survives with its meaning corrected — bundles hold
+conduct-valuations:
 
-- **Script-layer wiring**: v18's `withTraits` still records declarative facts; compiling
-  `castTraits` through a world-supplied Trait vocabulary needs a `compile` signature change and
-  JSON schema thought — banked (the principled mapping now *exists*; the script layer can adopt
-  it in its own round).
-- Randomized/sampled cast generation (a stress-tooling extension); trait acquisition/change at
-  runtime; anti-traits/aversions (negative bundles work today — a `Desire` may carry negative
-  weight — but a designed idiom for them is future work).
-- Hidden temperaments (see §1 — already expressible as plain desires; no machinery wanted).
+```haskell
+data Trait = Trait { traitName :: String        -- single path segment (loud error)
+                   , traitDesires :: [Desire] } -- conduct-valuations, typically negative
+
+personaVocabulary :: [Trait] -> [Desire]        -- loud error on duplicate desire names
+bearing           :: Trait -> Character -> Character   -- charDesires ++ names
+personaSetup      :: [Trait] -> [(String, [Trait])] -> [Outcome]
+                     -- trait.<who>.<name> per bearing; traitDesire.<trait>.<desire> data
+                     -- facts once per trait; character.<who> for roster members
+transparent       :: Axiom
+  -- trait.M.T ∧ traitDesire.T.D ∧ character.P ⇒ P.believes.desires.M.D.presumed
+  -- (temperament is legible: everyone presumes a bearer's conduct-valuations —
+  --  probe-verified through closure and predictMove in the first-draft review)
+
+cast :: [Trait] -> [(String, [Trait])] -> ([Character], [Outcome])
+  -- deterministic roster assembly (sampling stays banked with the stress tooling)
+```
+
+No duplicate desire names may reach `desires` (the guard, plus the world's own care where a
+bundle overlaps standalone entries).
+
+## 4. Demo: gale and eve — same spite, different temperaments
+
+The village gains **gale** (via `cast`), the contrast pair to eve:
+
+- **Same motive, made nameable**: the malice becomes a vocabulary desire —
+  `Desire "spites-carol" (Want [Match "regards.W.carol.thief"] 4)` — carried by BOTH eve and
+  gale via `charDesires`, professed by no one (named-but-unheralded, like bob's pursuit before
+  anyone watched him work: spite is not temperament, and stays unreadable until someone is
+  told). eve's behavior is unchanged (`selfWants` is identical to her old unnamed want); the
+  naming is what makes the prediction test below possible at all — unnamed wants cannot be
+  believed.
+- **Different temperament**: gale bears `honest` (the trait above). The whisper affordance is
+  as available to her as to eve, and would serve her spite (+4 per deceived head) — but the
+  lie-record's −6 nets it negative. **Eve whispers; gale never does.** Authored meaning: her
+  honesty outweighs her spite, by exactly the margin written.
+- **Legibility**: from t=0, everyone presumes gale's conscience (`transparent`); a test plants
+  a `spites-carol` motive-belief about each woman in a predictor's head — with gale's presumed
+  conscience netted in, `predictMove` has her declining; the same planted belief about eve
+  (no conscience) predicts the whisper.
+- The CK3 property, kept: gale *can* lie — nothing forbids it. If her spite were authored
+  larger than her conscience, she would. Costs, not prohibitions.
+
+## 5. Tests (TDD)
+
+- `DeceitSpec` additions: the lie deposits `lied.<liar>.<hearer>.<event>` (exact shape);
+  truthful `gossip` deposits no such record; existing lie tests unchanged (the record is
+  additive).
+- `PersonaSpec` (fixture pins the first-draft probe plus the new semantics): `bearing`/
+  `personaVocabulary` (+ duplicate/path-segment guards)/`personaSetup`/`cast` mechanics;
+  `transparent` derives presumption for bearers only, defeasibly; **the conduct-valuation
+  core**: a bearer with a temptation (a want a lie would serve) declines it while an
+  unprincipled twin takes it — asserted via `pickAction` on both; the marginal-lie property
+  (each additional lie costs again — no fall-from-grace discount); believed-conscience
+  prediction (predictMove with planted motive-belief + presumed trait = declines; without the
+  trait = the whisper).
+- `VillageSpec` additions: gale presumed honest by all from t=0; free-play drive — eve's
+  frame-up proceeds, gale never whispers (no `lied.gale.*` record, no `.heard.gale` edges);
+  the prediction contrast.
+- Regression: full suite green (278 baseline); older village stories intact (eve unchanged;
+  cast growth turn-budget raises sanctioned with traces); `prax check` all 7 worlds;
+  `cabal build all` zero warnings; hlint clean.
+
+## 6. Out of scope (parked deliberately)
+
+- Theft deed-records + exculpation/getting-caught-lying (the records' pattern is established;
+  each is its own round when wanted).
+- Script-layer `withTraits` wiring; randomized cast sampling; runtime trait change (character
+  transformation belongs with the Arc vocabulary, a future join); hard prohibitions (the
+  banked priority-tiers item).
+- Goal-bundle "traits" — deliberately not a thing; use plain desires.
