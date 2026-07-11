@@ -93,6 +93,7 @@ test-suite prax-test
                       Prax.ELSpec
                       Prax.DeriveSpec
                       Prax.FeudSpec
+                      Prax.GoldenDriveSpec
                       Prax.TypeCheckSpec
                       Prax.BeliefsSpec
                       Prax.WitnessSpec

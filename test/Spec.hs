@@ -14,6 +14,7 @@ import qualified Prax.DeonticSpec
 import qualified Prax.ELSpec
 import qualified Prax.DeriveSpec
 import qualified Prax.FeudSpec
+import qualified Prax.GoldenDriveSpec
 import qualified Prax.TypeCheckSpec
 import qualified Prax.BeliefsSpec
 import qualified Prax.WitnessSpec
@@ -48,6 +49,7 @@ main = defaultMain $ testGroup "prax"
   , Prax.ELSpec.tests
   , Prax.DeriveSpec.tests
   , Prax.FeudSpec.tests
+  , Prax.GoldenDriveSpec.tests
   , Prax.TypeCheckSpec.tests
   , Prax.BeliefsSpec.tests
   , Prax.WitnessSpec.tests
