@@ -131,6 +131,15 @@ The village gains **gale** (via `cast`), the contrast pair to eve:
   (no conscience) predicts the whisper.
 - The CK3 property, kept: gale *can* lie — nothing forbids it. If her spite were authored
   larger than her conscience, she would. Costs, not prohibitions.
+- **The laundering (found in implementation, kept honest)**: eve's one-shot-per-hearer whisper
+  reaches gale too — and an honest believer is the *perfect* vector. Once deceived, gale
+  spreads the falsehood she now genuinely holds by ordinary `gossip`: not a lie, no mark, no
+  conscience cost — her spite is served by telling a truth-as-she-knows-it. She even carries
+  it back to eve, handing the liar "evidence" for her own fabrication. The first spec draft
+  wrongly asserted "no `.heard.gale` edges"; that assertion confused *never lying* with
+  *never spreading*, and the demo pins the corrected claim instead: gale's psyche stays
+  unmarked, the lie still travels through her, and everything traced to her is something she
+  honestly believes.
 
 ## 5. Tests (TDD)
 
@@ -147,8 +156,9 @@ The village gains **gale** (via `cast`), the contrast pair to eve:
   prediction (predictMove with planted motive-belief + presumed trait = declines; without the
   trait = the whisper).
 - `VillageSpec` additions: gale presumed honest by all from t=0; free-play drive — eve's
-  frame-up proceeds, gale never whispers (no `lied.gale.*` record, no `.heard.gale` edges);
-  the prediction contrast.
+  frame-up proceeds, gale never whispers (no `gale.lied.*` mark), yet the lie travels through
+  her honestly (`.heard.gale` edges exist and everything behind them is something gale
+  believes — the laundering, §4); the prediction contrast.
 - Regression: full suite green (278 baseline); older village stories intact (eve unchanged;
   cast growth turn-budget raises sanctioned with traces); `prax check` all 7 worlds;
   `cabal build all` zero warnings; hlint clean.
