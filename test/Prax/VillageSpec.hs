@@ -200,6 +200,11 @@ tests = testGroup "Prax.Worlds.Village"
       -- the one he earned:
       assertBool "the loaf he holds is the one he earned"
         (exists "practice.earnBread.bob.done.s3" (db st))
+      -- and the sharpest check: a re-steal at ANY point would have revoked
+      -- the atonement and revived his notoriety (three believers never
+      -- forgot); the derived view stays clear of it.
+      assertBool "his notoriety never returned"
+        (not (exists "notorious.bob.thief" (readView st)))
 
   , testCase "the village keeps a perception clock and sightings" $ do
       -- after one full round of driveIdle (all six cast members -- you, bob,

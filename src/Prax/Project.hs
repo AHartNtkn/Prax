@@ -37,6 +37,11 @@ data Stage = Stage
 -- one of its own practices), the staged practice, and the named pursuit
 -- desire (for the world's vocabulary). One instance per owner; a finished
 -- instance persists as the record of the work.
+--
+-- The undertake and the stages live in /different/ practices, so an endeavor
+-- owner must not be 'charBoundTo' a single practice — a bound character could
+-- undertake but never advance a stage (or vice versa). Only bodiless
+-- mechanism characters are ever bound; keep it that way for owners.
 endeavor :: String        -- ^ project id (a single path segment)
          -> Int           -- ^ pursuit weight: +w per completed stage
          -> String        -- ^ undertake label
