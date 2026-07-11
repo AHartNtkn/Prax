@@ -17,6 +17,7 @@
 -- @Witness@ and @Actor@ in its own terms.
 module Prax.Witness
   ( CoPresence
+  , witnessed
   , observable
   , saw
   , asRole
@@ -35,15 +36,21 @@ import           Prax.Beliefs (beliefAbout)
 -- actor-exclusion.
 type CoPresence = [Condition]
 
+-- | The witness deposit as a first-class outcome: every co-present character
+-- (except the actor) comes to believe @event@ with provenance @seen@. This is
+-- what 'observable' appends; exported so generated actions (e.g.
+-- "Prax.Project" stages) can carry observability in their own effects.
+witnessed :: CoPresence -> String -> Outcome
+witnessed copresence event =
+  ForEach (copresence ++ [ Neq "Witness" "Actor" ])
+          [ Insert (beliefAbout "Witness" event ++ ".seen") ]
+
 -- | Declare an action's public appearance: every co-present character (except
 -- the actor, who already knows what they did) comes to believe @event@ with
 -- provenance @seen@. The event sentence may use the action's own variables.
 observable :: CoPresence -> String -> Action -> Action
 observable copresence event act =
-  act { actionOutcomes =
-          actionOutcomes act
-            ++ [ ForEach (copresence ++ [ Neq "Witness" "Actor" ])
-                         [ Insert (beliefAbout "Witness" event ++ ".seen") ] ] }
+  act { actionOutcomes = actionOutcomes act ++ [ witnessed copresence event ] }
 
 -- | Condition: @who@ directly witnessed @event@.
 saw :: String -> String -> Condition
