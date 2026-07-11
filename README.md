@@ -203,6 +203,11 @@ utility. See the design writeups:
   never does — and, found live rather than authored, eve's whisper deceives gale too, who then
   spreads the falsehood she genuinely believes by ordinary gossip, no lie, no mark, carrying it
   back to eve as "evidence" for her own fabrication. The honest villager launders the lie.
+- **v26 — planner work elimination**: an exactness-contract performance round (golden
+  decision-sequence tests pin every planner choice, byte-identical before/after). Cached
+  per-state closed views, a conservative relevance pre-filter (`Prax.Relevance`) that skips
+  predictions no authored action could motivate, tokenize-once query/closure internals, and
+  shared test trajectories: the full suite dropped ~726s → ~114s with zero behavior change.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).

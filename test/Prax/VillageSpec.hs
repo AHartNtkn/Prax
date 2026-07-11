@@ -220,7 +220,7 @@ tests = testGroup "Prax.Worlds.Village"
         (not (exists "notorious.bob.thief" (readView st)))
 
   , testCase "the village keeps a perception clock and sightings" $ do
-      -- after one full round of driveIdle (all seven cast members -- you, bob,
+      -- after one full round of free play (all seven cast members -- you, bob,
       -- carol, dana, eve, gale -- ending with the sight ticker), the perception
       -- clock has advanced and the square-mates (you, bob, and carol) hold
       -- sightings of each other; dana, at the mill the whole round, holds

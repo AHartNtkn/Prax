@@ -155,6 +155,20 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   amended in place (§4 "The laundering") once this was observed live, and `VillageSpec` pins the
   corrected claim. Suite: 292 tests (`PersonaSpec`, `DeceitSpec` additions, `VillageSpec`
   additions).
+- **v26** — **planner work elimination** (spec `docs/specs/2026-07-11-v26-planner-work.md`).
+  A performance round with an exactness contract: bit-for-bit identical planner decisions,
+  pinned by golden decision-sequence tests (`Prax.GoldenDriveSpec`, captured live pre-change,
+  held byte-identical throughout). Four changes: the closed view became a cached per-state
+  field behind `Prax.Engine.withDb`/`setAxioms`/`setDesires` (one closure per state instead of
+  ~15k re-computations per village round); `Prax.Relevance` skips predictions no authored
+  action could motivate (conservative outcome↔want pattern analysis with polarity, resting on
+  one stated invariant — entity names never collide with predicate-name literals); pattern
+  parsing hoisted out of the binding loops with a token-level closure loop (tokenization was
+  ~48% of runtime); and the village tests share their two deterministic drive trajectories
+  instead of re-simulating overlapping prefixes. Measured, uncontended: the full suite ~726s
+  (292 tests) → **~114s (301 tests)**, the `Prax.VillageSpec` group ~580–660s → **~116s**, one
+  profiled free-play round 7.07s → 2.83s. The residual planner cost is one axiom-closure per
+  *distinct* state the search visits (71.8% of the post-round profile) — v27's target (below).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -244,26 +258,28 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   not the full LRT decision procedure.
 
 ## Future ideas to investigate
-- **Incremental view maintenance for the derivation layer (#17).** Closure is now semi-naive and
-  cheap per call, but the planner's lookahead still re-closes each distinct future state from scratch.
-  Since a child state differs from its parent by a small delta (one action's outcomes), the closed
-  view could be *maintained incrementally* — add/retract the delta's consequences rather than
-  recompute — which would cut the lookahead's dominant cost. Bigger change than semi-naive (needs
-  delta-retraction / provenance to un-derive facts whose support is gone); worth it only if a large
-  axiom set + deep lookahead proves to be the bottleneck in a real sandbox.
-- **Planner runtime under cast growth (v25).** The full suite went from ~38.66s (289 tests, the
-  6-member village) to ~726s (292 tests, the 7-member village — gale joining eve), with the
-  `Prax.VillageSpec` group alone accounting for roughly ~580–660s of the latter total. No isolated
-  pre-growth Village-group timing was ever taken, so the group-level regression from 6 to 7 members
-  is steeper than the suite-total comparison alone suggests — the ~38.66s figure includes every
-  other spec file, not just the village. Two v25 mechanisms compound the v23 round-walk cost (#20):
-  `transparent` gives every character a *believed* model of every trait-bearer (so each added
-  trait-bearer is a new mind every other character's lookahead may predict), and the round-walk
-  itself already predicts one move per in-scope character per node explored. Neither is a bug —
-  both are the faithful cost of realism (#20's own design) — but the multiplication means the next
-  cast member is not "free" the way v23's post-rewrite numbers suggested. Profile before growing
-  the cast again (`predictionScope` narrowing, or memoizing a round's predictions across siblings,
-  are candidate directions — unmeasured, not committed to).
+- **Incremental view maintenance for the derivation layer (#17) — designated v27.** Closure is
+  semi-naive and (post-v26) token-level and computed once per state, but the planner's lookahead
+  still re-closes each *distinct* future state from scratch — measured at 71.8% of the post-v26
+  planner profile (11,840 closures per free-play round, one per state the search visits). Since a
+  child state differs from its parent by one action's outcomes, the closed view could be
+  *maintained incrementally* — derive/retract only the delta's consequences. The honest cost: our
+  axioms are **non-monotone** (`standingUnless`'s defeater, `Absent` bodies), so an insert can
+  retract derived facts and a delete can create them; exact incrementality therefore needs truth
+  maintenance (support tracking with deletion propagation, DRed-style), not just a delta join.
+  v26's golden decision-sequence tests are the safety net that makes attempting it sane.
+- **Planner runtime under cast growth (v25) — substantially addressed by v26.** The v25 regression
+  (full suite ~38.66s → ~726s when gale joined; `Prax.VillageSpec` alone ~580–660s; no isolated
+  pre-growth group timing was ever taken) was profiled in v26 and turned out to be dominated by
+  decision-irrelevant work, not by the realism itself: recomputed axiom closures (~15k per round
+  for the same states), predictions provably no action could motivate (1,373 `predictMove`
+  calls/round contributing zero decisions at sampled states), string re-tokenization (~48% of
+  runtime), and tests re-simulating overlapping trajectory prefixes. After v26's exact
+  eliminations: suite ~114s, Village group ~116s, one free-play round 2.83s. What remains is the
+  faithful cost of realism (`transparent` making each trait-bearer a mind others predict; the
+  round-walk itself) multiplied by one closure per distinct lookahead state — the incremental-view
+  item (#17, designated v27) is the remaining lever. Fact growth was measured NOT to be a factor
+  (51 → 97 sentences over 7 rounds); memory GC is not a lever here.
 - **Hard priority tiers for action selection (from Praxish's `swaygent.js`).** Ensemble/CiF-style
   selection tags actions with a symbolic tier — `forbidden` / `required` / `normal` — that sorts
   *above* numeric utility, giving categorical "you must / may not" rules. Our planner and norms are
