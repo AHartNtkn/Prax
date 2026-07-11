@@ -81,9 +81,13 @@ Because the pursuit is a **named desire**, everything from v23 applies: a charac
 to believe `P.believes.desires.bob.pursues-earnBread` (professed, presumed, confided,
 gossiped — or *inferred from watching him work*, below) predicts his next stage with
 `predictMove`. A project kept quiet is invisible industry; a project observed is legible
-purpose. Stages may be declared `observable` like any action, and a v21-style inference axiom
-turns a witnessed stage into a presumed pursuit — learning someone's project by seeing them at
-it.
+purpose. Since `endeavor` *generates* its stage actions, observability rides in `stageYields`:
+`Prax.Witness` exports the v19 deposit as a first-class outcome —
+`witnessed :: CoPresence -> String -> Outcome` (with `observable` refactored to append it, a
+behavior-preserving one-liner) — so a world writes `stageYields = [ witnessed together
+"swept.Actor" ]` and `Prax.Project` stays decoupled from Witness. A v21-style inference axiom
+then turns the witnessed stage into a presumed pursuit — learning someone's project by seeing
+them at it.
 
 ## 2. Demo: bob's redemption (the village completes its moral arc)
 
