@@ -64,7 +64,7 @@ mayUnify a b = anchored && and (zipWith seg (pathNames a) (pathNames b))
 outcomeAtoms :: Map String [Outcome] -> [String] -> Outcome
              -> Maybe ([String], [String])
 outcomeAtoms fns visited o = case o of
-  Insert s | '!' `elem` s -> Just ([s], [s, evictions s])
+  Insert s | '!' `elem` s -> Just ([s], s : evictionShadows s)
            | otherwise    -> Just ([s], [])
   Delete s                -> Just ([], [s])
   ForEach _ outs          -> mconcat' (map (outcomeAtoms fns visited) outs)
@@ -78,13 +78,15 @@ outcomeAtoms fns visited o = case o of
       pairs <- sequence ms
       pure (concatMap fst pairs, concatMap snd pairs)
 
--- The eviction shadow of an exclusion insert: the same path with each
--- segment that FOLLOWS a @!@ replaced by a fresh variable, standing for
--- whichever sibling the exclusion displaces.
-evictions :: String -> String
-evictions s = tokensToSentence
-  [ (if prevOp == Just '!' then "Evicted" else name, op)
-  | ((name, op), prevOp) <- zip toks (Nothing : map snd toks) ]
+-- The eviction shadows of an exclusion insert: one per @!@, the path
+-- TRUNCATED just past that exclusion point with a fresh variable in the
+-- slot. Each exclusion clears the displaced sibling's entire subtree —
+-- arbitrary depth and shape — and 'mayUnify' compares only up to the
+-- shorter path, so the truncated shadow covers every want under it.
+evictionShadows :: String -> [String]
+evictionShadows s =
+  [ tokensToSentence (take i toks ++ [("Evicted", Nothing)])
+  | (i, (_, op)) <- zip [1 ..] toks, op == Just '!' ]
   where toks = tokens s
 
 -- Positive and negated path patterns of a want's conditions. The Bool is

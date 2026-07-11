@@ -60,4 +60,18 @@ tests = testGroup "Prax.Relevance"
           ds = [ Desire "hates-the-stone" (Want [ Match "slot.stone" ] (-2)) ]
       improvableDesires (Map.fromList [("shrine", shrine)]) [] ds
         @?= ["hates-the-stone"]
+
+  , testCase "eviction covers the WHOLE displaced subtree, not just the shadow's shape" $ do
+      -- Two exclusion points: the first eviction clears everything under
+      -- altar (arbitrary depth and shape), including branches that diverge
+      -- from the insert's own path right after the '!'.
+      let temple = practice
+            { practiceId = "temple", roles = ["R"]
+            , actions = [ action "[Actor]: rededicate the altar"
+                            [ Match "shrine.here" ]
+                            [ Insert "altar!new.rite!dawn" ] ] }
+          ds = [ Desire "mourns-the-relic"
+                   (Want [ Match "altar.old.relic.jade" ] (-2)) ]
+      improvableDesires (Map.fromList [("temple", temple)]) [] ds
+        @?= ["mourns-the-relic"]
   ]
