@@ -142,6 +142,32 @@ utility. See the design writeups:
   → three regards → notoriety tips bob into returning the loaf → the village relents, memory
   intact throughout — and because the planner can see standing snap back on a repeat, an atoned
   bob is *deterred*, leaving a restocked stall untouched for the rest of the run.
+- `Prax.Minds` + `Prax.Sight` + a rewritten `Prax.Planner` (v23 — numbered here in *landing*
+  order, not spec order: v22's `Prax.Deceit`, concealment/lying, is already on master as v22
+  Task 1, but v22's own village content is parked mid-round on a side branch and resumes after
+  this round). The old lookahead's `worldValue` — max over every living character's every
+  action, scored by the *planning actor's own wants* — is **deleted**: it turned out to be
+  speculative (credited others with actions they'd never take — carol's top move became an
+  accusation she had no evidence for), omniscient (used movers' *true* wants, so a
+  secretly-planned murder was foreseeable by anyone), and combinatorially explosive (the village
+  stress suite regressed 8.7s → 621s). It's replaced by a round-walk: each other character
+  within the actor's epistemic *scope* (`predictionScope`, world-authored, default everyone)
+  gets one myopic, motivated move predicted from the actor's *believed* model of them
+  (`predictMove`) — never their true one — in cast order, before the actor recurses on its own
+  next choice. A mind the actor holds no belief about, or a mover it can't currently place, sits
+  still, never helpfully. Desires are now nameable and believable: `Prax.Minds` gives worlds
+  owner-parameterized `Desire` vocabularies (`charDesires`), and motive-beliefs reuse the v20
+  provenance shape unchanged — gossip, lying, confiding, and forgetting all work on
+  `desires.<owner>.<name>` with zero new machinery; "public" and "secret" fall out as *derived*,
+  defeasible common knowledge (a professed desire, or a conventionally-assumed one) rather than a
+  flag. `Prax.Sight` makes location itself a belief: a compiled per-round ticker advances a
+  shared clock and refreshes co-present sightings, so predicting someone who has stepped out of
+  the room means predicting from where you last saw them, with an authored horizon for how long
+  that guess stays good. `Prax.Worlds.Intrigue`'s plot is now a believed mind: a confidant's
+  prediction of cassia foresees the poisoning; the uninformed victim's does not; and a leaked
+  rumor of her motive flips that. Master's own test suite dropped 5.5s → 0.8s as a side effect of
+  the redesign (the true referee — the parked village stress suite — is measured when v22
+  resumes).
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).

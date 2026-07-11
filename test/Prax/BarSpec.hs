@@ -230,7 +230,9 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
         (any (("give up on the evening" `isInfixOf`) . gaLabel) (possibleActions barWorld "bex"))
       -- …but an NPC never chooses it (sliding into loneliness only costs utility):
       -- true transformation is, in practice, a player-only act.
-      let bexChar = head [ c | c <- characters barWorld, charName c == "bex" ]
+      bexChar <- case [ c | c <- characters barWorld, charName c == "bex" ] of
+                   (c : _) -> pure c
+                   []      -> assertFailure "bex not found in barWorld"
       assertBool "bex never resigns to solitude on its own"
         (maybe True (not . ("give up" `isInfixOf`) . gaLabel) (pickAction 2 barWorld bexChar))
   ]

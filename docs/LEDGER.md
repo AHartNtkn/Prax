@@ -54,6 +54,33 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   parameter). `Prax.Worlds.Village` completes its arc: theft → witnessing → rumor → three regards
   → notoriety tips bob into atonement → the village relents — and, because the planner can see the
   snap-back, an atoned thief facing a restocked stall is *deterred*, never touching it again.
+- **v23** — **realistic lookahead: round-walk over believed minds** (`Prax.Minds`, `Prax.Sight`,
+  a rewritten `Prax.Planner`; spec `docs/specs/2026-07-10-v23-planner-realism-design.md`). The old
+  lookahead's `worldValue` (now **deleted**) maxed over every living character's every action,
+  scored by the *planning actor's own wants* — three demonstrated failures: speculative (credited
+  others with actions they would never choose, e.g. carol's top move became an unevidenced
+  accusation), omniscient (used movers' *true* wants, so a secret plot was foreseeable by anyone),
+  and combinatorially explosive (v22's village suite: 8.7s → 621s). Replaced by a round-walk: each
+  other character within the actor's **epistemic scope** (`predictionScope`, the v19 co-presence
+  template — default everyone) gets one myopic, *motivated-only* move predicted from the actor's
+  **believed** model of them (`predictMove`), in cast order, before the actor recurses on its own
+  next choice (`scoreActions`, `pickAction`). A mind the actor holds no belief about, or a mover
+  out of scope, is modeled as still, never as helpful — and the model can be *wrong* (prediction
+  uses the actor's beliefs, not the mover's true wants). Desires become nameable and believable
+  (`Prax.Minds`: owner-parameterized `Desire` templates, `charDesires`; motive-beliefs reuse the
+  v20 provenance shape unchanged, so gossip/lie/confide/forget all work on
+  `desires.<owner>.<name>` for free); "public"/"secret" is recovered as derived, defeasible common
+  knowledge (`professed`/`conventional` → `.presumed`) rather than a flag. `Prax.Sight` adds
+  sightings as ordinary location-beliefs (`believes.at`/`atSince`), maintained by a compiled
+  per-round ticker (`turn!N`, the v18 `_clock` idiom) — "who's around" is itself information with
+  an authored horizon, not global. Intrigue's plot is now a believed mind (a confidant's
+  `predictMove` of cassia foresees the poisoning; the victim's does not; a leak flips it). Two
+  world edits were needed outside Intrigue and are recorded honestly in the spec's §6: the
+  village's `dana` gets a sanctioned mill-anchoring want (the same idiom `bob`'s stall-anchor
+  already used), and the bar's `LoopSpec` golden-trace turn budget is re-derived from 20 to 25
+  (5 rounds × a cast grown by one for the sight ticker) — the narration itself is unchanged.
+  Master suite: 5.5s → 0.8s (the rewrite's own speedup; the parked v22 village suite is the true
+  referee once it resumes).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -94,8 +121,8 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 |---|---------|--------|--------|-------|
 | 18 | Utility-based reactive selection (apply-evaluate-undo) | v1 | P§IX | immutability ⇒ no explicit undo |
 | 19 | Per-character wants; utility = Σ modifier × #bindings | v1 | P§IX-A | Versu-faithful; supersedes Praxish global goals |
-| 20 | Forward-chaining lookahead w/ discounts (0.9 self / 0.5 other) | v1 | Praxish `planner.js` | depth configurable |
-| 21 | Wants as arbitrary logic sentences (∃/∀ desires) | v8\* | P§IX-A | unblocked by #7 — a want is now any FOL formula; *runtime want injection still open* |
+| 20 | Round-walk lookahead over believed minds, w/ discounts (0.9 self / 0.5 other) | v1, v23 | Praxish `planner.js` (v1); redesigned (v23, spec `docs/specs/2026-07-10-v23-planner-realism-design.md` §4) | `Prax.Planner`. **v1**'s `worldValue` — max over every living character's every available action, scored by the *planning actor's* own wants — is **deleted**: it was speculative (credited others with actions they'd never choose), omniscient (used movers' *true* wants), and combinatorially explosive. **v23**: `scoreActions` predicts each other character within the actor's epistemic `predictionScope` (default everyone) exactly once, myopically, from the actor's **believed** model of them (`predictMove`, `Prax.Minds`) — only if the move strictly improves that belief over doing nothing (unmotivated moves are not predicted) — in cast round-robin order after the actor, before the actor recurses on its own next choice. `depth` still counts only the actor's own future plies; the CLI/loop keep depth 2 |
+| 21 | Wants as arbitrary logic sentences (∃/∀ desires) | v8\* | P§IX-A | unblocked by #7 — a want is now any FOL formula; runtime want injection needs no separate mechanism (a want gated on a fact is injectable by inserting the fact — see the foundational watchlist below) |
 | 22 | Character arcs / interiority (high-level internal choices) | v7 | P§X | `Prax.Arc`; bex's hopeful→belonging/lonely arc gates its wants; against-desires transformation is player-only |
 | 23 | Swaygent-style volition/influence selection | research-needed | Praxish `swaygent.js` | Ensemble-inspired alt selector |
 
@@ -209,10 +236,24 @@ Tier 2 — agent interiority for long time-spans:
 - **⤷K Secrets & deception**: a secret = fact + concealment want (`Want [Absent [anyone believes
   X]]`) — the planner then avoids witnesses automatically; lying = planting a belief the speaker
   doesn't hold; blackmail = obligation extracted under threat of gossip.
+- **Counterfactual placement (per-agent world-views)** *(banked — v23 spec §4a "honest residual")*:
+  a predicted in-scope mover is still simulated at their *true* position, not the predictor's
+  *believed* one — imagining them where the predictor thinks they are requires giving every
+  predictor its own simulable view of the world, the per-agent-world-view machinery Versu itself
+  declined to build. Base facts leaking into predictions and template-fixed believed weights (no
+  per-observer intensities) are the same residual: full per-agent world-views, deferred wholesale.
+- **Sighting recency-salience** *(banked — v23)*: `Prax.Sight` sightings are single-slot (a new
+  sighting overwrites the old) and `sightedWithin` gates prediction scope with a hard
+  ticks-since-sighted threshold — a sighting one tick old and one at the horizon's edge are
+  credited identically. A recency-weighted salience model (confidence decaying smoothly with
+  elapsed ticks rather than a boolean cutoff) is banked, not built; needs a principled decay
+  function before it's more than a heuristic.
 - **Decay & drift**: scores cool toward baseline via a bodiless ticker (the v18 `_clock` pattern);
   rates must be authored world parameters with stated semantics, not tuned constants.
-- **Calendar & gatherings**: recurring clock-gated scene spawns (market day, festival) — the mixing
-  dynamic that makes gossip percolate.
+- **Calendar & gatherings** *(partially seeded — v23: `Prax.Sight`'s ticker already advances a
+  global `turn!N` every round, the first brick of the clock; what's missing is authored
+  clock-gated scene spawns keyed off it, not the clock itself)*: recurring clock-gated scene
+  spawns (market day, festival) — the mixing dynamic that makes gossip percolate.
 
 Tier 3 — host-game boundary:
 - **⤷K Chronicler / salience queries** (`Prax.Chronicle`): derived summaries over the event stream

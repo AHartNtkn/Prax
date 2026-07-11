@@ -12,7 +12,10 @@ import           Prax.Worlds.Bar (barDirectorWorld, directorName)
 
 -- The director character (the player-controlled drama manager).
 directorChar :: Character
-directorChar = head [ c | c <- characters barDirectorWorld, charName c == directorName ]
+directorChar =
+  case [ c | c <- characters barDirectorWorld, charName c == directorName ] of
+    (c : _) -> c
+    []      -> error ("director character " ++ show directorName ++ " not found in barDirectorWorld")
 
 -- Perform the director's affordance whose label contains @needle@ (fails the
 -- test loudly if there is none).
@@ -26,7 +29,9 @@ direct needle st =
 -- bex's currently available action labels.
 bexCan :: PraxState -> [String]
 bexCan st = map gaLabel (candidateActions st bex)
-  where bex = head [ c | c <- characters st, charName c == "bex" ]
+  where bex = case [ c | c <- characters st, charName c == "bex" ] of
+                (c : _) -> c
+                []      -> error "bex not found in given state"
 
 tests :: TestTree
 tests = testGroup "Prax.Worlds.Bar (player-as-DM)"

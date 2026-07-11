@@ -1,7 +1,7 @@
 module Prax.PlannerSpec (tests) where
 
 import           Test.Tasty (TestTree, testGroup)
-import           Test.Tasty.HUnit (testCase, (@?=), assertBool)
+import           Test.Tasty.HUnit (testCase, (@?=), assertBool, assertFailure)
 
 import           Prax.Query
 import           Prax.Types
@@ -98,9 +98,11 @@ tests = testGroup "Prax.Planner"
       evaluate st (charWants host) @?= 0
       -- …and the planner chooses to serve b, which completes "everyone has a drink".
       fmap gaLabel (pickAction 1 st host) @?= Just "host: pour a drink for b"
-      let served = performAction st
-                     (head [ ga | ga <- possibleActions st "host"
-                                , gaLabel ga == "host: pour a drink for b" ])
+      pourForB <- case [ ga | ga <- possibleActions st "host"
+                             , gaLabel ga == "host: pour a drink for b" ] of
+                    (ga : _) -> pure ga
+                    []       -> assertFailure "no 'pour a drink for b' action available to host"
+      let served = performAction st pourForB
       evaluate served (charWants host) @?= 10   -- now the universal holds
 
   , testCase "predictMove is belief-relative: no belief, no prediction" $ do

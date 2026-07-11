@@ -73,10 +73,23 @@ You'll see something like:
 
 **What this demonstrates:** *utility-based autonomous action selection with lookahead.* Nobody
 scripted bex to walk to the bar and order — bex evaluates the world that each action would
-produce, and (looking two moves ahead) sees that going to the bar enables ordering the beer it
-wants. ada, seeing an outstanding order (which she dislikes), fulfills it. This is the heart of
-Versu's "strong autonomy": practices only *offer* actions; the agents choose.
-→ code: `Prax.Planner` (wants, `worldValue` lookahead), `Prax.Loop` (turn taking).
+produce, and (looking two moves ahead through its own future choices) sees that going to the bar
+enables ordering the beer it wants. ada, seeing an outstanding order (which she dislikes),
+fulfills it. This is the heart of Versu's "strong autonomy": practices only *offer* actions; the
+agents choose.
+→ code: `Prax.Planner` (wants, `scoreActions`/`pickAction` lookahead — the old `worldValue` this
+guide used to name here no longer exists; see the note below), `Prax.Loop` (turn taking).
+
+> **How lookahead treats *other* people (v23).** What you just watched is a special case: the
+> bar's cast has no authored believed-desire vocabulary (`Prax.Minds`), so bex's lookahead is
+> entirely about its own future moves, exactly as described above. In general the planner's
+> lookahead also imagines one round of *other* characters' moves — but only a character the actor
+> currently holds a *belief* about wanting something (`Prax.Minds`), and only if the actor
+> currently believes that character is around to act (co-present now, or sighted recently enough
+> — `Prax.Sight`, an authored *prediction scope*). A mind nobody has told you about, or a person
+> whose whereabouts you don't know, is imagined standing still — never as conveniently helping
+> your plan along. `prax village` (§22–24 below) is where this actually bites; the bar never
+> exercises it.
 
 ### 2. Move around
 
@@ -207,11 +220,17 @@ Actions now provoke *responses*, and the bar has a social rule with teeth. Watch
   → features: `markViolation`; a violation spawning the ready-made `disapproval` reaction;
   core-model consequences. code: `Prax.Reactions` + `settleUpP`.
 
-- **NPCs respect norms on their own.** bex is given a strong aversion to stiffing plus a small
-  liking for tipping, so when served it **tips** rather than walking out — the planner sees that the
-  violation→disapproval future scores far worse. That's the paper's "strong desire to respect
-  norms" falling out of ordinary utility evaluation, no special rule engine.
-  → features: norm avoidance via `Prax.Planner` lookahead + a large negative `Want`.
+- **NPCs respect norms on their own.** bex is given a strong aversion to stiffing
+  (`Want [violationOf "bex" "stiffedTheBartender"] (-40)`) plus a small liking for tipping, so
+  when served it **tips** rather than walking out. This isn't a foreseen future: "Leave ada's tab
+  unpaid" inserts the violation fact itself, so bex's own −40 already condemns it in the immediate,
+  no-lookahead evaluation (`scoreActions 0`) — confirmed live: tipping scores 13.0 against
+  stiffing's −30.0 with lookahead depth 0, before the planner has looked ahead at all. bex never
+  needs to *predict* ada's disapproval; it has a strong opinion of its own about breaking norms.
+  That's the paper's "strong desire to respect norms" falling out of ordinary utility evaluation,
+  no special rule engine, and (as of v23) no prediction of anyone else's reaction required.
+  → features: norm avoidance via a large negative self-`Want`, scored at depth 0 — `Prax.Planner`
+  `evaluate`/`scoreActions`.
 
 - **"Owes a tip" is a real obligation (v14).** That tip isn't just a reaction — being served
   raises a first-class **deontic □**: `obliged.you.(you.tipped.ada)` (the scene's *"you owes ada a
@@ -568,11 +587,14 @@ cabal run prax -- village
 
 > *"You are a villager. What you see — and what you miss — decides what you can do."*
 
-bob, carol, and you start in the square; dana is off at the mill. Wait a beat and bob, who wants
-the loaf, takes it — and carol, standing right there, acts on what she just saw in the very same
-beat:
+bob, carol, and you start in the square; dana is off at the mill, and stays there — she has her
+own +1 want to be at the mill (the same anchoring idiom that keeps bob loitering near the stall:
+an idle character needs a place it wants to be, or it drifts on a tie-break). Wait a beat and bob,
+who wants the loaf, takes it — and carol, standing right there, acts on what she just saw in the
+very same beat:
 
 ```
+-------------------- scene --------------------
   - bob is at the square
   - carol is at the square
   - dana is at the mill
@@ -584,21 +606,25 @@ Your move (you):
   s) save    q) quit
 >   bob: steal the loaf from the stall
   carol: confront bob about the theft
-  dana: Go to square
+  dana: Wait a moment
 ```
 
-You were co-present too, so the same affordance opens up for you next turn:
+You were co-present too, so the same affordance opens up for you next turn — and so does `shun`,
+a *derived-reputation* affordance this section isn't about yet (§24 covers it):
 
 ```
   1) you: confront bob about the theft
-  2) you: Go to mill
+  2) you: shun bob
+  3) you: Go to mill
 ```
 
-dana never gets it — not on this turn, and not later, even once she walks over and stands beside
-everyone in the square. Witnessing is fixed at the moment of the act, not by later proximity:
-`carol.believes.stole.bob.loaf.seen` and `you.believes.stole.bob.loaf.seen` are asserted the
-instant bob steals; `dana` holds no such belief, ever, unless she hears it from someone — which,
-per §23, she eventually does.
+dana never gets `confront` — not on this turn, not once she's told secondhand (§23), and not even
+later, once she's standing right next to bob in the square (checked directly against her own
+`possibleActions` at that point: it's never offered). Witnessing is fixed at the moment of the
+act, not by later proximity or later belief: `carol.believes.stole.bob.loaf.seen` and
+`you.believes.stole.bob.loaf.seen` are asserted the instant bob steals; dana holds no such belief,
+ever — only a *heard* one, once carol reaches her (§23) — and `confront` is gated on `saw`, not
+`heard`.
 
 The theft is wrapped in `observable together "stole.Actor.loaf"`; the plain `Go to [Place]` /
 `Wait a moment` actions in the same world are not — so **movement is not news**: nobody, not even
@@ -629,27 +655,47 @@ secondhand — can now be *told* to a co-present hearer. Same world, played furt
 cabal run prax -- village
 ```
 
-Wait a turn after bob steals and carol, standing right there, confronts him — and dana, off at the
-mill when it happened, drifts back into the square on her own, before anyone has told her anything:
+Press `m` twice more. carol regards bob a thief the instant she witnesses the theft (§24 covers
+*why* — reputation is derived, not stored) and shuns him outright while still in the square. With
+nobody left nearby to tell, she then sets off for the one place she knows an as-yet-uninformed
+hearer reliably is — dana never comes looking; her own +1 mill-want (§22) means she never leaves:
 
 ```
 -------------------- scene --------------------
   - bob is at the square
-  - carol is at the square
+  - carol is at the mill
   - dana is at the mill
   - you is at the square
+  - carol is shunning bob
+  - carol regards bob as a thief
+  - you regards bob as a thief
 Your move (you):
-  1) you: steal the loaf from the stall
-  2) you: Go to mill
+  1) you: confront bob about the theft
+  2) you: shun bob
+  3) you: Go to mill
   m) wait and let others act
   s) save    q) quit
->   bob: steal the loaf from the stall
-  carol: confront bob about the theft
-  dana: Go to square
+>   bob: Wait a moment
+  carol: tell dana that bob stole the loaf
+  dana: shun bob
 ```
 
-The very next beat, with everyone now together in the square, carol tells dana what she saw — and
-dana, who acts later in that same round, already has the hearsay to act on it, in the same beat:
+carol reaches the mill and tells dana what she saw; dana, who acts later that same round, already
+has the hearsay to act on — and, on the strength of it alone, shuns bob in the same beat she's
+told. What actually drives this: `gossip` only requires teller and hearer to be co-present, and
+that co-presence happens *at the mill* this run — not because dana went looking (she held no
+belief yet, so nothing in her wants pointed her at carol) but because carol is the one with a want
+that needs a hearer (`Want [Match "Other.believes.stole.bob.loaf.heard.carol"] 5`), and the only
+route to satisfying it is to go find the one villager who hasn't heard. The mechanism itself
+doesn't route anyone toward anyone — `gossip` only fires on co-presence — but this world's own
+anchoring want reliably puts a hearer in a known place, so the teller (not the hearer) does the
+travelling.
+
+Once bob atones (§24, the very next beat) and there's nothing left for either of them to react to,
+carol — who, unlike dana, holds no location want at all — resumes wandering square↔mill on a pure
+tie-break (`Go to` sorts before `Wait a moment` in the menu, so an idle mover with no reason to
+stay drifts). dana does something more purposeful first: her own `Want [Match "eyed.dana.T"] 5`
+outweighs her +1 mill-anchor, so she walks to the square once, to be near bob:
 
 ```
 -------------------- scene --------------------
@@ -657,30 +703,29 @@ dana, who acts later in that same round, already has the hearsay to act on it, i
   - carol is at the square
   - dana is at the square
   - you is at the square
+  - bob has made amends
 Your move (you):
-  1) you: confront bob about the theft
-  2) you: tell dana that bob stole the loaf
-  3) you: Go to mill
+  1) you: steal the loaf from the stall
+  2) you: confront bob about the theft
+  3) you: tell dana that bob stole the loaf
+  4) you: Go to mill
   m) wait and let others act
   s) save    q) quit
 >   bob: Wait a moment
-  carol: tell dana that bob stole the loaf
+  carol: Go to mill
   dana: eye bob with suspicion
 ```
 
-What actually drives this is less tidy than "carol carries the news": `gossip` only requires teller
-and hearer to be co-present, and in this run that co-presence happens in the square, because dana
-walks over — not because she's chasing news (she holds no belief yet, so nothing in her wants or
-lookahead points her at carol) but because, with no location want of her own, ties between her
-available moves resolve by list order (`Go to` sorts before `Wait a moment`) — the same tie-break
-`Prax.Worlds.Village`'s own comment on bob's anchoring want describes ("an idle character needs a
-place it wants to be, or it drifts on tie-break"). Once she's told and has acted on it, dana and
-carol go on oscillating square↔mill for the same reason, visible over the following turns of this
-same run. The mechanism doesn't route anyone toward anyone; it only fires when the two happen to be
-in the same place.
+— eyes him with suspicion (satisfying that want for good, since the fact it inserts persists) —
+and then heads straight back to the mill and settles there, `Wait`ing for the rest of the run,
+never leaving again. carol, with nothing anchoring her anywhere, keeps oscillating square↔mill on
+the same tie-break for as long as you keep pressing `m`. The asymmetry between them is real and
+want-driven, not a shared quirk — one character has a reason to stay put, the other never did.
 
-You were offered the identical tell (`2) you: tell dana that bob stole the loaf`) — telling is an
-ordinary affordance, open to the player exactly as witnessing was in §22.
+You were offered the identical tell (`3) you: tell dana that bob stole the loaf`) even after carol
+already told her — telling is a per-teller, per-source affordance (see "sourced-hearsay
+vocabulary" below), open to the player exactly as witnessing was in §22; a second source is
+corroboration, not a duplicate.
 
 **The saw/heard affordance asymmetry.** dana, hearsay-only, gets `eye [Thief] with suspicion` — a
 milder trust hit (−5, reason `heardOfTheft`) — but never `confront`, which stays gated on `saw`
@@ -727,61 +772,58 @@ cabal run prax -- village
 ```
 
 The instant carol (an eyewitness) believes the theft, she also comes to *regard* bob a thief — a
-fact nobody wrote, derived from her belief:
+fact nobody wrote, derived from her belief — and standing already has teeth: `you: shun bob` is
+offered to the player on the very same gate (`regardedAs "Actor" "T" "thief"`) that lets carol
+shun him, this same beat:
 
 ```
 -------------------- scene --------------------
   - bob is at the square
   - carol is at the square
-  - dana is at the square
+  - dana is at the mill
   - you is at the square
   - carol regards bob as a thief
   - you regards bob as a thief
 Your move (you):
   1) you: confront bob about the theft
-  2) you: tell dana that bob stole the loaf
-  3) you: shun bob
-  4) you: Go to mill
-  ...
+  2) you: shun bob
+  3) you: Go to mill
+  m) wait and let others act
+  s) save    q) quit
+>   bob: Wait a moment
+  carol: shun bob
+  dana: Wait a moment
 ```
 
-Standing has teeth: `you: shun bob` is offered to the player on the very same gate
-(`regardedAs "Actor" "T" "thief"`) that lets carol shun him a beat later:
-
-```
-  - carol is shunning bob
-  - carol regards bob as a thief
-  - you regards bob as a thief
-```
-
-carol then tells dana what she saw, and dana — hearsay-only — comes to regard bob too: §23's
-saw/heard asymmetry (suspicion, not confrontation) carries straight into standing, since hearsay
-is evidence enough to *regard* exactly as it's evidence enough to *believe*. With carol, dana, and
-you all regarding bob a thief, the third regard tips `notoriety "thief" 3` — "the whole village
-knows" — and bob's want against `notorious.bob.thief` (−15) now outweighs the loaf in his hands
-(+10): he returns it, the very same beat carol relents:
+carol later tells dana what she saw (§23 — she has to travel to the mill to find her; dana never
+comes looking), and dana — hearsay-only — comes to regard bob too: §23's saw/heard asymmetry
+(suspicion, not confrontation) carries straight into standing, since hearsay is evidence enough to
+*regard* exactly as it's evidence enough to *believe*. With carol, dana, and you all regarding bob
+a thief, the third regard tips `notoriety "thief" 3` — "the whole village knows" — and bob's want
+against `notorious.bob.thief` (−15) now outweighs the loaf in his hands (+10): he returns it, the
+very same beat both carol and dana relent:
 
 ```
 -------------------- scene --------------------
   - bob is at the square
-  - carol is at the square
-  - dana is at the square
+  - carol is at the mill
+  - dana is at the mill
   - you is at the square
   - carol is shunning bob
+  - dana is shunning bob
   - carol regards bob as a thief
   - dana regards bob as a thief
   - you regards bob as a thief
   - bob is notorious as a thief
 Your move (you):
   1) you: confront bob about the theft
-  2) you: tell dana that bob stole the loaf
-  3) you: shun bob
-  4) you: Go to mill
+  2) you: shun bob
+  3) you: Go to mill
   m) wait and let others act
   s) save    q) quit
 >   bob: return the loaf with apologies
   carol: relent toward bob
-  dana: Go to mill
+  dana: relent toward bob
 ```
 
 **Atonement, not amnesia.** One beat later every derived line vanishes from the scene at once —
@@ -790,7 +832,7 @@ not because anyone forgot, but because their only support (the absence of `atone
 ```
 -------------------- scene --------------------
   - bob is at the square
-  - carol is at the square
+  - carol is at the mill
   - dana is at the mill
   - you is at the square
   - bob has made amends
@@ -803,9 +845,9 @@ exactly as before (the scene never renders raw beliefs, only derived standing, s
 shows directly). Forgiveness without forgetting — the standing was never *stored*, so there was
 nothing to erase but the derivation's own support.
 
-**Deterrence: the stall stays stocked.** Keep pressing `m` — sixteen in total from the top of
-this same run — and every beat from here to the end repeats this shape, bob never touching the
-stall again:
+**Deterrence: the stall stays stocked.** Keep pressing `m`. By the ninth press from the top of
+this same run, dana — her business done (§23) — has settled back at the mill for good, and every
+beat from here to the end repeats this shape, bob never touching the stall again:
 
 ```
 -------------------- scene --------------------
@@ -822,25 +864,29 @@ Your move (you):
   s) save    q) quit
 >   bob: Wait a moment
   carol: Go to mill
-  dana: Go to square
+  dana: Wait a moment
 ```
 
-(Every one of the eleven beats still left in the run — `carol`/`dana` oscillating
-square↔mill, same as §23's tie-break — repeats exactly this: `bob has made amends`, `bob: Wait a
-moment`, and the steal still sitting first in the player's menu, right up to the last `m` and
-`Bye.`)
+(Every beat from here on repeats this shape for as long as you keep pressing `m`: dana stays put
+— her anchor has nothing left competing with it — while carol, who never had a location want of
+her own, keeps oscillating square↔mill on the same list-order tie-break as §23. `bob has made
+amends` and the steal option sitting first in the player's menu persist unchanged; the run above
+was captured for twenty presses straight through to `q`, and it never breaks this pattern.)
 
 That `1) you: steal the loaf from the stall` option is not a leftover — `stall.loaf` really is
 still there, and bob's `Want [Match "holding.bob.loaf"] 10` is live again (atonement deleted his
-*holding*, not his want). He just never takes it: the deed's own outcome deletes `atoned.Actor`
-the instant it fires, so a planner looking one step ahead at "steal again" sees standing and
-notoriety snap straight back — the same −15 he'd only just paid off, payable again on the
-spot. An unatoned bob was tipped into atoning; an atoned bob, seeing that future, doesn't
-re-offend. `bob has made amends` and `bob: Wait a moment` repeat for the rest of the run — every
-beat still offering the *player* the theft bob himself now refuses. This 16-beat run only shows
-the shape of it; `VillageSpec` pins both facts — "re-offense revokes atonement: standing snaps
-back from memory" forces a second theft by hand and asserts the regards return, and "an atoned
-thief is deterred: the planner sees the snap-back" drives 90 autonomous turns past the atonement
+*holding*, not his want). He just never takes it: the deed's own outcome deletes `atoned.Actor` as
+part of the very same outcome that reinstates his holding, so standing and notoriety are already
+snapped back — the same −15 he'd only just paid off — in the state stealing itself produces, with
+*no lookahead at all*: at depth 0, `scoreActions` already ranks stealing at −4.0 against waiting's
++1.0 (checked directly). This isn't a foreseen future; it's an immediate consequence of the
+action, exactly like §8's stiffing aversion. An unatoned bob was tipped into atoning; an atoned
+bob, seeing that consequence right in front of him, doesn't re-offend. `bob has made amends` and
+`bob: Wait a moment` repeat for the rest of the run — every beat still offering the *player* the
+theft bob himself now refuses. `VillageSpec` pins both facts — "re-offense revokes atonement:
+standing snaps back from memory" forces a second theft by hand and asserts the regards return, and
+"an atoned thief is deterred: the planner sees the snap-back" drives 90 autonomous turns past the
+atonement
 and asserts the stall stays stocked (the full arc itself is driven for 60 turns in "the whole
 arc runs itself").
 
@@ -911,17 +957,21 @@ bar, Part I); the second is Part II, one row per world/tool.
 | `standing`/`standingUnless`/`regardedAs`/`notoriety` (derived reputation, base-fact atonement defeater) | `Prax.Repute` | `prax village`: three regards tip `notorious.bob.thief`; atonement dissolves every regard while the belief persists; re-offense revokes it and an atoned bob is deterred from a restocked stall |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
-same behaviours are asserted in the test suite (`cabal test`, 229 tests). Part I: `Prax.QuerySpec`,
-`Prax.EngineSpec`, `Prax.PlannerSpec`, `Prax.CoreSpec` (emotions/relationships), `Prax.ReactionsSpec`
-(reactions, norms, norm-avoidance), `Prax.BeliefsSpec` (per-agent & false beliefs), `Prax.ConversationSpec`
-(speaker turns, topics, one-shot quips), `Prax.ArcSpec` (arc stages), `Prax.DeonticSpec` (□, discharge,
-breach, contrary-to-duty), `Prax.BarSpec`, and `Prax.LoopSpec` (a deterministic 20-turn replay). Part
-II: `Prax.IntrigueSpec` (death + branching endings), `Prax.StressSpec`, `Prax.PersistSpec` (save/resume),
+same behaviours are asserted in the test suite (`cabal test`, 261 tests). Part I: `Prax.QuerySpec`,
+`Prax.EngineSpec`, `Prax.PlannerSpec` + `Prax.MindsSpec` (wants/utility/lookahead, now a round-walk
+over believed minds — `predictMove`, `charDesires`, `professed`/`conventional`), `Prax.CoreSpec`
+(emotions/relationships), `Prax.ReactionsSpec` (reactions, norms, norm-avoidance), `Prax.BeliefsSpec`
+(per-agent & false beliefs), `Prax.ConversationSpec` (speaker turns, topics, one-shot quips),
+`Prax.ArcSpec` (arc stages), `Prax.DeonticSpec` (□, discharge, breach, contrary-to-duty),
+`Prax.BarSpec`, and `Prax.LoopSpec` (a deterministic 25-turn replay — the bar's cast now includes
+the bodiless sight ticker). Part II: `Prax.IntrigueSpec` (death + branching endings, incl. the
+confidant/victim `predictMove` split), `Prax.StressSpec`, `Prax.PersistSpec` (save/resume),
 `Prax.ScriptSpec` + `Prax.Script.JsonSpec` (scene layer + JSON, incl. memories/timed junctions/sketches
 and the `audience`), `Prax.DirectorSpec` (player-as-DM), `Prax.ELSpec` + `Prax.DeriveSpec` (the
 exclusion-logic lattice and forward chaining), `Prax.TypeCheckSpec`, `Prax.WitnessSpec` +
-`Prax.VillageSpec` + `Prax.RumorSpec` (`ForEach` witnessing, co-presence, the confront affordance,
-sourced hearsay and the gossip gate), and `Prax.ReputeSpec` (derived standing, the base-fact
+`Prax.VillageSpec` + `Prax.RumorSpec` + `Prax.SightSpec` (`ForEach` witnessing, co-presence, the
+confront affordance, sourced hearsay and the gossip gate, and the perception ticker/sightings that
+gate whose moves get predicted), and `Prax.ReputeSpec` (derived standing, the base-fact
 atonement defeater, and notoriety at threshold — `VillageSpec`'s later cases carry the same
 mechanisms through the full autonomous arc, the re-offense snap-back, and the resulting
 deterrence).
@@ -953,9 +1003,11 @@ and honest:
   so it's a dependency to add, not a paper to work through.
 - **Beyond-Versu extensions** noted for later: incremental view-maintenance for the derivation
   layer, hard priority tiers (Swaygent/Ensemble-style `forbidden`/`required` above utility) for
-  *categorical* norm enforcement, quantified/nested beliefs (which Versu itself couldn't represent),
-  and runtime want injection. These extend past what Versu did; the LEDGER's "Future ideas" section
-  tracks them.
+  *categorical* norm enforcement, and quantified/nested beliefs (which Versu itself couldn't
+  represent). These extend past what Versu did; the LEDGER's "Future ideas" section tracks them.
+  (Runtime want injection needs no separate mechanism — a want gated on a fact is injectable by
+  inserting the fact — and `Prax.Minds`, v23, gives named desires a believable, tellable form on
+  top of the plain `Want` this doc's Part I covers.)
 
 The larger arc, per the LEDGER, is to grow this from a faithful reproduction into an emergent
 social-sim substrate that can be embedded in other games (sandboxes, roguelikes) — the `feud`

@@ -232,8 +232,40 @@ bread; the intensity comes with the concept) — per-observer intensities are ou
   action iff they hold the motive-belief.
 - **Mispredictions are real**: a false planted motive-belief produces a predicted move the mover
   never takes.
-- **Norms and the bar unchanged**: full behavioral suite green with no world edits outside
-  Intrigue's §5 change.
+- **Norms and the bar, mostly unchanged — corrected (two adjudicated exceptions).** This
+  consequence was originally stated as "full behavioral suite green with no world edits outside
+  Intrigue's §5 change." That claim is false: it did not anticipate that (a) wiring `Prax.Sight`'s
+  ticker into a cast changes the cast's *size*, and (b) real (non-omniscient) scope-limited
+  prediction changes *movement itself*, which the old `worldValue`'s omniscient crediting had been
+  accidentally choreographing for two village NPCs without anyone noticing. Both were caught by
+  the full-suite regression the round-walk rewrite required (Task 3: `predictMove`'s myopic,
+  belief-relative movement predictions no longer keep carol and dana in the same room on the same
+  turn the old max-over-everything model had happened to; four village tests went red). Two edits
+  were needed and sanctioned, traced to necessity rather than tuned into place:
+  1. **`dana` gets one anchoring want** in the village: `Want [Match
+     "practice.world.world.at.dana!mill"] 1` — the same idiom `bob`'s stall-anchor already used
+     (v20 Task 3, `src/Prax/Worlds/Village.hs`). Necessity, traced: under real round-walk
+     prediction nothing keeps `dana` near the mill through a zero-utility wander/wait tie-break,
+     so carol's `tell dana` gossip action never finds her co-present and the theft-to-notoriety
+     arc stalls. (A symmetrical anchor was first added to `carol` on an unverified generalization
+     from this diagnosis; a direct trace then showed carol never wanders in the first place — bob's
+     dominant loaf-want fires on his own first turn, so `confronted.carol.T` is already strictly
+     dominant by carol's first turn — and the carol anchor was deleted as unnecessary before this
+     round's tests were finalized.) This is a want addition, not a story change: the village's
+     eye → shun → relent arc is unchanged in content and order.
+  2. **`LoopSpec`'s golden-trace turn budget moves from 20 to 25** (`test/Prax/LoopSpec.hs`).
+     Wiring the sight ticker into `barWorld` adds a fifth, bodiless cast member (`sightChar`), so
+     a round-robin round is 5 turns instead of 4. The original 20 was exactly 5 rounds over a
+     4-character cast (5×4); 25 is the same 5 rounds over the new 5-character cast (5×5) — a
+     principled re-derivation of the budget (the empirically-minimal turn count that reproduces
+     the trace is 23; 25 was chosen because it is the value that preserves the "5 full rounds"
+     story depth the original 20 represented, not the smallest cutoff that happens to pass). The
+     16-line golden narration itself — content and order — is byte-identical to the pre-v23 trace.
+  Both changes are additive/structural (one want, one turn-count parameter) — no practice's
+  conditions or outcomes were edited in either world, and no story beat's content or order
+  changed anywhere outside Intrigue's §5 change. Everything else in the behavioral suite (the
+  bar's own tests, the village's pre-v23 arcs, feud, play/audience goldens) is unchanged, and the
+  full suite is green after both fixes.
 - **Performance collapses to linear-per-ply**: one predicted move per other character. Master's
   suite stays in its time class; the true referee is the parked v22 village suite (621s →
   expected seconds) measured when v22 resumes.

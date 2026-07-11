@@ -2,7 +2,7 @@ module Prax.QuerySpec (tests) where
 
 import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
-import           Test.Tasty.HUnit (testCase, (@?=))
+import           Test.Tasty.HUnit (testCase, (@?=), assertFailure)
 
 import           Prax.Db
 import           Prax.Query (CmpOp(..), CalcOp(..), Condition(..), forAll, implies, groundCondition, query)
@@ -27,8 +27,9 @@ tests = testGroup "Prax.Query"
 
   , testGroup "eq / neq"
     [ testCase "eq binds an unbound variable to a constant" $
-        let [b] = query emptyDb [Eq "X" "beer"] Map.empty
-        in look "X" b @?= Just (VStr "beer")
+        case query emptyDb [Eq "X" "beer"] Map.empty of
+          [b] -> look "X" b @?= Just (VStr "beer")
+          bs  -> assertFailure ("expected exactly one binding, got " ++ show (length bs))
     , testCase "eq of two equal bound values keeps the binding" $
         query emptyDb [Eq "X" "Y"] (Map.fromList [("X", VStr "a"), ("Y", VStr "a")])
           @?= [Map.fromList [("X", VStr "a"), ("Y", VStr "a")]]
@@ -49,22 +50,24 @@ tests = testGroup "Prax.Query"
         let db0 = build ["counter.0"]
         query db0 [Match "counter.Val", Cmp Gt "Val" "4"] Map.empty @?= []
         -- calc NewVal = 0 + 5
-        let [b] = query db0 [Match "counter.Val", Calc "NewVal" Add "Val" "5"] Map.empty
-        look "NewVal" b @?= Just (VNum 5)
+        case query db0 [Match "counter.Val", Calc "NewVal" Add "Val" "5"] Map.empty of
+          [b] -> look "NewVal" b @?= Just (VNum 5)
+          bs  -> assertFailure ("expected exactly one binding, got " ++ show (length bs))
         -- replace counter with the new value; now gt 4 holds
         let db1 = insert "counter!5" db0
             rs  = query db1 [Match "counter.Val", Cmp Gt "Val" "4"] Map.empty
         map (look "Val") rs @?= [Just (VStr "5")]
     , testCase "chained calc: mul then sub yields -20" $
         let db = build ["counter!5"]
-            [b] = query db
+        in case query db
                     [ Match "counter.Val"
                     , Calc "BigVal" Mul "Val" "Val"
                     , Cmp Lt "Val" "BigVal"
                     , Calc "TinyVal" Sub "Val" "BigVal"
-                    ] Map.empty
-        in do look "BigVal" b @?= Just (VNum 25)
-              look "TinyVal" b @?= Just (VNum (-20))
+                    ] Map.empty of
+             [b] -> do look "BigVal" b @?= Just (VNum 25)
+                       look "TinyVal" b @?= Just (VNum (-20))
+             bs  -> assertFailure ("expected exactly one binding, got " ++ show (length bs))
     ]
 
   , testGroup "subquery / count  (port of tests.js subquery block)"
@@ -83,9 +86,14 @@ tests = testGroup "Prax.Query"
         in do
           length rs @?= 1
           -- The set holds the two other dancers (kevin, jer), one column each.
-          let Just (VSet rows) = look "Dancers" (head rs)
-          fmap length (look "Dancers" (head rs) >>= asSet) @?= Just 2
-          length rows @?= 2
+          case rs of
+            (r : _) ->
+              case look "Dancers" r of
+                Just (VSet rows) -> do
+                  fmap length (look "Dancers" r >>= asSet) @?= Just 2
+                  length rows @?= 2
+                other -> assertFailure ("expected Dancers to be a VSet, got " ++ show other)
+            [] -> assertFailure "expected at least one binding from query"
     , testCase "eq on the count filters out the wrong actor" $
         let db = build [ "char.tim", "char.solo", "isDancing.tim" ]
             conds =
@@ -142,7 +150,9 @@ tests = testGroup "Prax.Query"
         -- …Exists keeps a single binding and does not bind Who
         let rs = query db [ Match "here.OK", Exists [ Match "char.Who" ] ] Map.empty
         length rs @?= 1
-        look "Who" (head rs) @?= Nothing
+        case rs of
+          (r : _) -> look "Who" r @?= Nothing
+          []      -> assertFailure "expected at least one binding from query"
 
     , testCase "forAll: every patron has a drink (flips when one lacks it)" $ do
         let has  = build ["patron.tim", "patron.kev", "drink.tim", "drink.kev"]
