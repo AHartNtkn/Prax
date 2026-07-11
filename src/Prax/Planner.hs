@@ -23,7 +23,7 @@ import qualified Data.Map.Strict as Map
 import           Data.Maybe (listToMaybe)
 import           Data.Ord (Down(..))
 
-import           Prax.Db (Val (..))
+import           Prax.Db (Val (..), exists)
 import           Prax.Query (countSatisfying, groundCondition, query)
 import           Prax.Types
 import           Prax.Engine (readView, possibleActions, performAction)
@@ -37,12 +37,18 @@ evaluate st wants =
   where view = readView st
 
 -- | The actions a character may actually take (practice-bound filtering).
+-- The dead act in no one's plans, including their own: a character marked
+-- dead by the time this is consulted has no candidates, so neither
+-- 'predictMove' nor the actor's own 'selfNext' recursion will plan around or
+-- through a corpse.
 candidateActions :: PraxState -> Character -> [GroundedAction]
-candidateActions st c =
-  let as = possibleActions st (charName c)
-  in case charBoundTo c of
-       Nothing  -> as
-       Just pid -> filter ((== pid) . gaPracticeId) as
+candidateActions st c
+  | exists (deadSentence (charName c)) (db st) = []
+  | otherwise =
+      let as = possibleActions st (charName c)
+      in case charBoundTo c of
+           Nothing  -> as
+           Just pid -> filter ((== pid) . gaPracticeId) as
 
 -- | Is the mover within the actor's prediction scope? The world's template
 -- (over @Actor@/@Witness@) is grounded to the pair and queried against the

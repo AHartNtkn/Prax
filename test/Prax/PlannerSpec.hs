@@ -252,4 +252,71 @@ tests = testGroup "Prax.Planner"
       -- together: back in scope, the coordination fires as in the default
       -- (empty-scope, everyone-in-scope) case above.
       fmap gaLabel (pickAction 1 together olaf) @?= Just "olaf: open the gate"
+
+  , testCase "the dead are predicted to do nothing" $ do
+      -- ada believes beth craves cider; beth is alive with a motivated move
+      -- available (order cider), so she is predicted to take it.
+      let vocab = [ Desire "cider-craving"
+                      (Want [ Match "practice.tendBar.Bartender.customer.Owner!order!cider" ] 10) ]
+          beth' = (character "beth") { charDesires = ["cider-craving"] }
+          st    = (walkedUp { desires = vocab
+                            , characters = [ beth', character "ada" ] })
+          st'   = performOutcome
+                    (Insert "ada.believes.desires.beth.cider-craving.heard.gossip") st
+      fmap gaLabel (predictMove st' (character "ada") beth') @?= Just "beth: Order cider"
+      -- dead: the same belief and precondition hold, but a dead mover has no
+      -- candidate actions, so there is nothing to predict.
+      let dead = performOutcome (Insert (deadSentence "beth")) st'
+      predictMove dead (character "ada") beth' @?= Nothing
+
+  , testCase "a mid-round death silences the rest of the imagined round" $ do
+      -- Reviewer's shape: alice's "signal" opens a round in which bob (predicted
+      -- first) kills carol, and carol (predicted second) would otherwise
+      -- deliver -- a move alice values. A corpse must not be credited.
+      let vocab = [ Desire "kill-desire"    (Want [ Match "dead.carol" ] 10)
+                  , Desire "deliver-desire" (Want [ Match "delivered"  ] 10) ]
+          duelP = practice
+            { practiceId = "duel", roles = ["R"]
+            , actions =
+                [ action "[Actor]: signal"
+                    [ Eq "Actor" "alice", Not "signaled" ]
+                    [ Insert "signaled" ]
+                , action "[Actor]: kill carol"
+                    [ Eq "Actor" "bob", Match "signaled", Not "dead.carol" ]
+                    [ Insert "dead.carol" ]
+                , action "[Actor]: deliver"
+                    [ Eq "Actor" "carol", Match "signaled", Not "delivered" ]
+                    [ Insert "delivered" ]
+                , action "[Actor]: Wait about"
+                    [] [] ]
+            }
+          alice = (character "alice") { charWants = [ Want [ Match "delivered" ] 10 ] }
+          bob   = character "bob"
+          carol = character "carol"
+          st0   = foldl (flip performOutcome)
+                    ((definePractices [duelP] emptyState)
+                       { characters = [ alice, bob, carol ], desires = vocab })
+                    [ Insert "practice.duel.here" ]
+          believeBoth = foldl (flip performOutcome) st0
+            [ Insert "alice.believes.desires.bob.kill-desire.heard.gossip"
+            , Insert "alice.believes.desires.carol.deliver-desire.heard.gossip" ]
+          scoreOf lbl st = lookup lbl [ (gaLabel a, s) | (a, s) <- scoreActions 1 st alice ]
+      -- Round-walk after "signal": bob is predicted first (killing carol,
+      -- which alone gains alice nothing -> +0.5*0), then carol is predicted.
+      --
+      -- WITH the ghost bug (carol's death not consulted before predicting
+      -- her): carol is still predicted to "deliver" against a state that
+      -- already has "dead.carol" -- possibleActions/candidateActions never
+      -- filter on death. That predicted move inserts "delivered", crediting
+      -- +0.5*10 = 5.0 to othersScore, and the resulting (ghost-inflated)
+      -- afterRound state also feeds selfNext: scoreActions 0 there sees
+      -- "delivered" already true, so selfNext = 0.9*10 = 9.0. Total:
+      -- 0 (base after signal) + 5.0 + 9.0 = 14.0.
+      --
+      -- WITHOUT the ghost (correct): carol is dead by the time she would be
+      -- predicted, so candidateActions returns [] for her and predictMove is
+      -- Nothing -- she contributes nothing, and afterRound never gets
+      -- "delivered". othersScore = 0, selfNext = 0.9*0 = 0. Total:
+      -- 0 + 0 + 0 = 0.0.
+      scoreOf "alice: signal" believeBoth @?= Just 0.0
   ]
