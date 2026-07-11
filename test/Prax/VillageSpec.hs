@@ -74,14 +74,14 @@ tests = testGroup "Prax.Worlds.Village"
         (not (any (("confront bob" `isInfixOf`) . gaLabel) (possibleActions st "carol")))
 
   , testCase "the rumor spreads on its own: carol carries the news to the mill" $ do
-      -- 36 turns = the original 6 full rounds over the grown 6-member cast
-      -- (24 was 6 rounds of the pre-ticker, pre-eve 4-member village).
-      let st = driveIdle "you" 36 (doAct "bob" "steal the loaf" villageWorld)
+      -- 42 turns: 6 full rounds over the 7-member v25 cast
+      let st = driveIdle "you" 42 (doAct "bob" "steal the loaf" villageWorld)
       assertBool "dana heard it from carol"
         (exists "dana.believes.stole.bob.loaf.heard.carol" (db st))
 
   , testCase "the arc completes on its own: dana eventually eyes bob" $ do
-      let st = driveIdle "you" 40 (doAct "bob" "steal the loaf" villageWorld)
+      -- 49 turns: 7 rounds
+      let st = driveIdle "you" 49 (doAct "bob" "steal the loaf" villageWorld)
       assertBool "dana acted on the hearsay"
         (exists "eyed.dana.bob" (db st))
 
@@ -162,7 +162,8 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "the stall is restocked" (exists "stall.loaf" (db st2))
 
   , testCase "the whole arc runs itself: notoriety tips bob; forgiveness follows" $ do
-      let st = driveIdle "you" 60 (doAct "bob" "steal the loaf" villageWorld)
+      -- 70 turns: 10 rounds
+      let st = driveIdle "you" 70 (doAct "bob" "steal the loaf" villageWorld)
           v  = readView st
       assertBool "bob atoned on his own" (exists "atoned.bob" (db st))
       assertBool "no regard survives"    (not (exists "regards.carol.bob.thief" v))
@@ -190,7 +191,8 @@ tests = testGroup "Prax.Worlds.Village"
       -- run the whole arc, then keep driving: the stall is restocked, bob's
       -- loaf-want is live again, but stealing would instantly restore his
       -- notoriety (-15 > +10) — so he never takes it.
-      let st = driveIdle "you" 90 (doAct "bob" "steal the loaf" villageWorld)
+      -- 105 turns: 15 rounds
+      let st = driveIdle "you" 105 (doAct "bob" "steal the loaf" villageWorld)
       assertBool "his atonement stands" (exists "atoned.bob" (db st))
       assertBool "the stall's loaf is untouched" (exists "stall.loaf" (db st))
       -- "bob holds no loaf" was a proxy for "he never re-steals"; v24's
@@ -207,12 +209,12 @@ tests = testGroup "Prax.Worlds.Village"
         (not (exists "notorious.bob.thief" (readView st)))
 
   , testCase "the village keeps a perception clock and sightings" $ do
-      -- after one full round of driveIdle (all six cast members -- you, bob,
-      -- carol, dana, eve -- ending with the sight ticker), the perception
+      -- after one full round of driveIdle (all seven cast members -- you, bob,
+      -- carol, dana, eve, gale -- ending with the sight ticker), the perception
       -- clock has advanced and the square-mates (you, bob, and carol) hold
       -- sightings of each other; dana, at the mill the whole round, holds
       -- none of bob (and bob none of her).
-      let st = driveIdle "you" 6 villageWorld
+      let st = driveIdle "you" 7 villageWorld
       assertBool "the clock ticked once" (exists "turn!1" (db st))
       assertBool "you sighted bob in the square"
         (exists "you.believes.at.bob!square" (db st))
@@ -267,19 +269,21 @@ tests = testGroup "Prax.Worlds.Village"
         (inScopeOf st3 "dana" "bob")
 
   , testCase "a secret keeps: bob will not steal while the square watches" $ do
-      let st = driveIdle "you" 20 villageWorld
+      -- 28 turns: 4 rounds
+      let st = driveIdle "you" 28 villageWorld
       assertBool "the loaf is still on the stall" (exists "stall.loaf" (db st))
       assertBool "no one believes any theft by bob"
         (not (any (\w -> exists (w ++ ".believes.stole.bob.loaf") (db st))
-                  ["you", "carol", "dana", "eve"]))
+                  ["you", "carol", "dana", "eve", "gale"]))
 
   , testCase "the perfect crime: alone, bob steals and no one ever knows" $ do
+      -- 14 turns: 2 rounds
       let st0 = doAct "carol" "Go to mill" (doAct "you" "Go to mill" villageWorld)
-          st  = driveIdle "you" 12 st0
+          st  = driveIdle "you" 14 st0
       assertBool "bob took it" (exists "holding.bob.loaf" (db st))
       assertBool "nobody saw"
         (not (any (\w -> exists (w ++ ".believes.stole.bob.loaf") (db st))
-                  ["you", "carol", "dana", "eve"]))
+                  ["you", "carol", "dana", "eve", "gale"]))
       assertBool "no standing about bob ever derives"
         (not (exists "regards.carol.bob.thief" (readView st)))
 
@@ -303,14 +307,15 @@ tests = testGroup "Prax.Worlds.Village"
       -- from t=0 free play, with the whole square watching, bob undertakes
       -- honest work and completes it: he ends holding a loaf he BAKED —
       -- the stall's loaf untouched, no theft beliefs about him anywhere.
-      let st = driveIdle "you" 42 villageWorld
+      -- 49 turns: 7 rounds
+      let st = driveIdle "you" 49 villageWorld
       assertBool "bob undertook the endeavor" (exists "practice.earnBread.bob" (db st))
       assertBool "and finished it" (exists "practice.earnBread.bob.done.s3" (db st))
       assertBool "he holds a loaf" (exists "holding.bob.loaf" (db st))
       assertBool "the stall's loaf untouched" (exists "stall.loaf" (db st))
       assertBool "no one believes any theft by bob"
         (not (any (\w -> exists (w ++ ".believes.stole.bob.loaf") (db st))
-                  ["you", "carol", "dana", "eve"]))
+                  ["you", "carol", "dana", "eve", "gale"]))
 
   , testCase "the opportunism stays honest: an empty square mid-project still tempts" $ do
       -- bob has undertaken and swept; then the square empties. Stealing (+10,
@@ -339,4 +344,56 @@ tests = testGroup "Prax.Worlds.Village"
       fmap gaLabel (predictMove st1 (villager "carol") (villager "bob"))
         @?= Just "bob: fetch flour from the mill"
       predictMove st1 (villager "dana") (villager "bob") @?= Nothing
+
+  , testCase "temperament is legible from t=0: the village presumes gale's conscience" $ do
+      let v = readView villageWorld
+      assertBool "carol presumes gale's conscience"
+        (exists "carol.believes.desires.gale.clean-conscience.presumed" v)
+      assertBool "dana presumes it too"
+        (exists "dana.believes.desires.gale.clean-conscience.presumed" v)
+      assertBool "her spite, unheralded, is presumed by no one"
+        (not (exists "carol.believes.desires.gale.spites-carol" v))
+      assertBool "no conscience is presumed of eve (she bears no trait)"
+        (not (exists "carol.believes.desires.eve.clean-conscience" v))
+
+  , testCase "same spite, different temperaments: eve whispers, gale never does" $ do
+      let vs = ["you", "bob", "carol", "dana", "eve", "gale"]
+          st = driveIdle "you" 49 villageWorld
+      assertBool "eve's frame-up went ahead"
+        (exists "dana.believes.stole.carol.loaf.heard.eve" (db st))
+      assertBool "and eve carries the mark of it"
+        (exists "eve.lied.dana.stole.carol.loaf" (db st))
+      assertBool "gale, bearing the same spite, never lied (her psyche is unmarked)"
+        (not (exists "gale.lied" (db st)))
+      -- the emergent sting, kept honest rather than asserted away: eve's
+      -- whisper deceives gale too (an honest believer is the perfect vector),
+      -- and gale spreads the falsehood she now honestly holds -- ordinary
+      -- gossip, no lie, no mark, no conscience cost. The honest villager
+      -- launders the lie. Assert the laundering, and its honesty: everything
+      -- traced to gale is something gale herself believes.
+      let heardFromGale =
+            [ (w, c) | w <- vs, c <- vs
+                     , exists (w ++ ".believes.stole." ++ c
+                                 ++ ".loaf.heard.gale") (db st) ]
+      assertBool "the lie traveled through the honest villager"
+        (not (null heardFromGale))
+      assertBool "whatever gale passed on, she honestly believes"
+        (all (\(_, c) -> exists ("gale.believes.stole." ++ c ++ ".loaf") (db st))
+             heardFromGale)
+
+  , testCase "a told-about spite predicts eve's whisper but not gale's" $ do
+      -- dana is told (planted) that each woman nurses the spite; gale's
+      -- conscience she has presumed since t=0 (transparent). Believed malice
+      -- alone predicts a whisper framing carol; believed malice netted
+      -- against believed conscience (+4 - 6) predicts nothing.
+      let st = foldl (flip performOutcome) villageWorld
+                 [ Insert "dana.believes.desires.eve.spites-carol.heard.you"
+                 , Insert "dana.believes.desires.gale.spites-carol.heard.you" ]
+          p  = fmap gaLabel (predictMove st (villager "dana") (villager "eve"))
+      -- eve has two equally-paying hearers at the mill (dana and gale), so
+      -- assert the shape, not the tie-break
+      assertBool ("predicted a carol-framing whisper, got " ++ show p)
+        (maybe False (\l -> "whisper" `isInfixOf` l
+                            && "carol stole" `isInfixOf` l) p)
+      predictMove st (villager "dana") (villager "gale") @?= Nothing
   ]
