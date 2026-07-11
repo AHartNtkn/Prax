@@ -85,6 +85,13 @@ reclose st = st { readView = case closure (axioms st) (db st) of
 withDb :: (Db -> Db) -> PraxState -> PraxState
 withDb f st = reclose st { db = f (db st) }
 
+-- | Apply one delta to the base AND the cached view in lockstep — sound
+-- exactly when 'relevantDelta' answered False (the delta commutes with
+-- closure; v27 spec theorem). The only sanctioned 'readView' write outside
+-- 'reclose'.
+applyDirect :: (Db -> Db) -> PraxState -> PraxState
+applyDirect f st = st { db = f (db st), readView = f (readView st) }
+
 -- | The only sanctioned way to change the axioms of a built state.
 setAxioms :: [Axiom] -> PraxState -> PraxState
 setAxioms axs st = retable (reclose st { axioms = axs })
@@ -136,9 +143,12 @@ groundOutcome (ForEach conds outs) b =
 
 -- | Apply a single, already-grounded outcome to the state.
 performOutcome :: Outcome -> PraxState -> PraxState
-performOutcome (Delete s) st = withDb (retract s) st
+performOutcome (Delete s) st
+  | relevantDelta s st = withDb (retract s) st
+  | otherwise          = applyDirect (retract s) st
 performOutcome (Insert s) st =
-  let st' = withDb (insert s) st
+  let st' | relevantDelta s st = withDb (insert s) st
+          | otherwise          = applyDirect (insert s) st
   in case spawnedInstance s st of
        Just (def, roleVals) ->
          let roleBindings = Map.fromList (zip (roles def) (map VStr roleVals))
