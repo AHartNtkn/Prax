@@ -16,6 +16,16 @@ Design history — from a goal-bundle model to a conduct-valuation model.
   not prohibitions, in keeping with the soft planner (hard tiers stay banked, separate). Traits
   make kinds of action more or less likely; goal-bundles are demoted to what they always were —
   plain desires needing no trait.
+- **Rejected on second review: objective deed-records.** The first conduct draft had `lie`
+  deposit a ground-truth ledger entry, framed as the banked exculpation item "arriving through
+  the front door." User review overturned it, and rightly: **history persists only through the
+  marks it makes** — beliefs, memories, consequences — and the game must be able to reach
+  states where the truth is impossible to recover. v22 already shipped this as a commitment
+  ("nobody in-world holds ground truth"); an objective record is an oracle, and anything built
+  on it would be omniscience through the archive. The conduct-residue is therefore a **mark on
+  the liar** — their own memory, owned, forgettable, perishable — and the banked
+  exculpation-via-records idea is unbanked as mistaken (truth recovery, if ever built, flows
+  through mark-bearers: confession and testimony, not consultation).
 
 ## 1. The mechanism: valuations over conduct-records
 
@@ -27,7 +37,7 @@ desires over the bearer's *own conduct-records*:
 ```
 honest = Trait "honest"
   [ Desire "clean-conscience"
-      (Want [ Match "lied.Owner.H.stole.C.loaf" ] (-6)) ]
+      (Want [ Match "Owner.lied.H.stole.C.loaf" ] (-6)) ]
       -- −6 per lie told (per hearer × per fabricated subject), matching the
       -- village's lie-record shape; the weight is authored: what a lie costs
       -- HER, netted against whatever the lie would buy.
@@ -43,27 +53,30 @@ honest = Trait "honest"
 - Trait wants are **world-authored against world record shapes**, the same discipline as all
   vocabulary (the trait lives with the world that defines its conduct-records).
 
-## 2. Conduct-records: the `lied` deed-record
+## 2. Conduct-marks: the liar's own memory
 
 Conduct-valuation requires conduct to leave traces, and mostly it doesn't yet — the lie's only
-current trace (`.heard.<liar>` in the hearer) is indistinguishable from truthful gossip. So:
+current trace (`.heard.<liar>` in the hearer) is indistinguishable from truthful gossip. The
+residue is a **mark on the liar**, not a record in the world:
 
-- **`Prax.Deceit.lie` gains one effect**: `Insert ("lied.Actor.Hearer." ++ pat)` — a
-  ground-truth deed-record, `lied.<liar>.<hearer>.<full event>` (e.g.
-  `lied.eve.dana.stole.carol.loaf`). Fixed arity per lie-declaration, so world-authored trait
-  wants count lies exactly (per hearer × per event).
-- **This is the banked ground-truth/exculpation item arriving through the front door**: the
-  same records that make conscience expressible make frame-ups disprovable later. This round
-  ships only the `lied` record (the vocabulary conscience needs *now*); theft-records and
-  exculpation actions stay banked, with the pattern established.
-- **Privacy by convention, documented**: the trie is public, so conduct-records are readable
-  by anyone — conscience stays private only because no shipped action or axiom queries
-  `lied.*` except the bearer's own trait want. The same convention `conceal`'s vocabulary
-  already lives by. (Believed/witnessed lying — getting *caught* — is exactly what these
-  records enable later, deliberately not built now.)
-- **Conscience vs shame, expressible and distinct**: a want over `lied.Owner…` is conscience
-  (fires seen or unseen); a want over others' *beliefs* about you is shame. Both authorable;
-  the difference is now explicit rather than muddled.
+- **`Prax.Deceit.lie` gains one effect**: `Insert ("Actor.lied.Hearer." ++ pat)` — the liar's
+  own memory of the deed, rooted under their name like all mental state (e.g.
+  `eve.lied.dana.stole.carol.loaf`). Fixed arity per lie-declaration, so world-authored trait
+  wants count the bearer's lies exactly (per hearer × per event).
+- **Marks, not records — a design commitment**: history persists only through the marks it
+  makes, and the truth must be able to become unrecoverable. The mark is owned (the liar's
+  psyche), forgettable (`forget` retracts subtrees), and perishes with its bearer. Nothing can
+  consult it as an oracle: a frame-up stays undisprovable unless a mark-bearer acts — the liar
+  confesses, or someone who witnessed the whispering speaks. Truth recovery, wherever it is
+  ever built, flows through people.
+- **Privacy inherits the existing convention**: psyche-rooted marks have exactly the status of
+  `X.believes.…` — public in the trie, private by the same convention every mental-state
+  vocabulary already lives by. No new namespace, no new convention.
+- **Conscience vs shame, expressible and distinct**: a want over `Owner.lied.…` is conscience
+  (fires seen or unseen — it is your own memory); a want over others' *beliefs* about you is
+  shame. Both authorable; the difference is now explicit rather than muddled. (A coarser
+  gainable attribute — a single `guilty` mood in the v2 idiom — is also authorable where
+  per-deed granularity is unwanted.)
 
 ## 3. The trait scaffolding (carried over, semantics changed)
 
@@ -115,9 +128,10 @@ The village gains **gale** (via `cast`), the contrast pair to eve:
 
 ## 5. Tests (TDD)
 
-- `DeceitSpec` additions: the lie deposits `lied.<liar>.<hearer>.<event>` (exact shape);
-  truthful `gossip` deposits no such record; existing lie tests unchanged (the record is
-  additive).
+- `DeceitSpec` additions: the lie deposits the liar's mark `<liar>.lied.<hearer>.<event>`
+  (exact shape); truthful `gossip` deposits no such mark; the mark is forgettable
+  (`forget` on the `lied` subtree clears it — and the conscience-cost with it); existing lie
+  tests unchanged (the mark is additive).
 - `PersonaSpec` (fixture pins the first-draft probe plus the new semantics): `bearing`/
   `personaVocabulary` (+ duplicate/path-segment guards)/`personaSetup`/`cast` mechanics;
   `transparent` derives presumption for bearers only, defeasibly; **the conduct-valuation
@@ -135,8 +149,8 @@ The village gains **gale** (via `cast`), the contrast pair to eve:
 
 ## 6. Out of scope (parked deliberately)
 
-- Theft deed-records + exculpation/getting-caught-lying (the records' pattern is established;
-  each is its own round when wanted).
+- Theft conduct-marks and getting-caught-lying (the mark pattern is established; each is its
+  own round when wanted). Exculpation-via-records is not parked — it is rejected (§2).
 - Script-layer `withTraits` wiring; randomized cast sampling; runtime trait change (character
   transformation belongs with the Arc vocabulary, a future join); hard prohibitions (the
   banked priority-tiers item).
