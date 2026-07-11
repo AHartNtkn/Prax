@@ -587,3 +587,156 @@ git add docs/LEDGER.md README.md
 git commit -m "Docs: v26 — the planner stops paying for work that decides nothing"
 ```
 (with the standard trailers)
+
+---
+
+### Task 4b: Single tokenization on the measured hot paths (commissioned by the Task 4 profile)
+
+The Task 4 re-profile (one village round, post Tasks 2–3): 7.07s → 2.83s; `readView` is now a
+free field access; the remaining cost is `reclose` (11,840 entries — one closure per distinct
+state — 71.8% inherited) and **string tokenization is still ~48% of total** (`tokens.go` 23.5+5.4,
+`trim.f` 15.2, `parseNames` 2.0, `insertToks` 2.4). Spec §3's criterion is met. The waste has two
+mechanical sources: (1) `query` re-parses each condition's pattern once **per binding-set**
+(`concatMap (unify s db) matches`), and (2) `closure`'s loop grounds heads to strings that
+`entailed`/`meetOne`/`insertAll` immediately re-tokenize, with the heads themselves re-tokenized
+per binding. Both fixes are internal; the String authoring surface does not change.
+
+**Files:**
+- Modify: `src/Prax/Db.hs` (export `insertToks`; add `unifyNames`, `groundTokens`, `tokensToSentence`)
+- Modify: `src/Prax/Query.hs` (hoist parsing in `queryWith`/`unifyAll` usage)
+- Modify: `src/Prax/Derive.hs` (token-level closure loop; heads tokenized once per closure)
+- Test: `test/Prax/DbSpec.hs` (unit tests for the new Db functions)
+
+**Interfaces:**
+- Consumes: everything as of Task 3.
+- Produces: identical observable behavior (goldens + 299 tests prove it), faster.
+
+- [ ] **Step 1: Write the failing tests.** In `test/Prax/DbSpec.hs`, add (following the file's existing import/style conventions):
+
+```haskell
+  , testCase "unifyNames is unify with the parse hoisted out" $ do
+      let db = insertAll ["at.bob!square", "at.eve!mill"] emptyDb
+      unifyNames (pathNames "at.Who!Where") db Map.empty
+        @?= unify "at.Who!Where" db Map.empty
+
+  , testCase "groundTokens substitutes bindings segment-wise, preserving operators" $ do
+      let toks = tokens "at.Who!Where"
+          b    = Map.fromList [("Who", VStr "bob"), ("Where", VStr "square")]
+      tokensToSentence (groundTokens toks b) @?= ground "at.Who!Where" b
+      tokensToSentence (groundTokens (tokens "plain.path") Map.empty)
+        @?= "plain.path"
+```
+
+(If `pathNames`/`tokens`/`ground`/`VStr` are not yet imported there, extend the import list.)
+
+- [ ] **Step 2: Observe RED.** `cabal test --test-options='-p "Prax.Db"' 2>&1 | tail -5` — compile failure: `unifyNames`/`groundTokens`/`tokensToSentence` undefined.
+
+- [ ] **Step 3: Implement.**
+
+**(a) `src/Prax/Db.hs`** — add to the export list `insertToks`, `unifyNames`, `groundTokens`, `tokensToSentence`, and define:
+
+```haskell
+-- | 'unify' with the sentence already split into names — for callers that
+-- evaluate one pattern against many binding sets ('Prax.Query' hoists the
+-- parse out of that loop).
+unifyNames :: [String] -> Db -> Bindings -> [Bindings]
+unifyNames names db0 bindings =
+  map snd (foldl step [(db0, bindings)] names)
+  where
+    step worlds part = concatMap (descend part) worlds
+    descend part (Db _ m, b)
+      | isVariable part =
+          case Map.lookup part b of
+            Just v  -> case Map.lookup (valToString v) m of
+                         Just sub -> [(sub, b)]
+                         Nothing  -> []
+            Nothing -> [ (sub, Map.insert part (VStr k) b)
+                       | (k, sub) <- Map.toList m ]
+      | otherwise =
+          case Map.lookup part m of
+            Just sub -> [(sub, b)]
+            Nothing  -> []
+
+unify :: String -> Db -> Bindings -> [Bindings]
+unify sentence = unifyNames (parseNames sentence)
+```
+
+(the old `unify` body moves into `unifyNames`; `unify` becomes the parsing entry point.)
+
+```haskell
+-- | 'ground' at the token level: substitute bindings into already-split
+-- tokens. 'Prax.Derive.closure' grounds each axiom head once per binding —
+-- tokenizing the head template once per closure, not once per binding.
+groundTokens :: [(String, Maybe Char)] -> Bindings -> [(String, Maybe Char)]
+groundTokens toks b = [ (value n, op) | (n, op) <- toks ]
+  where
+    value name
+      | isVariable name = maybe name valToString (Map.lookup name b)
+      | otherwise       = name
+
+-- | Re-emit tokens as a sentence (inverse of 'tokens' up to trimming).
+tokensToSentence :: [(String, Maybe Char)] -> String
+tokensToSentence = concatMap emit
+  where emit (name, mop) = name ++ maybe "" pure mop
+```
+
+and redefine `ground` through them: `ground sentence b = tokensToSentence (groundTokens (tokens sentence) b)`.
+
+**(b) `src/Prax/Query.hs`** — in `queryWith`, hoist the parse per condition instead of per binding:
+
+```haskell
+queryWith :: Bool -> Db -> [Condition] -> Bindings -> [Bindings]
+queryWith inSub db conds b0 = foldl step [b0] conds
+  where
+    step matches cond = case cond of
+      -- parse the pattern once per condition, not once per binding
+      Match s -> let names = parseNames s
+                 in concatMap (unifyNames names db) matches
+      Not s   -> let names = parseNames s
+                 in concatMap (\b -> [ b | null (unifyNames names db b) ]) matches
+      _       -> concatMap (evalCond inSub db cond) matches
+```
+
+(`evalCond`'s own `Match`/`Not` cases stay for any direct callers; import `unifyNames`, `parseNames` from `Prax.Db`.)
+
+**(c) `src/Prax/Derive.hs`** — the closure loop works in tokens end to end:
+
+```haskell
+closure :: [Axiom] -> Db -> Either Contradiction Db
+closure []  db0 = Right db0
+closure axs db0 = go db0 db0
+  where
+    rules = [ (body, map tokens hs)
+            | Axiom body hs <- axs ++ mapMaybe liftObliged axs ]
+
+    go model delta =
+      let heads = [ groundTokens h b | (body, hs) <- rules
+                                     , b <- deltaJoin model delta body, h <- hs ]
+          fresh = nub (filter (not . entailed model) heads)
+      in if null fresh
+           then Right model
+           else case foldM meetOne model fresh of
+                  Left c  -> Left c
+                  Right m -> go m (foldl (flip insertToks) emptyDb fresh)
+
+    meetOne m h = maybe (Left (Contradiction (tokensToSentence h))) Right
+                        (meet m (insertToks h emptyDb))
+    entailed m h = leq m (insertToks h emptyDb)
+```
+
+(`deltaJoin` and everything else unchanged; imports gain `insertToks`, `tokens`, `groundTokens`, `tokensToSentence` and drop `insert`/`insertAll`/`ground` if now unused — chase the warnings to zero.)
+
+- [ ] **Step 4: Observe GREEN — full suite once, goldens byte-identical.**
+
+Run: `cabal test 2>&1 | tail -4`
+Expected: 301 tests green (299 + 2). Record the wall time (the round's final headline).
+
+- [ ] **Step 5: Gates.** Zero warnings; hlint "No hints".
+
+- [ ] **Step 6: Commit.**
+
+```bash
+git add src/Prax/Db.hs src/Prax/Query.hs src/Prax/Derive.hs test/Prax/DbSpec.hs
+git commit -m "Tokenize once: hoist pattern parsing out of binding loops"
+```
+(with the standard trailers)
