@@ -66,7 +66,9 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   bread is safe exactly as long as *someone* is watching); eve, out of authored malice, frames
   carol, and the frame-up settles into regard, shunning, and notoriety exactly as truth would —
   with an honest injustice at the end: framed carol has no recourse (amends needs a loaf she never
-  took; exculpation needs ground-truth event records, banked below, not faked).
+  took; exculpation needs ground-truth event records — an idea banked here, then **rejected in
+  v25**: the vocabulary's refusal to fake ground truth is a stated commitment, not a gap; see v25's
+  banked-item rewrite below).
 - **v23** — **realistic lookahead: round-walk over believed minds** (`Prax.Minds`, `Prax.Sight`,
   a rewritten `Prax.Planner`; spec `docs/specs/2026-07-10-v23-planner-realism-design.md`). The old
   lookahead's `worldValue` (now **deleted**) maxed over every living character's every action,
@@ -129,6 +131,30 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   stale "bob holds no loaf" proxy for a direct non-re-offense assertion
   (`practice.earnBread.bob.done.s3`), since the endeavor now gives bob a lawful loaf the
   original proxy couldn't anticipate.
+- **v25** — **persona: traits as conduct-valuations** (`Prax.Persona`; spec
+  `docs/specs/2026-07-11-v25-persona-design.md`). A first draft (goal-bundle traits — a trait
+  installs a desire) was **rejected**: pressed, it added nothing real, since a bearer behaves
+  identically to a character assigned the desires directly. The shipped model instead values
+  **conduct**: a `Trait` is a named bundle of desires over the bearer's *own* conduct-marks
+  (`Trait "honest" [Desire "clean-conscience" (Want [Match "Owner.lied.…"] (-6))]`) —
+  `personaVocabulary`/`bearing`/`cast` wire a roster's traits into desires and facts, and
+  `transparent` derives that everyone presumes a bearer's valuations (defeasibly, from t=0). A
+  trait costs contrary conduct rather than forbidding it — the soft planner's usual idiom, no
+  new enforcement. Conduct needed something to value, so `Prax.Deceit.lie` gained one outcome:
+  `Insert "Actor.lied.Hearer.<pat>"`, the liar's own memory of the deed, rooted under their name
+  like all mental state — a **mark on the liar**, never a world-rooted ground-truth record (the
+  banked exculpation idea, rejected below). `Prax.Worlds.Village` gains **gale**, eve's
+  temperament contrast: both carry the identical named `spites-carol` desire, but gale bears
+  `honest`, so her conscience (−6/lie) outprices what any single whisper buys (+4/head) — eve
+  whispers, gale never does, and a predictor told of both spites predicts the difference
+  (`predictMove`). **The round's signature finding, surfaced in implementation, not predicted by
+  the spec's first draft**: eve's whisper deceives gale too, and an honest believer turns out to
+  be the perfect vector — gale spreads the falsehood she now genuinely holds by ordinary
+  `gossip`, no lie, no mark, no conscience cost, and even carries it back to eve, handing the
+  liar "evidence" for her own fabrication. *The honest villager launders the lie.* The spec was
+  amended in place (§4 "The laundering") once this was observed live, and `VillageSpec` pins the
+  corrected claim. Suite: 292 tests (`PersonaSpec`, `DeceitSpec` additions, `VillageSpec`
+  additions).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -225,6 +251,15 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   recompute — which would cut the lookahead's dominant cost. Bigger change than semi-naive (needs
   delta-retraction / provenance to un-derive facts whose support is gone); worth it only if a large
   axiom set + deep lookahead proves to be the bottleneck in a real sandbox.
+- **Planner runtime under cast growth (v25).** The village test group went from ~38s to ~580s
+  when the cast grew from 6 to 7 (gale joining eve). Two v25 mechanisms compound the v23 round-walk
+  cost (#20): `transparent` gives every character a *believed* model of every trait-bearer (so each
+  added trait-bearer is a new mind every other character's lookahead may predict), and the round-walk
+  itself already predicts one move per in-scope character per node explored. Neither is a bug — both
+  are the faithful cost of realism (#20's own design) — but the multiplication means the next cast
+  member is not "free" the way v23's post-rewrite numbers suggested. Profile before growing the
+  cast again (`predictionScope` narrowing, or memoizing a round's predictions across siblings, are
+  candidate directions — unmeasured, not committed to).
 - **Hard priority tiers for action selection (from Praxish's `swaygent.js`).** Ensemble/CiF-style
   selection tags actions with a symbolic tier — `forbidden` / `required` / `normal` — that sorts
   *above* numeric utility, giving categorical "you must / may not" rules. Our planner and norms are
@@ -286,9 +321,15 @@ Tier 2 — agent interiority for long time-spans:
   completion); **cooperative projects** (multiple owners on one instance — `roles = ["Owner"]`
   is deliberately single-slot); **type synthesis** (authoring a *family* of endeavors from a
   higher-order description rather than one `endeavor` call per project type).
-- **Personality → volition** (`Prax.Persona`): define our own trait semantics as documented
-  want-packages (`vengeful` ≡ want [my grudges avenged] +k); turns v18 sketches into a cast
-  generator. Principled because the mapping is a stated model, not per-world tuning.
+- **Personality → volition** (`Prax.Persona`) *(done — v25: traits as **conduct-valuations**, not
+  goal-bundles. A first draft bundling goals directly (`vengeful` ≡ installs [my grudges avenged]
+  +k) was rejected — pressed, a bearer behaved identically to a character handed the desires
+  directly, so the layer added nothing real; a goal is a plain desire needing no trait. The shipped
+  model instead values the bearer's own *conduct*: a `Trait` bundles desires over the bearer's own
+  conduct-marks (`honest` costs a lie-mark, not forbids the lie), `personaVocabulary`/`bearing`/
+  `cast` wire a roster's traits into desires and setup facts, and `transparent` derives that a
+  bearer's valuations are presumed, defeasibly, from t=0)*. `Prax.Worlds.Village`'s gale/eve
+  contrast demonstrates it: identical spite, different temperament, different conduct.
 - **⤷K Secrets & deception** (`Prax.Deceit`) *(done — v22: `conceal`/`lie` — a concealment want
   (`Absent [Anyone believes <deed>]`) makes the planner avoid witnesses automatically, lookahead
   already simulating the v19 witness deposits; `lie` plants the same `.heard.<liar>` hearsay as
@@ -298,11 +339,16 @@ Tier 2 — agent interiority for long time-spans:
   theft; eve frames carol out of authored malice, and the frame-up cascades through the unmodified
   v20/v21 machinery to real shunning and notoriety, with an honest injustice — the framed have no
   recourse (amends needs a loaf never taken).
-- **Ground-truth event records & exculpation** *(banked — v22 spec §5)*: v22's `lie` leaves no
-  ground truth in the vocabulary — nobody, including the narrator, can check a fabrication against
-  what actually happened, so the framed have no way to clear their name. Needs an event record
-  (deed tokens / a calendar) actions could be checked against; deferred wholesale, alongside the
-  banked counterfactual-placement and sighting-salience residuals below.
+- **Ground-truth event records & exculpation** *(rejected, v25 — spec §2, overturning the v22 §5
+  banked idea)*: an event record (deed tokens / a calendar) actions could be checked against was
+  banked as "the honest way to eventually let the framed clear their name." Design review
+  overturned it: **history persists only through the marks it makes** — beliefs, memories,
+  consequences — and the vocabulary must be able to reach states where the truth is genuinely
+  unrecoverable, which a world-rooted, narrator-consultable event ledger would foreclose by
+  construction (it would be an oracle nothing in-world holds). v25's `lie` gains a residue instead:
+  a mark on the liar alone (`<liar>.lied.<hearer>.<event>`, their own memory — owned, forgettable,
+  perishable), never a record anyone can consult as ground truth. Truth recovery, if it is ever
+  built, is committed to flow through mark-bearers — confession, testimony — never consultation.
 - **Blackmail** *(v-next candidate, split out from v22)*: obligation extracted under threat of
   gossip composes Deontic + Rumor, but its leverage model (exclusivity of knowledge; why the
   blackmailer withholds rather than gossips) deserves its own design round — parked deliberately,

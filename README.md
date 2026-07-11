@@ -192,6 +192,17 @@ utility. See the design writeups:
   closes the village's arc on it: deterred since v21 and concealing since v22, he takes up honest
   work unprompted, sweeps the square in the open, and earns — rather than steals — his loaf,
   while the village learns his purpose just by watching him work.
+- `Prax.Persona` (v25) — **temperament as conduct-valuations**: a `Trait` bundles desires over the
+  bearer's *own* conduct-marks, not goals — `honest` costs a lie-mark rather than forbidding the
+  lie, so a bearer can still lie if the arithmetic ever favored it. Conduct needed something to
+  value, so `Prax.Deceit.lie` gained one outcome: the liar's own memory of the deed
+  (`Actor.lied.Hearer.<pat>`) — a mark on the liar, never a world-rooted ground-truth record.
+  `transparent` derives that everyone presumes a bearer's valuations from the start, so a believed
+  temperament nets against a believed motive in prediction. `Prax.Worlds.Village` gains gale, eve's
+  contrast: the identical named spite, but gale's conscience outprices it, so eve whispers and gale
+  never does — and, found live rather than authored, eve's whisper deceives gale too, who then
+  spreads the falsehood she genuinely believes by ordinary gossip, no lie, no mark, carrying it
+  back to eve as "evidence" for her own fabrication. The honest villager launders the lie.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).
