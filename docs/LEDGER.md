@@ -54,6 +54,19 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   parameter). `Prax.Worlds.Village` completes its arc: theft → witnessing → rumor → three regards
   → notoriety tips bob into atonement → the village relents — and, because the planner can see the
   snap-back, an atoned thief facing a restocked stall is *deterred*, never touching it again.
+- **v22** — **secrets & deception** (`Prax.Deceit` `conceal`/`lie`): a concealment want — that
+  nobody believe some deed (`Absent [Anyone.believes.<event>]`) — makes an agent avoid witnesses
+  *by planning*: the lookahead already simulates v19's witness deposits, so waiting for privacy
+  falls out of ordinary utility, no stealth system needed. A lie is an assertion without evidence:
+  `lie` mirrors v20's `gossip` and plants the identical `.heard.<liar>` hearsay, so a fabrication
+  is indistinguishable from truth to everyone but the liar, and the whole rumor/reputation stack
+  (v20/v21) cascades on it unmodified — hearing your own lie back replaces the lie action with
+  plain gossip, seamlessly. `Prax.Worlds.Village` gains a villain: bob conceals his theft, waiting
+  out a genuinely watched square (walking away alone isn't enough — carol keeps her own post; the
+  bread is safe exactly as long as *someone* is watching); eve, out of authored malice, frames
+  carol, and the frame-up settles into regard, shunning, and notoriety exactly as truth would —
+  with an honest injustice at the end: framed carol has no recourse (amends needs a loaf she never
+  took; exculpation needs ground-truth event records, banked below, not faked).
 - **v23** — **realistic lookahead: round-walk over believed minds** (`Prax.Minds`, `Prax.Sight`,
   a rewritten `Prax.Planner`; spec `docs/specs/2026-07-10-v23-planner-realism-design.md`). The old
   lookahead's `worldValue` (now **deleted**) maxed over every living character's every action,
@@ -79,8 +92,10 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   village's `dana` gets a sanctioned mill-anchoring want (the same idiom `bob`'s stall-anchor
   already used), and the bar's `LoopSpec` golden-trace turn budget is re-derived from 20 to 25
   (5 rounds × a cast grown by one for the sight ticker) — the narration itself is unchanged.
-  Master suite: 5.5s → 0.8s (the rewrite's own speedup; the parked v22 village suite is the true
-  referee once it resumes).
+  Master suite: 5.5s → 0.8s (the rewrite's own speedup). The true referee — v22's village suite,
+  once landed on top — bears this out directly: ~19s (`cabal test --test-options='--pattern
+  "Prax.Worlds.Village"'`), down from the 621s blowup, a >30× recovery, at the *original* pre-blowup
+  order of magnitude (8.7s).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -233,9 +248,24 @@ Tier 2 — agent interiority for long time-spans:
 - **Personality → volition** (`Prax.Persona`): define our own trait semantics as documented
   want-packages (`vengeful` ≡ want [my grudges avenged] +k); turns v18 sketches into a cast
   generator. Principled because the mapping is a stated model, not per-world tuning.
-- **⤷K Secrets & deception**: a secret = fact + concealment want (`Want [Absent [anyone believes
-  X]]`) — the planner then avoids witnesses automatically; lying = planting a belief the speaker
-  doesn't hold; blackmail = obligation extracted under threat of gossip.
+- **⤷K Secrets & deception** (`Prax.Deceit`) *(done — v22: `conceal`/`lie` — a concealment want
+  (`Absent [Anyone believes <deed>]`) makes the planner avoid witnesses automatically, lookahead
+  already simulating the v19 witness deposits; `lie` plants the same `.heard.<liar>` hearsay as
+  `gossip`, so a fabrication is indistinguishable from truth once heard, and hearing your own lie
+  back turns it right back into gossip — the lie/gossip duality that makes the whole v20/v21 stack
+  run on a falsehood unmodified)*. `Prax.Worlds.Village` gains a villain on this: bob conceals his
+  theft; eve frames carol out of authored malice, and the frame-up cascades through the unmodified
+  v20/v21 machinery to real shunning and notoriety, with an honest injustice — the framed have no
+  recourse (amends needs a loaf never taken).
+- **Ground-truth event records & exculpation** *(banked — v22 spec §5)*: v22's `lie` leaves no
+  ground truth in the vocabulary — nobody, including the narrator, can check a fabrication against
+  what actually happened, so the framed have no way to clear their name. Needs an event record
+  (deed tokens / a calendar) actions could be checked against; deferred wholesale, alongside the
+  banked counterfactual-placement and sighting-salience residuals below.
+- **Blackmail** *(v-next candidate, split out from v22)*: obligation extracted under threat of
+  gossip composes Deontic + Rumor, but its leverage model (exclusivity of knowledge; why the
+  blackmailer withholds rather than gossips) deserves its own design round — parked deliberately,
+  not attempted this round.
 - **Counterfactual placement (per-agent world-views)** *(banked — v23 spec §4a "honest residual")*:
   a predicted in-scope mover is still simulated at their *true* position, not the predictor's
   *believed* one — imagining them where the predictor thinks they are requires giving every

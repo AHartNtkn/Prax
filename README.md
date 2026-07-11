@@ -142,10 +142,24 @@ utility. See the design writeups:
   → three regards → notoriety tips bob into returning the loaf → the village relents, memory
   intact throughout — and because the planner can see standing snap back on a repeat, an atoned
   bob is *deterred*, leaving a restocked stall untouched for the rest of the run.
-- `Prax.Minds` + `Prax.Sight` + a rewritten `Prax.Planner` (v23 — numbered here in *landing*
-  order, not spec order: v22's `Prax.Deceit`, concealment/lying, is already on master as v22
-  Task 1, but v22's own village content is parked mid-round on a side branch and resumes after
-  this round). The old lookahead's `worldValue` — max over every living character's every
+- `Prax.Deceit` (v22) — **secrets and deception**: concealment is authoring, not machinery —
+  `conceal` is a want that nobody believe some deed (`Absent [Anyone believes <event>]`); the
+  planner's lookahead already simulates the v19 witness deposits, so an agent who values a secret
+  avoids being seen *by planning* — waiting for the room to empty falls out of utility, no stealth
+  system built or needed. A lie (`lie`) is an assertion without evidence: it mirrors `gossip`
+  (v20) and plants the identical `.heard.<liar>` hearsay, so a fabrication is indistinguishable
+  from truth to everyone but the liar — the deceived hold real evidence, and if the liar ever
+  hears their own lie back, the lie action vanishes and plain gossip takes its place, seamlessly.
+  The whole rumor/reputation stack (v20/v21) cascades on a falsehood exactly as it would on the
+  truth. `Prax.Worlds.Village` gains a villain: bob conceals his theft, waiting out a genuinely
+  watched square (the bread is safe exactly as long as *someone* minds it — a player walking away
+  alone isn't enough, since carol keeps her own post); eve, out of authored malice, frames carol,
+  and the frame-up settles into regard, shunning, and notoriety exactly as truth would — with an
+  honest injustice at the end: framed carol has no recourse (amends needs a loaf she never took,
+  and exculpation needs ground-truth event records this vocabulary deliberately doesn't have). The
+  player gets the same whisper affordance eve does.
+- `Prax.Minds` + `Prax.Sight` + a rewritten `Prax.Planner` (v23). The old lookahead's
+  `worldValue` — max over every living character's every
   action, scored by the *planning actor's own wants* — is **deleted**: it turned out to be
   speculative (credited others with actions they'd never take — carol's top move became an
   accusation she had no evidence for), omniscient (used movers' *true* wants, so a
@@ -166,8 +180,8 @@ utility. See the design writeups:
   that guess stays good. `Prax.Worlds.Intrigue`'s plot is now a believed mind: a confidant's
   prediction of cassia foresees the poisoning; the uninformed victim's does not; and a leaked
   rumor of her motive flips that. Master's own test suite dropped 5.5s → 0.8s as a side effect of
-  the redesign (the true referee — the parked village stress suite — is measured when v22
-  resumes).
+  the redesign. The true referee — v22's village suite, landed on top — bears it out: ~19s (down
+  from the 621s blowup, a >30× recovery, back to the original pre-blowup order of magnitude).
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).
@@ -185,7 +199,7 @@ cabal run prax -- play      # play the same drama authored as a Prompter-lite pl
 cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
 cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + three rules
 cabal run prax -- audience  # a Prompter demo: memory + timed junction + character-sketch in one scene
-cabal run prax -- village   # witnessing + rumor + reputation: what you see or hear settles into standing, notoriety tips the thief into atoning, and an atoned thief is deterred from stealing again
+cabal run prax -- village   # witnessing + rumor + reputation + deception: what you see or hear settles into standing, an atoned thief is deterred from stealing again, a concealed secret stays kept, and an unproven whisper cascades into reputation exactly like the truth would
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
 cabal run prax -- check feud   # static well-formedness check of a world
 ```
