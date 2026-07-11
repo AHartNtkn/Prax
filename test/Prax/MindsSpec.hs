@@ -1,13 +1,16 @@
 module Prax.MindsSpec (tests) where
 
+import           Data.List (isInfixOf)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, readView)
+import           Prax.Engine (definePractices, performOutcome, readView, possibleActions, performAction)
 import           Prax.Minds
+import           Prax.Planner (predictMove)
+import           Prax.Rumor (gossip)
 
 -- The tale: a vocabulary of two desires; ida professes her sweet tooth,
 -- norm-respect is conventional, and rex's grudge is neither.
@@ -68,4 +71,32 @@ tests = testGroup "Prax.Minds"
       -- and presumption counts too:
       believedWants world (character "rex") (character "ida")
         @?= [ Want [ Match "holding.ida.cake" ] 5 ]
+
+  , testCase "gossip about a motive flips a third party's prediction" $ do
+      -- rex's grudge (vocab) drives him to seek petty revenge once someone
+      -- believes he holds it. ida already knows (an eyewitness); she tells
+      -- nia, and nia's arrival at a believed model of rex flips her
+      -- prediction of him from unreadable to a move.
+      let together = [ Match "at.Actor!P", Match "at.Witness!P" ]
+          tellGrudge = gossip together [] "desires.Culprit.grudge-rex"
+                         "[Actor]: mention [Culprit]'s grudge to [Hearer]"
+          revenge = action "[Actor]: seek petty revenge" [] [ Insert "shamed.Actor" ]
+          townP = practice
+            { practiceId = "town", roles = ["Place"]
+            , actions = [ tellGrudge, revenge ] }
+          rex' = (character "rex") { charDesires = ["grudge-rex"] }
+          st0 = foldl (flip performOutcome)
+                  ((definePractices [townP] emptyState)
+                     { characters = [ character "ida", rex', character "nia" ]
+                     , desires = vocab })
+                  [ Insert "practice.town.village"
+                  , Insert "at.ida!village", Insert "at.nia!village"
+                  , Insert "ida.believes.desires.rex.grudge-rex.seen" ]
+          told = case [ ga | ga <- possibleActions st0 "ida"
+                            , "mention rex's grudge to nia" `isInfixOf` gaLabel ga ] of
+                   (ga : _) -> performAction st0 ga
+                   []       -> error "no gossip action offered to ida"
+      predictMove st0 (character "nia") rex' @?= Nothing
+      fmap gaLabel (predictMove told (character "nia") rex')
+        @?= Just "rex: seek petty revenge"
   ]

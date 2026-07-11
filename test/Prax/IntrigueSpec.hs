@@ -2,13 +2,14 @@ module Prax.IntrigueSpec (tests) where
 
 import           Data.List (isInfixOf)
 import           Test.Tasty (TestTree, testGroup)
-import           Test.Tasty.HUnit (testCase, assertBool, assertFailure)
+import           Test.Tasty.HUnit (testCase, assertBool, assertFailure, (@?=))
 
 import           Prax.Db (dbToSentences)
-import           Prax.Types (PraxState, db, gaLabel)
-import           Prax.Engine (possibleActions, performAction)
+import           Prax.Types (PraxState, Outcome (..), db, gaLabel, character)
+import           Prax.Engine (possibleActions, performAction, performOutcome)
 import           Prax.Loop (runNpcTicks)
 import           Prax.Inspect (explain)
+import           Prax.Planner (predictMove)
 import           Prax.Worlds.Intrigue (intrigueWorld)
 
 facts :: PraxState -> [String]
@@ -78,4 +79,23 @@ tests = testGroup "Prax.Worlds.Intrigue (a dramatic slice)"
       -- once Cassia has confided, it becomes available
       let after = concat (explain afterConfide "marcus" "warn artus")
       assertBool ("now available: " ++ after) ("AVAILABLE" `isInfixOf` after)
+
+  , testCase "the confidant can foresee the poisoning; the victim cannot" $ do
+      -- cassia confides in marcus (the existing plot action); this both
+      -- unlocks her own poisoning move and, via the confide's new motive-belief
+      -- insert, gives marcus a believed model of cassia's mind to predict from.
+      st <- act intrigueWorld "cassia" "confide the plot against artus to marcus"
+      fmap gaLabel (predictMove st (character "marcus") (character "cassia"))
+        @?= Just "cassia: slip poison into artus's cup"
+      -- artus never received the belief, so cassia's mind is unreadable to him.
+      predictMove st (character "artus") (character "cassia") @?= Nothing
+
+  , testCase "a leaked motive changes who can see the plan" $ do
+      st <- act intrigueWorld "cassia" "confide the plot against artus to marcus"
+      predictMove st (character "artus") (character "cassia") @?= Nothing
+      -- plant the motive-belief directly, as if the secret had leaked to artus
+      let leaked = performOutcome
+                     (Insert "artus.believes.desires.cassia.kill-artus.heard.marcus") st
+      fmap gaLabel (predictMove leaked (character "artus") (character "cassia"))
+        @?= Just "cassia: slip poison into artus's cup"
   ]

@@ -45,12 +45,17 @@ plotP = practice
   , roles = ["Schemer", "Target"]
   , actions =
       [ -- Recruit/inform an ally — which also lets that ally warn the victim.
+        -- Confiding shares not just the fact of danger but the schemer's own
+        -- believed mind: the ally comes to hold a motive-belief over the named
+        -- vocabulary desire, sourced from the schemer herself, so the ally's
+        -- planner can predict the schemer's next move.
         action "[Actor]: confide the plot against [Target] to [Ally]"
           [ Eq "Actor" "Schemer"
           , Match "character.Ally", Neq "Ally" "Schemer", Neq "Ally" "Target"
           , Not "practice.plot.Schemer.Target.confided.Ally" ]
           [ Insert "practice.plot.Schemer.Target.confided.Ally"
           , believe "Ally" "plotAgainst.Target" "yes"
+          , Insert "Ally.believes.desires.Schemer.kill-artus.heard.Schemer"
           , adjustScore "Ally" "Schemer" warmth 5 "sharedASecret" ]
 
         -- The murder: needs a confided accomplice, no warning, victim alive, no
@@ -106,10 +111,11 @@ artus :: Character
 artus = character "artus"       -- the oblivious patron; no wants
 
 -- The schemer wants the patron dead; her lookahead makes her confide first
--- (which enables the poisoning) then strike.
+-- (which enables the poisoning) then strike. The motive is a named vocabulary
+-- desire, not a plain want: naming it is what lets a confidant's belief about
+-- it (and the planner's theory-of-mind) get any purchase on it at all.
 cassia :: Character
-cassia = (character "cassia")
-  { charWants = [ Want [ Match (deadSentence "artus") ] 100 ] }
+cassia = (character "cassia") { charDesires = ["kill-artus"] }
 
 -- Initial world ----------------------------------------------------------------
 
@@ -120,7 +126,8 @@ intrigueWorld =
   where
     withPractices =
       (definePractices [ coreLib, presenceP, plotP ] emptyState)
-        { characters = [marcus, artus, cassia] }
+        { characters = [marcus, artus, cassia]
+        , desires = [ Desire "kill-artus" (Want [ Match (deadSentence "artus") ] 100) ] }
     setup =
       [ Insert "character.marcus"
       , Insert "character.artus"
