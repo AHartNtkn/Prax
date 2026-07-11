@@ -4,7 +4,7 @@ import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
-import           Prax.Engine (setDesires)
+import           Prax.Engine (setDesires, relevantDelta)
 import           Prax.Query (Condition (..))
 import           Prax.Types
 import           Prax.Worlds.Village (villageWorld)
@@ -74,4 +74,14 @@ tests = testGroup "Prax.Relevance"
                    (Want [ Match "altar.old.relic.jade" ] (-2)) ]
       improvableDesires (Map.fromList [("temple", temple)]) [] ds
         @?= ["mourns-the-relic"]
+
+  , testCase "delta relevance against the village's axioms" $ do
+      assertBool "movement commutes with closure (fast path)"
+        (not (relevantDelta "practice.world.world.at.bob!square" villageWorld))
+      assertBool "a witness deposit is relevant (standingUnless reads believes)"
+        (relevantDelta "you.believes.stole.bob.loaf.seen" villageWorld)
+      assertBool "an atonement is relevant (it defeats standing)"
+        (relevantDelta "atoned.bob" villageWorld)
+      assertBool "the stall's stock is not"
+        (not (relevantDelta "stall.loaf" villageWorld))
   ]

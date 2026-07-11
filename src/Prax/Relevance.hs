@@ -22,6 +22,7 @@
 module Prax.Relevance
   ( mayUnify
   , improvableDesires
+  , evictionShadows
   ) where
 
 import           Data.Map.Strict (Map)

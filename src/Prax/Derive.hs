@@ -30,6 +30,7 @@ module Prax.Derive
   , closure
   , derived
   , contradiction
+  , axiomFootprint
   ) where
 
 import           Control.Monad (foldM)
@@ -130,3 +131,28 @@ contradiction :: [Axiom] -> Db -> Maybe String
 contradiction axs db = case closure axs db of
   Left (Contradiction h) -> Just h
   Right _                -> Nothing
+
+-- | Every path pattern the axioms can read or write: body atoms at any
+-- polarity (including inside Absent\/Exists\/Or\/Subquery), head templates,
+-- and the □-lifted forms of both. A ground delta that may-unify none of
+-- these commutes with 'closure' (v27 spec theorem) — the basis of the
+-- engine's delta-irrelevance fast path.
+axiomFootprint :: [Axiom] -> [String]
+axiomFootprint axs =
+  concat [ concatMap condPatterns body ++ hs
+         | Axiom body hs <- axs ++ mapMaybe liftObliged axs ]
+
+-- All path patterns a condition mentions, any polarity.
+condPatterns :: Condition -> [String]
+condPatterns c = case c of
+  Match s        -> [s]
+  Not s          -> [s]
+  Absent cs      -> concatMap condPatterns cs
+  Exists cs      -> concatMap condPatterns cs
+  Or clauses     -> concatMap (concatMap condPatterns) clauses
+  Subquery _ _ w -> concatMap condPatterns w
+  Eq {}          -> []
+  Neq {}         -> []
+  Cmp {}         -> []
+  Calc {}        -> []
+  Count {}       -> []

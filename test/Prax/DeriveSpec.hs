@@ -81,4 +81,16 @@ tests = testGroup "Prax.Derive (m(X) closure)"
           base = build [ "place.bex!bar", "summoned.bex" ]   -- bex is exclusively at the bar
       assertBool "contradiction detected" (not (isRight (closure axs base)))
       contradiction axs base @?= Just "place.bex.hall"
+
+  , testCase "axiomFootprint collects bodies (any polarity), heads, and lifted forms" $ do
+      let ax = axiom [ Match "parent.X.Y", Absent [ Match "dead.X" ] ] [ "elder.X" ]
+          fp = axiomFootprint [ax]
+      assertBool "body atom"          ("parent.X.Y" `elem` fp)
+      assertBool "negated body atom"  ("dead.X" `elem` fp)
+      assertBool "head"               ("elder.X" `elem` fp)
+      -- an Absent body blocks □-lifting; an all-Match rule contributes both
+      -- lifted body and lifted head:
+      let fp2 = axiomFootprint [ axiom [ Match "a.X" ] [ "b.X" ] ]
+      assertBool "lifted body" ("obliged.Obligor.a.X" `elem` fp2)
+      assertBool "lifted head" ("obliged.Obligor.b.X" `elem` fp2)
   ]

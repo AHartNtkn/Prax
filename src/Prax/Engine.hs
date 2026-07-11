@@ -17,6 +17,7 @@ module Prax.Engine
   , performAction
   , performOutcome
   , groundOutcome
+  , relevantDelta
   ) where
 
 import           Data.List (intercalate)
@@ -25,14 +26,23 @@ import qualified Data.Map.Strict as Map
 import           Prax.Db
 import           Prax.Query (query, groundCondition)
 import           Prax.Types
-import           Prax.Derive (Axiom, closure)
-import           Prax.Relevance (improvableDesires)
+import           Prax.Derive (Axiom, closure, axiomFootprint)
+import           Prax.Relevance (improvableDesires, mayUnify, evictionShadows)
 
 -- | Rebuild the derived vocabulary tables. Internal: every helper that
 -- changes 'practiceDefs', 'axioms', or 'desires' must end here.
 retable :: PraxState -> PraxState
-retable st = st { improvables =
-                    improvableDesires (practiceDefs st) (axioms st) (desires st) }
+retable st = st
+  { improvables = improvableDesires (practiceDefs st) (axioms st) (desires st)
+  , footprint   = axiomFootprint (axioms st) }
+
+-- | Can this ground delta change what the axioms derive? Conservative:
+-- False only when the sentence — and anything its exclusions evict —
+-- may-unify nothing in the axioms' footprint (v27 spec theorem). False is
+-- the licence for 'performOutcome' to skip 'reclose'.
+relevantDelta :: String -> PraxState -> Bool
+relevantDelta s st =
+  any (\x -> any (mayUnify x) (footprint st)) (s : evictionShadows s)
 
 -- | Register a practice and insert its static @dataFacts@ under
 -- @practiceData.<id>.@.
