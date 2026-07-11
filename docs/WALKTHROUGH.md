@@ -993,7 +993,7 @@ claim nobody witnessed. The very next round, dana acts on it:
 ```
 
 eve keeps moving to wherever an untold villager is and keeps whispering — to bob, then to you —
-until, five presses in, the third regard tips notoriety over *carol*, exactly as it did over bob in
+until, four presses in, the third regard tips notoriety over *carol*, exactly as it did over bob in
 §24, on exactly the same machinery:
 
 ```
