@@ -29,7 +29,7 @@ module Prax.Worlds.Village
 
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setAxioms)
+import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires)
 import           Prax.Core (coreLib, adjustScore)
 import           Prax.Derive (Axiom, axiom)
 import           Prax.Project
@@ -221,15 +221,14 @@ villageAxioms =
 
 villageWorld :: PraxState
 villageWorld =
-  (setAxioms villageAxioms (foldl (flip performOutcome) base (setup ++ personaFacts)))
-  { desires = [ earnBreadPursuit, spitesCarol ] ++ personaVocabulary [honest]
-    -- an epistemic prediction scope: you credit another's predicted move only
-    -- if you're with them now, or you sighted them within the last 2 ticks —
-    -- one tick per round, and two rounds is roughly a square<->mill round
-    -- trip: "you assume people stay put for about as long as it takes to
-    -- walk there and back."
-  , predictionScope = [ Or [ together, sightedWithin 2 ] ]
-  }
+  (setDesires ([ earnBreadPursuit, spitesCarol ] ++ personaVocabulary [honest])
+     (setAxioms villageAxioms (foldl (flip performOutcome) base (setup ++ personaFacts))))
+  -- an epistemic prediction scope: you credit another's predicted move only
+  -- if you're with them now, or you sighted them within the last 2 ticks —
+  -- one tick per round, and two rounds is roughly a square<->mill round
+  -- trip: "you assume people stay put for about as long as it takes to
+  -- walk there and back."
+  { predictionScope = [ Or [ together, sightedWithin 2 ] ] }
   where
     (roster, personaFacts) = cast [honest]
       [ (character "you", [])

@@ -19,7 +19,7 @@ module Prax.Worlds.Intrigue
 
 import           Prax.Query
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome)
+import           Prax.Engine (definePractices, performOutcome, setDesires)
 import           Prax.Core
 import           Prax.Beliefs
 
@@ -125,9 +125,9 @@ intrigueWorld =
   foldl (flip performOutcome) withPractices setup
   where
     withPractices =
-      (definePractices [ coreLib, presenceP, plotP ] emptyState)
-        { characters = [marcus, artus, cassia]
-        , desires = [ Desire "kill-artus" (Want [ Match (deadSentence "artus") ] 100) ] }
+      setDesires [ Desire "kill-artus" (Want [ Match (deadSentence "artus") ] 100) ]
+        ((definePractices [ coreLib, presenceP, plotP ] emptyState)
+           { characters = [marcus, artus, cassia] })
     setup =
       [ Insert "character.marcus"
       , Insert "character.artus"

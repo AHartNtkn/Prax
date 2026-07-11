@@ -113,8 +113,7 @@ tests = testGroup "Prax.Planner"
       let vocab = [ Desire "cider-craving"
                       (Want [ Match "practice.tendBar.Bartender.customer.Owner!order!cider" ] 10) ]
           beth' = (character "beth") { charDesires = ["cider-craving"] }
-          st    = (walkedUp { desires = vocab
-                            , characters = [ beth', character "ada" ] })
+          st    = setDesires vocab (walkedUp { characters = [ beth', character "ada" ] })
           st'   = performOutcome
                     (Insert "ada.believes.desires.beth.cider-craving.heard.gossip") st
       fmap gaLabel (predictMove st' (character "ada") beth') @?= Just "beth: Order cider"
@@ -128,7 +127,7 @@ tests = testGroup "Prax.Planner"
       let vocab = [ Desire "cider-craving"
                       (Want [ Match "practice.tendBar.Bartender.customer.Owner!order!cider" ] 10) ]
           plainBeth = character "beth"
-          st  = walkedUp { desires = vocab, characters = [ plainBeth, character "ada" ] }
+          st  = setDesires vocab (walkedUp { characters = [ plainBeth, character "ada" ] })
           st' = performOutcome
                   (Insert "ada.believes.desires.beth.cider-craving.presumed") st
       fmap gaLabel (predictMove st' (character "ada") plainBeth) @?= Just "beth: Order cider"
@@ -154,8 +153,9 @@ tests = testGroup "Prax.Planner"
           inge = (character "inge") { charDesires = ["covet-relic"] }
           olaf = (character "olaf") { charWants = [ Want [ Match "grabbed.inge" ] 6 ] }
           st0  = foldl (flip performOutcome)
-                    ((definePractices [grabP] emptyState)
-                       { characters = [ olaf, inge ], desires = vocab })
+                    (setDesires vocab
+                       ((definePractices [grabP] emptyState)
+                          { characters = [ olaf, inge ] }))
                     [ Insert "practice.heist.here" ]
           told = performOutcome
                    (Insert "olaf.believes.desires.inge.covet-relic.heard.inge") st0
@@ -192,8 +192,9 @@ tests = testGroup "Prax.Planner"
           bob   = character "bob"
           carol = character "carol"
           st0   = foldl (flip performOutcome)
-                    ((definePractices [chainP] emptyState)
-                       { characters = [ alice, bob, carol ], desires = vocab })
+                    (setDesires vocab
+                       ((definePractices [chainP] emptyState)
+                          { characters = [ alice, bob, carol ] }))
                     [ Insert "practice.chain.here" ]
           believeBoth = foldl (flip performOutcome) st0
             [ Insert "alice.believes.desires.bob.relay-desire.heard.gossip"
@@ -235,9 +236,10 @@ tests = testGroup "Prax.Planner"
           olaf = (character "olaf") { charWants = [ Want [ Match "grabbed.inge" ] 6 ] }
           sharedRoom = [ Match "at.Actor!Room", Match "at.Witness!Room" ]
           st0  = foldl (flip performOutcome)
-                    ((definePractices [grabP] emptyState)
-                       { characters = [ olaf, inge ], desires = vocab
-                       , predictionScope = sharedRoom })
+                    (setDesires vocab
+                       ((definePractices [grabP] emptyState)
+                          { characters = [ olaf, inge ]
+                          , predictionScope = sharedRoom }))
                     [ Insert "practice.heist.here" ]
           told = performOutcome
                    (Insert "olaf.believes.desires.inge.covet-relic.heard.inge") st0
@@ -259,8 +261,7 @@ tests = testGroup "Prax.Planner"
       let vocab = [ Desire "cider-craving"
                       (Want [ Match "practice.tendBar.Bartender.customer.Owner!order!cider" ] 10) ]
           beth' = (character "beth") { charDesires = ["cider-craving"] }
-          st    = (walkedUp { desires = vocab
-                            , characters = [ beth', character "ada" ] })
+          st    = setDesires vocab (walkedUp { characters = [ beth', character "ada" ] })
           st'   = performOutcome
                     (Insert "ada.believes.desires.beth.cider-craving.heard.gossip") st
       fmap gaLabel (predictMove st' (character "ada") beth') @?= Just "beth: Order cider"
@@ -294,8 +295,9 @@ tests = testGroup "Prax.Planner"
           bob   = character "bob"
           carol = character "carol"
           st0   = foldl (flip performOutcome)
-                    ((definePractices [duelP] emptyState)
-                       { characters = [ alice, bob, carol ], desires = vocab })
+                    (setDesires vocab
+                       ((definePractices [duelP] emptyState)
+                          { characters = [ alice, bob, carol ] }))
                     [ Insert "practice.duel.here" ]
           believeBoth = foldl (flip performOutcome) st0
             [ Insert "alice.believes.desires.bob.kill-desire.heard.gossip"

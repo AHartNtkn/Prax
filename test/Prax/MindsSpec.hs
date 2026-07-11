@@ -7,7 +7,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setAxioms, possibleActions, performAction)
+import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, possibleActions, performAction)
 import           Prax.Minds
 import           Prax.Planner (predictMove)
 import           Prax.Rumor (gossip)
@@ -21,8 +21,8 @@ vocab =
   ]
 
 world :: PraxState
-world = (setAxioms [ professed, conventional ] (foldl (flip performOutcome) base setup))
-          { desires = vocab }
+world = setDesires vocab
+          (setAxioms [ professed, conventional ] (foldl (flip performOutcome) base setup))
   where
     base = (definePractices [] emptyState)
              { characters = [ character "ida"
@@ -85,9 +85,9 @@ tests = testGroup "Prax.Minds"
             , actions = [ tellGrudge, revenge ] }
           rex' = (character "rex") { charDesires = ["grudge-rex"] }
           st0 = foldl (flip performOutcome)
-                  ((definePractices [townP] emptyState)
-                     { characters = [ character "ida", rex', character "nia" ]
-                     , desires = vocab })
+                  (setDesires vocab
+                     ((definePractices [townP] emptyState)
+                        { characters = [ character "ida", rex', character "nia" ] }))
                   [ Insert "practice.town.village"
                   , Insert "at.ida!village", Insert "at.nia!village"
                   , Insert "ida.believes.desires.rex.grudge-rex.seen" ]

@@ -144,6 +144,11 @@ data PraxState = PraxState
   , sorts        :: [(String, [String])]  -- ^ sort → member constants, for the type checker (default none)
   , desires      :: [Desire]      -- ^ the vocabulary of nameable desires (default none)
   , predictionScope :: [Condition]  -- ^ conditions the planner predicts over (default none)
+  , improvables :: [String]
+    -- ^ Names of desires some authored action may improve
+    -- ('Prax.Relevance.improvableDesires') — rebuilt with the vocabulary
+    -- ('Prax.Engine.definePractices' / 'setAxioms' / 'setDesires'); the
+    -- planner skips predictions over models with no improvable desire.
   , readView     :: Db
     -- ^ The db closed under the axioms — established (lazily) whenever the
     -- state is built, so reads share one closure per state. Change 'db' or
@@ -155,7 +160,8 @@ data PraxState = PraxState
 emptyState :: PraxState
 emptyState = PraxState
   { db = emptyDb, practiceDefs = Map.empty, characters = [], cursor = -1
-  , axioms = [], sorts = [], desires = [], predictionScope = [], readView = emptyDb }
+  , axioms = [], sorts = [], desires = [], predictionScope = []
+  , improvables = [], readView = emptyDb }
 
 -- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead
 -- character stays in the cast list but is skipped in turn-taking and lookahead.

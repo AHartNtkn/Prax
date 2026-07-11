@@ -27,7 +27,7 @@ import           Prax.Db (Val (..), exists)
 import           Prax.Query (countSatisfying, groundCondition, query)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction)
-import           Prax.Minds (selfWants, believedWants)
+import           Prax.Minds (selfWants, believedDesires, wantFor)
 
 -- | Total utility of a world to a set of wants: @Σ utility × #satisfying@.
 evaluate :: PraxState -> [Want] -> Int
@@ -67,16 +67,23 @@ inScope st actor m =
 -- plan). 'Nothing' when the mind is unreadable or unmotivated.
 predictMove :: PraxState -> Character -> Character -> Maybe GroundedAction
 predictMove st p m =
-  case believedWants st p m of
-    []    -> Nothing
-    model ->
-      let still  = evaluate st model
-          scored = sortOn (\(ga, s) -> (Down s, gaLabel ga))
-                     [ (a, evaluate (performAction st a) model)
-                     | a <- candidateActions st m ]
-      in case scored of
-           ((a, s) : _) | s > still -> Just a
-           _                        -> Nothing
+  case believedDesires st p m of
+    [] -> Nothing
+    ds
+      -- no believed desire is improvable by any authored action: no candidate
+      -- can strictly beat standing still, so don't ground or evaluate any
+      -- (Prax.Relevance; exact — improvable desires keep the FULL model,
+      -- unimprovable costs included, so deterrents still deter)
+      | all ((`notElem` improvables st) . desireName) ds -> Nothing
+      | otherwise ->
+          let model  = map (wantFor (charName m)) ds
+              still  = evaluate st model
+              scored = sortOn (\(ga, s) -> (Down s, gaLabel ga))
+                         [ (a, evaluate (performAction st a) model)
+                         | a <- candidateActions st m ]
+          in case scored of
+               ((a, s) : _) | s > still -> Just a
+               _                        -> Nothing
 
 -- The other living characters, one full cycle in cast order starting after
 -- the actor (the loop's round-robin order).

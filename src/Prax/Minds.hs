@@ -14,6 +14,7 @@
 module Prax.Minds
   ( wantFor
   , selfWants
+  , believedDesires
   , believedWants
   , professed
   , conventional
@@ -39,15 +40,20 @@ selfWants st c =
     ++ [ wantFor (charName c) d
        | d <- desires st, desireName d `elem` charDesires c ]
 
+-- | The vocabulary desires the predictor believes (any provenance) the mover
+-- to have. The model can be wrong — it is the predictor's, not the mover's.
+believedDesires :: PraxState -> Character -> Character -> [Desire]
+believedDesires st p m =
+  [ d | d <- desires st
+      , exists (charName p ++ ".believes.desires." ++ charName m
+                  ++ "." ++ desireName d) view ]
+  where view = readView st
+
 -- | The predictor's believed model of the mover: every vocabulary desire the
 -- predictor believes (any provenance) the mover to have. The model can be
 -- wrong — it is the predictor's, not the mover's.
 believedWants :: PraxState -> Character -> Character -> [Want]
-believedWants st p m =
-  [ wantFor (charName m) d
-  | d <- desires st
-  , exists (charName p ++ ".believes.desires." ++ charName m ++ "." ++ desireName d) view ]
-  where view = readView st
+believedWants st p m = map (wantFor (charName m)) (believedDesires st p m)
 
 -- | An openly-held desire is presumed known by everyone:
 -- @professes.\<owner\>.\<name\>@ ⇒ every character presumes it.

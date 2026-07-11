@@ -8,7 +8,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (Val (..), exists, dbToSentences)
 import           Prax.Query (Condition (..), groundCondition, query)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction, performOutcome)
+import           Prax.Engine (possibleActions, performAction, performOutcome, setDesires)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Core (adjustScore)
 import           Prax.Planner (predictMove, pickAction)
@@ -235,7 +235,7 @@ tests = testGroup "Prax.Worlds.Village"
       -- scope gate). predictMove finds bob's motivated best move the moment
       -- we ask: the mind-reading itself is live and correct...
       let vocab = [ Desire "wantsLoaf" (Want [ Match "holding.Owner.loaf" ] 10) ]
-          st0   = villageWorld { desires = vocab }
+          st0   = setDesires vocab villageWorld
           st1   = performOutcome (Insert "dana.believes.desires.bob.wantsLoaf.seen") st0
           charByName n = case [ c | c <- characters st1, charName c == n ] of
             (c : _) -> c

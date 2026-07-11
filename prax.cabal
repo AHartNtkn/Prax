@@ -40,6 +40,7 @@ library
                       Prax.Repute
                       Prax.Deceit
                       Prax.Minds
+                      Prax.Relevance
                       Prax.Persona
                       Prax.Project
                       Prax.Sight
@@ -102,6 +103,7 @@ test-suite prax-test
                       Prax.DeceitSpec
                       Prax.MindsSpec
                       Prax.PersonaSpec
+                      Prax.RelevanceSpec
                       Prax.ProjectSpec
                       Prax.SightSpec
                       Prax.ConversationSpec

@@ -12,6 +12,7 @@ module Prax.Engine
   , renderText
   , withDb
   , setAxioms
+  , setDesires
   , possibleActions
   , performAction
   , performOutcome
@@ -25,12 +26,19 @@ import           Prax.Db
 import           Prax.Query (query, groundCondition)
 import           Prax.Types
 import           Prax.Derive (Axiom, closure)
+import           Prax.Relevance (improvableDesires)
+
+-- | Rebuild the derived vocabulary tables. Internal: every helper that
+-- changes 'practiceDefs', 'axioms', or 'desires' must end here.
+retable :: PraxState -> PraxState
+retable st = st { improvables =
+                    improvableDesires (practiceDefs st) (axioms st) (desires st) }
 
 -- | Register a practice and insert its static @dataFacts@ under
 -- @practiceData.<id>.@.
 definePractice :: Practice -> PraxState -> PraxState
 definePractice p st =
-  (withDb (insertAll (map (prefix ++) (dataFacts p))) st)
+  retable (withDb (insertAll (map (prefix ++) (dataFacts p))) st)
     { practiceDefs = Map.insert (practiceId p) p (practiceDefs st) }
   where prefix = "practiceData." ++ practiceId p ++ "."
 
@@ -69,7 +77,11 @@ withDb f st = reclose st { db = f (db st) }
 
 -- | The only sanctioned way to change the axioms of a built state.
 setAxioms :: [Axiom] -> PraxState -> PraxState
-setAxioms axs st = reclose st { axioms = axs }
+setAxioms axs st = retable (reclose st { axioms = axs })
+
+-- | The only sanctioned way to change the desire vocabulary of a built state.
+setDesires :: [Desire] -> PraxState -> PraxState
+setDesires ds st = retable st { desires = ds }
 
 -- | All actions the named actor can currently perform, across every
 -- instantiated practice and every satisfying binding of each action. Conditions

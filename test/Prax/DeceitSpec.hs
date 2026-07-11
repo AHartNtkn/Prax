@@ -9,7 +9,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction)
+import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setDesires)
 import           Prax.Planner (pickAction)
 import           Prax.Witness (CoPresence, observable)
 import           Prax.Rumor (gossip)
@@ -73,11 +73,10 @@ offered who needle st =
 motiveLieWorld :: PraxState
 motiveLieWorld = foldl (flip performOutcome) base setup
   where
-    base = (definePractices [pMotive] emptyState)
-             { characters =
-                 [ character "nia", character "oz", character "kit" ]
-             , desires = [ Desire "revenge" (Want [ Match "harms.Owner" ] 10) ]
-             }
+    base = setDesires [ Desire "revenge" (Want [ Match "harms.Owner" ] 10) ]
+             ((definePractices [pMotive] emptyState)
+                { characters =
+                    [ character "nia", character "oz", character "kit" ] })
     pMotive = practice
       { practiceId = "rumor", roles = ["R"]
       , actions =
