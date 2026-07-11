@@ -170,12 +170,7 @@ villageWorld = (foldl (flip performOutcome) base setup)
                                    , Want [ Match "Other.believes.stole.bob.loaf.heard.carol" ] 5
                                    , Want [ Match "shunned.carol.T", Match "regards.carol.T.thief" ] 5
                                    , Want [ Match "shunned.carol.T"
-                                          , Absent [ Match "regards.carol.T.thief" ] ] (-5)
-                                     -- loiters near the square (the same anchoring idiom as
-                                     -- bob's): with nothing to do, she waits where the
-                                     -- village's business happens rather than drifting on
-                                     -- the wander/wait tie-break
-                                   , Want [ Match "practice.world.world.at.carol!square" ] 1 ] }
+                                          , Absent [ Match "regards.carol.T.thief" ] ] (-5) ] }
                  , (character "dana")
                      { charWants = [ Want [ Match "confronted.dana.T" ] 5
                                    , Want [ Match "eyed.dana.T" ] 5
