@@ -1,9 +1,11 @@
 module Prax.RelevanceSpec (tests) where
 
+import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
-import           Test.Tasty.HUnit (testCase, assertBool)
+import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Engine (setDesires)
+import           Prax.Query (Condition (..))
 import           Prax.Types
 import           Prax.Worlds.Village (villageWorld)
 import           Prax.Relevance
@@ -44,4 +46,18 @@ tests = testGroup "Prax.Relevance"
                               , desireName d == "spites-carol" ] villageWorld
       assertBool "narrowed vocabulary narrows the table"
         ("pursues-earnBread" `notElem` improvables st)
+
+  , testCase "an exclusion insert counts as evicting ANY sibling on the delete side" $ do
+      -- The gem displaces whatever sat in the slot: a negative want on the
+      -- stone is improvable ONLY through that eviction, and the victim's name
+      -- appears in no outcome — the analysis must not conclude "unimprovable"
+      -- from the gem's name alone.
+      let shrine = practice
+            { practiceId = "shrine", roles = ["R"]
+            , actions = [ action "[Actor]: enshrine the gem"
+                            [ Match "slot.stone" ]
+                            [ Insert "slot!gem" ] ] }
+          ds = [ Desire "hates-the-stone" (Want [ Match "slot.stone" ] (-2)) ]
+      improvableDesires (Map.fromList [("shrine", shrine)]) [] ds
+        @?= ["hates-the-stone"]
   ]

@@ -27,7 +27,7 @@ module Prax.Relevance
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (isVariable, pathNames)
+import           Prax.Db (isVariable, pathNames, tokens, tokensToSentence)
 import           Prax.Derive (Axiom (..))
 import           Prax.Query (Condition (..))
 import           Prax.Types
@@ -55,13 +55,16 @@ mayUnify a b = anchored && and (zipWith seg (pathNames a) (pathNames b))
 
 -- The insert- and delete-shaped atoms an outcome can produce, resolving
 -- 'Call's through the worlds' declared functions (conservatively: all cases).
--- An @!@ path both asserts its value and evicts siblings, so it counts on
--- both sides. Returns Nothing for "unknown effects" (unresolvable Call):
--- the caller must treat that as improves-everything.
+-- An @!@ path both asserts its value and evicts that value's __siblings__ —
+-- whose names appear nowhere in the outcome — so the delete side carries the
+-- path with every post-@!@ segment replaced by a fresh variable ('mayUnify'
+-- wildcard: conservatively, any sibling). Returns Nothing for "unknown
+-- effects" (unresolvable Call): the caller must treat that as
+-- improves-everything.
 outcomeAtoms :: Map String [Outcome] -> [String] -> Outcome
              -> Maybe ([String], [String])
 outcomeAtoms fns visited o = case o of
-  Insert s | '!' `elem` s -> Just ([s], [s])
+  Insert s | '!' `elem` s -> Just ([s], [s, evictions s])
            | otherwise    -> Just ([s], [])
   Delete s                -> Just ([], [s])
   ForEach _ outs          -> mconcat' (map (outcomeAtoms fns visited) outs)
@@ -74,6 +77,15 @@ outcomeAtoms fns visited o = case o of
     mconcat' ms = do
       pairs <- sequence ms
       pure (concatMap fst pairs, concatMap snd pairs)
+
+-- The eviction shadow of an exclusion insert: the same path with each
+-- segment that FOLLOWS a @!@ replaced by a fresh variable, standing for
+-- whichever sibling the exclusion displaces.
+evictions :: String -> String
+evictions s = tokensToSentence
+  [ (if prevOp == Just '!' then "Evicted" else name, op)
+  | ((name, op), prevOp) <- zip toks (Nothing : map snd toks) ]
+  where toks = tokens s
 
 -- Positive and negated path patterns of a want's conditions. The Bool is
 -- "uncertain": the want's satisfaction depends on machinery (numeric binds,
