@@ -77,8 +77,11 @@ tested, not authored:
 - **bob conceals**: `conceal "stole.bob.loaf" 12` (authored: the bread is worth +10; not being
   thought a thief is worth more). Layering: concealment *prevents* (he waits for an empty
   square); the v21 shame want *responds* (if seen anyway, notoriety tips him into amends).
-  Player-facing stealth: stand in the square and the bread never vanishes; walk to the mill and
-  it does.
+  Player-facing stealth, as it actually plays post-anchor (§3): bob waits as long as *anyone*
+  minds the square — and carol keeps her post, so walking away yourself is not enough; the
+  perfect crime requires a genuinely empty square (demonstrated by the scripted test, which
+  sends carol away too). The bread is safe exactly as long as someone is watching, which is the
+  honest moral of the mechanic.
 - **eve joins** (starts at the **mill** — placement matters: she must not witness the scripted
   thefts that v19–21 tests force, keeping their two-witness arithmetic intact). Her motivation
   is authored malice: `Want [ Match "regards.W.carol.thief" ] 4` — she wants carol ill-regarded,
