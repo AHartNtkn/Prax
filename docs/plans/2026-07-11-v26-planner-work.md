@@ -740,3 +740,74 @@ git add src/Prax/Db.hs src/Prax/Query.hs src/Prax/Derive.hs test/Prax/DbSpec.hs
 git commit -m "Tokenize once: hoist pattern parsing out of binding loops"
 ```
 (with the standard trailers)
+
+---
+
+### Task 5b: Shared test trajectories (user-directed follow-on)
+
+The village drive tests re-simulate overlapping prefixes of two deterministic trajectories:
+free-play from t=0 (snapshots wanted at turns 7, 28, 40, 49) and post-theft (42, 49, 70, 105).
+That is ~490 driven turns where ~155 suffice. The planner is deterministic, so replacing each
+test's private drive with a snapshot of a shared trace changes NOTHING about what is asserted —
+same states, same assertions, same turn counts — only how often identical turns are simulated.
+
+**Files:**
+- Modify: `test/Prax/VillageSpec.hs` (only)
+
+- [ ] **Step 1: Record the before number.** `cabal test --test-options='-p "Village"' 2>&1 | tail -3` — note the group wall time.
+
+- [ ] **Step 2: Refactor the helper.** Replace the current `driveIdle` definition with:
+
+```haskell
+-- One planner-driven turn, with @idle@'s turn consumed but not acted.
+idleStep :: String -> PraxState -> PraxState
+idleStep idle st =
+  let (actor, st1) = advance st
+  in if charName actor == idle then st1 else snd (npcAct 2 actor st1)
+
+-- Run @k@ turns with everyone planner-driven except @idle@, who waits.
+driveIdle :: String -> Int -> PraxState -> PraxState
+driveIdle idle n st = iterate (idleStep idle) st !! n
+
+-- The suite's two long trajectories, shared across tests: the planner is
+-- deterministic, so a test wanting the state after N turns reads a snapshot
+-- of the one trace instead of re-simulating the same N turns privately.
+-- Top-level sharing: each trace is computed once per test-suite run.
+freePlayAt :: Int -> PraxState
+freePlayAt = (trace !!)
+  where trace = iterate (idleStep "you") villageWorld
+
+postTheftAt :: Int -> PraxState
+postTheftAt = (trace !!)
+  where trace = iterate (idleStep "you") (doAct "bob" "steal the loaf" villageWorld)
+```
+
+- [ ] **Step 3: Swap the ten family call sites** (assertions and turn counts UNTOUCHED):
+
+| line (approx) | old | new |
+|---|---|---|
+| 78 | `driveIdle "you" 42 (doAct "bob" "steal the loaf" villageWorld)` | `postTheftAt 42` |
+| 84 | `driveIdle "you" 49 (doAct "bob" "steal the loaf" villageWorld)` | `postTheftAt 49` |
+| 166 | `driveIdle "you" 70 (…)` | `postTheftAt 70` |
+| 195 | `driveIdle "you" 105 (…)` | `postTheftAt 105` |
+| 217 | `driveIdle "you" 7 villageWorld` | `freePlayAt 7` |
+| 273 | `driveIdle "you" 28 villageWorld` | `freePlayAt 28` |
+| 291 | `driveIdle "you" 40 villageWorld` | `freePlayAt 40` |
+| 300 | `driveIdle "you" 40 villageWorld` | `freePlayAt 40` |
+| 311 | `driveIdle "you" 49 villageWorld` | `freePlayAt 49` |
+| 361 | `driveIdle "you" 49 villageWorld` | `freePlayAt 49` |
+
+The one non-family drive (the "perfect crime", line ~282: 14 turns from a moved-away start)
+keeps its private `driveIdle`.
+
+- [ ] **Step 4: Observe GREEN + the after number.** `cabal test --test-options='-p "Village"' 2>&1 | tail -3` — all Village tests green (same count), group time recorded. Then the full suite ONCE: 301 green (goldens byte-identical — the shared traces must not change a single decision).
+
+- [ ] **Step 5: Gates.** Zero warnings; hlint "No hints".
+
+- [ ] **Step 6: Commit.**
+
+```bash
+git add test/Prax/VillageSpec.hs
+git commit -m "VillageSpec: share the two drive trajectories across tests"
+```
+(with the standard trailers; include the before/after group times in the report, and hand them to the Task 5 LEDGER text if it has not yet committed — otherwise note them for the round report)
