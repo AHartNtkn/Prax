@@ -68,6 +68,30 @@ offered :: String -> String -> PraxState -> Bool
 offered who needle st =
   any ((needle `isInfixOf`) . gaLabel) (possibleActions st who)
 
+-- Dedicated fixture for testing lie over motive patterns. Same structure as world,
+-- but with a "revenge" desire and a motive-pattern lie action in the practice.
+motiveLieWorld :: PraxState
+motiveLieWorld = foldl (flip performOutcome) base setup
+  where
+    base = (definePractices [pMotive] emptyState)
+             { characters =
+                 [ character "nia", character "oz", character "kit" ]
+             , desires = [ Desire "revenge" (Want [ Match "harms.Owner" ] 10) ]
+             }
+    pMotive = practice
+      { practiceId = "rumor", roles = ["R"]
+      , actions =
+          [ lie together []
+              [ Match "at.Culprit!Anywhere" ]
+              "desires.Culprit.revenge"
+              "[Actor]: whisper to [Hearer] that [Culprit] wants revenge"
+          ]
+      }
+    setup =
+      [ Insert "practice.rumor.here"
+      , Insert "at.nia!yard", Insert "at.oz!yard", Insert "at.kit!yard"
+      ]
+
 tests :: TestTree
 tests = testGroup "Prax.Deceit"
   [ testCase "conceal is the nobody-believes want" $
@@ -137,4 +161,14 @@ tests = testGroup "Prax.Deceit"
                 "[Actor]: mention it to [Hearer]"))))
       assertBool "a lie must be about someone"
         (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "a lie can fabricate a MOTIVE: desires.* patterns work like deed patterns" $ do
+      -- nia whispers that kit nurses a revenge desire — evidence-free motive framing.
+      let st = doAct "nia" "whisper to oz that kit wants revenge" motiveLieWorld
+      assertBool "oz believes kit desires revenge (heard from nia)"
+        (exists "oz.believes.desires.kit.revenge.heard.nia" (db st))
+      assertBool "nia keeps no evidence of her own motive claim"
+        (not (exists "nia.believes.desires.kit.revenge" (db st)))
+      assertBool "kit is never offered as hearer (subject cannot be hearer)"
+        (not (offered "nia" "whisper to kit that kit wants" motiveLieWorld))
   ]
