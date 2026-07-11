@@ -251,15 +251,19 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   recompute — which would cut the lookahead's dominant cost. Bigger change than semi-naive (needs
   delta-retraction / provenance to un-derive facts whose support is gone); worth it only if a large
   axiom set + deep lookahead proves to be the bottleneck in a real sandbox.
-- **Planner runtime under cast growth (v25).** The village test group went from ~38s to ~580s
-  when the cast grew from 6 to 7 (gale joining eve). Two v25 mechanisms compound the v23 round-walk
-  cost (#20): `transparent` gives every character a *believed* model of every trait-bearer (so each
-  added trait-bearer is a new mind every other character's lookahead may predict), and the round-walk
-  itself already predicts one move per in-scope character per node explored. Neither is a bug — both
-  are the faithful cost of realism (#20's own design) — but the multiplication means the next cast
-  member is not "free" the way v23's post-rewrite numbers suggested. Profile before growing the
-  cast again (`predictionScope` narrowing, or memoizing a round's predictions across siblings, are
-  candidate directions — unmeasured, not committed to).
+- **Planner runtime under cast growth (v25).** The full suite went from ~38.66s (289 tests, the
+  6-member village) to ~726s (292 tests, the 7-member village — gale joining eve), with the
+  `Prax.VillageSpec` group alone accounting for roughly ~580–660s of the latter total. No isolated
+  pre-growth Village-group timing was ever taken, so the group-level regression from 6 to 7 members
+  is steeper than the suite-total comparison alone suggests — the ~38.66s figure includes every
+  other spec file, not just the village. Two v25 mechanisms compound the v23 round-walk cost (#20):
+  `transparent` gives every character a *believed* model of every trait-bearer (so each added
+  trait-bearer is a new mind every other character's lookahead may predict), and the round-walk
+  itself already predicts one move per in-scope character per node explored. Neither is a bug —
+  both are the faithful cost of realism (#20's own design) — but the multiplication means the next
+  cast member is not "free" the way v23's post-rewrite numbers suggested. Profile before growing
+  the cast again (`predictionScope` narrowing, or memoizing a round's predictions across siblings,
+  are candidate directions — unmeasured, not committed to).
 - **Hard priority tiers for action selection (from Praxish's `swaygent.js`).** Ensemble/CiF-style
   selection tags actions with a symbolic tier — `forbidden` / `required` / `normal` — that sorts
   *above* numeric utility, giving categorical "you must / may not" rules. Our planner and norms are
