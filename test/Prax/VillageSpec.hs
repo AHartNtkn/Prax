@@ -23,16 +23,27 @@ doAct who needle st =
     []       -> error ("no action for " ++ who ++ " matching " ++ show needle
                        ++ "; had: " ++ show (map gaLabel (possibleActions st who)))
 
+-- One planner-driven turn, with @idle@'s turn consumed but not acted.
+idleStep :: String -> PraxState -> PraxState
+idleStep idle st =
+  let (actor, st1) = advance st
+  in if charName actor == idle then st1 else snd (npcAct 2 actor st1)
+
 -- Run @k@ turns with everyone planner-driven except @idle@, who waits.
 driveIdle :: String -> Int -> PraxState -> PraxState
-driveIdle idle = go
-  where
-    go 0 st = st
-    go k st =
-      let (actor, st1) = advance st
-          st2 | charName actor == idle = st1
-              | otherwise              = snd (npcAct 2 actor st1)
-      in go (k - 1) st2
+driveIdle idle n st = iterate (idleStep idle) st !! n
+
+-- The suite's two long trajectories, shared across tests: the planner is
+-- deterministic, so a test wanting the state after N turns reads a snapshot
+-- of the one trace instead of re-simulating the same N turns privately.
+-- Top-level sharing: each trace is computed once per test-suite run.
+freePlayAt :: Int -> PraxState
+freePlayAt = (trace !!)
+  where trace = iterate (idleStep "you") villageWorld
+
+postTheftAt :: Int -> PraxState
+postTheftAt = (trace !!)
+  where trace = iterate (idleStep "you") (doAct "bob" "steal the loaf" villageWorld)
 
 -- The named villager from the cast.
 villager :: String -> Character
@@ -75,13 +86,13 @@ tests = testGroup "Prax.Worlds.Village"
 
   , testCase "the rumor spreads on its own: carol carries the news to the mill" $ do
       -- 42 turns: 6 full rounds over the 7-member v25 cast
-      let st = driveIdle "you" 42 (doAct "bob" "steal the loaf" villageWorld)
+      let st = postTheftAt 42
       assertBool "dana heard it from carol"
         (exists "dana.believes.stole.bob.loaf.heard.carol" (db st))
 
   , testCase "the arc completes on its own: dana eventually eyes bob" $ do
       -- 49 turns: 7 rounds
-      let st = driveIdle "you" 49 (doAct "bob" "steal the loaf" villageWorld)
+      let st = postTheftAt 49
       assertBool "dana acted on the hearsay"
         (exists "eyed.dana.bob" (db st))
 
@@ -163,7 +174,7 @@ tests = testGroup "Prax.Worlds.Village"
 
   , testCase "the whole arc runs itself: notoriety tips bob; forgiveness follows" $ do
       -- 70 turns: 10 rounds
-      let st = driveIdle "you" 70 (doAct "bob" "steal the loaf" villageWorld)
+      let st = postTheftAt 70
           v  = readView st
       assertBool "bob atoned on his own" (exists "atoned.bob" (db st))
       assertBool "no regard survives"    (not (exists "regards.carol.bob.thief" v))
@@ -192,7 +203,7 @@ tests = testGroup "Prax.Worlds.Village"
       -- loaf-want is live again, but stealing would instantly restore his
       -- notoriety (-15 > +10) — so he never takes it.
       -- 105 turns: 15 rounds
-      let st = driveIdle "you" 105 (doAct "bob" "steal the loaf" villageWorld)
+      let st = postTheftAt 105
       assertBool "his atonement stands" (exists "atoned.bob" (db st))
       assertBool "the stall's loaf is untouched" (exists "stall.loaf" (db st))
       -- "bob holds no loaf" was a proxy for "he never re-steals"; v24's
@@ -214,7 +225,7 @@ tests = testGroup "Prax.Worlds.Village"
       -- clock has advanced and the square-mates (you, bob, and carol) hold
       -- sightings of each other; dana, at the mill the whole round, holds
       -- none of bob (and bob none of her).
-      let st = driveIdle "you" 7 villageWorld
+      let st = freePlayAt 7
       assertBool "the clock ticked once" (exists "turn!1" (db st))
       assertBool "you sighted bob in the square"
         (exists "you.believes.at.bob!square" (db st))
@@ -270,7 +281,7 @@ tests = testGroup "Prax.Worlds.Village"
 
   , testCase "a secret keeps: bob will not steal while the square watches" $ do
       -- 28 turns: 4 rounds
-      let st = driveIdle "you" 28 villageWorld
+      let st = freePlayAt 28
       assertBool "the loaf is still on the stall" (exists "stall.loaf" (db st))
       assertBool "no one believes any theft by bob"
         (not (any (\w -> exists (w ++ ".believes.stole.bob.loaf") (db st))
@@ -288,7 +299,7 @@ tests = testGroup "Prax.Worlds.Village"
         (not (exists "regards.carol.bob.thief" (readView st)))
 
   , testCase "the frame-up: eve's whisper becomes reputation and shunning" $ do
-      let st = driveIdle "you" 40 villageWorld
+      let st = freePlayAt 40
       assertBool "dana heard the lie from eve"
         (exists "dana.believes.stole.carol.loaf.heard.eve" (db st))
       assertBool "the falsehood settled into standing"
@@ -297,7 +308,7 @@ tests = testGroup "Prax.Worlds.Village"
         (exists "shunned.dana.carol" (db st))
 
   , testCase "the framed have no amends: carol is offered no return" $ do
-      let st = driveIdle "you" 40 villageWorld
+      let st = freePlayAt 40
       assertBool "carol was framed" (exists "regards.dana.carol.thief" (readView st))
       assertBool "carol cannot 'return' a loaf she never took"
         (not (any (("return the loaf" `isInfixOf`) . gaLabel)
@@ -308,7 +319,7 @@ tests = testGroup "Prax.Worlds.Village"
       -- honest work and completes it: he ends holding a loaf he BAKED —
       -- the stall's loaf untouched, no theft beliefs about him anywhere.
       -- 49 turns: 7 rounds
-      let st = driveIdle "you" 49 villageWorld
+      let st = freePlayAt 49
       assertBool "bob undertook the endeavor" (exists "practice.earnBread.bob" (db st))
       assertBool "and finished it" (exists "practice.earnBread.bob.done.s3" (db st))
       assertBool "he holds a loaf" (exists "holding.bob.loaf" (db st))
@@ -358,7 +369,7 @@ tests = testGroup "Prax.Worlds.Village"
 
   , testCase "same spite, different temperaments: eve whispers, gale never does" $ do
       let vs = ["you", "bob", "carol", "dana", "eve", "gale"]
-          st = driveIdle "you" 49 villageWorld
+          st = freePlayAt 49
       assertBool "eve's frame-up went ahead"
         (exists "dana.believes.stole.carol.loaf.heard.eve" (db st))
       assertBool "and eve carries the mark of it"
