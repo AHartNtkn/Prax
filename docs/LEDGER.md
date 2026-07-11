@@ -96,6 +96,39 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   once landed on top — bears this out directly: ~19s (`cabal test --test-options='--pattern
   "Prax.Worlds.Village"'`), down from the 621s blowup, a >30× recovery, at the *original* pre-blowup
   order of magnitude (8.7s).
+- **v24** — **endeavors: staged practices with dormant pursuits** (`Prax.Project` `endeavor`/
+  `Stage`; spec `docs/specs/2026-07-11-v24-project-design.md`). A project *type* is authored
+  vocabulary, like a practice or a desire; `endeavor pid weight undertakeLabel gate stages`
+  compiles it to three things a world wires in: the undertake `Action`, a staged `Practice`
+  (one instance per owner — undertaking twice is never offered again), and a named pursuit
+  `Desire` that counts completed stages (`practice.<pid>.Owner.done.S`) at `+weight` each.
+  Progress itself is the reward, so horizon length stops mattering — every next stage is
+  locally visible to the ordinary planner, no lookahead change needed; this is the concrete
+  case that finally **closes #21's runtime-want-injection question by worked pattern**, not
+  just by claim (see #21's updated note, below): the pursuit desire is *dormant* — zero
+  bindings, zero utility — for any disposed character with no instance yet, and undertaking
+  (an ordinary planner choice) is exactly "injecting a want by inserting a fact." Because the
+  pursuit is a named, nameable desire, an endeavor is automatically theory-of-mind content
+  (`Prax.Minds`): whoever comes to believe a character pursues one gets it fed straight into
+  `predictMove`. `Prax.Witness`'s `witnessed` outcome-builder is extracted as a first-class,
+  exported combinator (previously folded only inside `observable`) so a generated stage can
+  carry public observability in its own effects — `Prax.Project` needed this, not a new
+  primitive. `Prax.Worlds.Village` closes its own moral arc on this: bob — deterred since v21,
+  concealing since v22 — takes up `earnBread` from a clean t=0 free-play start: undertakes at
+  the stall, sweeps the square in public, walks to the mill, fetches flour, returns, and bakes
+  the loaf he could no longer safely steal, done by turn 32 of the same running world every
+  earlier round used. Watching him sweep is enough for the village to learn his purpose (a
+  one-line inference axiom presumes the pursuit for anyone who believed the sweep), and once he
+  stands at the mill, `predictMove` anticipates the flour trip specifically for whoever holds
+  that belief — myopically (no prediction at the square, where no stage is yet available) and
+  belief-relative (co-present, unbelieving dana predicts nothing, proving prediction reads the
+  predictor's beliefs, not the mover's true state). The opportunism stays honest: mid-project,
+  with the square genuinely empty, stealing (71.18) still beats pressing on to the next stage
+  (50.46) — industry is chosen because it's watched and safe, not because temptation stopped
+  scoring. One sanctioned test amendment (spec §3): "an atoned thief is deterred" swaps its
+  stale "bob holds no loaf" proxy for a direct non-re-offense assertion
+  (`practice.earnBread.bob.done.s3`), since the endeavor now gives bob a lawful loaf the
+  original proxy couldn't anticipate.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -137,7 +170,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 18 | Utility-based reactive selection (apply-evaluate-undo) | v1 | P§IX | immutability ⇒ no explicit undo |
 | 19 | Per-character wants; utility = Σ modifier × #bindings | v1 | P§IX-A | Versu-faithful; supersedes Praxish global goals |
 | 20 | Round-walk lookahead over believed minds, w/ discounts (0.9 self / 0.5 other) | v1, v23 | Praxish `planner.js` (v1); redesigned (v23, spec `docs/specs/2026-07-10-v23-planner-realism-design.md` §4) | `Prax.Planner`. **v1**'s `worldValue` — max over every living character's every available action, scored by the *planning actor's* own wants — is **deleted**: it was speculative (credited others with actions they'd never choose), omniscient (used movers' *true* wants), and combinatorially explosive. **v23**: `scoreActions` predicts each other character within the actor's epistemic `predictionScope` (default everyone) exactly once, myopically, from the actor's **believed** model of them (`predictMove`, `Prax.Minds`) — only if the move strictly improves that belief over doing nothing (unmotivated moves are not predicted) — in cast round-robin order after the actor, before the actor recurses on its own next choice. `depth` still counts only the actor's own future plies; the CLI/loop keep depth 2 |
-| 21 | Wants as arbitrary logic sentences (∃/∀ desires) | v8\* | P§IX-A | unblocked by #7 — a want is now any FOL formula; runtime want injection needs no separate mechanism (a want gated on a fact is injectable by inserting the fact — see the foundational watchlist below) |
+| 21 | Wants as arbitrary logic sentences (∃/∀ desires) | v8\* | P§IX-A | unblocked by #7 — a want is now any FOL formula; runtime want injection needs no separate mechanism (a want gated on a fact is injectable by inserting the fact). **Closed by worked pattern in v24**: `Prax.Project`'s pursuit `Desire` is dormant (zero bindings, zero utility) for any disposed character with no project instance, and undertaking — an ordinary planner choice — inserts the very fact that switches it on; bob's `charDesires = ["pursues-earnBread"]` carries the disposition permanently, live only once he acts on it |
 | 22 | Character arcs / interiority (high-level internal choices) | v7 | P§X | `Prax.Arc`; bex's hopeful→belonging/lonely arc gates its wants; against-desires transformation is player-only |
 | 23 | Swaygent-style volition/influence selection | research-needed | Praxish `swaygent.js` | Ensemble-inspired alt selector |
 
@@ -242,9 +275,17 @@ Tier 1 — compiled social structures:
   single-slot `!` facts (`mayor!bob`) — exclusion semantics are succession semantics.
 
 Tier 2 — agent interiority for long time-spans:
-- **Projects / endeavors** (`Prax.Project`): staged external arcs (build a house = timber → plot →
-  build), each stage gating wants — long horizons become chains of local utility, no planner change.
-  The symbolic answer to bounded lookahead.
+- **Projects / endeavors** (`Prax.Project`) *(done — v24: `endeavor`/`Stage` — authored project
+  types compile to an undertake action, a staged one-instance-per-owner practice, and a named,
+  dormant pursuit desire that rewards completed stages directly, so horizon length never enters
+  the planner's lookahead; a witnessed stage is theory-of-mind content the moment `Prax.Minds`
+  believes it. `Prax.Worlds.Village`'s `earnBread` closes the village's moral arc: deterred,
+  concealing bob is given honest work, takes it up unprompted, and the village learns his
+  purpose by watching)*. Banked residuals, not attempted this round: **abandonment** (walking
+  away from an in-progress instance mid-stage — the current model has no "give up" outcome, only
+  completion); **cooperative projects** (multiple owners on one instance — `roles = ["Owner"]`
+  is deliberately single-slot); **type synthesis** (authoring a *family* of endeavors from a
+  higher-order description rather than one `endeavor` call per project type).
 - **Personality → volition** (`Prax.Persona`): define our own trait semantics as documented
   want-packages (`vengeful` ≡ want [my grudges avenged] +k); turns v18 sketches into a cast
   generator. Principled because the mapping is a stated model, not per-world tuning.

@@ -182,6 +182,16 @@ utility. See the design writeups:
   rumor of her motive flips that. Master's own test suite dropped 5.5s → 0.8s as a side effect of
   the redesign. The true referee — v22's village suite, landed on top — bears it out: ~19s (down
   from the 621s blowup, a >30× recovery, back to the original pre-blowup order of magnitude).
+- `Prax.Project` (v24) — **endeavors**: authored project *types* (`endeavor`/`Stage`) compile to
+  an undertake action, a one-instance-per-owner staged practice, and a named pursuit desire that
+  rewards each completed stage directly, so a long project needs no planner change — every next
+  stage is ordinary local utility, and the desire sits *dormant* (zero bindings, zero utility)
+  for any disposed character until undertaking switches it on, a worked instance of "a want
+  gated on a fact is injectable by inserting the fact." Because the pursuit is a named,
+  believable desire, a witnessed stage becomes theory-of-mind content for free. bob's redemption
+  closes the village's arc on it: deterred since v21 and concealing since v22, he takes up honest
+  work unprompted, sweeps the square in the open, and earns — rather than steals — his loaf,
+  while the village learns his purpose just by watching him work.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).
@@ -199,7 +209,7 @@ cabal run prax -- play      # play the same drama authored as a Prompter-lite pl
 cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
 cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + three rules
 cabal run prax -- audience  # a Prompter demo: memory + timed junction + character-sketch in one scene
-cabal run prax -- village   # witnessing + rumor + reputation + deception: what you see or hear settles into standing, an atoned thief is deterred from stealing again, a concealed secret stays kept, and an unproven whisper cascades into reputation exactly like the truth would
+cabal run prax -- village   # witnessing + rumor + reputation + deception + endeavors: what you see or hear settles into standing, an atoned thief is deterred from stealing again, a concealed secret stays kept while it's worth keeping, an unproven whisper cascades into reputation exactly like the truth would, and — given a lawful way to earn what he wanted — the thief takes up honest work instead
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
 cabal run prax -- check feud   # static well-formedness check of a world
 ```

@@ -14,8 +14,9 @@ its own world or tool: a branching dramatic episode with a death (`intrigue`), t
 (`dm`), emergent derivation (`feud`), the static checker (`check`), the Prompter compilation
 features (`audience`), and the sandbox where who sees, who's told, and what that settles
 into decides how people treat you — including a villain who manages what's known, both his own
-secret and someone else's fabricated one (`village` — witnessing, gossip, reputation, and
-deception).
+secret and someone else's fabricated one, and — once deterrence meets a lawful way to earn what he
+wanted all along — a thief who takes up honest work instead (`village` — witnessing, gossip,
+reputation, deception, and endeavors).
 
 Start with the bar:
 
@@ -594,11 +595,12 @@ game — she has her own +1 want to be at the mill (the same anchoring idiom tha
 near the stall: an idle character needs a place it wants to be, or it drifts on a tie-break).
 
 **A note before you press anything.** In an earlier round of this world (v19–21), the honest
-demonstration here was to wait a beat and watch bob, who wants the loaf, take it. As of v22, that
-no longer happens: bob now conceals his theft (§25 covers the mechanism), and the square, with
-carol and you standing in it, is exactly the audience he's concealing it *from*. He will simply
-wait, for as many beats as you care to press. The cleanest way to see witnessing fire today is to
-steal the loaf yourself:
+demonstration here was to wait a beat and watch bob, who wants the loaf, take it. As of v22 that
+stopped: bob concealed his theft instead (§25 covers the mechanism), and pressing `m` just showed
+him waiting out a watched square. As of v24 pressing `m` doesn't show *that* either — bob now has
+a lawful path to the loaf, and takes it unprompted from turn one (§26 tells that story in full;
+it's not this section's subject). The cleanest way to see witnessing fire on its own, without
+getting pulled into either later arc, is still to steal the loaf yourself:
 
 ```
 -------------------- scene --------------------
@@ -615,20 +617,24 @@ Your move (you):
   5) you: whisper to carol that dana stole the loaf
   6) you: whisper to bob that eve stole the loaf
   7) you: whisper to carol that eve stole the loaf
-  8) you: Go to mill
+  8) you: take up honest work at the stall
+  9) you: Go to mill
   m) wait and let others act
   s) save    q) quit
 > > you: steal the loaf from the stall
-  bob: Wait a moment
+  bob: take up honest work at the stall
   carol: confront you about the theft
   dana: Wait a moment
   eve: whisper to dana that carol stole the loaf
 ```
 
-(Two things already visible that weren't here at v19's landing: the `whisper to …` options, and
-eve's own move — v22's deception layer, live in this same world from turn one. Both are §25's
-subject, not this section's; ignore them for now. eve, at the mill the whole time, isn't a witness
-to anything in the square either — the same reason dana isn't.)
+(Three things already visible that weren't here at v19's landing: the `whisper to …` and `take up
+honest work` options, and eve's own move. The whisper options are v22's deception layer (§25);
+`take up honest work` and bob choosing it the instant you steal are v24's redemption (§26) — the
+undertake gate only needs bob at the square, not a loaf still on the stall, so your theft doesn't
+stop him pursuing the endeavor, it just takes his own theft option off the table. Neither is this
+section's subject; ignore them for now. eve, at the mill the whole time, isn't a witness to
+anything in the square either — the same reason dana isn't.)
 
 carol, standing right there, confronted you the instant you took it — the same beat, because
 witnessing is checked at the moment of the act, not on a later turn — and comes to *regard* you a
@@ -680,13 +686,15 @@ secondhand — can now be *told* to a co-present hearer.
 
 The rest of this tour (§§23–24) goes back to following *bob*, not you: v21's reputation arc ends
 in an NPC's own remorse and self-deterrence, which only an autonomous character can exhibit, so it
-needs an NPC thief. As of v22, though, getting bob to actually take the loaf in free play doesn't
-happen on its own anymore (§22, §25): he conceals, and carol — who used to wander off on a
-tie-break before her first decision even arrived — now holds her own +1 square-anchor, added in
-v22 for exactly this reason (with no theft guaranteed on turn one anymore, her first turns are
+needs an NPC thief. As of v22, getting bob to actually take the loaf in free play stopped
+happening on its own (§22, §25): he conceals, and carol — who used to wander off on a tie-break
+before her first decision even arrived — now holds her own +1 square-anchor, added in v22 for
+exactly this reason (with no theft guaranteed on turn one anymore, her first turns are
 zero-utility ties, and an idle character with no anchor drifts on the tie-break, same idiom as
 bob's and dana's). The two anchors together mean the square never genuinely empties in autonomous
-play, so bob never bites — §25 demonstrates this directly, at length.
+play. As of v24, bob doesn't even try: from turn one he undertakes `earnBread` instead (§26) — a
+strictly better option than waiting out a watched square for a theft he'd have to conceal — so
+free play doesn't reach a theft by *any* route anymore, watched square or not.
 
 So what follows is **forced**: bob's theft triggered directly (`doAct`, the exact technique
 `Prax.VillageSpec`'s tests use — precisely because free play can no longer reach this state), then
@@ -838,34 +846,45 @@ supports them (when the defeater is later revoked) sits untouched. This is `Vill
 shows directly (the scene prints derived standing, not raw beliefs) — which is exactly why this
 walkthrough checks the underlying facts instead of just the narration, here and below.
 
-**Deterrence: the stall stays stocked.** Driving the same forced session onward past round 6
-(round 6 confirms every shun toward bob has relented) and out to round 15 (90 steps — the same
-budget `VillageSpec`'s "an atoned thief is deterred" test drives), the picture doesn't change:
-bob's `steal the loaf from the stall` is still on his own menu, unrefused by any gate —
+**Deterrence: the stall stays stocked — and, as of v24, bob really does end up holding a loaf, the
+one he earned.** Driving the same forced session onward past round 6 (round 6 confirms every shun
+toward bob has relented) and out to round 15 (90 steps — the same budget `VillageSpec`'s "an
+atoned thief is deterred" test drives), bob's `steal the loaf from the stall` is still on his own
+menu, unrefused by any gate, but he spends the early turns of the same window on `earnBread`
+instead of waiting on it, and finishes well within the 90:
 
 ```
 bob's steal-the-loaf option still on the menu, unrefused: True
 stall.loaf present: True
-bob holds no loaf: True
+bob holds a loaf: True
+the loaf he holds is the one he earned: True
+bob's atonement still stands: True
 ```
 
-— and he simply never takes it, for the whole remaining run. `stall.loaf` really is still there,
-and bob's `Want [Match "holding.bob.loaf"] 10` is live again (atonement deleted his *holding*, not
-his want). The deed's own outcome deletes `atoned.Actor` as part of the very same outcome that
-reinstates his holding, so standing and notoriety are already snapped back — the same −15 he'd
-only just paid off — in the state stealing itself produces, with *no lookahead at all*: re-checked
-live against the current planner (v22 concealment and the v23 round-walk both landed since this
-number was first measured), `scoreActions` at depth 0 still ranks `bob: steal the loaf from the
-stall` at exactly **−4.0** against `bob: Wait a moment`'s **+1.0** — unchanged, because concealment
-is a *reward-if-unseen* want (it simply fails to add its +12 once the square is watched, which it
-always is here; it isn't an extra penalty on top of notoriety's −15). This isn't a foreseen future;
-it's an immediate consequence of the action, exactly like §8's stiffing aversion. An unatoned bob
-was tipped into atoning; an atoned bob, seeing that consequence right in front of him, doesn't
-re-offend. `VillageSpec` pins both facts — "re-offense revokes atonement: standing snaps back from
-memory" forces a second theft by hand and asserts the regards return, and "an atoned thief is
-deterred: the planner sees the snap-back" drives 90 autonomous turns past the atonement and asserts
-the stall stays stocked (the full arc itself is driven for 60 turns in "the whole arc runs
-itself").
+— he never re-steals, for the whole remaining run. `stall.loaf` really is still there — his own
+`steal` action is the only thing that would take it, and he doesn't. `holding.bob.loaf` is true
+for a different reason than the pre-v24 story: not a still-unsatisfied theft-linked want lying in
+wait for a future re-offense, but `practice.earnBread.bob.done.s3` — the loaf he's holding is the
+one he baked, during this same 90-turn window. This is exactly what `VillageSpec`'s "an atoned
+thief is deterred" test now asserts directly (amended under v24, spec §3): its old proxy — "bob
+holds no loaf" — was falsified by the correctly-implemented redemption, not by a bug, so the test
+now pins non-re-offense on its own terms (atonement standing, the stall untouched, and the loaf he
+holds traced to the endeavor's own completion fact) rather than a fact the endeavor was always
+going to make false.
+
+Re-checked live against the current planner at this same terminal state, `scoreActions` at depth 0
+ranks `bob: Wait a moment` at **20.0** against `bob: steal the loaf from the stall`'s **5.0** —
+stealing again would instantly flip `notorious.bob.thief` back to true (the same defeater-deletion
+mechanism as before: the deed's own outcome deletes `atoned.Actor`, and the regards nobody ever
+stopped believing revive on the very next read, no lookahead required) and forfeit concealment's
+reward now that the deed would, once again, be witnessed. This isn't a foreseen future; it's an
+immediate consequence of the action, exactly like §8's stiffing aversion. An unatoned bob was
+tipped into atoning; an atoned bob, seeing that consequence right in front of him, doesn't
+re-offend — he has better things to do, and v24 gives him one. `VillageSpec` pins both facts —
+"re-offense revokes atonement: standing snaps back from memory" forces a second theft by hand and
+asserts the regards return, and "an atoned thief is deterred: the planner sees the snap-back"
+drives the same 90 autonomous turns and asserts non-re-offense (the full arc itself is driven for
+60 turns in "the whole arc runs itself").
 
 The shun/relent/tell options never resurface either — with no live regard, the wants that drove
 them (carol and dana's shun-want is *conditioned* on `regardedAs`, per the design spec, so it
@@ -900,107 +919,66 @@ system, no lie-detection engine, nothing new in `Prax.Engine`:
   indistinguishable from the genuine article, and the entire v20/v21 machinery (retelling,
   corroboration, standing, notoriety, shunning) runs on the falsehood unmodified.
 
-**bob conceals.** `conceal "stole.bob.loaf" 12` — worth more than the loaf itself (+10). §22
-already showed the consequence: press `m` as many times as you like with anyone still minding the
-square, and bob just waits.
+**bob conceals — but no longer by waiting.** `conceal "stole.bob.loaf" 12` — worth more than the
+loaf itself (+10) — is exactly the want it was in v22: it rewards a deed nobody comes to believe,
+and it still fails the instant anyone would see the theft. What changed in v24 is what a watched
+bob *does* about that: earlier, avoiding a witnessed theft meant simply waiting it out; now
+`earnBread` is on the table, and industry beats patience, so he takes it instead — §26 tells that
+story start to finish, live. Concealment itself hasn't gone anywhere; it still gates the same
+choice, just later in the story. Two scripted probes still isolate the mechanism on its own,
+unconfounded by the endeavor, and both still pass:
 
-```sh
-cabal run prax -- village
-```
+- `Prax.DeceitSpec`'s minimal fixture probes `conceal` in isolation — watched vs. unwatched,
+  nothing else in play.
+- `VillageSpec`'s "a secret keeps: bob will not steal while the square watches" (20 driven turns
+  from a clean `villageWorld`) and "the perfect crime: alone, bob steals and no one ever knows"
+  (carol and you sent to the mill by hand, 12 driven turns) both hold. "The perfect crime" is
+  worth pausing on: even with `earnBread` now available, a *truly* alone bob still steals rather
+  than starting the endeavor — opportunism outranks patient industry the moment nobody's
+  watching, exactly as sharply as before v24. §26's "the opportunism stays honest" beat is the
+  same finding told mid-project instead of at the very first turn: concealment isn't about the
+  player, it's about *anyone* watching, wherever in the story the temptation lands.
 
-Ten presses, player never leaving the square:
-
-```
--------------------- scene --------------------
-  - bob is at the square
-  - carol is at the square
-  - dana is at the mill
-  - eve is at the mill
-  - you is at the square
-Your move (you):
-  1) you: steal the loaf from the stall
-  2) you: whisper to carol that bob stole the loaf
-  3) you: whisper to bob that carol stole the loaf
-  4) you: whisper to bob that dana stole the loaf
-  5) you: whisper to carol that dana stole the loaf
-  6) you: whisper to bob that eve stole the loaf
-  7) you: whisper to carol that eve stole the loaf
-  8) you: Go to mill
-  m) wait and let others act
-  s) save    q) quit
->   bob: Wait a moment
-```
-
-`bob: Wait a moment` repeats on every one of the ten presses — the stall stays stocked the whole
-capture. **Walking away yourself is not enough**, either. Leave for the mill on your very first
-move and keep pressing `m`:
-
-```
--------------------- scene --------------------
-  - bob is at the square
-  - carol is at the square
-  - dana is at the mill
-  - eve is at the mill
-  - you is at the square
-Your move (you):
-  1) you: steal the loaf from the stall
-  2) you: whisper to carol that bob stole the loaf
-  3) you: whisper to bob that carol stole the loaf
-  4) you: whisper to bob that dana stole the loaf
-  5) you: whisper to carol that dana stole the loaf
-  6) you: whisper to bob that eve stole the loaf
-  7) you: whisper to carol that eve stole the loaf
-  8) you: Go to mill
-  m) wait and let others act
-  s) save    q) quit
-> > you: Go to mill
-  bob: Wait a moment
-```
-
-— and across every one of seven further presses, bob still just waits. The reason is v22's other
-landed change (§23): carol now holds her own +1 square-anchor, so she never leaves either, and bob
-is still watched. §2 of the design spec put it plainly once this was discovered live: *bob waits as
-long as **anyone** minds the square — the bread is safe exactly as long as someone is watching.*
-The "walk to the mill and it empties" beat from earlier rounds' expectations is **dead in free
-play**; the only way to see the actual perfect crime — the square genuinely empty, bob taking the
-loaf, and nobody ever forming a belief about it — is the scripted route `VillageSpec`'s tests use
-(`carol` moved out by hand, same as `you`), which is exactly what `Prax.DeceitSpec`'s minimal
-fixture and `VillageSpec`'s "the perfect crime: alone, bob steals and no one ever knows" case both
-demonstrate and pass. The stall surviving your absence isn't a bug in the demo — it's the mechanic
-working exactly as designed: concealment isn't about the player, it's about *anyone watching*.
+Free play itself no longer reaches "bob waits" at all — not with the player present, not with the
+player gone to the mill. An earlier capture of this section pressed `m` ten times and printed
+`bob: Wait a moment` on every one; the identical input today prints the redemption from turn one
+(§26 walks through it). What free play *does* still show, unprompted, in that very same session,
+is a second and wholly independent plot running in its gaps: eve's frame-up of carol.
 
 **eve joins, and frames carol.** eve starts at the mill — placement matters: she must not witness
 the scripted thefts v19–21's own tests force, so their two-witness arithmetic stays intact — with
 one authored want, `Want [Match "regards.W.carol.thief"] 4`: she wants carol ill-regarded, per
-head, and doesn't care how. `lie` gives her the means. Continuing the very first capture above (ten
-`m` presses, player present throughout), her whisper campaign is visible from the first beat:
+head, and doesn't care how. `lie` gives her the means. This is the same ten-`m`-press, player-
+present run §26 draws bob's redemption from; eve's campaign runs alongside it from the first beat:
 
 ```
->   bob: Wait a moment
+>   bob: take up honest work at the stall
   carol: Wait a moment
   dana: Wait a moment
   eve: whisper to dana that carol stole the loaf
 ```
 
 — and `dana regards carol as a thief` derives on the very same beat, a fact nobody wrote, from a
-claim nobody witnessed. The very next round, dana acts on it:
+claim nobody witnessed. The very next round, dana acts on it, while bob is mid-sweep:
 
 ```
->   bob: Wait a moment
+>   bob: sweep the square
   carol: Wait a moment
   dana: shun carol
   eve: Go to square
 ```
 
-eve keeps moving to wherever an untold villager is and keeps whispering — to bob, then to you —
-until, four presses in, the third regard tips notoriety over *carol*, exactly as it did over bob in
-§24, on exactly the same machinery:
+eve keeps moving to wherever an untold villager is and keeps whispering — dana first, then (once
+she reaches the square) you — until, six presses in, a third whisper catches bob himself, the very
+round he finishes baking, and tips notoriety over *carol*, exactly as it did over bob in §24, on
+exactly the same machinery. bob's own redemption and carol's frame-up land in the same beat,
+unstaged and unprompted by either story:
 
 ```
 -------------------- scene --------------------
   - bob is at the square
   - carol is at the square
-  - dana is at the square
+  - dana is at the mill
   - eve is at the square
   - you is at the square
   - dana is shunning carol
@@ -1035,9 +1013,17 @@ carol: whisper to bob that eve stole the loaf
 carol: whisper to you that eve stole the loaf
 carol: whisper to bob that you stole the loaf
 carol: whisper to eve that you stole the loaf
+carol: take up honest work at the stall
 carol: Go to mill
 carol: Wait a moment
 ```
+
+`take up honest work at the stall` is new here as of v24 — the undertake action is offered to
+*anyone* standing at the square, not just bob (`Prax.Project.endeavor` gates on place, not
+identity), so it's on carol's menu too. Nothing in her own wants motivates her to take it (only
+bob carries `charDesires = ["pursues-earnBread"]`), so it sits unchosen — an unmotivated
+affordance, not a live pursuit; §26's own opportunism beat rests on exactly this asymmetry: the
+option's availability doesn't imply anyone wants it.
 
 No `return the loaf with apologies` — and there never will be. That action's own precondition is
 `Match "holding.Actor.loaf"`, and carol never held one; amends requires the thing she never took.
@@ -1053,6 +1039,123 @@ else now believes.
 
 → code: `Prax.Deceit` (`conceal`/`lie`), `Prax.Worlds.Village`; asserted in `Prax.DeceitSpec`,
 `Prax.VillageSpec`.
+
+### 26. Industry — endeavors, purpose read from watching, honest opportunism (`prax village`) (v24)
+
+`Prax.Project` gives the village's moral arc its resolution. An authored endeavor *type*
+(`endeavor pid weight undertakeLabel gate stages`, built from `Stage`s) compiles to three things a
+world wires in once: an undertake `Action`, a staged `Practice` (one instance per owner —
+undertaking twice is never offered again), and a named pursuit `Desire` that pays `+weight` for
+every completed stage. Progress *is* the reward, so a long project needs no planner change: every
+next stage is ordinary local utility the moment it's available, never a foreseen end the lookahead
+has to plan toward. The pursuit desire is **dormant** — zero bindings, zero utility — for any
+disposed character with no instance yet; undertaking (an ordinary planner choice) is what switches
+it on. bob carries the disposition from the start (`charDesires = ["pursues-earnBread"]`), silent
+until he acts on it. `Prax.Worlds.Village`'s `earnBread` is three stages: sweep the square
+(public — `witnessed together "swept.Actor"`, `Prax.Witness`'s deposit-builder now exported as a
+first-class combinator for exactly this), fetch flour at the mill, and bake at the square for the
+loaf he'd otherwise have to steal.
+
+**The redemption, captured live.** A completely clean start, pressing only `m`:
+
+```sh
+cabal run prax -- village
+```
+
+```
+-------------------- scene --------------------
+  - bob is at the square
+  - carol is at the square
+  - dana is at the mill
+  - eve is at the mill
+  - you is at the square
+Your move (you):
+  1) you: steal the loaf from the stall
+  2) you: whisper to carol that bob stole the loaf
+  3) you: whisper to bob that carol stole the loaf
+  4) you: whisper to bob that dana stole the loaf
+  5) you: whisper to carol that dana stole the loaf
+  6) you: whisper to bob that eve stole the loaf
+  7) you: whisper to carol that eve stole the loaf
+  8) you: take up honest work at the stall
+  9) you: Go to mill
+  m) wait and let others act
+  s) save    q) quit
+>   bob: take up honest work at the stall
+  carol: Wait a moment
+  dana: Wait a moment
+  eve: whisper to dana that carol stole the loaf
+```
+
+— and, one press at a time, the rest of the endeavor plays out entirely on its own. bob's own line,
+real and verbatim, one per round for the next five presses:
+
+```
+  bob: sweep the square
+  bob: Go to mill
+  bob: fetch flour from the mill
+  bob: Go to square
+  bob: bake and earn the loaf
+```
+
+Six presses, deterred bob to fed bob, no forcing anywhere — the identical technique `VillageSpec`'s
+"deterrence plus opportunity yields industry: watched bob earns his loaf" drives headlessly
+(`driveIdle "you" 42 villageWorld`), which pins the turn this completes on: `s3` (baking) is first
+done at **turn 32** of that count, `holding.bob.loaf` true, `stall.loaf` untouched (he never went
+near it), and no theft belief about bob anywhere — this is a loaf he *baked*, not one anyone had to
+witness him take.
+
+**Watching him work teaches the village his purpose.** Sweeping is public, so anyone who saw it
+comes to believe `swept.bob` — and `villageAxioms` adds one inference rule for exactly this:
+whoever believes bob swept presumes he's pursuing `earnBread`, the same "watching settles into a
+belief about someone's mind" pattern v21 already used for reputation, now aimed at a desire instead
+of a deed. Because that presumed pursuit is an ordinary believed `Desire` (`Prax.Minds`), it feeds
+`predictMove` directly — with a genuine nuance live testing turned up, checked directly
+(`cabal repl exe:prax`, real output):
+
+```
+carol saw the sweep: True
+carol presumes the pursuit: True
+carol's predicted move for bob, still at the square: Nothing
+carol's predicted move for bob, now at the mill: Just "bob: fetch flour from the mill"
+dana's predicted move for bob, co-present at the mill but never told: Nothing
+```
+
+`predictMove` is **myopic**: even carol, who both saw the sweep and holds the presumed-pursuit
+belief, predicts *nothing* while bob's still standing at the square — the model only pays off once
+the next stage is an available move (the sweep is done, the mill trip is next, and predicting
+"stand still" would gain nothing over the model's baseline). The instant bob reaches the mill, the
+same belief resolves to the exact next stage. And prediction is **belief-relative, not
+proximity-relative**: dana, standing right next to bob at the mill the whole time, never saw the
+sweep and was never told — she predicts nothing either, even though she's more physically
+co-present with bob than carol is at that moment. The model reads the predictor's beliefs, not the
+mover's true state or the predictor's eyes — exactly the property v23 built `predictMove` to have,
+now exercised by a desire instead of a plot.
+
+**The opportunism stays honest.** Deterrence and industry both hold only because bob is being
+watched; the story would ring false if concealment quietly stopped mattering once he had somewhere
+respectable to be. Mid-project — undertaken, sweep already done — with the square genuinely
+empty (`carol` and `you` both sent to the mill by hand, the same forcing technique §25's scripted
+tests use), bob's own top-ranked move flips:
+
+```
+bob's top pick, square empty mid-project: Just "bob: steal the loaf from the stall"
+  71.18  bob: steal the loaf from the stall
+  60.46  bob: Wait a moment
+  50.46  bob: Go to mill
+```
+
+Stealing (71.18 — concealment's +12 back in play now that nobody's watching, on top of the loaf
+itself) beats continuing toward the next stage (`Go to mill`, 50.46 — the step that leads to the
+endeavor's comparatively modest flat `+3`) by a wide margin — the same shape of comparison the
+"perfect crime" beat of §25 shows at turn zero, here reproduced mid-project. bob is honest because
+honesty is *currently* the higher-scoring path, watched; the instant it stops being watched, the
+ranking reverts exactly as it would have before v24 existed. `VillageSpec`'s "the opportunism stays
+honest: an empty square mid-project still tempts" pins this precise comparison.
+
+→ code: `Prax.Project` (`endeavor`/`Stage`), `Prax.Witness` (`witnessed`, now exported),
+`Prax.Worlds.Village` (`earnBreadTake`/`earnBreadP`/`earnBreadPursuit`, the inference axiom);
+asserted in `Prax.ProjectSpec`, `Prax.VillageSpec`.
 
 ---
 
@@ -1108,10 +1211,11 @@ bar, Part I); the second is Part II, one row per world/tool.
 | Quantified outcomes (`ForEach`) + authored witnessing | `Prax.Engine` / `Prax.Witness` | `prax village`: carol (co-present) believes bob's theft and can confront him; dana (elsewhere) doesn't |
 | Gossip / sourced hearsay (`gossip`/`heard`, multi-valued `.seen`/`.heard.<source>` provenance) | `Prax.Rumor` | `prax village`: carol tells dana what she saw; hearsay licenses suspicion, not confrontation |
 | `standing`/`standingUnless`/`regardedAs`/`notoriety` (derived reputation, base-fact atonement defeater) | `Prax.Repute` | `prax village`: three regards tip `notorious.bob.thief`; atonement dissolves every regard while the belief persists; re-offense revokes it and an atoned bob is deterred from a restocked stall |
-| Secrets & deception (`conceal`/`lie`) | `Prax.Deceit` | `prax village`: bob conceals his theft and waits out a watched square; eve frames carol, and the lie cascades into real shunning and notoriety with no recourse for the framed |
+| Secrets & deception (`conceal`/`lie`) | `Prax.Deceit` | `prax village`: bob's concealment want still gates a watched theft (mid-project opportunism, §26; the scripted "secret keeps"/"perfect crime" tests); eve frames carol, and the lie cascades into real shunning and notoriety with no recourse for the framed |
+| Endeavors: staged practices, dormant pursuits (`endeavor`/`Stage`) | `Prax.Project` | `prax village`: bob undertakes `earnBread` unprompted at t=0, sweeps the square in public, and bakes the loaf he'd otherwise have to steal; watching him sweep is enough for the village to presume his purpose and predict his next stage |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
-same behaviours are asserted in the test suite (`cabal test`, 267 tests). Part I: `Prax.QuerySpec`,
+same behaviours are asserted in the test suite (`cabal test`, 278 tests). Part I: `Prax.QuerySpec`,
 `Prax.EngineSpec`, `Prax.PlannerSpec` + `Prax.MindsSpec` (wants/utility/lookahead, now a round-walk
 over believed minds — `predictMove`, `charDesires`, `professed`/`conventional`), `Prax.CoreSpec`
 (emotions/relationships), `Prax.ReactionsSpec` (reactions, norms, norm-avoidance), `Prax.BeliefsSpec`
@@ -1128,11 +1232,17 @@ confront affordance, sourced hearsay and the gossip gate, and the perception tic
 gate whose moves get predicted), `Prax.ReputeSpec` (derived standing, the base-fact
 atonement defeater, and notoriety at threshold — `VillageSpec`'s later cases carry the same
 mechanisms through the full autonomous arc, the re-offense snap-back, and the resulting
-deterrence), and `Prax.DeceitSpec` (`conceal`'s shape and its watched/unwatched planner probe,
+deterrence), `Prax.DeceitSpec` (`conceal`'s shape and its watched/unwatched planner probe,
 `lie`'s no-evidence gate, self-framing and subject-is-hearer exclusions, one-shot-per-hearer, and
 hearing-your-own-lie-back replacing `lie` with `gossip` — `VillageSpec`'s later cases carry the
-same mechanisms into the full village: the stall staying stocked while watched, the perfect crime
-once the square is genuinely empty, and eve's frame-up cascading to shunning with no recourse).
+same mechanisms into the full village: a watched theft still fails, the perfect crime still needs
+a genuinely empty square, and eve's frame-up still cascades to shunning with no recourse), and
+`Prax.ProjectSpec` (`endeavor`'s undertake/stage-gating/yield shape on a standalone oven-building
+fixture, the pursuit desire's exact shape and its dormant-vs-undertaken believability, and the
+horizon regression driving four stages to completion at planner depth 2 — `VillageSpec`'s later
+cases carry the same mechanism into the full village: bob's unforced redemption, the
+watching-teaches-purpose inference feeding a belief-relative, myopic `predictMove`, and the
+mid-project opportunism beat that keeps concealment honest).
 
 ---
 
