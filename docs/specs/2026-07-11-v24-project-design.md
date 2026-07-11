@@ -132,7 +132,13 @@ satisfaction of honest work — real, but no substitute for bread in hand):
   `predictMove`s the flour trip; a non-witness doesn't).
 - Regression: full suite green (268 baseline); older village arcs unaffected (they force the
   theft before bob's first free choice, or run post-theft states where the endeavor's rewards
-  don't change the analyzed decisions — verify empirically, BLOCKED with traces if not);
+  don't change the analyzed decisions — verify empirically, BLOCKED with traces if not).
+  **One sanctioned amendment, found in implementation**: the v21 deterrence test asserted
+  "bob holds no loaf" as a *proxy* for "he never re-steals" — redemption falsifies the proxy
+  (he now EARNS a loaf) while strengthening the property. The test is amended to assert
+  non-re-offense directly: the stall's loaf untouched ∧ `atoned.bob` intact (a re-steal would
+  delete both) ∧ the held loaf is the earned one (`done.s3`). Tests must verify the behavior,
+  not an era's proxy for it;
   `prax check` all 7 worlds; `cabal build all` zero warnings; hlint clean.
 
 ## 4. Out of scope (parked deliberately)
