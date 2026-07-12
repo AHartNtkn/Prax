@@ -26,24 +26,47 @@ reservedIn pat vs = [ v | v <- filter isVariable (pathNames pat), v `elem` vs ]
 -- | Confess ONE deed (one mark binding) to a co-present hearer. The lied-mark
 -- is the precondition and it CONVERTS — a deed can be confessed once; further
 -- hearers learn by gossip. @H@ is the mark's own original-hearer slot and is
--- reserved in the event pattern.
-confess :: String -> CoPresence -> String -> String -> Action
-confess kind copresence pat label
+-- reserved in the MARK pattern.
+--
+-- The MARK pattern and the DEPOSIT pattern are deliberately separate
+-- (amended after implementation blocked on the anticipated shape finding): a
+-- content-shaped mark (e.g. @\"stole.C.loaf\"@, priceable by conscience) and
+-- an act-shaped standing (e.g. @\"whispered.V.H\"@, what confessing a LIE
+-- actually reveals — the act and its falsity, not a re-assertion of the
+-- fabricated content) cannot share one pattern. The deposit is grounded from
+-- the mark's own bindings only (@Actor@, @H@, and the mark pattern's own
+-- variables) — any other deposit variable would insert a variable-bearing
+-- fact, so it is a loud error. Worlds whose deed IS self-shaped (the mark's
+-- content and what it reveals coincide) pass the same pattern for both
+-- arguments, explicitly — there is no default.
+confess :: String -> CoPresence -> String -> String -> String -> Action
+confess kind copresence markPat depositPat label
   | not (segOk kind) =
       error ("confess: mark kind " ++ show kind ++ " must be a single path segment")
-  | (v : _) <- reservedIn pat ["H", "Hearer", "Actor"] =
-      error ("confess: event pattern " ++ show pat ++ " reserves variable " ++ show v
+  | (v : _) <- reservedIn markPat ["H", "Hearer", "Actor"] =
+      error ("confess: mark pattern " ++ show markPat ++ " reserves variable " ++ show v
              ++ " (the mark's hearer slot / the action's own roles)")
+  | (v : _) <- reservedIn depositPat ["Hearer"] =
+      error ("confess: deposit pattern " ++ show depositPat ++ " reserves variable "
+             ++ show v ++ " (the confession's own audience role)")
+  | (v : _) <- ungroundable =
+      error ("confess: deposit pattern " ++ show depositPat ++ " variable " ++ show v
+             ++ " is not grounded by the mark (only Actor, H, and " ++ show markPat
+             ++ "'s own variables are available) -- an ungroundable deposit would"
+             ++ " insert a variable-bearing fact")
   | otherwise = action label conds outs
   where
-    liedPath      = "Actor." ++ kind ++ ".H." ++ pat
-    confessedPath = "Actor.confessed.H." ++ pat
+    liedPath      = "Actor." ++ kind ++ ".H." ++ markPat
+    confessedPath = "Actor.confessed.H." ++ markPat
+    groundedVars  = "Actor" : "H" : filter isVariable (pathNames markPat)
+    ungroundable  = [ v | v <- filter isVariable (pathNames depositPat)
+                        , v `notElem` groundedVars ]
     conds = Match liedPath
           : asRole "Hearer" copresence
          ++ [ Neq "Hearer" "Actor" ]
     outs  = [ Delete liedPath
             , Insert confessedPath
-            , Insert (beliefAbout "Hearer" pat ++ ".heard.Actor") ]
+            , Insert (beliefAbout "Hearer" depositPat ++ ".heard.Actor") ]
 
 -- | Grant absolution: insert the world's defeater for a deed confessed TO YOU
 -- (the belief must be heard from its own doer — gossip does not qualify),

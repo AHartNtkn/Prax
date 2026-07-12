@@ -66,7 +66,7 @@ conscience = Trait "conscience"
   , Desire "clearConscience" (Want [ Match "Owner.confessed.H.wronged.Owner.Victim" ] 0) ]
 
 confessAct :: Action
-confessAct = confess "lied" together pat "[Actor]: confess to [Hearer] about wronging [Victim]"
+confessAct = confess "lied" together pat pat "[Actor]: confess to [Hearer] about wronging [Victim]"
 
 convWorld :: PraxState
 convWorld = foldl (flip performOutcome) base (personaFacts ++ setup)
@@ -224,7 +224,7 @@ incorrigibilityTests = testGroup "incorrigibility: threshold, gossip, independen
 --   big  stake=20: hold your tongue = 37.94, confess = 0.0    -> doesn't
 
 spontConfessAct :: Action
-spontConfessAct = confess "lied" together pat "[Actor]: confess to [Hearer] about wronging [Victim]"
+spontConfessAct = confess "lied" together pat pat "[Actor]: confess to [Hearer] about wronging [Victim]"
 
 holdTongue :: Action
 holdTongue = action "[Actor]: hold your tongue" [ Match "at.Actor!P" ] []
@@ -285,7 +285,7 @@ threatenAct, complyAct, defyAct, exposeAct :: Action
   acts -> error ("shakedown produced " ++ show (length acts) ++ " actions, expected 4")
 
 blackmailConfessAct :: Action
-blackmailConfessAct = confess "lied" together blackmailPat "[Actor]: confess to [Hearer] about the loaf"
+blackmailConfessAct = confess "lied" together blackmailPat blackmailPat "[Actor]: confess to [Hearer] about the loaf"
 
 waitAct :: Action
 waitAct = action "[Actor]: wait" [ Match "at.Actor!P" ] []
@@ -420,18 +420,72 @@ reoffenseTests = testGroup "re-offense deletes the defeater (v21 idiom)"
   ]
 
 --------------------------------------------------------------------------------
+-- Group 7: the decoupled deposit -- what the mark IS vs what confessing it
+-- REVEALS are two patterns (the village's exact upcoming wiring, pinned here
+-- at module level first)
+--------------------------------------------------------------------------------
+
+-- eve's mark is content-shaped ("stole.C.loaf" -- who she framed); confessing
+-- it must NOT re-assert that content to the new hearer -- it reveals the ACT
+-- of having whispered the lie, and to WHOM (H, the mark's own original
+-- hearer), grounded straight from the mark's own bindings.
+decoupledConfessAct :: Action
+decoupledConfessAct = confess "lied" together "stole.C.loaf" "whispered.Actor.H"
+  "[Actor]: confess to [Hearer] about framing [C]"
+
+decoupledWorld :: PraxState
+decoupledWorld = setCharacters [character "eve", character "fay"]
+  (foldl (flip performOutcome) base setup)
+  where
+    base = definePractices [p] emptyState
+    p = practice
+      { practiceId = "confessional", roles = ["R"], actions = [decoupledConfessAct] }
+    setup =
+      [ Insert "practice.confessional.here"
+      , Insert "at.eve!yard", Insert "at.fay!yard"
+        -- eve once lied to gale, framing carol for the theft.
+      , Insert "eve.lied.gale.stole.carol.loaf" ]
+
+decoupledDepositTests :: TestTree
+decoupledDepositTests = testGroup "the deposit is decoupled from the mark's own content"
+  [ testCase "confessing converts the content-mark and deposits the ACT, not the content" $ do
+      let st = doAct "eve" "confess to fay about framing carol" decoupledWorld
+      assertBool "the content-mark converted"
+        (exists "eve.confessed.gale.stole.carol.loaf" (db st))
+      assertBool "the content-mark's lied form is gone"
+        (not (exists "eve.lied.gale.stole.carol.loaf" (db st)))
+      assertBool "fay learns the ACT (whispered.eve.gale), sourced from eve"
+        (exists "fay.believes.whispered.eve.gale.heard.eve" (db st))
+      assertBool "fay does NOT learn a re-assertion of the framed content"
+        (not (exists "fay.believes.stole.carol.loaf" (db st)))
+  ]
+
+--------------------------------------------------------------------------------
 -- Group 6: guards forced
 --------------------------------------------------------------------------------
 
 guardTests :: TestTree
 guardTests = testGroup "guards"
   [ testCase "confess rejects a dotted mark kind" $ do
-      r <- try (evaluate (length (show (confess "li.ed" together pat "[Actor]: confess"))))
+      r <- try (evaluate (length (show (confess "li.ed" together pat pat "[Actor]: confess"))))
       assertBool "a dotted kind is an error" (isLeft (r :: Either ErrorCall Int))
 
-  , testCase "confess rejects an event pattern reserving H/Hearer/Actor" $ do
-      r <- try (evaluate (length (show (confess "lied" together "wronged.H.Victim" "[Actor]: confess"))))
+  , testCase "confess rejects a mark pattern reserving H/Hearer/Actor" $ do
+      r <- try (evaluate (length (show (confess "lied" together "wronged.H.Victim" "wronged.H.Victim" "[Actor]: confess"))))
       assertBool "H is reserved (the mark's own hearer slot)" (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "confess rejects a deposit pattern reserving Hearer" $ do
+      r <- try (evaluate (length (show (confess "lied" together "stole.C.loaf" "told.Actor.Hearer" "[Actor]: confess"))))
+      assertBool "Hearer is reserved (the confession's own audience role)"
+        (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "confess rejects an ungroundable deposit variable" $ do
+      -- "Someone" is neither Actor, H, nor one of the mark's own variables
+      -- (the mark is "stole.C.loaf", whose only variable is C) -- grounding
+      -- it would insert a variable-bearing fact.
+      r <- try (evaluate (length (show (confess "lied" together "stole.C.loaf" "whispered.Actor.Someone" "[Actor]: confess"))))
+      assertBool "an ungroundable deposit variable is an error"
+        (isLeft (r :: Either ErrorCall Int))
 
   , testCase "absolve rejects non-single-segment defeater/label" $ do
       r <- try (evaluate (length (show (absolve "re.canted" pat "fedUp" "[Actor]: absolve"))))
@@ -475,5 +529,6 @@ tests = testGroup "Prax.Confession"
   , incorrigibilityTests
   , probedArithmeticTests
   , reoffenseTests
+  , decoupledDepositTests
   , guardTests
   ]
