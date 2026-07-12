@@ -33,6 +33,7 @@ library
                       Prax.Core
                       Prax.Reactions
                       Prax.Deontic
+                      Prax.Debt
                       Prax.EL
                       Prax.Derive
                       Prax.TypeCheck
@@ -95,6 +96,7 @@ test-suite prax-test
                       Prax.CoreSpec
                       Prax.ReactionsSpec
                       Prax.DeonticSpec
+                      Prax.DebtSpec
                       Prax.ELSpec
                       Prax.DeriveSpec
                       Prax.FeudSpec
