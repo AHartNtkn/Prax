@@ -1,13 +1,15 @@
 -- | An __emergent sandbox__ demo (the direction the engine is heading — a social
 -- substrate for other games, not authored IF). It shows the derivation layer
--- ("Prax.Derive") doing the work: from /one/ authored fact and three domain rules,
--- a whole feud emerges — people who never met come to resent someone purely
--- through the alliance network — and it is __defeasible__: make amends and the
--- enmity dissolves on its own.
+-- ("Prax.Derive") doing the work: from /one/ authored fact and a handful of
+-- domain rules, a whole feud emerges — people who never met come to resent
+-- someone purely through the alliance network — and it is __defeasible__: make
+-- amends and the enmity dissolves on its own.
 --
--- Setup: Alice wronged Bob; Bob is allied with Carol; Carol with Dave. The rules
--- (authored once) say alliances are mutual, the wronged resent the wrongdoer, and
--- "the enemy of my ally is my enemy". Forward-chaining ('readView') then derives
+-- Setup (v31): Alice wronged Bob; Bob, Carol, and Dave are house kestrel
+-- ("Prax.Faction" membership — 'comrades' derives their alliances); Esme is
+-- house wren, marriageable across the lines ("Prax.Kin"). The rules say
+-- alliances are mutual, the wronged resent the wrongdoer, and "the enemy of my
+-- ally is my enemy". Forward-chaining ('readView') then derives
 -- @resents.bob.alice@, @resents.carol.alice@, @resents.dave.alice@ — Alice is shunned
 -- by Bob's entire network though she only ever wronged Bob. Retract the wrong
 -- (Alice "makes amends") and every derived @resents@ — and the shunning — vanishes.
