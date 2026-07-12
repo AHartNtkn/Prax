@@ -69,8 +69,20 @@ intern !name =
 
 -- | The segment a symbol names. Loud error on a foreign id (impossible for
 -- any 'Sym' produced by 'intern').
+--
+-- __Bang pattern is load-bearing__, same hazard as 'intern'/'symOfId': a
+-- @newtype@ pattern match has no runtime tag to match against, so
+-- @(Sym i)@ alone does NOT force its scrutinee — matching it is a plain
+-- coercion, not a demand. Without the bang, a caller passing a still-thunked
+-- 'Sym' built from a fresh, not-yet-run 'intern' call could have
+-- 'readIORef' race ahead of that 'intern' call's pool write. GHC's own
+-- strictness analysis happens to erase this window at @-O1@ (it proves
+-- @i@ is always demanded and reorders accordingly) — but that is an
+-- optimizer coincidence, not a correctness guarantee this code should rely
+-- on; the bang makes the ordering explicit and correct at any optimization
+-- level.
 symName :: Sym -> String
-symName (Sym i) = unsafePerformIO $ do
+symName (Sym !i) = unsafePerformIO $ do
   Pool _ rev _ _ <- readIORef poolRef
   case IntMap.lookup i rev of
     Just n  -> pure n
