@@ -21,6 +21,7 @@
 -- violation as a dropped prediction.
 module Prax.Relevance
   ( mayUnify
+  , mayUnifyNames
   , improvableDesires
   , evictionShadows
   ) where
@@ -48,10 +49,15 @@ import           Prax.Types
 -- want always shares an aligned literal, so the anchor removes only
 -- coincidence.
 mayUnify :: String -> String -> Bool
-mayUnify a b = anchored && and (zipWith seg (pathNames a) (pathNames b))
+mayUnify a b = mayUnifyNames (pathNames a) (pathNames b)
+
+-- | 'mayUnify' on pre-split paths — the planner-hot form ('relevantDelta'
+-- classifies every primitive delta against every footprint pattern).
+mayUnifyNames :: [String] -> [String] -> Bool
+mayUnifyNames as bs = anchored && and (zipWith seg as bs)
   where
     seg x y = isVariable x || isVariable y || x == y
-    anchored = or (zipWith literalMatch (pathNames a) (pathNames b))
+    anchored = or (zipWith literalMatch as bs)
     literalMatch x y = not (isVariable x) && not (isVariable y) && x == y
 
 -- The insert- and delete-shaped atoms an outcome can produce, resolving

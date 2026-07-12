@@ -7,8 +7,8 @@ import           Data.Either (isRight)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
-import           Prax.Db (Db, emptyDb, insertAll, retract, dbToSentences)
-import           Prax.Query (Condition (..))
+import           Prax.Db (Db, emptyDb, insert, insertAll, retract, dbToSentences, dbToLabeledSentences)
+import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Derive
 
 build :: [String] -> Db
@@ -93,4 +93,30 @@ tests = testGroup "Prax.Derive (m(X) closure)"
       let fp2 = axiomFootprint [ axiom [ Match "a.X" ] [ "b.X" ] ]
       assertBool "lifted body" ("obliged.Obligor.a.X" `elem` fp2)
       assertBool "lifted head" ("obliged.Obligor.b.X" `elem` fp2)
+
+  , testCase "closureFrom continues a closed model exactly as a from-scratch closure" $ do
+      let axs = [ axiom [ Match "parent.X.Y" ] [ "elder.X" ]
+                , axiom [ Match "elder.X", Match "wise.X" ] [ "sage.X" ] ]
+          base = insertAll [ "parent.ada.bea", "wise.ada" ] emptyDb
+          -- a monotone new fact cascading through BOTH rules:
+          closed  = either (error . show) id (closure axs base)
+          cont    = either (error . show) id (closureFrom axs closed [ "parent.cal.dun" ])
+          scratch = either (error . show) id (closure axs (insert "parent.cal.dun" base))
+      dbToLabeledSentences cont @?= dbToLabeledSentences scratch
+
+  , testCase "axiomNegPatterns collects exactly the negated interiors" $ do
+      let axs = [ axiom [ Match "a.X", Absent [ Match "b.X", Not "c.X" ] ] [ "d.X" ] ]
+      assertBool "Absent interior" ("b.X" `elem` axiomNegPatterns axs)
+      assertBool "Not inside Absent" ("c.X" `elem` axiomNegPatterns axs)
+      assertBool "positive atom is NOT negated" ("a.X" `notElem` axiomNegPatterns axs)
+
+  , testCase "monotoneAxioms accepts the count-threshold shape and rejects anti-monotone" $ do
+      assertBool "Match-only is safe" (monotoneAxioms [ axiom [ Match "a.X" ] [ "b.X" ] ])
+      assertBool "the notoriety shape (Subquery+Count+Cmp Gte literal) is safe"
+        (monotoneAxioms [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
+                                , Count "N" "Rs", Cmp Gte "N" "3" ] [ "n.T" ] ])
+      assertBool "Cmp Lt with the literal on the right is anti-monotone"
+        (not (monotoneAxioms [ axiom [ Count "N" "Rs", Cmp Lt "N" "3" ] [ "q.T" ] ]))
+      assertBool "Calc disables the tier"
+        (not (monotoneAxioms [ axiom [ Calc "M" Add "N" "1" ] [ "q.M" ] ]))
   ]

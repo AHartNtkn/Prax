@@ -28,9 +28,12 @@ module Prax.Derive
   , axiom
   , Contradiction(..)
   , closure
+  , closureFrom
   , derived
   , contradiction
   , axiomFootprint
+  , axiomNegPatterns
+  , monotoneAxioms
   ) where
 
 import           Control.Monad (foldM)
@@ -38,8 +41,8 @@ import           Data.List (nub)
 import           Data.Maybe (mapMaybe)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Db, insertToks, emptyDb, tokens, groundTokens, tokensToSentence, dbToSentences)
-import           Prax.Query (Condition (..), query)
+import           Prax.Db (Db, insertToks, insertAll, emptyDb, tokens, groundTokens, tokensToSentence, dbToSentences)
+import           Prax.Query (Condition (..), CmpOp (..), query)
 import           Prax.EL (meet, leq)
 
 -- | An implication rule @axiomWhen → axiomThen@: when the body holds for some
@@ -67,7 +70,22 @@ newtype Contradiction = Contradiction String
 -- returned unchanged (the identity that keeps un-axiomatised worlds free).
 closure :: [Axiom] -> Db -> Either Contradiction Db
 closure []  db0 = Right db0
-closure axs db0 = go db0 db0
+closure axs db0 = run axs db0 db0
+
+-- | Continue an ALREADY-CLOSED model with new base facts. Exactly
+-- 'closure'’s semi-naive loop, entered at (model ∪ facts, delta = facts).
+-- Sound only when the facts are monotone for these axioms — '!'-free and
+-- unifying no negated body pattern, with 'monotoneAxioms' true — which is
+-- the CALLER's obligation ('Prax.Engine.monotoneInsert'); a violation is
+-- caught by the ViewInvariant net, not silently absorbed.
+closureFrom :: [Axiom] -> Db -> [String] -> Either Contradiction Db
+closureFrom axs closed facts =
+  run axs (insertAll facts closed) (insertAll facts emptyDb)
+
+-- The shared semi-naive engine (the former closure-local 'go', verbatim,
+-- with 'rules' computed from the axiom list).
+run :: [Axiom] -> Db -> Db -> Either Contradiction Db
+run axs = go
   where
     rules = [ (body, map tokens hs)
             | Axiom body hs <- axs ++ mapMaybe liftObliged axs ]
@@ -156,3 +174,49 @@ condPatterns c = case c of
   Cmp {}         -> []
   Calc {}        -> []
   Count {}       -> []
+
+-- | Every pattern under a negation in any body: inserting a fact these
+-- patterns match can UN-fire a rule (retraction), so such facts never take
+-- the continuation tier.
+axiomNegPatterns :: [Axiom] -> [String]
+axiomNegPatterns axs = concat
+  [ concatMap negOf body | Axiom body _ <- axs ++ mapMaybe liftObliged axs ]
+  where
+    negOf c = case c of
+      Not s          -> [s]
+      Absent cs      -> concatMap condPatterns cs   -- everything inside a ¬∃
+      Exists cs      -> concatMap negOf cs
+      Or clauses     -> concatMap (concatMap negOf) clauses
+      Subquery _ _ w -> concatMap negOf w
+      _              -> []
+
+-- | Is the axiom set continuation-safe: does adding base facts only ever ADD
+-- derived facts (given the caller also avoids negated patterns)? Conditions
+-- must be monotone-up: Match/Eq/Neq/Not/Absent (negations are handled via
+-- 'axiomNegPatterns'), recursion through Exists/Or/Subquery, Count freely,
+-- and Cmp only in the grows-only direction — the count side growing past a
+-- numeric literal (Gt/Gte with the literal right, Lt/Lte with it left).
+-- Calc (and any other Cmp shape) disables the tier for the world; the
+-- fallback is today's full reclose, correct just slower.
+monotoneAxioms :: [Axiom] -> Bool
+monotoneAxioms axs =
+  all bodyOk [ body | Axiom body _ <- axs ++ mapMaybe liftObliged axs ]
+  where
+    bodyOk = all condOk
+    condOk c = case c of
+      Match _        -> True
+      Not _          -> True
+      Absent _       -> True
+      Eq _ _         -> True
+      Neq _ _        -> True
+      Count _ _      -> True
+      Exists cs      -> bodyOk cs
+      Or clauses     -> all bodyOk clauses
+      Subquery _ _ w -> bodyOk w
+      Cmp op l r     -> case op of
+        Gt  -> numeric r
+        Gte -> numeric r
+        Lt  -> numeric l
+        Lte -> numeric l
+      Calc {}        -> False
+    numeric x = not (null x) && all (`elem` ("0123456789" :: String)) x

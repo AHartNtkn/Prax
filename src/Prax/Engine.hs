@@ -18,6 +18,7 @@ module Prax.Engine
   , performOutcome
   , groundOutcome
   , relevantDelta
+  , monotoneInsert
   ) where
 
 import           Data.List (intercalate)
@@ -26,15 +27,17 @@ import qualified Data.Map.Strict as Map
 import           Prax.Db
 import           Prax.Query (query, groundCondition)
 import           Prax.Types
-import           Prax.Derive (Axiom, closure, axiomFootprint)
-import           Prax.Relevance (improvableDesires, mayUnify, evictionShadows)
+import           Prax.Derive (Axiom, closure, closureFrom, axiomFootprint, axiomNegPatterns, monotoneAxioms)
+import           Prax.Relevance (improvableDesires, mayUnifyNames, evictionShadows)
 
 -- | Rebuild the derived vocabulary tables. Internal: every helper that
 -- changes 'practiceDefs', 'axioms', or 'desires' must end here.
 retable :: PraxState -> PraxState
 retable st = st
-  { improvables = improvableDesires (practiceDefs st) (axioms st) (desires st)
-  , footprint   = axiomFootprint (axioms st) }
+  { improvables  = improvableDesires (practiceDefs st) (axioms st) (desires st)
+  , footprint    = map pathNames (axiomFootprint (axioms st))
+  , negFootprint = map pathNames (axiomNegPatterns (axioms st))
+  , contMonotone = monotoneAxioms (axioms st) }
 
 -- | Can this ground delta change what the axioms derive? Conservative:
 -- False only when the sentence — and anything its exclusions evict —
@@ -42,7 +45,15 @@ retable st = st
 -- the licence for 'performOutcome' to skip 'reclose'.
 relevantDelta :: String -> PraxState -> Bool
 relevantDelta s st =
-  any (\x -> any (mayUnify x) (footprint st)) (s : evictionShadows s)
+  any (\x -> any (mayUnifyNames (pathNames x)) (footprint st)) (s : evictionShadows s)
+
+-- | May this insert take the continuation tier: the world is
+-- continuation-safe, the insert evicts nothing, and it can defeat nothing.
+monotoneInsert :: String -> PraxState -> Bool
+monotoneInsert s st =
+  contMonotone st
+    && '!' `notElem` s
+    && not (any (mayUnifyNames (pathNames s)) (negFootprint st))
 
 -- | Register a practice and insert its static @dataFacts@ under
 -- @practiceData.<id>.@.
@@ -91,6 +102,14 @@ withDb f st = reclose st { db = f (db st) }
 -- 'reclose'.
 applyDirect :: (Db -> Db) -> PraxState -> PraxState
 applyDirect f st = st { db = f (db st), readView = f (readView st) }
+
+-- | The continuation tier: grow the base and continue the ALREADY-CLOSED
+-- view with the one new fact. A contradiction (⊥) falls back to the full
+-- reclose path, which reaches the same "contradiction" marker from scratch.
+applyGrow :: String -> PraxState -> PraxState
+applyGrow s st = case closureFrom (axioms st) (readView st) [s] of
+  Right v -> st { db = insert s (db st), readView = v }
+  Left _  -> withDb (insert s) st
 
 -- | The only sanctioned way to change the axioms of a built state.
 setAxioms :: [Axiom] -> PraxState -> PraxState
@@ -147,8 +166,9 @@ performOutcome (Delete s) st
   | relevantDelta s st = withDb (retract s) st
   | otherwise          = applyDirect (retract s) st
 performOutcome (Insert s) st =
-  let st' | relevantDelta s st = withDb (insert s) st
-          | otherwise          = applyDirect (insert s) st
+  let st' | not (relevantDelta s st) = applyDirect (insert s) st
+          | monotoneInsert s st      = applyGrow s st
+          | otherwise                = withDb (insert s) st
   in case spawnedInstance s st of
        Just (def, roleVals) ->
          let roleBindings = Map.fromList (zip (roles def) (map VStr roleVals))

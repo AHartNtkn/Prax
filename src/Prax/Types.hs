@@ -149,10 +149,15 @@ data PraxState = PraxState
     -- ('Prax.Relevance.improvableDesires') — rebuilt with the vocabulary
     -- ('Prax.Engine.definePractices' / 'setAxioms' / 'setDesires'); the
     -- planner skips predictions over models with no improvable desire.
-  , footprint :: [String]
-    -- ^ Every pattern the axioms read or write ('Prax.Derive.axiomFootprint')
-    -- — rebuilt with the vocabulary; a ground delta unifying none of it
-    -- commutes with closure and may skip 'reclose' (the engine's fast path).
+  , footprint :: [[String]]
+    -- ^ Pre-tokenized ('pathNames') patterns the axioms read or write; a
+    -- ground delta unifying none of them commutes with closure (fast path).
+  , negFootprint :: [[String]]
+    -- ^ Pre-tokenized negated body interiors: a '!'-free insert unifying
+    -- none of these (in a 'contMonotone' world) only ADDS derived facts and
+    -- takes the continuation tier.
+  , contMonotone :: Bool
+    -- ^ 'Prax.Derive.monotoneAxioms' of this world's axioms.
   , readView     :: Db
     -- ^ The db closed under the axioms — established (lazily) whenever the
     -- state is built, so reads share one closure per state. Change 'db' or
@@ -165,7 +170,8 @@ emptyState :: PraxState
 emptyState = PraxState
   { db = emptyDb, practiceDefs = Map.empty, characters = [], cursor = -1
   , axioms = [], sorts = [], desires = [], predictionScope = []
-  , improvables = [], footprint = [], readView = emptyDb }
+  , improvables = [], footprint = [], negFootprint = [], contMonotone = True
+  , readView = emptyDb }
 
 -- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead
 -- character stays in the cast list but is skipped in turn-taking and lookahead.

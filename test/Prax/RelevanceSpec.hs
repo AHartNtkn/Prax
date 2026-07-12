@@ -4,7 +4,7 @@ import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
-import           Prax.Engine (setDesires, relevantDelta)
+import           Prax.Engine (setDesires, relevantDelta, monotoneInsert)
 import           Prax.Query (Condition (..))
 import           Prax.Types
 import           Prax.Worlds.Village (villageWorld)
@@ -84,4 +84,14 @@ tests = testGroup "Prax.Relevance"
         (relevantDelta "atoned.bob" villageWorld)
       assertBool "the stall's stock is not"
         (not (relevantDelta "stall.loaf" villageWorld))
+
+  , testCase "monotone-insert classification against the village" $ do
+      assertBool "the village's axioms admit the continuation tier"
+        (contMonotone villageWorld)
+      assertBool "a witness deposit grows monotonically"
+        (monotoneInsert "you.believes.stole.bob.loaf.seen" villageWorld)
+      assertBool "atonement defeats standing: full reclose"
+        (not (monotoneInsert "atoned.bob" villageWorld))
+      assertBool "an exclusion insert never takes the continuation"
+        (not (monotoneInsert "practice.world.world.at.bob!square" villageWorld))
   ]
