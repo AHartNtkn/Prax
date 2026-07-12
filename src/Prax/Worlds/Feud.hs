@@ -77,8 +77,9 @@ alice = (character playerName)
 -- derives the @allied@ facts the old world used to assert directly. Esme
 -- starts in a house of her own (wren) — inert to the feud until a wedding
 -- moves her in (tested in "Prax.FeudSpec"). All of 'Prax.Kin.kinAxioms'
--- joins the axiom set wholesale here (the spec's stated decision: the world
--- grows kin vocabulary, not just what one demo needs) — harmless to the
+-- is wired in wholesale here — the families are namespace-disjoint, so
+-- inclusion is free and the wedding needs only the marriage rules; an
+-- authored choice for this world, not a spec mandate — harmless to the
 -- unmodified feud tests since no @parent.*@/@married.*@ base fact exists
 -- until a wedding inserts one.
 feudWorld :: PraxState

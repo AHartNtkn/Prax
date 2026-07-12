@@ -85,6 +85,8 @@ tests = testGroup "Prax.Worlds.Feud (emergent sandbox)"
       assertBool "and can no longer shun her" (null (canShun amended "carol"))
 
   , testCase "pre-wedding: esme is inert to the feud — her own house, no resentment, no kestrel ties" $ do
+      -- wren has no other member, so comrades derives nothing for esme —
+      -- inertness is structural, not accidental
       assertBool "esme starts in her own house (wren)" (exists "member.esme!wren" (db feudWorld))
       let vs = viewFacts feudWorld
       assertBool "esme resents no one yet" (not (any ("resents.esme." `isPrefixOf`) vs))
