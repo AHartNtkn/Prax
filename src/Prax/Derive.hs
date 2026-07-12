@@ -192,27 +192,45 @@ axiomNegPatterns axs = concat
 
 -- | Is the axiom set continuation-safe: does adding base facts only ever ADD
 -- derived facts (given the caller also avoids negated patterns)? Conditions
--- must be monotone-up: Match/Eq/Neq/Not/Absent (negations are handled via
+-- must be monotone-up: Match/Not/Absent (negations are handled via
 -- 'axiomNegPatterns'), recursion through Exists/Or/Subquery, Count freely,
--- and Cmp only in the grows-only direction — the count side growing past a
--- numeric literal (Gt/Gte with the literal right, Lt/Lte with it left).
--- Calc (and any other Cmp shape) disables the tier for the world; the
--- fallback is today's full reclose, correct just slower.
+-- Cmp only in the grows-only direction — the count side growing past a
+-- numeric literal (Gt/Gte with the literal right, Lt/Lte with it left) — and
+-- Eq/Neq only over pattern-bound variables. An Eq/Neq over an
+-- aggregate-bound variable (a 'Count' result or a 'Subquery' set variable)
+-- expresses exactly-k/not-k, which UN-fires as the aggregate grows past k —
+-- anti-monotone despite Eq/Neq otherwise being a safe equality test. Calc
+-- (and any other Cmp shape) disables the tier for the world; the fallback is
+-- today's full reclose, correct just slower.
 monotoneAxioms :: [Axiom] -> Bool
 monotoneAxioms axs =
   all bodyOk [ body | Axiom body _ <- axs ++ mapMaybe liftObliged axs ]
   where
-    bodyOk = all condOk
-    condOk c = case c of
+    bodyOk body = all (condOk (aggVars body)) body
+
+    -- Every variable bound by an aggregate anywhere in the body (a body
+    -- shares one binding environment, so a 'Count'/'Subquery' result nested
+    -- under 'Exists'/'Or'/'Subquery' is still visible to an Eq/Neq
+    -- elsewhere in the body).
+    aggVars = concatMap collect
+      where
+        collect c = case c of
+          Count r _      -> [r]
+          Subquery s _ w -> s : aggVars w
+          Exists cs      -> aggVars cs
+          Or clauses     -> concatMap aggVars clauses
+          _              -> []
+
+    condOk aggs c = case c of
       Match _        -> True
       Not _          -> True
       Absent _       -> True
-      Eq _ _         -> True
-      Neq _ _        -> True
+      Eq l r         -> l `notElem` aggs && r `notElem` aggs
+      Neq l r        -> l `notElem` aggs && r `notElem` aggs
       Count _ _      -> True
-      Exists cs      -> bodyOk cs
-      Or clauses     -> all bodyOk clauses
-      Subquery _ _ w -> bodyOk w
+      Exists cs      -> all (condOk aggs) cs
+      Or clauses     -> all (all (condOk aggs)) clauses
+      Subquery _ _ w -> all (condOk aggs) w
       Cmp op l r     -> case op of
         Gt  -> numeric r
         Gte -> numeric r

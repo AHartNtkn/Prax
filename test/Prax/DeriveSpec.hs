@@ -119,4 +119,11 @@ tests = testGroup "Prax.Derive (m(X) closure)"
         (not (monotoneAxioms [ axiom [ Count "N" "Rs", Cmp Lt "N" "3" ] [ "q.T" ] ]))
       assertBool "Calc disables the tier"
         (not (monotoneAxioms [ axiom [ Calc "M" Add "N" "1" ] [ "q.M" ] ]))
+      assertBool "Eq over a count-bound variable is anti-monotone (exactly-k)"
+        (not (monotoneAxioms [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
+                                     , Count "N" "Rs", Eq "N" "3" ] [ "n.T" ] ]))
+      assertBool "Neq over a count-bound variable is anti-monotone too"
+        (not (monotoneAxioms [ axiom [ Count "N" "Rs", Neq "N" "3" ] [ "q.T" ] ]))
+      assertBool "Eq over Match-bound names stays monotone"
+        (monotoneAxioms [ axiom [ Match "a.X", Match "b.Y", Eq "X" "Y" ] [ "c.X" ] ])
   ]
