@@ -59,16 +59,27 @@ recomputes from scratch. Any divergence between the two construction paths fails
 the turn number. This is the direct statement of what incrementality must preserve — the
 goldens then additionally pin that decisions didn't move.
 
-## Phase 2, gated on the Task 0 probe: truth maintenance
+## Phase 2, gated on the post-fast-path profile (measured; amended in-round)
 
-If the measured fast-path hit rate leaves the closure share dominant (the probe and a
-post-fast-path re-profile decide; criterion: closure remains the top cost centre), the
-axiom-relevant residue gets real incrementality — DRed-style support tracking (count
-supports per derived fact; on delete, over-delete then re-derive survivors) over the
-semi-naive loop. This is the honest-cost path (our axioms are non-monotone: inserts can
-retract derived facts through defeaters, deletes can create them), and it lands only with
-the measurement that justifies its complexity. If the fast path already demotes closure,
-Phase 2 is recorded as not warranted — a stated decision, like v26 §3's.
+The re-profile after the fast path landed: closures halved (11,840 → ~5,740 per round;
+`applyDirect` fires on 52% of primitives) but the relevant residue — overwhelmingly witness
+and belief deposits — still costs ~40% of the round. The measurement selects a **middle tier
+between the fast path and DRed**, exact and far smaller than support tracking:
+
+- **Monotone-insert continuation.** A `!`-free ground insert that may-unify **no negated
+  body atom** (the `Absent`/`Not` interiors of any rule; □-lifted rules are all-`Match` and
+  contribute none) can only *add* derived facts: it evicts nothing, defeats nothing.
+  For such a delta the new view is the semi-naive continuation of the OLD closed view with
+  delta = that one fact — `closure`'s own `go` loop re-entered at `go oldView (fact)`,
+  reusing its meet/contradiction handling verbatim (a contradiction falls back to the full
+  reclose path). Witness deposits qualify; `atoned.*` (a defeater interior) and every
+  delete correctly do not, and keep the full reclose.
+- **Tokenized classification.** `relevantDelta` re-parses both sides of every `mayUnify`
+  per footprint atom per primitive (~8–10% of the round): the footprint fields are stored
+  pre-tokenized and the delta tokenized once per call.
+
+DRed-style support tracking (the full non-monotone case) is deferred until a measurement
+shows the reclose residue that survives BOTH tiers still dominates — recorded either way.
 
 ## Verification
 

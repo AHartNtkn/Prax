@@ -313,3 +313,253 @@ git add docs/LEDGER.md README.md
 git commit -m "Docs: v27 — the view keeps itself, provably"
 ```
 (with the standard trailers)
+
+---
+
+### Task 4b: Phase 2 as measured — the monotone-insert continuation + tokenized classification
+
+The Task 4 re-profile (spec §Phase 2, amended in-round): fast path halved closures
+(11,840 → ~5,740/round) but the relevant residue — witness/belief deposits — still costs
+~40%, and `relevantDelta`'s own string re-parsing ~8–10%. Two exact tiers land here.
+
+**Files:**
+- Modify: `src/Prax/Derive.hs` (share `closure`'s loop as `closureFrom`; `axiomNegPatterns`; `monotoneAxioms`)
+- Modify: `src/Prax/Types.hs` (footprint fields become pre-tokenized; new `negFootprint`, `contMonotone`)
+- Modify: `src/Prax/Engine.hs` (`retable`; `relevantDelta` on tokens; `monotoneInsert`; `applyGrow`; the three-way `performOutcome` branch)
+- Modify: `src/Prax/Relevance.hs` (export `mayUnifyNames`; `mayUnify` defined through it)
+- Test: `test/Prax/DeriveSpec.hs`, `test/Prax/RelevanceSpec.hs`
+
+**Interfaces produced:**
+- `Prax.Derive.closureFrom :: [Axiom] -> Db -> [String] -> Either Contradiction Db` — continue an already-closed model with new base facts (caller guarantees monotonicity).
+- `Prax.Derive.axiomNegPatterns :: [Axiom] -> [String]` — every pattern under an `Absent`/`Not` in any body.
+- `Prax.Derive.monotoneAxioms :: [Axiom] -> Bool` — whether the world's axiom set is continuation-safe.
+- `Prax.Relevance.mayUnifyNames :: [String] -> [String] -> Bool`.
+- `PraxState.footprint :: [[String]]`, `negFootprint :: [[String]]`, `contMonotone :: Bool`.
+
+- [ ] **Step 1: Write the failing tests.**
+
+`test/Prax/DeriveSpec.hs` additions:
+
+```haskell
+  , testCase "closureFrom continues a closed model exactly as a from-scratch closure" $ do
+      let axs = [ axiom [ Match "parent.X.Y" ] [ "elder.X" ]
+                , axiom [ Match "elder.X", Match "wise.X" ] [ "sage.X" ] ]
+          base = insertAll [ "parent.ada.bea", "wise.ada" ] emptyDb
+          Right closed = closure axs base
+          -- a monotone new fact cascading through BOTH rules:
+          Right cont   = closureFrom axs closed [ "parent.cal.dun" ]
+          Right scratch = closure axs (insert "parent.cal.dun" base)
+      dbToLabeledSentences cont @?= dbToLabeledSentences scratch
+
+  , testCase "axiomNegPatterns collects exactly the negated interiors" $ do
+      let axs = [ axiom [ Match "a.X", Absent [ Match "b.X", Not "c.X" ] ] [ "d.X" ] ]
+      assertBool "Absent interior" ("b.X" `elem` axiomNegPatterns axs)
+      assertBool "Not inside Absent" ("c.X" `elem` axiomNegPatterns axs)
+      assertBool "positive atom is NOT negated" ("a.X" `notElem` axiomNegPatterns axs)
+
+  , testCase "monotoneAxioms accepts the count-threshold shape and rejects anti-monotone" $ do
+      assertBool "Match-only is safe" (monotoneAxioms [ axiom [ Match "a.X" ] [ "b.X" ] ])
+      assertBool "the notoriety shape (Subquery+Count+Cmp Gte literal) is safe"
+        (monotoneAxioms [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
+                                , Count "N" "Rs", Cmp Gte "N" "3" ] [ "n.T" ] ])
+      assertBool "Cmp Lt with the literal on the right is anti-monotone"
+        (not (monotoneAxioms [ axiom [ Count "N" "Rs", Cmp Lt "N" "3" ] [ "q.T" ] ]))
+      assertBool "Calc disables the tier"
+        (not (monotoneAxioms [ axiom [ Calc "M" Add "N" "1" ] [ "q.M" ] ]))
+```
+
+(imports: `Subquery`/`Count`/`Cmp`/`Calc`/`CmpOp (..)`/`CalcOp (..)` from `Prax.Query` as needed;
+`dbToLabeledSentences`/`insert`/`insertAll`/`emptyDb` from `Prax.Db`. If the incomplete-pattern
+`Right` binds trip `-Wall`, use explicit `case`/`either (error . show) id` instead.)
+
+`test/Prax/RelevanceSpec.hs` addition (import `monotoneInsert` from `Prax.Engine`):
+
+```haskell
+  , testCase "monotone-insert classification against the village" $ do
+      assertBool "the village's axioms admit the continuation tier"
+        (contMonotone villageWorld)
+      assertBool "a witness deposit grows monotonically"
+        (monotoneInsert "you.believes.stole.bob.loaf.seen" villageWorld)
+      assertBool "atonement defeats standing: full reclose"
+        (not (monotoneInsert "atoned.bob" villageWorld))
+      assertBool "an exclusion insert never takes the continuation"
+        (not (monotoneInsert "practice.world.world.at.bob!square" villageWorld))
+```
+
+- [ ] **Step 2: Observe RED** (compile failures for the new names).
+
+- [ ] **Step 3: Implement.**
+
+**(a) `src/Prax/Derive.hs`** — extract `closure`'s loop so both entry points share it verbatim,
+and add the analyses (export `closureFrom`, `axiomNegPatterns`, `monotoneAxioms`):
+
+```haskell
+closure :: [Axiom] -> Db -> Either Contradiction Db
+closure []  db0 = Right db0
+closure axs db0 = run axs db0 db0
+
+-- | Continue an ALREADY-CLOSED model with new base facts. Exactly
+-- 'closure'’s semi-naive loop, entered at (model ∪ facts, delta = facts).
+-- Sound only when the facts are monotone for these axioms — '!'-free and
+-- unifying no negated body pattern, with 'monotoneAxioms' true — which is
+-- the CALLER's obligation ('Prax.Engine.monotoneInsert'); a violation is
+-- caught by the ViewInvariant net, not silently absorbed.
+closureFrom :: [Axiom] -> Db -> [String] -> Either Contradiction Db
+closureFrom axs closed facts =
+  run axs (insertAll facts closed) (insertAll facts emptyDb)
+
+-- The shared semi-naive engine (the former closure-local 'go', verbatim,
+-- with 'rules' computed from the axiom list).
+run :: [Axiom] -> Db -> Db -> Either Contradiction Db
+run axs = go
+  where
+    rules = [ (body, map tokens hs)
+            | Axiom body hs <- axs ++ mapMaybe liftObliged axs ]
+    go model delta = <the existing loop body, unchanged>
+```
+
+(move the existing `go`/`meetOne`/`entailed`/`deltaJoin` bodies under `run` untouched.)
+
+```haskell
+-- | Every pattern under a negation in any body: inserting a fact these
+-- patterns match can UN-fire a rule (retraction), so such facts never take
+-- the continuation tier.
+axiomNegPatterns :: [Axiom] -> [String]
+axiomNegPatterns axs = concat
+  [ concatMap negOf body | Axiom body _ <- axs ++ mapMaybe liftObliged axs ]
+  where
+    negOf c = case c of
+      Not s          -> [s]
+      Absent cs      -> concatMap condPatterns cs   -- everything inside a ¬∃
+      Exists cs      -> concatMap negOf cs
+      Or clauses     -> concatMap (concatMap negOf) clauses
+      Subquery _ _ w -> concatMap negOf w
+      _              -> []
+
+-- | Is the axiom set continuation-safe: does adding base facts only ever ADD
+-- derived facts (given the caller also avoids negated patterns)? Conditions
+-- must be monotone-up: Match/Eq/Neq/Not/Absent (negations are handled via
+-- 'axiomNegPatterns'), recursion through Exists/Or/Subquery, Count freely,
+-- and Cmp only in the grows-only direction — the count side growing past a
+-- numeric literal (Gt/Gte with the literal right, Lt/Lte with it left).
+-- Calc (and any other Cmp shape) disables the tier for the world; the
+-- fallback is today's full reclose, correct just slower.
+monotoneAxioms :: [Axiom] -> Bool
+monotoneAxioms axs =
+  all bodyOk [ body | Axiom body _ <- axs ++ mapMaybe liftObliged axs ]
+  where
+    bodyOk = all condOk
+    condOk c = case c of
+      Match _        -> True
+      Not _          -> True
+      Absent _       -> True
+      Eq _ _         -> True
+      Neq _ _        -> True
+      Count _ _      -> True
+      Exists cs      -> bodyOk cs
+      Or clauses     -> all bodyOk clauses
+      Subquery _ _ w -> bodyOk w
+      Cmp op l r     -> case op of
+        Gt  -> numeric r
+        Gte -> numeric r
+        Lt  -> numeric l
+        Lte -> numeric l
+        _   -> False
+      Calc {}        -> False
+    numeric x = not (null x) && all (`elem` ("0123456789" :: String)) x
+```
+
+(check `CmpOp`'s constructors in `Prax.Query` — cover any beyond Gt/Gte/Lt/Lte, e.g. an
+equality op, as `False`.)
+
+**(b) `src/Prax/Relevance.hs`** — split `mayUnify`:
+
+```haskell
+mayUnify :: String -> String -> Bool
+mayUnify a b = mayUnifyNames (pathNames a) (pathNames b)
+
+-- | 'mayUnify' on pre-split paths — the planner-hot form ('relevantDelta'
+-- classifies every primitive delta against every footprint pattern).
+mayUnifyNames :: [String] -> [String] -> Bool
+mayUnifyNames as bs = anchored && and (zipWith seg as bs)
+  where
+    seg x y = isVariable x || isVariable y || x == y
+    anchored = or (zipWith literalMatch as bs)
+    literalMatch x y = not (isVariable x) && not (isVariable y) && x == y
+```
+
+(export `mayUnifyNames`.)
+
+**(c) `src/Prax/Types.hs`** — the classification fields become:
+
+```haskell
+  , footprint :: [[String]]
+    -- ^ Pre-tokenized ('pathNames') patterns the axioms read or write; a
+    -- ground delta unifying none of them commutes with closure (fast path).
+  , negFootprint :: [[String]]
+    -- ^ Pre-tokenized negated body interiors: a '!'-free insert unifying
+    -- none of these (in a 'contMonotone' world) only ADDS derived facts and
+    -- takes the continuation tier.
+  , contMonotone :: Bool
+    -- ^ 'Prax.Derive.monotoneAxioms' of this world's axioms.
+```
+
+(`emptyState`: `[]`/`[]`/`True`.)
+
+**(d) `src/Prax/Engine.hs`**:
+
+```haskell
+retable :: PraxState -> PraxState
+retable st = st
+  { improvables  = improvableDesires (practiceDefs st) (axioms st) (desires st)
+  , footprint    = map pathNames (axiomFootprint (axioms st))
+  , negFootprint = map pathNames (axiomNegPatterns (axioms st))
+  , contMonotone = monotoneAxioms (axioms st) }
+
+relevantDelta :: String -> PraxState -> Bool
+relevantDelta s st =
+  any (\x -> any (mayUnifyNames x) (footprint st))
+      (map pathNames (s : evictionShadows s))
+
+-- | May this insert take the continuation tier: the world is
+-- continuation-safe, the insert evicts nothing, and it can defeat nothing.
+monotoneInsert :: String -> PraxState -> Bool
+monotoneInsert s st =
+  contMonotone st
+    && '!' `notElem` s
+    && not (any (mayUnifyNames (pathNames s)) (negFootprint st))
+
+-- | The continuation tier: grow the base and continue the ALREADY-CLOSED
+-- view with the one new fact. A contradiction (⊥) falls back to the full
+-- reclose path, which reaches the same "contradiction" marker from scratch.
+applyGrow :: String -> PraxState -> PraxState
+applyGrow s st = case closureFrom (axioms st) (readView st) [s] of
+  Right v -> st { db = insert s (db st), readView = v }
+  Left _  -> withDb (insert s) st
+```
+
+and the `Insert` case becomes a three-way branch (Delete unchanged from Task 3):
+
+```haskell
+performOutcome (Insert s) st =
+  let st' | not (relevantDelta s st) = applyDirect (insert s) st
+          | monotoneInsert s st      = applyGrow s st
+          | otherwise                = withDb (insert s) st
+  in case spawnedInstance s st of
+       ...unchanged...
+```
+
+Export `monotoneInsert` (tests) alongside the existing exports.
+
+- [ ] **Step 4: The proof run.** `-p "ViewInvariant"` (now guarding a THIRD construction path), `-p "GoldenDrive"`, `-p "Derive"`, `-p "Relevance"`, then the full suite once (expect 316 green: 309 + 4 DeriveSpec + 1 RelevanceSpec + 2 adjust to the actual count — report the real number) with wall time recorded.
+
+- [ ] **Step 5: Gates**: zero warnings; hlint; grep-gates.
+
+- [ ] **Step 6: Commit.**
+
+```bash
+git add src/Prax/Derive.hs src/Prax/Types.hs src/Prax/Engine.hs src/Prax/Relevance.hs \
+        test/Prax/DeriveSpec.hs test/Prax/RelevanceSpec.hs
+git commit -m "The continuation tier: monotone inserts grow the closed view in place"
+```
+(with the standard trailers)
