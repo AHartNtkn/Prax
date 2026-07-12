@@ -119,8 +119,12 @@ tests = testGroup "Prax.Debt"
         assertBool "the world records the breach" (exists "violated.dell.defaulted" (db st))
         assertBool "ren, elsewhere, holds no belief of it"
           (not (exists "ren.believes.violated.dell.defaulted.seen" (db st)))
-        assertBool "and so derives no deadbeat regard"
+        assertBool "and so derives no THIRD-PARTY deadbeat regard"
           (not (exists "regards.ren.dell.deadbeat" (readView st)))
+        assertBool "dell is unavoidably co-present at his own default, so he still\
+                   \ witnesses (and regards) himself — belief-gating is per observer,\
+                   \ not a blanket suppression"
+          (exists "regards.dell.dell.deadbeat" (readView st))
 
     , testCase "a witnessed default derives deadbeat standing for the witness" $ do
         let st = doAct "cora" "demand" witnessedWorld
