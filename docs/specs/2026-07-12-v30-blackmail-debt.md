@@ -80,22 +80,36 @@ shakedown :: String        -- id (path segment; loud error)
   `<extorter>.extorted.<victim>.<event>` — the extorter's own memory, priceable by traits
   (an `honest`/`decent` bearer won't stoop; a mark future confession/exposure arcs can use).
 
-## 3. Village demo
+## 3. Village demo (amended after implementation blocked both drafted arcs)
 
-- **carol blackmails eve** — the poetic close of the v25 arc: gale (honest, at the mill)
-  *witnesses eve's whisper* — the v25-parked getting-caught piece, minimally: the village's
-  `lie` action becomes observable-as-an-act (`whispered.<liar>.<hearer>` seen by co-present
-  witnesses via the existing `witnessed` outcome — the CONTENT stays secret, the ACT does
-  not). gale, honest, won't lie but will *tell* — carol (already motivated against her
-  framer) hears of the whispering, holds the evidence-belief, and shakes eve down: silence
-  about the whispering for a favor. eve — whose malice-want loses everything if the village
-  learns her frame-up was a lie — pays.
-- Alternatively simplest-path if the above needs new observability plumbing beyond the one
-  `witnessed` line: dana blackmails bob post-theft (forced-theft trajectory, the standard
-  test start). The plan probes WHICH arc drives cleanly and ships the one that does; both
-  are asserted intents, not both shipped.
-- Debt demo rides the same arc: the extracted favor is a real `debt.*` +
-  `obliged.*` pair; a later `settle` or a `demand`→`deadbeat` branch exercises Debt fully.
+**The block, recorded**: per-head fear cannot serve two masters — the weight that keeps eve
+whispering before a guaranteed witness (≤1/head) contradicts the weight compliance needs
+(~10/head); and theft-evidence shakedowns catch the framed (v22's indistinguishability is the
+point) while displacing dana's shipped arcs. Both measured, neither tunable away.
+
+**The resolution: threshold fear — bob's own idiom.** Nonlinear fear serves both masters
+because its marginal price is zero below the brink and catastrophic at it:
+
+- eve's fear becomes `Want [Match "notorious.eve.slanderer"] (−15)` (mirroring bob's
+  notorious −15 — authored meaning: being the village's KNOWN slanderer destroys her),
+  wired by `standingUnless "whispered.Culprit.H" "recanted.Culprit" "slanderer"` +
+  `notoriety "slanderer" 3`. The whispering ACT becomes observable
+  (`witnessed together "whispered.Actor.Hearer"` on the village's lie — content stays
+  secret), as originally drafted.
+- **Whispering stays rational** (1–2 regards < 3 threshold — asserted, not hoped): eve's
+  free-play behavior is unchanged, explicitly tested.
+- **The arc** (forced trajectory, the theft tests' own convention): carol walks to the mill
+  and witnesses eve's whisper (2 witnesses = 2 regards — still under threshold, eve still
+  whispers); carol — already the frame-up's target, now holding `.seen` evidence — shakes
+  eve down (`shakedown` with evidence `"whispered.V.H"`, price `favor`); eve stands one
+  exposure from the brink, her round-walk sees the third regard land, and she pays.
+  carol's additions are additive only: the punitive desire via `charDesires` and a
+  favor-debt want; her existing wants and arcs untouched.
+- The blocked attempt's real finds ship with the arc: the villageP role `V` renamed (it
+  collided with evidence-variable conventions), and `shakedown`'s reserved-variable guard
+  extended to `Hearer` and `Actor` (loud, complete).
+- dana/bob is retired as an arc (recorded: bob's crimes in this village are either fully
+  witnessed or perfectly secret — a Catch-22 that is itself a faithful result).
 
 ## 4. Tests (TDD)
 
