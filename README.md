@@ -213,6 +213,10 @@ utility. See the design writeups:
   it (lockstep application for deltas the axioms can't see, in-place growth of the closed
   view for inserts that defeat nothing, full re-derivation for the rest). A profiled village
   round fell 7.07s → 1.32s across v26+v27 with bit-for-bit identical decisions throughout.
+- **v28 — the world compiles once**: authored conditions and outcomes cook to token form at
+  world construction and the hot paths (candidate enumeration, outcome application, want
+  scoring, the closure loop) run on names end to end, with the string evaluator retained as
+  the independently-verified reference. Profiled round 1.32s → 0.69s; suite ~22–30s.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).

@@ -185,6 +185,22 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   ~330 per profiled round; the round 2.83s → **1.32s** (7.07s at v26's start); full suite
   ~50–60s (machine-variance range across the round's recorded runs). DRed-style truth maintenance recorded as **not warranted**: from-scratch closure is
   ~5% of the round, and the continuation IS the delta derivation DRed would compute.
+- **v28** — **the world compiles once** (spec `docs/specs/2026-07-12-v28-cooked-world.md`).
+  Authored conditions and outcomes cook to token form once per world (`CookedCondition` and
+  `queryCooked` in `Prax.Query` — a case-for-case transcription of the string evaluator,
+  pinned by an equivalence property over every constructor; `CookedOutcome`/`CookedPractice`
+  conversions in `Prax.Cooked`; the containers in `Prax.Types`, maintained like every derived
+  field by the Engine helpers, with `setCharacters` joining the helper family and the
+  grep-gate). The hot paths run on names end to end: `possibleActions`/`performCooked`
+  (the string `performOutcome` delegates — one engine, two doors), the planner's scoring
+  (`evaluateCooked` over cooked wants), and the closure loop (`runCooked` over pre-cooked
+  rules) — while the STRING `closure` path is deliberately retained as the independent
+  reference `Prax.ViewInvariantSpec` recomputes against every turn. Consolidations en route:
+  one home for eviction shadows, the applyGrow string bridge killed, `cpFns` first-wins
+  fixing a latent duplicate-function-name lookup asymmetry. Measured: profiled round 1.32s →
+  **0.69s** (allocation 2.2GB → 0.75GB); full suite ~55s → **~22–30s** (320 tests). The
+  post-round profile's top centres are now segment *comparisons* (`mayUnifyNames` ~25%,
+  `unifyNames` ~25%) — the interning criterion is met, designating v29.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
