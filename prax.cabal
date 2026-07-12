@@ -34,6 +34,7 @@ library
                       Prax.Reactions
                       Prax.Deontic
                       Prax.Debt
+                      Prax.Blackmail
                       Prax.EL
                       Prax.Derive
                       Prax.TypeCheck
@@ -97,6 +98,7 @@ test-suite prax-test
                       Prax.ReactionsSpec
                       Prax.DeonticSpec
                       Prax.DebtSpec
+                      Prax.BlackmailSpec
                       Prax.ELSpec
                       Prax.DeriveSpec
                       Prax.FeudSpec
