@@ -26,6 +26,7 @@ library
     exposed-modules:  Prax.Db
                       Prax.Query
                       Prax.Types
+                      Prax.Cooked
                       Prax.Engine
                       Prax.Planner
                       Prax.Core
@@ -84,6 +85,7 @@ test-suite prax-test
                     , tasty-hunit
     other-modules:    Prax.DbSpec
                       Prax.QuerySpec
+                      Prax.CookedSpec
                       Prax.EngineSpec
                       Prax.PlannerSpec
                       Prax.LoopSpec

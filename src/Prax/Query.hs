@@ -22,6 +22,11 @@ module Prax.Query
   , query
   , satisfies
   , countSatisfying
+  , CookedCondition(..)
+  , cookCondition
+  , groundNames
+  , groundCookedCondition
+  , queryCooked
   ) where
 
 import           Data.List (nub)
@@ -105,10 +110,77 @@ groundCondition b c = case c of
   Absent cs        -> Absent (map (groundCondition b) cs)
   Exists cs        -> Exists (map (groundCondition b) cs)
 
+-- | The cooked mirror of 'Condition': every pattern-bearing operand
+-- (@Match@/@Not@'s sentence) is pre-split into names ('Prax.Db.pathNames')
+-- once, at cook time, instead of once per binding at query time. Every other
+-- constructor carries its operands through unchanged (they are already plain
+-- names, never re-parsed by 'evalCond') and recurses into cooked conditions.
+data CookedCondition
+  = CMatch [String]
+  | CNot [String]
+  | CEq String String
+  | CNeq String String
+  | CCmp CmpOp String String
+  | CCalc String CalcOp String String
+  | CCount String String
+  | CSubquery String [String] [CookedCondition]
+  | COr [[CookedCondition]]
+  | CAbsent [CookedCondition]
+  | CExists [CookedCondition]
+  deriving (Eq, Show)
+
+-- | Compile a 'Condition' to its cooked form (see 'CookedCondition').
+cookCondition :: Condition -> CookedCondition
+cookCondition c = case c of
+  Match s          -> CMatch (pathNames s)
+  Not s            -> CNot (pathNames s)
+  Eq x y           -> CEq x y
+  Neq x y          -> CNeq x y
+  Cmp op x y       -> CCmp op x y
+  Calc r op x y    -> CCalc r op x y
+  Count r s        -> CCount r s
+  Subquery s f w   -> CSubquery s f (map cookCondition w)
+  Or clauses       -> COr (map (map cookCondition) clauses)
+  Absent cs        -> CAbsent (map cookCondition cs)
+  Exists cs        -> CExists (map cookCondition cs)
+
+-- | Substitute a single name: replaced iff it 'isVariable' and bound (via
+-- 'valToString'), otherwise left as-is. The same rule 'Prax.Db.groundTokens'
+-- applies per token.
+substName :: Bindings -> String -> String
+substName b n
+  | isVariable n = maybe n valToString (Map.lookup n b)
+  | otherwise    = n
+
+-- | Substitute bindings into a list of names — no string rebuild.
+groundNames :: Bindings -> [String] -> [String]
+groundNames b = map (substName b)
+
+-- | Substitute bindings into a cooked condition, mirroring 'groundCondition'.
+groundCookedCondition :: Bindings -> CookedCondition -> CookedCondition
+groundCookedCondition b c = case c of
+  CMatch ns        -> CMatch (groundNames b ns)
+  CNot ns          -> CNot (groundNames b ns)
+  CEq x y          -> CEq (substName b x) (substName b y)
+  CNeq x y         -> CNeq (substName b x) (substName b y)
+  CCmp op x y      -> CCmp op (substName b x) (substName b y)
+  CCalc r op x y   -> CCalc (substName b r) op (substName b x) (substName b y)
+  CCount r s       -> CCount (substName b r) (substName b s)
+  CSubquery s f w  -> CSubquery (substName b s) (map (substName b) f) (map (groundCookedCondition b) w)
+  COr clauses      -> COr (map (map (groundCookedCondition b)) clauses)
+  CAbsent cs       -> CAbsent (map (groundCookedCondition b) cs)
+  CExists cs       -> CExists (map (groundCookedCondition b) cs)
+
 -- | Evaluate a conjunctive list of conditions from a starting binding, yielding
 -- every consistent binding that satisfies them all.
 query :: Db -> [Condition] -> Bindings -> [Bindings]
 query = queryWith False
+
+-- | The cooked-condition query entry: equivalent to 'query' but the pattern
+-- lists are already split (see 'CookedCondition') — the hot path never
+-- re-parses an authored sentence.
+queryCooked :: Db -> [CookedCondition] -> Bindings -> [Bindings]
+queryCooked = queryCookedWith False
 
 -- | True iff the conditions are satisfiable from the given binding.
 satisfies :: Db -> [Condition] -> Bindings -> Bool
@@ -175,6 +247,63 @@ evalCond inSub db (Or clauses) b =
   nub (concat [ queryWith inSub db clause b | clause <- clauses ])
 evalCond inSub db (Absent conds) b = [ b | null  (queryWith inSub db conds b) ]
 evalCond inSub db (Exists conds) b = [ b | not (null (queryWith inSub db conds b)) ]
+
+-- The cooked mirror of 'queryWith': same fold, same left-to-right threading,
+-- same 'CMatch'/'CNot' hoist-per-condition (already split, so no 'pathNames'
+-- call needed at all here).
+queryCookedWith :: Bool -> Db -> [CookedCondition] -> Bindings -> [Bindings]
+queryCookedWith inSub db conds b0 = foldl step [b0] conds
+  where
+    step matches cond = case cond of
+      CMatch names -> concatMap (unifyNames names db) matches
+      CNot names   -> concatMap (\b -> [ b | null (unifyNames names db b) ]) matches
+      _            -> concatMap (evalCookedCond inSub db cond) matches
+
+-- The cooked mirror of 'evalCond': case-for-case, recursing through the
+-- cooked evaluator with the same in-subquery flag semantics.
+evalCookedCond :: Bool -> Db -> CookedCondition -> Bindings -> [Bindings]
+evalCookedCond _ db (CMatch names) b = unifyNames names db b
+evalCookedCond _ db (CNot names)   b = [b | null (unifyNames names db b)]
+
+evalCookedCond _ _ (CEq lhs rhs) b =
+  case (resolve b lhs, resolve b rhs) of
+    (Just l, Just r)   -> [b | valToString l == valToString r]
+    (Just l, Nothing)  -> [Map.insert rhs l b]
+    (Nothing, Just r)  -> [Map.insert lhs r b]
+    (Nothing, Nothing) -> []
+
+evalCookedCond _ _ (CNeq lhs rhs) b =
+  case (resolve b lhs, resolve b rhs) of
+    (Just l, Just r) -> [b | valToString l /= valToString r]
+    _                -> []
+
+evalCookedCond _ _ (CCmp op lhs rhs) b =
+  case (resolve b lhs >>= num, resolve b rhs >>= num) of
+    (Just l, Just r) -> [b | applyCmp op l r]
+    _                -> []
+
+evalCookedCond _ _ (CCalc result op lhs rhs) b =
+  case (resolve b lhs >>= num, resolve b rhs >>= num) of
+    (Just l, Just r) -> [Map.insert result (VNum (applyCalc op l r)) b]
+    _                -> []
+
+evalCookedCond _ _ (CCount result setVar) b =
+  case resolve b setVar of
+    Just (VSet xs) -> [Map.insert result (VNum (fromIntegral (length xs))) b]
+    _              -> []
+
+evalCookedCond inSub db (CSubquery setVar find conds) b
+  | inSub = error "Prax.Query: subquery nested inside a subquery"
+  | otherwise =
+      let results = queryCookedWith True db conds b
+          rows = [ [ maybe lvar valToString (Map.lookup lvar r) | lvar <- find ]
+                 | r <- results ]
+      in [Map.insert setVar (VSet rows) b]
+
+evalCookedCond inSub db (COr clauses) b =
+  nub (concat [ queryCookedWith inSub db clause b | clause <- clauses ])
+evalCookedCond inSub db (CAbsent conds) b = [ b | null  (queryCookedWith inSub db conds b) ]
+evalCookedCond inSub db (CExists conds) b = [ b | not (null (queryCookedWith inSub db conds b)) ]
 
 -- Resolve an operand: an uppercase-initial operand is a variable (look it up),
 -- otherwise it is a literal constant. Returns Nothing for an unbound variable.
