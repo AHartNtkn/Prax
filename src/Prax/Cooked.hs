@@ -55,9 +55,9 @@ cookPractice p = CookedPractice
   { cpInstanceNames = pathNames ("practice." ++ practiceId p ++ "." ++ intercalate "." (roles p))
   , cpActions = map cookAction (actions p)
   , cpInits   = map cookOutcome (initOutcomes p)
-  , cpFns     = Map.fromList
-      [ (fnName f, [ (map cookCondition (caseConditions c), map cookOutcome (caseOutcomes c))
-                    | c <- fnCases f ])
+  , cpFns     = Map.fromListWith (\_new old -> old)
+      [ (fnName f, (fnParams f, [ (map cookCondition (caseConditions c), map cookOutcome (caseOutcomes c))
+                                 | c <- fnCases f ]))
       | f <- functions p ]
   }
   where

@@ -26,7 +26,7 @@ module Prax.Worlds.Bar
 
 import           Prax.Query
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome)
+import           Prax.Engine (definePractices, performOutcome, setCharacters)
 import           Prax.Core
 import           Prax.Reactions
 import           Prax.Deontic
@@ -496,12 +496,13 @@ barWorld =
     { predictionScope = [ Or [ together, sightedWithin 2 ] ] }
   where
     withPractices =
-      (definePractices
-         [ coreLib, disapprovalP
-         , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
-         , arcP, sightP barSighting ]
-         emptyState)
-        { characters = [you, ada, bex, director, sightChar], sorts = barSorts }
+      (setCharacters [you, ada, bex, director, sightChar]
+        (definePractices
+           [ coreLib, disapprovalP
+           , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
+           , arcP, sightP barSighting ]
+           emptyState))
+        { sorts = barSorts }
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"
       , Insert "practice.world.world.connected.bar.entrance"
@@ -529,12 +530,13 @@ barDirectorWorld =
     { predictionScope = [ Or [ together, sightedWithin 2 ] ] }
   where
     withPractices =
-      (definePractices
-         [ coreLib, disapprovalP
-         , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, directP
-         , arcP, sightP barSighting ]
-         emptyState)
-        { characters = [ada, bex, cai, directorPlayer, sightChar], sorts = barSorts }
+      (setCharacters [ada, bex, cai, directorPlayer, sightChar]
+        (definePractices
+           [ coreLib, disapprovalP
+           , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, directP
+           , arcP, sightP barSighting ]
+           emptyState))
+        { sorts = barSorts }
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"
       , Insert "practice.world.world.connected.bar.entrance"

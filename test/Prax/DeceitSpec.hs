@@ -9,7 +9,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setDesires)
+import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setDesires, setCharacters)
 import           Prax.Planner (pickAction)
 import           Prax.Witness (CoPresence, observable)
 import           Prax.Rumor (gossip)
@@ -23,14 +23,14 @@ together = [ Match "at.Actor!P", Match "at.Witness!P" ]
 world :: PraxState
 world = foldl (flip performOutcome) base setup
   where
-    base = (definePractices [p] emptyState)
-             { characters =
-                 [ (character "sid")
-                     { charWants = [ Want [ Match "holding.sid.gem" ] 5
-                                   , conceal "took.sid.gem" 8 ] }
-                 , (character "nia")
-                     { charWants = [ Want [ Match "W.believes.took.kit.gem" ] 4 ] }
-                 , character "oz", character "kit", character "mia" ] }
+    base = setCharacters
+             [ (character "sid")
+                 { charWants = [ Want [ Match "holding.sid.gem" ] 5
+                               , conceal "took.sid.gem" 8 ] }
+             , (character "nia")
+                 { charWants = [ Want [ Match "W.believes.took.kit.gem" ] 4 ] }
+             , character "oz", character "kit", character "mia" ]
+             (definePractices [p] emptyState)
     p = practice
       { practiceId = "vault", roles = ["R"]
       , actions =
@@ -74,9 +74,8 @@ motiveLieWorld :: PraxState
 motiveLieWorld = foldl (flip performOutcome) base setup
   where
     base = setDesires [ Desire "revenge" (Want [ Match "harms.Owner" ] 10) ]
-             ((definePractices [pMotive] emptyState)
-                { characters =
-                    [ character "nia", character "oz", character "kit" ] })
+             (setCharacters [ character "nia", character "oz", character "kit" ]
+                (definePractices [pMotive] emptyState))
     pMotive = practice
       { practiceId = "rumor", roles = ["R"]
       , actions =

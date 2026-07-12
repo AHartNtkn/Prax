@@ -8,7 +8,7 @@ import           Prax.Db (Val (..), exists)
 import           Prax.Query (Condition (..), groundCondition, query)
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome, possibleActions,
-                               performAction)
+                               performAction, setCharacters)
 import           Prax.TypeCheck (typeCheck)
 import           Prax.Sight
 
@@ -19,8 +19,8 @@ sighting = [ Match "at.Seer!Spot", Match "at.Seen!Spot" ]
 world :: PraxState
 world = foldl (flip performOutcome) base (sightSetup ++ setup)
   where
-    base = (definePractices [sightP sighting] emptyState)
-             { characters = map character ["ute", "vic", "wes"] ++ [sightChar] }
+    base = setCharacters (map character ["ute", "vic", "wes"] ++ [sightChar])
+             (definePractices [sightP sighting] emptyState)
     setup = [ Insert "at.ute!hall", Insert "at.vic!hall", Insert "at.wes!attic" ]
 
 -- One tick of the perception clock.

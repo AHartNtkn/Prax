@@ -1,13 +1,14 @@
 module Prax.MindsSpec (tests) where
 
 import           Data.List (isInfixOf)
+import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Db (exists)
-import           Prax.Query (Condition (..))
+import           Prax.Query (Condition (..), CookedCondition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, possibleActions, performAction)
+import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, possibleActions, performAction, setCharacters)
 import           Prax.Minds
 import           Prax.Planner (predictMove)
 import           Prax.Rumor (gossip)
@@ -24,9 +25,9 @@ world :: PraxState
 world = setDesires vocab
           (setAxioms [ professed, conventional ] (foldl (flip performOutcome) base setup))
   where
-    base = (definePractices [] emptyState)
-             { characters = [ character "ida"
-                            , (character "rex") { charDesires = ["grudge-rex"] } ] }
+    base = setCharacters [ character "ida"
+                          , (character "rex") { charDesires = ["grudge-rex"] } ]
+             (definePractices [] emptyState)
     setup =
       [ Insert "character.ida", Insert "character.rex"
       , Insert "professes.ida.sweet-tooth" ]
@@ -42,6 +43,23 @@ tests = testGroup "Prax.Minds"
                                   , charDesires = ["grudge-rex"] }
       selfWants world rex
         @?= [ Want [ Match "x" ] 1, Want [ Match "shamed.rex" ] 7 ]
+
+  , testCase "setCharacters retables cookedWants; retable tracks cookedDesires" $ do
+      -- cookedWants: keyed by charName, each want's conditions precooked, in
+      -- charWants' own order — read back from a fresh setCharacters call.
+      let rex = (character "rex") { charWants   = [ Want [ Match "x" ] 1, Want [ Match "y.Z" ] 2 ]
+                                   , charDesires = ["grudge-rex"] }
+          st  = setCharacters [ character "ida", rex ] world
+      Map.keys (cookedWants st) @?= ["ida", "rex"]
+      Map.lookup "ida" (cookedWants st) @?= Just []
+      Map.lookup "rex" (cookedWants st)
+        @?= Just [ [ CMatch ["x"] ], [ CMatch ["y", "Z"] ] ]
+      -- cookedDesires: keyed by desireName, the vocabulary's Owner-template
+      -- conditions precooked once, independent of which characters hold them.
+      Map.keys (cookedDesires st) @?= ["grudge-rex", "sweet-tooth"]
+      Map.lookup "grudge-rex" (cookedDesires st) @?= Just [ CMatch ["shamed", "rex"] ]
+      Map.lookup "sweet-tooth" (cookedDesires st)
+        @?= Just [ CMatch ["holding", "Owner", "cake"] ]
 
   , testCase "a profession derives presumed motive-beliefs across the cast" $ do
       let v = readView world
@@ -86,8 +104,8 @@ tests = testGroup "Prax.Minds"
           rex' = (character "rex") { charDesires = ["grudge-rex"] }
           st0 = foldl (flip performOutcome)
                   (setDesires vocab
-                     ((definePractices [townP] emptyState)
-                        { characters = [ character "ida", rex', character "nia" ] }))
+                     (setCharacters [ character "ida", rex', character "nia" ]
+                        (definePractices [townP] emptyState)))
                   [ Insert "practice.town.village"
                   , Insert "at.ida!village", Insert "at.nia!village"
                   , Insert "ida.believes.desires.rex.grudge-rex.seen" ]

@@ -8,7 +8,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (dbToSentences)
 import           Prax.Query (Condition (..), satisfies)
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction)
+import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setCharacters)
 import           Prax.Planner (pickAction)
 import           Prax.Deontic
 import           Prax.Reactions (violationOf)
@@ -31,7 +31,7 @@ conductWorld acts wants =
         { practiceId = "conduct", practiceName = "conduct", roles = ["X"]
         , actions = [ action lbl cs os | (lbl, cs, os) <- acts ] }
       agent = (character "gil") { charWants = wants }
-      st0 = (definePractices [p] emptyState) { characters = [agent] }
+      st0 = setCharacters [agent] (definePractices [p] emptyState)
   in performOutcome (Insert "practice.conduct.gil") st0
 
 gil :: PraxState -> Character

@@ -9,7 +9,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction)
+import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setCharacters)
 import           Prax.Witness (CoPresence)
 import           Prax.Rumor
 
@@ -26,8 +26,8 @@ tell = gossip together [ Not "grudge.Actor.Hearer" ] "tripped.Klutz"
 world :: PraxState
 world = foldl (flip performOutcome) base setup
   where
-    base = (definePractices [p] emptyState)
-             { characters = map character ["sam", "rita", "hana", "tess", "pip"] }
+    base = setCharacters (map character ["sam", "rita", "hana", "tess", "pip"])
+             (definePractices [p] emptyState)
     p = practice { practiceId = "yard", roles = ["R"], actions = [tell] }
     setup =
       [ Insert "practice.yard.here"
@@ -66,9 +66,9 @@ tests = testGroup "Prax.Rumor"
       let lent = gossip together [] "borrowed.Borrower.Item"
                    "[Actor]: tell [Hearer] that [Borrower] borrowed the [Item]"
           w' = foldl (flip performOutcome)
-                 ((definePractices [ practice { practiceId = "yard2", roles = ["R"]
-                                              , actions = [lent] } ] emptyState)
-                    { characters = map character ["sam", "hana", "tess", "pip"] })
+                 (setCharacters (map character ["sam", "hana", "tess", "pip"])
+                   (definePractices [ practice { practiceId = "yard2", roles = ["R"]
+                                              , actions = [lent] } ] emptyState))
                  [ Insert "practice.yard2.here"
                  , Insert "at.sam!yard2", Insert "at.hana!yard2"
                  , Insert "at.tess!yard2", Insert "at.pip!yard2"

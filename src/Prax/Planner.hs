@@ -12,6 +12,7 @@
 -- modeled as still — never as helpful.
 module Prax.Planner
   ( evaluate
+  , evaluateCooked
   , candidateActions
   , predictMove
   , scoreActions
@@ -24,16 +25,26 @@ import           Data.Maybe (listToMaybe)
 import           Data.Ord (Down(..))
 
 import           Prax.Db (Val (..), exists)
-import           Prax.Query (countSatisfying, groundCondition, query)
+import           Prax.Query (countSatisfying, groundCondition, query, CookedCondition, queryCooked)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction)
-import           Prax.Minds (selfWants, believedDesires, wantFor)
+import           Prax.Minds (believedDesires, cookedSelfWants, cookedDesiresFor)
 
 -- | Total utility of a world to a set of wants: @Σ utility × #satisfying@.
 evaluate :: PraxState -> [Want] -> Int
 evaluate st wants =
   sum [ wantUtility w * countSatisfying view (wantConditions w) Map.empty
       | w <- wants ]
+  where view = readView st
+
+-- | 'evaluate''s cooked mirror, fed by 'Prax.Minds.cookedSelfWants'\/
+-- 'Prax.Minds.cookedDesiresFor' — the Planner's internal scoring path
+-- ('scoreActions'\/'predictMove'\/'pickAction'). Case-for-case with
+-- 'evaluate': same sum-of-utility-times-satisfying-count, over
+-- 'queryCooked' instead of 'countSatisfying'.
+evaluateCooked :: PraxState -> [([CookedCondition], Int)] -> Int
+evaluateCooked st wants =
+  sum [ u * length (queryCooked view cs Map.empty) | (cs, u) <- wants ]
   where view = readView st
 
 -- | The actions a character may actually take (practice-bound filtering).
@@ -76,10 +87,10 @@ predictMove st p m =
       -- unimprovable costs included, so deterrents still deter)
       | all ((`notElem` improvables st) . desireName) ds -> Nothing
       | otherwise ->
-          let model  = map (wantFor (charName m)) ds
-              still  = evaluate st model
+          let model  = cookedDesiresFor st (charName m) ds
+              still  = evaluateCooked st model
               scored = sortOn (\(ga, s) -> (Down s, gaLabel ga))
-                         [ (a, evaluate (performAction st a) model)
+                         [ (a, evaluateCooked (performAction st a) model)
                          | a <- candidateActions st m ]
           in case scored of
                ((a, s) : _) | s > still -> Just a
@@ -105,7 +116,7 @@ scoreActions depth st actor =
   where
     valueAfter d st1 = base + rest
       where
-        base = fromIntegral (evaluate st1 (selfWants st1 actor))
+        base = fromIntegral (evaluateCooked st1 (cookedSelfWants st1 actor))
         rest
           | d <= 0    = 0
           | otherwise = othersScore + selfNext
@@ -117,7 +128,7 @@ scoreActions depth st actor =
                   Nothing -> (s, acc)
                   Just ga ->
                     let s' = performAction s ga
-                    in (s', acc + 0.5 * fromIntegral (evaluate s' (selfWants s' actor)))
+                    in (s', acc + 0.5 * fromIntegral (evaluateCooked s' (cookedSelfWants s' actor)))
             selfNext = case scoreActions (d - 1) afterRound actor of
               ((_, v) : _) -> 0.9 * v
               []           -> 0

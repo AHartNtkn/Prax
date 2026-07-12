@@ -13,6 +13,7 @@ module Prax.Engine
   , withDb
   , setAxioms
   , setDesires
+  , setCharacters
   , possibleActions
   , performAction
   , performOutcome
@@ -26,30 +27,28 @@ import           Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db
-import           Prax.Query (queryCooked, groundCondition, CookedCondition)
+import           Prax.Query (queryCooked, groundCondition, CookedCondition, cookCondition)
 import           Prax.Types
-import           Prax.Derive (Axiom, closure, closureFrom, axiomFootprint, axiomNegPatterns, monotoneAxioms)
-import           Prax.Relevance (improvableDesires, mayUnifyNames, evictionShadows)
+import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, monotoneAxioms, cookAxioms, runCooked)
+import           Prax.Relevance (improvableDesires, mayUnifyNames, evictionShadows, evictionShadowNames)
 import           Prax.Cooked (cookOutcome, cookPractice, groundCookedOutcome)
 
 -- | Rebuild the derived vocabulary tables. Internal: every helper that
--- changes 'practiceDefs', 'axioms', or 'desires' must end here.
+-- changes 'practiceDefs', 'desires', or 'characters' must end here.
+-- ('axioms' is the one exception — 'cookedRules' is maintained directly by
+-- 'setAxioms', which needs it set before its own 'reclose' call; see there.)
 retable :: PraxState -> PraxState
 retable st = st
-  { cookedDefs   = Map.map cookPractice (practiceDefs st)
+  { cookedDefs    = Map.map cookPractice (practiceDefs st)
+  , cookedWants   = Map.fromList
+      [ (charName c, [ map cookCondition (wantConditions w) | w <- charWants c ])
+      | c <- characters st ]
+  , cookedDesires = Map.fromList
+      [ (desireName d, map cookCondition (wantConditions (desireWant d))) | d <- desires st ]
   , improvables  = improvableDesires (practiceDefs st) (axioms st) (desires st)
   , footprint    = map pathNames (axiomFootprint (axioms st))
   , negFootprint = map pathNames (axiomNegPatterns (axioms st))
   , contMonotone = monotoneAxioms (axioms st) }
-
--- | Eviction shadows computed directly from tokens — the names-level mirror
--- of 'Prax.Relevance.evictionShadows' (one shadow per @!@ operator: the names
--- up to and including that point, followed by a fresh @"Evicted"@ segment),
--- with no round trip through a rebuilt sentence.
-evictionShadowNames :: [(String, Maybe Char)] -> [[String]]
-evictionShadowNames toks =
-  [ map fst (take i toks) ++ ["Evicted"]
-  | (i, (_, op)) <- zip [1 ..] toks, op == Just '!' ]
 
 -- | 'relevantDelta' generalized to operate on already-split names: the
 -- primary delta's names and its eviction shadows (each already a name list).
@@ -78,13 +77,16 @@ monotoneToks toks st =
 monotoneInsert :: String -> PraxState -> Bool
 monotoneInsert s = monotoneToks (tokens s)
 
--- | 'applyGrow' from already-split tokens. Bridges to the sentence form only
--- because 'Prax.Derive.closureFrom' — a module outside this task's touched
--- set — is typed over 'String'; the bridge is a cheap 'tokensToSentence'
--- concatenation, the exact inverse of the 'tokens' that produced @toks@, not
--- a re-parse of anything already computed.
+-- | The continuation tier, natively on tokens: grow the base and continue the
+-- ALREADY-CLOSED view with the one new fact via 'runCooked' and the state's
+-- precompiled 'cookedRules' — no string is ever rebuilt from @toks@. A
+-- contradiction (⊥) falls back to the full 'reclose' path, which reaches the
+-- same "contradiction" marker from scratch.
 applyGrowToks :: [(String, Maybe Char)] -> PraxState -> PraxState
-applyGrowToks toks = applyGrow (tokensToSentence toks)
+applyGrowToks toks st =
+  case runCooked (cookedRules st) (insertToks toks (readView st)) (insertToks toks emptyDb) of
+    Right v -> st { db = insertToks toks (db st), readView = v }
+    Left _  -> withDb (insertToks toks) st
 
 -- | Register a practice and insert its static @dataFacts@ under
 -- @practiceData.<id>.@.
@@ -112,14 +114,15 @@ renderText template b = go template
     go (c : rest) = c : go rest
 
 -- | Rebuild the cached closed view: the base DB forward-chained under the
--- state's domain 'axioms' (the derived closure). With no axioms this is
--- exactly @db st@, so un-axiomatised worlds are unaffected and pay nothing.
--- A contradiction (@⊥@) is surfaced as a queryable @contradiction@ fact over
--- the (still-consistent) base rather than crashing, so a world or
--- drama-manager can react to it. Internal: every helper that changes 'db' or
--- 'axioms' must end here.
+-- state's domain 'axioms', via 'runCooked' and the precompiled 'cookedRules'
+-- (so this ~5,400-calls\/round path never re-cooks the axiom set — see
+-- 'setAxioms'). With no axioms this is exactly @db st@, so un-axiomatised
+-- worlds are unaffected and pay nothing. A contradiction (@⊥@) is surfaced as
+-- a queryable @contradiction@ fact over the (still-consistent) base rather
+-- than crashing, so a world or drama-manager can react to it. Internal:
+-- every helper that changes 'db' or 'axioms' must end here.
 reclose :: PraxState -> PraxState
-reclose st = st { readView = case closure (axioms st) (db st) of
+reclose st = st { readView = case runCooked (cookedRules st) (db st) (db st) of
                                Right closed -> closed
                                Left _       -> insert "contradiction" (db st) }
 
@@ -134,21 +137,21 @@ withDb f st = reclose st { db = f (db st) }
 applyDirect :: (Db -> Db) -> PraxState -> PraxState
 applyDirect f st = st { db = f (db st), readView = f (readView st) }
 
--- | The continuation tier: grow the base and continue the ALREADY-CLOSED
--- view with the one new fact. A contradiction (⊥) falls back to the full
--- reclose path, which reaches the same "contradiction" marker from scratch.
-applyGrow :: String -> PraxState -> PraxState
-applyGrow s st = case closureFrom (axioms st) (readView st) [s] of
-  Right v -> st { db = insert s (db st), readView = v }
-  Left _  -> withDb (insert s) st
-
 -- | The only sanctioned way to change the axioms of a built state.
+-- 'cookedRules' is set in the SAME record update as 'axioms', before
+-- 'reclose' runs, so 'reclose'\'s 'runCooked' call sees the new rules
+-- (setting it in 'retable' instead would be too late: 'retable' runs AFTER
+-- 'reclose' here).
 setAxioms :: [Axiom] -> PraxState -> PraxState
-setAxioms axs st = retable (reclose st { axioms = axs })
+setAxioms axs st = retable (reclose st { axioms = axs, cookedRules = cookAxioms axs })
 
 -- | The only sanctioned way to change the desire vocabulary of a built state.
 setDesires :: [Desire] -> PraxState -> PraxState
 setDesires ds st = retable st { desires = ds }
+
+-- | The only sanctioned way to change the character roster of a built state.
+setCharacters :: [Character] -> PraxState -> PraxState
+setCharacters cs st = retable st { characters = cs }
 
 -- | All actions the named actor can currently perform, across every
 -- instantiated practice and every satisfying binding of each action. Conditions
@@ -201,7 +204,7 @@ performOutcome o = performCooked (cookOutcome o)
 -- | Apply a single, already-grounded cooked outcome to the state.
 -- Case-for-case with the string 'performOutcome': same classification order
 -- (irrelevant → monotone-insert continuation → reclose), same
--- 'applyDirect'\/'applyGrow'\/'withDb' routing, same spawn-runs-inits
+-- 'applyDirect'\/'applyGrowToks'\/'withDb' routing, same spawn-runs-inits
 -- semantics, same 'ForEach' snapshot-then-apply behaviour — only the parsing
 -- moves: classification, spawn detection, and insert/retract all run on
 -- names already in hand.
@@ -225,13 +228,13 @@ performCooked (CInsert toks) st =
                    st' (cpInits cp)
        Nothing -> st'
 performCooked (CCall fn args) st =
-  case lookupFunction fn st of
-    Nothing  -> st
-    Just fdef ->
-      let paramBindings = Map.fromList (zip (fnParams fdef) (map VStr args))
+  case lookupCookedFn fn st of
+    Nothing -> st
+    Just (params, cases) ->
+      let paramBindings = Map.fromList (zip params (map VStr args))
           firstMatch =
             [ (outs, res)
-            | (conds, outs) <- lookupCookedFn fn st
+            | (conds, outs) <- cases
             , res <- take 1 (queryCooked (db st) conds paramBindings) ]
       in case firstMatch of
            ((outs, res) : _) ->
@@ -261,18 +264,14 @@ spawnedInstanceNames names st =
     -- The instance is newly spawned iff it did not exist before this insert.
     existedBefore ns = not (null (unifyNames ns (db st) Map.empty))
 
-lookupFunction :: String -> PraxState -> Maybe Function
-lookupFunction name st =
-  case [ f | def <- Map.elems (practiceDefs st)
-           , f <- functions def, fnName f == name ] of
-    (f : _) -> Just f
-    []      -> Nothing
-
--- | 'lookupFunction''s cooked mirror: the cases (cooked conditions/outcomes)
--- of the first practice whose 'cpFns' declares @fn@, in the same
--- 'Map.elems' order 'lookupFunction' scans.
-lookupCookedFn :: String -> PraxState -> [([CookedCondition], [CookedOutcome])]
+-- | The function named @fn@'s params and cooked cases: the first practice
+-- (in 'Map.elems' order) whose 'cpFns' declares it — 'cpFns' itself is
+-- first-wins within a practice ('Prax.Cooked.cookPractice'), so this single
+-- lookup gives the correct two-level first-match resolution (first practice,
+-- then first same-named function within it) on its own, with no string-side
+-- fallback needed for 'fnParams'.
+lookupCookedFn :: String -> PraxState -> Maybe ([String], [([CookedCondition], [CookedOutcome])])
 lookupCookedFn fn st =
-  case [ cases | cp <- Map.elems (cookedDefs st), Just cases <- [Map.lookup fn (cpFns cp)] ] of
-    (cs : _) -> cs
-    []       -> []
+  case [ entry | cp <- Map.elems (cookedDefs st), Just entry <- [Map.lookup fn (cpFns cp)] ] of
+    (e : _) -> Just e
+    []      -> Nothing

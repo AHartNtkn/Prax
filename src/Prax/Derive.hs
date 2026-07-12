@@ -34,6 +34,9 @@ module Prax.Derive
   , axiomFootprint
   , axiomNegPatterns
   , monotoneAxioms
+  , CookedRule(..)
+  , cookAxioms
+  , runCooked
   ) where
 
 import           Control.Monad (foldM)
@@ -42,7 +45,7 @@ import           Data.Maybe (mapMaybe)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Db, insertToks, insertAll, emptyDb, tokens, groundTokens, tokensToSentence, dbToSentences)
-import           Prax.Query (Condition (..), CmpOp (..), query)
+import           Prax.Query (Condition (..), CmpOp (..), query, CookedCondition (..), cookCondition, queryCooked)
 import           Prax.EL (meet, leq)
 
 -- | An implication rule @axiomWhen → axiomThen@: when the body holds for some
@@ -82,6 +85,15 @@ closureFrom :: [Axiom] -> Db -> [String] -> Either Contradiction Db
 closureFrom axs closed facts =
   run axs (insertAll facts closed) (insertAll facts emptyDb)
 
+-- Shared by 'run' and 'runCooked': does @m@ already entail head tokens @h@,
+-- and meet a fresh head into the model (⊥ iff incompatible).
+entailed :: Db -> [(String, Maybe Char)] -> Bool
+entailed m h = leq m (insertToks h emptyDb)
+
+meetOne :: Db -> [(String, Maybe Char)] -> Either Contradiction Db
+meetOne m h = maybe (Left (Contradiction (tokensToSentence h))) Right
+                    (meet m (insertToks h emptyDb))
+
 -- The shared semi-naive engine (the former closure-local 'go', verbatim,
 -- with 'rules' computed from the axiom list).
 run :: [Axiom] -> Db -> Db -> Either Contradiction Db
@@ -107,10 +119,6 @@ run axs = go
                   Left c  -> Left c
                   Right m -> go m (foldl (flip insertToks) emptyDb fresh)
 
-    meetOne m h = maybe (Left (Contradiction (tokensToSentence h))) Right
-                        (meet m (insertToks h emptyDb))
-    entailed m h = leq m (insertToks h emptyDb)
-
     -- Bindings of @body@ in which at least one 'Match' atom is satisfied by a
     -- @delta@ fact (the others by the full model). With @delta@ = the base this is
     -- a full query; thereafter it visits only the newly-relevant joins.
@@ -121,6 +129,56 @@ run axs = go
       where
         joinAt i = foldl step [Map.empty] (zip [0 :: Int ..] body)
           where step bs (j, c) = concatMap (query (if j == i then delta else model) [c]) bs
+
+-- | An axiom's body and heads, precompiled once per world (see 'cookAxioms'):
+-- the body pattern-split ('Prax.Query.cookCondition') and the head sentences
+-- pre-tokenized ('Prax.Db.tokens') — the same compilation 'run'\'s local
+-- @rules@ otherwise redoes on every call.
+data CookedRule = CookedRule
+  { crBody  :: [CookedCondition]
+  , crHeads :: [[(String, Maybe Char)]]
+  }
+  deriving (Eq, Show)
+
+-- | Precompile a domain's axioms (with their auto-□-lifted forms — see
+-- 'liftObliged') to 'CookedRule's. The caller ('Prax.Engine.setAxioms')
+-- stores the result in 'Prax.Types.cookedRules', so 'runCooked' — invoked
+-- once per 'Prax.Engine.reclose'\/'Prax.Engine.applyGrowToks', thousands of
+-- times a round — never re-cooks the axiom set.
+cookAxioms :: [Axiom] -> [CookedRule]
+cookAxioms axs =
+  [ CookedRule (map cookCondition body) (map tokens hs)
+  | Axiom body hs <- axs ++ mapMaybe liftObliged axs ]
+
+-- | 'run'\'s cooked mirror: case-for-case the same semi-naive loop
+-- (@go@\/@deltaJoin@), typed over precompiled 'CookedRule's and
+-- 'Prax.Query.queryCooked' instead of re-deriving @rules@ from @axs@ and
+-- re-splitting each body pattern via 'Prax.Query.query' on every call. A
+-- deliberately independent, hand-verified parallel implementation — not a
+-- delegation through 'run' — so 'closure'\/'closureFrom' (which still call
+-- 'run') remain a genuinely separate code path from the engine's hot loop,
+-- exactly the property "Prax.ViewInvariantSpec"'s net depends on to recompute
+-- against something other than the code under test.
+runCooked :: [CookedRule] -> Db -> Db -> Either Contradiction Db
+runCooked rules = go
+  where
+    go model delta =
+      let heads = [ groundTokens h b | CookedRule body hs <- rules
+                                      , b <- deltaJoinCooked model delta body, h <- hs ]
+          fresh = nub (filter (not . entailed model) heads)
+      in if null fresh
+           then Right model
+           else case foldM meetOne model fresh of
+                  Left c  -> Left c
+                  Right m -> go m (foldl (flip insertToks) emptyDb fresh)
+
+    deltaJoinCooked model delta body =
+      case [ i | (i, CMatch _) <- zip [0 :: Int ..] body ] of
+        []  -> queryCooked model body Map.empty
+        pos -> nub (concatMap joinAt pos)
+      where
+        joinAt i = foldl step [Map.empty] (zip [0 :: Int ..] body)
+          where step bs (j, c) = concatMap (queryCooked (if j == i then delta else model) [c]) bs
 
 -- Lift a purely-conjunctive domain rule under the obligation operator: prefix
 -- @obliged.\<fresh\>.@ to every body match and head, so □A ⊢ □B whenever A ⊢ B.

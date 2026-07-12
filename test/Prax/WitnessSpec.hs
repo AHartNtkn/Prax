@@ -6,7 +6,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction)
+import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setCharacters)
 import           Prax.Witness
 
 -- A minimal world: three located characters, one observable act.
@@ -21,8 +21,8 @@ wave = observable together "waved.Actor" $
 world :: PraxState
 world = foldl (flip performOutcome) base setup
   where
-    base = (definePractices [p] emptyState)
-             { characters = map character ["ann", "bea", "cal"] }
+    base = setCharacters (map character ["ann", "bea", "cal"])
+             (definePractices [p] emptyState)
     p = practice { practiceId = "greet", roles = ["R"], actions = [wave] }
     setup =
       [ Insert "practice.greet.stage"

@@ -37,7 +37,7 @@ import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Bindings, Db, emptyDb, exists)
 import           Prax.Query (Condition, CookedCondition)
-import           Prax.Derive (Axiom)
+import           Prax.Derive (Axiom, CookedRule)
 
 -- | A social practice: a role-parameterized bundle of affordances.
 data Practice = Practice
@@ -130,9 +130,13 @@ data CookedPractice = CookedPractice
     -- precomputed once per world instead of re-split every 'possibleActions' call.
   , cpActions :: [CookedAction]
   , cpInits   :: [CookedOutcome]
-  , cpFns     :: Map String [([CookedCondition], [CookedOutcome])]
-    -- ^ Cooked 'Function' cases, keyed by 'fnName'; a case's 'caseConditions'\/
-    -- 'caseOutcomes' cooked in place.
+  , cpFns     :: Map String ([String], [([CookedCondition], [CookedOutcome])])
+    -- ^ Cooked 'Function' cases, keyed by 'fnName', paired with 'fnParams' —
+    -- so the cooked hot path ('Prax.Engine.performCooked') never falls back
+    -- to a string-side 'fnParams' lookup. First-wins on a duplicate 'fnName'
+    -- within one practice (built via a fold that keeps the first occurrence,
+    -- not @Map.fromList@'s last-wins), matching the search order
+    -- 'lookupCookedFn' uses across practices.
   }
   deriving (Eq, Show)
 
@@ -187,8 +191,24 @@ data PraxState = PraxState
     -- ('Prax.Cooked.cookPractice'), rebuilt in lockstep by the same Engine
     -- helper ('Prax.Engine.retable') that maintains 'improvables'\/'footprint'.
   , characters   :: [Character]
+  , cookedWants :: Map String [[CookedCondition]]
+    -- ^ Each character's 'charWants' conditions precooked, one entry per
+    -- want, same order as 'charWants' — keyed by 'charName'. Maintained by
+    -- 'Prax.Engine.setCharacters' (retable); paired with 'charWants''
+    -- utilities by construction (same source list, same order — never
+    -- re-sorted or filtered independently).
+  , cookedDesires :: Map String [CookedCondition]
+    -- ^ Each vocabulary 'Desire''s (Owner-templated) conditions precooked
+    -- once — keyed by 'desireName', independent of which characters hold it.
+    -- Maintained by 'Prax.Engine.retable' alongside 'cookedDefs'.
   , cursor       :: Int          -- ^ round-robin index of the last actor
   , axioms       :: [Axiom]       -- ^ domain rules; reads see their forward-chained closure (default none)
+  , cookedRules  :: [CookedRule]
+    -- ^ 'axioms' precompiled ('Prax.Derive.cookAxioms') — bodies pattern-
+    -- split, heads pre-tokenized, □-lifted forms included. Maintained by
+    -- 'Prax.Engine.setAxioms', consumed by 'Prax.Derive.runCooked' in
+    -- 'Prax.Engine.reclose'\/'Prax.Engine.applyGrowToks' so the closure
+    -- loop's ~5,400 calls\/round never re-cook the axiom set.
   , sorts        :: [(String, [String])]  -- ^ sort → member constants, for the type checker (default none)
   , desires      :: [Desire]      -- ^ the vocabulary of nameable desires (default none)
   , predictionScope :: [Condition]  -- ^ conditions the planner predicts over (default none)
@@ -216,8 +236,9 @@ data PraxState = PraxState
 -- | An empty interpreter state (cursor before the first actor).
 emptyState :: PraxState
 emptyState = PraxState
-  { db = emptyDb, practiceDefs = Map.empty, cookedDefs = Map.empty, characters = [], cursor = -1
-  , axioms = [], sorts = [], desires = [], predictionScope = []
+  { db = emptyDb, practiceDefs = Map.empty, cookedDefs = Map.empty, characters = []
+  , cookedWants = Map.empty, cookedDesires = Map.empty, cursor = -1
+  , axioms = [], cookedRules = [], sorts = [], desires = [], predictionScope = []
   , improvables = [], footprint = [], negFootprint = [], contMonotone = True
   , readView = emptyDb }
 

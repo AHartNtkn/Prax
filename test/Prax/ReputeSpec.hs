@@ -9,7 +9,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, possibleActions, setAxioms)
+import           Prax.Engine (definePractices, performOutcome, possibleActions, setAxioms, setCharacters)
 import           Prax.Derive (Axiom (..))
 import           Prax.Repute
 
@@ -20,8 +20,8 @@ world = setAxioms [ standingUnless "kicked.Brute.dog" "forgiven.Brute" "brute"
                    , notoriety "brute" 2 ]
                    (foldl (flip performOutcome) base setup)
   where
-    base = (definePractices [p] emptyState)
-             { characters = map character ["ana", "ben", "kai"] }
+    base = setCharacters (map character ["ana", "ben", "kai"])
+             (definePractices [p] emptyState)
     -- an affordance gated on the DERIVED standing: preconditions read the view
     p = practice
       { practiceId = "yard", roles = ["R"]

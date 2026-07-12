@@ -184,8 +184,8 @@ tests = testGroup "Prax.Engine"
                             [ ForEach [ Match "friend.Target.W" ]
                                       [ Insert "told.W.Target" ] ] ] }
           st = foldl (flip performOutcome)
-                 ((definePractices [p] emptyState)
-                    { characters = [ character "ann" ] })
+                 (setCharacters [ character "ann" ]
+                   (definePractices [p] emptyState))
                  [ Insert "practice.tell.stage"
                  , Insert "target.bob"
                  , Insert "friend.bob.carol", Insert "friend.bob.dave"

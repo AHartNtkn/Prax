@@ -7,7 +7,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, assertFailure, (@?=))
 import           Prax.Db (dbToSentences)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction)
+import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setCharacters)
 import           Prax.Planner (pickAction)
 import           Prax.Core (coreLib)
 import           Prax.Reactions
@@ -99,7 +99,7 @@ tests = testGroup "Prax.Reactions"
                   , action "[Actor]: Misbehave" [] [ markViolation "Actor" "tipping" ] ] }
             bex = (character "bex")
               { charWants = [ Want [ violationOf "bex" "tipping" ] (-50) ] }
-            st0 = (definePractices [coreLib, conductP] emptyState) { characters = [bex] }
+            st0 = setCharacters [bex] (definePractices [coreLib, conductP] emptyState)
             st  = performOutcome (spawnReaction "conduct" ["bex"]) st0
         -- Both options are on the table…
         assertBool "can behave"    (any ("Behave"    `isInfixOf`) (labels st "bex"))

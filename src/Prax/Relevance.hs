@@ -24,6 +24,7 @@ module Prax.Relevance
   , mayUnifyNames
   , improvableDesires
   , evictionShadows
+  , evictionShadowNames
   ) where
 
 import           Data.Map.Strict (Map)
@@ -85,16 +86,30 @@ outcomeAtoms fns visited o = case o of
       pairs <- sequence ms
       pure (concatMap fst pairs, concatMap snd pairs)
 
--- The eviction shadows of an exclusion insert: one per @!@, the path
--- TRUNCATED just past that exclusion point with a fresh variable in the
--- slot. Each exclusion clears the displaced sibling's entire subtree —
--- arbitrary depth and shape — and 'mayUnify' compares only up to the
--- shorter path, so the truncated shadow covers every want under it.
+-- | The eviction shadows of an exclusion insert, computed directly on
+-- already-split tokens — the single implementation (both 'evictionShadows'
+-- below and 'Prax.Engine.performCooked'\'s cooked hot path go through this,
+-- so there is one name-shape, one implementation). One shadow per @!@
+-- operator: the names up to and including that point, followed by a fresh
+-- @"Evicted"@ segment. Each exclusion clears the displaced sibling's entire
+-- subtree — arbitrary depth and shape — and 'mayUnifyNames' compares only up
+-- to the shorter path, so the truncated shadow covers every want under it.
+evictionShadowNames :: [(String, Maybe Char)] -> [[String]]
+evictionShadowNames toks =
+  [ map fst (take i toks) ++ ["Evicted"]
+  | (i, (_, op)) <- zip [1 ..] toks, op == Just '!' ]
+
+-- | The eviction shadows of an exclusion insert, as sentences — 'mayUnify'
+-- (via 'pathNames', which discards punctuation) is the only consumer, so
+-- WHICH separator re-joins the names is immaterial; this is
+-- 'evictionShadowNames' re-joined with 'tokensToSentence' using @.@ between
+-- every pair (a token's op-flag is emitted AFTER it, so every name but the
+-- last needs one to keep the names from gluing together).
 evictionShadows :: String -> [String]
 evictionShadows s =
-  [ tokensToSentence (take i toks ++ [("Evicted", Nothing)])
-  | (i, (_, op)) <- zip [1 ..] toks, op == Just '!' ]
-  where toks = tokens s
+  [ tokensToSentence (dotted ns) | ns <- evictionShadowNames (tokens s) ]
+  where
+    dotted ns = zip ns (replicate (length ns - 1) (Just '.') ++ [Nothing])
 
 -- Positive and negated path patterns of a want's conditions. The Bool is
 -- "uncertain": the want's satisfaction depends on machinery (numeric binds,

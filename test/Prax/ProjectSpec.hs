@@ -9,7 +9,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setDesires)
+import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setDesires, setCharacters)
 import           Prax.Planner (pickAction, predictMove)
 import           Prax.Project
 
@@ -34,11 +34,11 @@ world :: PraxState
 world = foldl (flip performOutcome) base setup
   where
     base = setDesires [ ovenPursuit ]
-             ((definePractices [ovenP, yardP] emptyState)
-                { characters =
-                    [ (character "mia")
-                        { charDesires = ["pursues-oven"] }
-                    , character "pat" ] })
+             (setCharacters
+                [ (character "mia")
+                    { charDesires = ["pursues-oven"] }
+                , character "pat" ]
+                (definePractices [ovenP, yardP] emptyState))
     yardP = practice { practiceId = "yard", roles = ["R"]
                      , actions = [ ovenTake
                                  , action "[Actor]: Idle about" [] [] ] }

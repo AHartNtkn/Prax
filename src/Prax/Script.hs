@@ -69,7 +69,7 @@ import qualified Data.Map.Strict as Map
 import           Prax.Db (unify, valToString)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome)
+import           Prax.Engine (definePractices, performOutcome, setCharacters)
 import           Prax.Core (coreLib)
 
 -- The AST ---------------------------------------------------------------------
@@ -240,8 +240,8 @@ compile scr = foldl (flip performOutcome) base setup
   where
     scenes = scriptScenes scr
 
-    base = (definePractices ([coreLib, beatsP, junctionsP] ++ [clockP | usesClock]) emptyState)
-             { characters = castChars ++ [narrator] ++ [clockChar | usesClock] }
+    base = setCharacters (castChars ++ [narrator] ++ [clockChar | usesClock])
+             (definePractices ([coreLib, beatsP, junctionsP] ++ [clockP | usesClock]) emptyState)
 
     beatsP = practice
       { practiceId = "beats", practiceName = "scene dialogue", roles = ["Stage"]

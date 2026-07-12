@@ -20,7 +20,7 @@ module Prax.Worlds.Feud
 
 import           Prax.Query
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setAxioms)
+import           Prax.Engine (definePractices, performOutcome, setAxioms, setCharacters)
 import           Prax.Derive (Axiom, axiom)
 
 -- | You are Alice — the one who gave offence.
@@ -76,8 +76,8 @@ feudWorld =
   setAxioms feudAxioms (foldl (flip performOutcome) withPractices setup)
   where
     withPractices =
-      (definePractices [ societyP ] emptyState)
-        { characters = [ alice, grudgeBearer "bob", grudgeBearer "carol", grudgeBearer "dave" ] }
+      setCharacters [ alice, grudgeBearer "bob", grudgeBearer "carol", grudgeBearer "dave" ]
+        (definePractices [ societyP ] emptyState)
     setup =
       [ Insert "practice.society.here"
       , Insert "wronged.alice.bob"      -- the single authored grievance
@@ -94,8 +94,8 @@ bigFeud n =
   where
     names = [ "a" ++ show i | i <- [1 .. n] ]
     withPractices =
-      (definePractices [ societyP ] emptyState)
-        { characters = alice : map grudgeBearer names }
+      setCharacters (alice : map grudgeBearer names)
+        (definePractices [ societyP ] emptyState)
     setup =
       [ Insert "practice.society.here"
       , Insert "wronged.alice.a1" ]

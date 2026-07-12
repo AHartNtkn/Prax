@@ -29,7 +29,7 @@ module Prax.Worlds.Village
 
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires)
+import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, setCharacters)
 import           Prax.Core (coreLib, adjustScore)
 import           Prax.Derive (Axiom, axiom)
 import           Prax.Project
@@ -282,8 +282,8 @@ villageWorld =
         -- (+4/head), so eve whispers and gale never does
       , ((character "gale") { charDesires = ["spites-carol"] }, [honest])
       ]
-    base = (definePractices [coreLib, worldP, villageP, earnBreadP, sightP villageSighting] emptyState)
-             { characters = roster ++ [sightChar] }
+    base = setCharacters (roster ++ [sightChar])
+             (definePractices [coreLib, worldP, villageP, earnBreadP, sightP villageSighting] emptyState)
     setup =
       [ Insert "practice.village.here"
       , Insert "practice.world.world.connected.square.mill"
