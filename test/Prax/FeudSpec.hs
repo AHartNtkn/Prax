@@ -7,10 +7,11 @@ import           Data.List (isInfixOf, isPrefixOf)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, assertFailure)
 
-import           Prax.Db (dbToSentences)
+import           Prax.Db (dbToSentences, exists)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction)
+import           Prax.Engine (possibleActions, performAction, performOutcome)
 import           Prax.Loop (advance, npcAct)
+import           Prax.Kin (wed)
 import           Prax.Worlds.Feud (feudWorld, bigFeud)
 
 -- Run with `idle` (the player, Alice) never acting and everyone else planner-driven.
@@ -37,6 +38,10 @@ perform st who needle =
   case filter ((needle `isInfixOf`) . gaLabel) (possibleActions st who) of
     (ga : _) -> pure (performAction st ga)
     []       -> assertFailure ("no action " ++ show needle ++ " for " ++ who) >> pure st
+
+-- Esme, wed into the feud's kestrel house (the bride moves — authored direction).
+weddedWorld :: PraxState
+weddedWorld = foldl (flip performOutcome) feudWorld (wed "esme" "kestrel" "dave")
 
 tests :: TestTree
 tests = testGroup "Prax.Worlds.Feud (emergent sandbox)"
@@ -78,4 +83,27 @@ tests = testGroup "Prax.Worlds.Feud (emergent sandbox)"
       assertBool "carol no longer resents"  ("resents.carol.alice" `notElem` vs)
       assertBool "dave no longer resents"   ("resents.dave.alice"  `notElem` vs)
       assertBool "and can no longer shun her" (null (canShun amended "carol"))
+
+  , testCase "pre-wedding: esme is inert to the feud — her own house, no resentment, no kestrel ties" $ do
+      assertBool "esme starts in her own house (wren)" (exists "member.esme!wren" (db feudWorld))
+      let vs = viewFacts feudWorld
+      assertBool "esme resents no one yet" (not (any ("resents.esme." `isPrefixOf`) vs))
+      assertBool "esme is not yet allied with the kestrel house"
+        (not (any (`elem` vs) ["allied.esme.bob", "allied.esme.carol", "allied.esme.dave"]))
+
+  , testCase "the wedding: wed moves esme's membership; the derived world flips" $ do
+      assertBool "esme's membership moved to kestrel" (exists "member.esme!kestrel" (db weddedWorld))
+      assertBool "esme's old wren membership is gone" (not (exists "member.esme!wren" (db weddedWorld)))
+      let vs = viewFacts weddedWorld
+      assertBool "esme is now allied with the whole kestrel house (comrades)"
+        (all (`elem` vs) ["allied.esme.bob", "allied.esme.carol", "allied.esme.dave"])
+      assertBool "esme inherits her in-laws' grudge: resents.esme.alice is derived"
+        ("resents.esme.alice" `elem` vs)
+      assertBool "married.dave.esme is derived (marriage symmetry, kinAxioms)"
+        ("married.dave.esme" `elem` vs)
+
+  , testCase "the driven beat: after the wedding, esme (a grudgeBearer) shuns alice unprompted" $ do
+      let driven = runWithPassive "alice" 12 weddedWorld
+          vs = dbToSentences (db driven)
+      assertBool "esme shunned alice" ("shunned.esme.alice" `elem` vs)
   ]

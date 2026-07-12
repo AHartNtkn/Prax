@@ -22,6 +22,8 @@ import           Prax.Query
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome, setAxioms, setCharacters)
 import           Prax.Derive (Axiom, axiom)
+import           Prax.Faction (joins, comrades)
+import           Prax.Kin (kinAxioms)
 
 -- | You are Alice — the one who gave offence.
 playerName :: String
@@ -33,6 +35,7 @@ feudAxioms =
   [ axiom [ Match "allied.X.Y" ]                     [ "allied.Y.X" ]    -- alliances are mutual
   , axiom [ Match "wronged.X.Y" ]                    [ "resents.Y.X" ]   -- the wronged resent the wrongdoer
   , axiom [ Match "resents.A.B", Match "allied.A.C" ][ "resents.C.B" ]   -- the enemy of my ally is my enemy
+  , comrades                                                             -- shared membership derives allied (Prax.Faction)
   ]
 
 -- The one place everyone shares. Affordances key off /derived/ enmity.
@@ -70,24 +73,39 @@ alice = (character playerName)
   { charWants = [ Want [ Match "shunned.Other.alice" ] (-10) ] }  -- dislikes being shunned
 
 -- | The set-up sandbox: three domain rules + one act of offence, and a feud
--- assembles itself.
+-- assembles itself. Bob, carol and dave share one house (kestrel); 'comrades'
+-- derives the @allied@ facts the old world used to assert directly. Esme
+-- starts in a house of her own (wren) — inert to the feud until a wedding
+-- moves her in (tested in "Prax.FeudSpec"). All of 'Prax.Kin.kinAxioms'
+-- joins the axiom set wholesale here (the spec's stated decision: the world
+-- grows kin vocabulary, not just what one demo needs) — harmless to the
+-- unmodified feud tests since no @parent.*@/@married.*@ base fact exists
+-- until a wedding inserts one.
 feudWorld :: PraxState
 feudWorld =
-  setAxioms feudAxioms (foldl (flip performOutcome) withPractices setup)
+  setAxioms (feudAxioms ++ kinAxioms) (foldl (flip performOutcome) withPractices setup)
   where
     withPractices =
-      setCharacters [ alice, grudgeBearer "bob", grudgeBearer "carol", grudgeBearer "dave" ]
+      setCharacters
+        [ alice, grudgeBearer "bob", grudgeBearer "carol", grudgeBearer "dave"
+        , grudgeBearer "esme" ]
         (definePractices [ societyP ] emptyState)
     setup =
       [ Insert "practice.society.here"
       , Insert "wronged.alice.bob"      -- the single authored grievance
-      , Insert "allied.bob.carol"
-      , Insert "allied.carol.dave"
+      , joins "bob" "kestrel"
+      , joins "carol" "kestrel"
+      , joins "dave" "kestrel"
+      , joins "esme" "wren"
       ]
 
 -- | A scaled feud (for scale demos / benchmarks): @n@ grudge-bearers in an
 -- alliance chain, all turned against Alice by the one original wrong — so the
 -- closure derives @O(n)@ enmities and the planner has @n+1@ movers per node.
+-- UNCHANGED by the faction refactor: the pairwise @allied@ chain is the
+-- benchmark's own design, not the demo world's — base @allied.*@ facts
+-- remain legal vocabulary (spec's ontology note: not every alliance is a
+-- membership).
 bigFeud :: Int -> PraxState
 bigFeud n =
   setAxioms feudAxioms (foldl (flip performOutcome) withPractices setup)
