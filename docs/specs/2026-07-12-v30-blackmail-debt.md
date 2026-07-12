@@ -120,11 +120,19 @@ because its marginal price is zero below the brink and catastrophic at it:
   arithmetic is the mechanic); standing-threat exposure (stalling ties defiance);
   post-compliance the extorter holds the debt and exposure is gone; the extorted mark; a
   trait pricing the mark deters the shakedown (v25 composition).
-- `VillageSpec`: the chosen arc end to end in free play; goldens/ViewInvariant untouched
-  and green (cast/vocabulary changes will shift golden sequences — NO: goldens pin the
-  villageWorld; adding vocabulary CHANGES the world, so the village golden is RE-CAPTURED
-  once, in its own commit, with the decision drift itemized and justified line by line —
-  the one sanctioned re-capture form: a deliberate world change, not an engine change).
+- `VillageSpec`: the arc end to end (forced trajectory per §3); the village golden
+  RE-CAPTURED once, in its own commit, drift itemized (a deliberate world change, never an
+  engine change; bar/intrigue must not drift).
+- **One sanctioned amendment to a v25 test** (found in implementation): threshold fear makes
+  eve a one-shot liar in free play — after her first whisper she sits at two regarders and
+  correctly never risks the brink again, so the v25 laundering (her whisper reaching gale,
+  who honestly relays) is free-play unreachable. The precedent is v22's retelling: the
+  "same spite, different temperaments" test keeps its free-play assertions (the frame-up,
+  the mark, gale never lying) and GAINS the sharper one (exactly one whisper, ever — fear
+  of the brink made eve prudent); the laundering block moves to a forced-trajectory
+  continuation (force the gale whisper — the affordance remains offered — then drive and
+  assert gale's honest relay), so the v25 mechanism stays pinned rather than silently
+  untested. Task 4's WALKTHROUGH/LEDGER updates retell this honestly.
 - Suite green throughout; the usual gates.
 
 ## 5. Out of scope
