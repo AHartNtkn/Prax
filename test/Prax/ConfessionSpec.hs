@@ -248,11 +248,23 @@ spontWorld stake = foldl (flip performOutcome) base (personaFacts ++ setup)
 
 -- 4b. Confession as blackmail defense: the shakedown composed with confess
 -- over the SAME self-incriminating pattern (the theft's own subject IS the
--- confessor). MEASURED via scoreActions (both threatened worlds):
---   price=30, fear=3:  confess-to-cora = defy = wait = -16.26, comply = -111.06
---                      -> pickAction resolves the tie to confess (label order)
---   price=3,  fear=30: comply = -157.23 (best), confess = defy = wait = -162.60
+-- confessor). The victim ALSO bears the v25 conscience shape (guilt -6 on
+-- the "lied" mark, 0 once "confessed") -- without it, confess/defy/wait
+-- score IDENTICALLY (the threat's continuation doesn't depend on vic's own
+-- move) and "confesses" would rest on nothing but the scoreActions label
+-- tie-break, not on any merit. With it, confessing strictly dominates
+-- defy/wait (it is the only move that sheds the -6 guilt) rather than
+-- merely tying and winning alphabetically. MEASURED via scoreActions (both
+-- threatened worlds, re-measured after adding the conscience desires):
+--   price=30, fear=3: confess-to-cora = -16.26 (STRICTLY best),
+--                      defy = wait = -25.26, comply = -120.06
+--                      -> pickAction picks confess on the merits
+--   price=1,  fear=30: comply = -159.81 (STRICTLY best),
+--                      confess-to-cora = -162.60, defy = wait = -171.60
 --                      -> pickAction picks comply
+-- (confess-to-cora and confess-to-mel remain tied with EACH OTHER at every
+-- price/fear pair -- an orthogonal, unproblematic tie over WHICH hearer to
+-- spend the secret on, not over whether to confess at all.)
 -- After confessing, mel's expose is verified dead: only "mel: wait" remains
 -- (cora, the sole other co-present hearer, already believes -- sourced from
 -- vic -- so expose's own "hearer doesn't already believe" gate closes for
@@ -281,6 +293,14 @@ waitAct = action "[Actor]: wait" [ Match "at.Actor!P" ] []
 fearsScandal :: Int -> Desire
 fearsScandal fear = Desire "fears-scandal" (Want [ Match "W.believes.stole.Owner.loaf" ] (negate fear))
 
+-- The v25 conscience shape (as in "conscience" above), keyed to THIS
+-- fixture's own deed pattern: -6 while the "lied" mark stands, 0 once
+-- confessed -- the residue that makes confessing a merit-based move rather
+-- than a label-order tie-break against defy/wait.
+blackmailGuilt, blackmailClear :: Desire
+blackmailGuilt = Desire "guilt" (Want [ Match "Owner.lied.H.stole.Owner.loaf" ] (-6))
+blackmailClear = Desire "clearConscience" (Want [ Match "Owner.confessed.H.stole.Owner.loaf" ] 0)
+
 blackmailPractice :: Practice
 blackmailPractice = practice
   { practiceId = "yard", roles = ["R"]
@@ -288,12 +308,13 @@ blackmailPractice = practice
 
 blackmailWorld :: Int -> Int -> PraxState
 blackmailWorld price fear =
-  setDesires [ punishesTheft, fearsScandal fear ] (foldl (flip performOutcome) base setup)
+  setDesires [ punishesTheft, fearsScandal fear, blackmailGuilt, blackmailClear ]
+    (foldl (flip performOutcome) base setup)
   where
     base = setCharacters
              [ (character "mel") { charDesires = ["punishes-theft"] }
              , (character "vic") { charWants = [ Want [ Match "debt.mel.vic.favor" ] (negate price) ]
-                                  , charDesires = ["fears-scandal"] }
+                                  , charDesires = ["fears-scandal", "guilt", "clearConscience"] }
              , character "cora" ]
              (definePractices [blackmailPractice] emptyState)
     setup =
@@ -324,10 +345,12 @@ probedArithmeticTests = testGroup "probed arithmetic: spontaneous confession, bl
       let w = blackmailWorld 30 3
           threatened = doAct "mel" "threaten vic" w
           scores = scoreActions 2 threatened (member threatened "vic")
+      -- confess STRICTLY dominates defy/wait now (conscience relief), not a
+      -- tie broken by the alphabet.
       scoreOf scores "confess to cora about the loaf" @?= (-16.259999999999998)
-      scoreOf scores "defy mel"                        @?= (-16.259999999999998)
-      scoreOf scores "wait"                            @?= (-16.259999999999998)
-      scoreOf scores "buy mel's silence"               @?= (-111.06)
+      scoreOf scores "defy mel"                        @?= (-25.259999999999998)
+      scoreOf scores "wait"                            @?= (-25.259999999999998)
+      scoreOf scores "buy mel's silence"               @?= (-120.06)
       fmap gaLabel (pickAction 2 threatened (member threatened "vic"))
         @?= Just "vic: confess to cora about the loaf"
 
@@ -342,8 +365,16 @@ probedArithmeticTests = testGroup "probed arithmetic: spontaneous confession, bl
       map gaLabel (possibleActions confessed "mel") @?= ["mel: wait"]
 
   , testCase "blackmail defense: the converse -- a cheap price against a severe fear -- complies" $ do
-      let w = blackmailWorld 3 30
+      let w = blackmailWorld 1 30
           threatened = doAct "mel" "threaten vic" w
+          scores = scoreActions 2 threatened (member threatened "vic")
+      -- comply STRICTLY beats confess here too, even with the same
+      -- conscience relief on offer -- the price is cheap enough that paying
+      -- it beats spending the secret.
+      scoreOf scores "buy mel's silence"               @?= (-159.81)
+      scoreOf scores "confess to cora about the loaf" @?= (-162.60000000000002)
+      scoreOf scores "defy mel"                        @?= (-171.60000000000002)
+      scoreOf scores "wait"                            @?= (-171.60000000000002)
       fmap gaLabel (pickAction 2 threatened (member threatened "vic"))
         @?= Just "vic: buy mel's silence"
   ]
