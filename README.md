@@ -96,9 +96,11 @@ utility. See the design writeups:
   through a **defeasible closed view** (`readView`): derivations are recomputed from the base, never
   persisted, so retracting a premise dissolves its conclusions — and it is opt-in (`axioms = []`
   leaves a world untouched). Domain rules **auto-lift under `□`**, giving obligation-closure for free.
-  `Prax.Worlds.Feud` (`prax feud`) is the demo: from *one* authored wrong and three rules, a whole
-  feud emerges (people who never met come to resent someone through the alliance network) and
-  dissolves the moment amends are made.
+  `Prax.Worlds.Feud` (`prax feud`) is the demo: from *one* authored wrong and a handful of rules, a
+  whole feud emerges (people who never met come to resent someone through the alliance network) and
+  dissolves the moment amends are made. (v31 folds a fourth rule in — see `Prax.Faction` below —
+  replacing the demo's hand-authored alliance ties with derived house membership, unmodified-tests
+  proving the generalization holds.)
 - `Prax.TypeCheck` (v16–17) — a static **type checker** (`prax check [world]`), Versu's implicit type
   system. The declaration-free, sound layer flags **unbound variables** (an outcome/axiom-head variable
   no precondition can bind — a silent no-op), **exclusion-cardinality clashes** (a relation asserted both
@@ -214,6 +216,22 @@ utility. See the design writeups:
   continuation once free play alone can no longer reach it. Found by the planner's own lookahead,
   not designed for: an unguarded repeat threat could re-extract silence indefinitely, banking
   serial extortion as a real future mechanic once guarded shut.
+- `Prax.Faction` + `Prax.Kin` (v31) — **one membership spine, two generators**: two backlog rows
+  folded because they share one primitive. `member.<who>!<faction>` is a base, single-slot fact —
+  joining, defecting, and marrying-in are all the same `!` exclusion overwrite. `comrades` derives
+  `allied.X.Y` from shared membership, keeping the `allied` name so every existing consumer needs
+  no change — proved by refactoring `Prax.Worlds.Feud` onto it: the two hand-authored pairwise
+  `allied.*` setup facts are gone, replaced by three house memberships, and `FeudSpec`'s 5 original
+  tests pass byte-unmodified. `kinAxioms` is pure derivation (marriage symmetry, sibling,
+  grandparent, one-directional in-laws), retraction-safe with a designed asymmetry: dissolving a
+  marriage un-derives its in-laws, but membership itself does not, since `wed`'s transfer is a base
+  move, not a derivation. `wed joiner faction spouse` compiles a wedding to the marriage fact plus
+  one membership overwrite; succession reuses the same exclusion idiom for offices, any child of a
+  dead holder may claim the single slot. `Prax.Worlds.Feud`'s wedding beat: esme, inert in her own
+  single-member house, weds into the feud's `kestrel` house and inherits its grudge against alice —
+  the planner has her shunning alice, unprompted, on the first try. The village is untouched this
+  round (goldens byte-identical); `factionStanding` (belief-gated regard through a faction-mate)
+  ships spec-tested but unwired into any world, a stated and deferred decision.
 - **v26 — planner work elimination**: an exactness-contract performance round (golden
   decision-sequence tests pin every planner choice, byte-identical before/after). Cached
   per-state closed views, a conservative relevance pre-filter (`Prax.Relevance`) that skips
@@ -247,7 +265,7 @@ cabal run prax             # play the bar demo — you are 'you'; pick from the 
 cabal run prax -- intrigue  # play the dramatic episode (a Roman conspiracy)
 cabal run prax -- play      # play the same drama authored as a Prompter-lite play-script
 cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
-cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + three rules
+cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + a handful of rules
 cabal run prax -- audience  # a Prompter demo: memory + timed junction + character-sketch in one scene
 cabal run prax -- village   # witnessing + rumor + reputation + deception + endeavors: what you see or hear settles into standing, an atoned thief is deterred from stealing again, a concealed secret stays kept while it's worth keeping, an unproven whisper cascades into reputation exactly like the truth would, and — given a lawful way to earn what he wanted — the thief takes up honest work instead
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)

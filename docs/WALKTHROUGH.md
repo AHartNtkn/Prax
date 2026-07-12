@@ -508,7 +508,7 @@ metalevel `direct` moves — nothing else. → code: `Prax.Worlds.Bar` `barDirec
 ### 19. Emergent derivation — `prax feud` (v15)
 
 This is the sandbox that points past authored interactive fiction toward emergent social sim. You
-author **one** wrong and **three** rules; a whole feud derives itself.
+author **one** wrong and a handful of rules; a whole feud derives itself.
 
 ```sh
 cabal run prax -- feud
@@ -521,22 +521,29 @@ cabal run prax -- feud
 >   - dave resents alice
 > ```
 
-The setup asserts only `wronged.alice.bob`, `allied.bob.carol`, `allied.carol.dave`. Three
-forward-chaining rules do the rest:
+**As of v31** the setup no longer hand-authors the alliance: it asserts `wronged.alice.bob` and
+three *membership* facts — bob, carol, and dave all `join` the same house, `kestrel`
+(`Prax.Faction`, folded in at v31 — see §29 for the full refactor). Four forward-chaining rules do
+the rest, the original three plus one that turns shared membership into alliance:
 
 ```
-allied.X.Y                     ⇒ allied.Y.X       -- alliances are mutual
-wronged.X.Y                    ⇒ resents.Y.X      -- the wronged resent the wrongdoer
-resents.A.B ∧ allied.A.C       ⇒ resents.C.B      -- the enemy of my ally is my enemy
+allied.X.Y                          ⇒ allied.Y.X       -- alliances are mutual
+wronged.X.Y                         ⇒ resents.Y.X      -- the wronged resent the wrongdoer
+resents.A.B ∧ allied.A.C            ⇒ resents.C.B      -- the enemy of my ally is my enemy
+member.X!F ∧ member.Y!F, X≠Y        ⇒ allied.X.Y       -- shared membership is alliance (comrades, v31)
 ```
 
-So **carol and dave come to resent Alice though she only ever wronged Bob**, and they act on it
-(*"bob is shunning alice"*, and so on). The derivation is **defeasible**: derived facts live in a
-closed *view*, recomputed from the base and never stored. Choose **`make amends with bob`** — which
-deletes the single authored `wronged.alice.bob` — and watch the *entire* feud vanish in one move:
-every derived `resents` and every shunning disappears, because their only support is gone.
+So **carol and dave come to resent Alice though she only ever wronged Bob** — now via one shared
+house instead of a hand-authored pairwise chain — and they act on it (*"bob is shunning alice"*,
+and so on). The derivation is **defeasible**: derived facts live in a closed *view*, recomputed
+from the base and never stored. Choose **`make amends with bob`** — which deletes the single
+authored `wronged.alice.bob` — and watch the *entire* feud vanish in one move: every derived
+`resents` and every shunning disappears, because their only support is gone. (The scaled
+`bigFeud` benchmark keeps its original pairwise `allied.*` chain unchanged — the chain topology is
+the benchmark's own design, and base `allied.*` facts remain legal vocabulary; not every alliance
+has to be a membership.)
 → code: `Prax.EL` (the exclusion-logic lattice + `m(X)`), `Prax.Derive` (forward chaining),
-`Prax.Worlds.Feud`.
+`Prax.Faction` (`comrades`, v31), `Prax.Worlds.Feud`.
 
 ### 20. Static type-checking — `prax check` (v16–17)
 
@@ -1596,6 +1603,120 @@ asserted in `Prax.DebtSpec`, `Prax.BlackmailSpec`, `Prax.VillageSpec`, `Prax.Gol
 
 ---
 
+### 29. One membership spine, two generators — factions, kinship, and a wedding across the feud (`prax feud`) (v31)
+
+Two backlog rows (`Factions & membership`, `Kinship & households`) fold into one round because they
+share exactly one primitive: **membership**. A household is a small faction; kinship *generates*
+memberships (marriage moves them); faction axioms turn membership into solidarity. `Prax.Faction`
+and `Prax.Kin` ship as two thin modules over that one spine, and §19's feud is refactored onto it —
+not left as a second, parallel design — as the round's own proof that the generalization holds.
+
+**Membership is a base, single-slot fact.** `member.<who>!<faction>` — one primary allegiance, and
+the `!` is the whole semantics: joining a house, defecting from one, and marrying into one are all
+the same exclusion overwrite, not three different mechanisms. `comrades` derives `allied.X.Y` from
+`member.X!F ∧ member.Y!F ∧ X≠Y` — and it **keeps the name `allied`**, so everything already built on
+that name (the mutuality axiom, "the enemy of my ally is my enemy", `societyP`'s shun affordance)
+consumes it unmodified. A third axiom, `factionStanding`, extends v21's belief-gated reputation
+(`standingUnless`'s shape) with a membership join — an offense against my faction-mate, *that I
+believe happened*, makes me regard the offender — and ships spec-tested (`Prax.FactionSpec`), but
+isn't wired into any world this round: it's `FactionSpec`-pinned only, the village-wiring decision
+stated and deferred rather than built speculatively (see the ledger's Tier 1 row for the same
+banked line).
+
+**`Prax.Kin` is pure derivation on top.** Base vocabulary is `parent.<parent>.<child>` and
+`married.<a>.<b>` (asserted once; symmetry is derived, not asserted twice); `kinAxioms` closes
+marriage symmetry, `sibling`, `grandparent`, and two `inLaw` rules (spouse's parent; sibling's
+spouse) — stated **one-directional** (acquired-relative-first, ego-second: `inLaw.P.B` reads "P is
+B's in-law"), with no symmetric `inLaw.B.P` derived. Because it's pure derivation, retraction-safety
+is free: dissolving a marriage (retracting the `married` fact) un-derives every in-law it supported
+— but **membership itself does not un-derive**, because `wed`'s membership transfer is a base `!`
+overwrite, not a derivation from the marriage fact. That asymmetry is the point, not an oversight:
+whoever moved households stays moved even after a divorce, exactly as a real defection would.
+`wed joiner faction spouse` compiles a wedding to exactly two things: the marriage base fact, and
+one `!` overwrite moving the joiner's membership into the named faction — the fold's whole payoff in
+one line. *Which* party moves is the author's choice per wedding (world content, not module policy).
+Offices generalize the same exclusion idiom to succession: `office.<name>!<holder>` plus
+`succession`, a claim action gated on the holder's death and the claimant being a child of the
+holder — any child may claim, the single slot takes the first motivated one, which is honest
+exclusion semantics rather than an invented age-based primogeniture (age doesn't exist in this
+model; inventing "eldest" would be an unprincipled fact).
+
+**The feud, refactored — and `FeudSpec` unmodified is the proof.** §19's two hand-authored
+`Insert "allied.bob.carol"` / `Insert "allied.carol.dave"` setup facts are gone, replaced by three
+`joins "X" "kestrel"` facts; `comrades` now derives what those two facts used to assert directly.
+The five original `FeudSpec` tests were run against the refactored world **before anything else was
+touched**, and pass byte-for-byte unmodified — no test edit, because no existing assertion mentions
+`allied.*` at all (every one is phrased in `resents.*`/`shunned.*`/`wronged.*`, exactly the derived
+vocabulary the refactor preserves). One semantic wrinkle was checked, not assumed: the old pairwise
+chain derived `resents.dave.alice` in two hops (through `allied.carol.dave`); the house derives it
+in one hop (`comrades` ties everyone sharing `kestrel` to everyone else directly) — invisible to
+every existing test, since none of them count derivation depth.
+
+**The wedding beat, live.** Esme starts in her own single-member house, `wren` — inert to the feud
+by construction: `comrades` needs *two* members of a house to derive anything, and she has no
+housemate yet, so her pre-wedding facts are exactly this, checked directly against `feudWorld`
+(base and derived view identical — nothing else touches her name):
+
+```
+member.esme.wren
+```
+
+(no `allied.esme.*`, no `resents.esme.*` — `dbToSentences` prints the `!` exclusion as `.`, so this
+is the base fact `member.esme!wren`.)
+
+Then the wedding — `wed "esme" "kestrel" "dave"` (the bride moves; an authored choice for this
+world, not a module default) — and the derived world flips. Base facts change by exactly the two
+things `wed` compiles to:
+
+```
+married.esme.dave
+member.esme.kestrel        -- the ! overwrite: member.esme!wren is gone
+```
+
+and the closed view derives everything downstream in one pass — she is now a comrade of the whole
+house she married into, and inherits the grudge she had no part in creating:
+
+```
+allied.bob.esme      allied.esme.bob        -- comrades: shared kestrel membership
+allied.carol.esme    allied.esme.carol
+allied.dave.esme     allied.esme.dave
+married.dave.esme    married.esme.dave      -- marriage symmetry (kinAxioms)
+resents.esme.alice                          -- her in-laws' grudge, inherited through the chain
+```
+
+Driving 12 ticks with Alice passive (the same `advance`/`npcAct` idiom every other section's
+headless traces use) shows the planner picking the newly-derived enmity up on the very first try —
+no BLOCK, no tuning:
+
+```
+bob: shun alice
+carol: shun alice
+dave: shun alice
+esme: shun alice
+bob: (idle)
+carol: (idle)
+dave: (idle)
+esme: (idle)
+bob: (idle)
+```
+
+Every member of `kestrel` — including the bride who joined that morning — shuns Alice on their very
+first opportunity, then idles: nothing else is left for any of them to want.
+
+**What's banked, not built.** Multi-affiliation (one character, several factions at once);
+inheritance of holdings beyond bare offices; births (a `parent.*` fact currently has to be asserted,
+never generated by play); divorce as a driven *action* (dissolution is tested via raw retraction of
+the `married` fact, not a practice a character can choose); and `factionStanding`'s wiring into a
+world (stated and deferred above) — all recorded in the ledger's Tier 1 row rather than attempted
+this round. The village itself is untouched: no golden churn, because nothing in `Prax.Worlds.Village`
+imports `Prax.Faction` or `Prax.Kin` this round.
+
+→ code: `Prax.Faction` (`member`/`joins`/`comrades`/`factionStanding`), `Prax.Kin` (`kinAxioms`/
+`wed`/`succession`), `Prax.Worlds.Feud`; asserted in `Prax.FactionSpec`, `Prax.KinSpec`,
+`Prax.FeudSpec`.
+
+---
+
 ## Feature coverage map
 
 Everything implemented, where it lives, and how to see it. The first block is the engine core (the
@@ -1642,7 +1763,7 @@ bar, Part I); the second is Part II, one row per world/tool.
 | Scene-authoring layer (CAST + scenes/beats/junctions) | `Prax.Script` / `Worlds.Play` | `prax play`; `prax flow` prints the scene graph |
 | Play-scripts round-trip through JSON | `Prax.Script.Json` | `prax dump-play`; `prax play examples/play.json` |
 | Player as drama manager | `Bar.barDirectorWorld` / `candidateActions` | `prax dm`: your menu is authorial nudges |
-| Forward-chaining derivation (defeasible) | `Prax.EL` / `Prax.Derive` | `prax feud`: 1 wrong + 3 rules → a feud; amends dissolves it |
+| Forward-chaining derivation (defeasible) | `Prax.EL` / `Prax.Derive` | `prax feud`: 1 wrong + 4 rules (v31 folds membership in) → a feud; amends dissolves it |
 | Static type checker + sort inference | `Prax.TypeCheck` | `prax check <world>` |
 | Memories, timed junctions, character sketches | `Prax.Script` / `Worlds.Audience` | `prax audience` |
 | Quantified outcomes (`ForEach`) + authored witnessing | `Prax.Engine` / `Prax.Witness` | `prax village`: carol (co-present) believes bob's theft and can confront him; dana (elsewhere) doesn't |
@@ -1653,6 +1774,7 @@ bar, Part I); the second is Part II, one row per world/tool.
 | Temperament as conduct-valuations (`Trait`/`personaVocabulary`/`bearing`/`transparent`/`cast`); a lie marks the liar (`Actor.lied.Hearer.<event>`) | `Prax.Persona`, `Prax.Deceit` | `prax village`: gale bears `honest` and never lies despite sharing eve's exact spite; everyone presumes her conscience from t=0; a believed conscience nets against a believed motive in `predictMove`; eve's whisper deceives gale too, and (forced, since v30's threshold fear stops her reaching gale unprompted) gale spreads it onward by ordinary gossip, no mark, carrying it back to eve as "evidence" for her own fabrication |
 | Debt as a beneficiary'd obligation (`owe`/`settle`), belief-gated deadbeat standing | `Prax.Debt` | `prax village`: a witnessed default derives `regards.<W>.<debtor>.deadbeat`; the debtor himself, unavoidably co-present at his own default, always regards himself one even when no one else does; repayment defeats it by the same base-fact-defeater idiom as v21's thief |
 | Blackmail (`shakedown`: threaten/comply/defy/expose), threshold fear | `Prax.Blackmail`, `Prax.Worlds.Village` | `prax village`: a threat is a motive-belief deposit the victim's own round-walk prices; a standing threat is exposable, so stalling ties defiance; carol, holding eyewitness evidence of eve's whisper, shakes her down and buys real silence; eve's own fear of the notoriety brink also makes her a one-shot liar in free play, retelling §27's laundering under a forced continuation |
+| Membership as one spine (`member.<who>!<faction>`, `comrades`, belief-gated `factionStanding`); kin derivation (`kinAxioms`: marriage symmetry, sibling, grandparent, one-directional in-laws) and `wed`'s marriage-fact-plus-membership-overwrite; succession as single-slot exclusion | `Prax.Faction`, `Prax.Kin` | `prax feud`: bob/carol/dave share house `kestrel` (`comrades` derives their alliance, replacing the old hand-authored pairwise ties — §19/§29); esme weds into it (`wed "esme" "kestrel" "dave"`), inherits the grudge, and shuns alice unprompted on her first turn |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
 same behaviours are asserted in the test suite (`cabal test`, 360 tests). Part I: `Prax.QuerySpec`,
@@ -1698,7 +1820,14 @@ cases carry the same mechanism into the full village: carol's threat lands once 
 evidence, eve complies and the reputation stack stays undisturbed for everyone uninvolved, and
 threshold fear leaves eve's below-the-brink free-play whispering exactly as rational as it always
 was while retelling, under a forced continuation, the one free-play consequence (§27's laundering)
-it structurally forecloses.
+it structurally forecloses), `Prax.FactionSpec` (`comrades`'s shared-membership derivation and its
+`X≠Y`/cross-faction negatives, defection's retraction-safety, `factionStanding`'s belief-gating —
+including the fratricide and victim-self-belief pins — and its reserved-variable guards), and
+`Prax.KinSpec` (each `kinAxioms` rule positive and negative, `wed`'s two facts and both parties'
+name guards, dissolution un-deriving in-laws while membership persists, and the succession
+lifecycle's death-gating, child-only claims, and single-slot race resolution) — `Prax.FeudSpec`
+carries both into the emergent sandbox unmodified: the five original assertions untouched by the
+refactor, plus the wedding beat's derivation flip and driven shunning.
 
 ---
 

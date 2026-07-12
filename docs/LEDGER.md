@@ -304,6 +304,50 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   throughout; zero warnings; hlint clean; `prax check` on all 7 worlds; the village golden
   re-captured once, in its own commit, with exactly one drift line itemized (a world change, never
   an engine change).
+- **v31** — **one spine, two generators: factions & kinship** (`Prax.Faction`, `Prax.Kin`; spec
+  `docs/specs/2026-07-12-v31-faction-kin.md`). Two backlog rows folded per user direction because
+  they share one primitive: **membership**. It's a base, single-slot fact,
+  `member.<who>!<faction>` — joining, defecting, and marrying-in are all the same `!` exclusion
+  overwrite, not three mechanisms. `comrades` derives `allied.X.Y` from shared membership and
+  **keeps the name `allied`**, so everything downstream (the mutuality axiom, "enemy of my ally",
+  `societyP`'s shun affordance) consumes it unmodified — the base `allied.*` vocabulary itself stays
+  legal (`bigFeud`'s pairwise chain is unchanged, a benchmark's own design, not every alliance is a
+  membership). **The generalization's proof**: `Prax.Worlds.Feud`'s two hand-authored
+  `allied.bob.carol`/`allied.carol.dave` setup facts are deleted, replaced by three house-`joins`
+  facts, and `FeudSpec` — every one of its 5 original tests — passes byte-unmodified; no assertion
+  in it even mentions `allied.*`, so the refactor is invisible to the contract it must preserve.
+  `factionStanding` extends v21's `standingUnless` shape with a membership join (belief-gated,
+  spec-tested) but ships unwired into any world this round — review caught the v30-class bug again
+  (a `W`/`F` reserved-variable collision that silently no-ops the axiom), fixed with the same
+  `reservedClash`-style loud guard `Prax.Blackmail.shakedown` already established, plus two
+  deliberate pins: fratricide (an offender's own faction-mates still condemn them) and victim
+  self-belief, both asserted directly rather than left implicit. `Prax.Kin`'s `kinAxioms` are pure
+  derivation (marriage symmetry, sibling, grandparent, two in-law rules) — the in-law rules are
+  **stated one-directional** (acquired-relative-first, ego-second; no symmetric back-edge), and
+  dissolution is retraction-safe with a designed asymmetry: retracting `married` un-derives every
+  in-law it supported, but membership does **not** un-derive, because `wed`'s transfer is a base `!`
+  move, not a derivation — whoever moved households stays moved through a divorce, like a real
+  defection. `wed joiner faction spouse` compiles a wedding to exactly two things (the marriage
+  fact, one membership overwrite), with both `joiner` and `spouse` name-guarded (review found the
+  first draft guarded only `joiner`, leaving `spouse` spliceable into the fact unguarded).
+  Succession reuses the same exclusion idiom for offices: any child of a dead holder may claim
+  `office.<name>!<holder>`, the single slot resolves the race to one, honestly — no invented
+  age/primogeniture (age isn't modeled; "eldest" would be an unprincipled fact). **The wedding
+  beat, live**: esme starts inert in her own single-member house (`wren` — `comrades` needs two
+  members to derive anything, so this is structural, not scripted); `wed "esme" "kestrel" "dave"`
+  (the bride moves — an authored per-wedding choice, not module policy) flips her derived world in
+  one pass — she becomes a comrade of the whole `kestrel` house and inherits `resents.esme.alice`,
+  the grudge she had no part in creating — and the planner picks it up unprompted, on the first
+  try: esme shuns alice within her first few ticks alongside bob/carol/dave, no BLOCK, no tuning.
+  The village is untouched this round (goldens byte-identical; nothing in `Prax.Worlds.Village`
+  imports either new module) — `factionStanding`'s village wiring is a stated, deferred decision,
+  `FactionSpec`-pinned rather than built speculatively. Banked: multi-affiliation, holdings
+  inheritance beyond bare offices, births (`parent.*` must be asserted, never generated), divorce
+  as a driven action (dissolution is tested via raw retraction only), and the village faction
+  wiring just noted. Suite: 371 (`Prax.Faction`, incl. the reserved-variable fix) → 389
+  (`Prax.Kin`, incl. the `wed`-guard fix) → 392 (`Prax.Worlds.Feud` refactor + the wedding beat),
+  all green throughout; zero warnings; hlint clean; `prax check` on all 7 worlds; grep-gates
+  empty.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -455,9 +499,19 @@ Tier 1 — compiled social structures:
   makes standing snap back from memory that was never lost; `notoriety` counts derived regards at
   an authored threshold)*. Score effects from standing (a reaction, not an axiom) remain unbuilt —
   not needed for the village's arc.
-- **Factions & membership** (`Prax.Faction`): membership facts + the feud axioms generalized
-  ("my faction's enemy is my enemy"), join/leave/exile practices, and faction-/place-scoped deontic
-  norm-sets (what's obligatory in the temple isn't at the tavern). Composes Derive + Deontic.
+- **Factions & membership** (`Prax.Faction`) *(done — v31, folded with Kinship below onto one
+  shared spine: **membership**. `member.<who>!<faction>` is a base, single-slot fact; the `!` is
+  the whole semantics — joining, defecting, and marrying-in are the same exclusion overwrite.
+  `comrades` generalizes the feud's old pairwise `allied.*` setup facts ("my faction's enemy is my
+  enemy") into a derivation from shared membership, keeping the `allied` name so every existing
+  consumer (the mutuality axiom, the feud's shun affordance) needs no change — proved by
+  `Prax.Worlds.Feud`'s refactor, where `FeudSpec`'s 5 original tests pass byte-unmodified.
+  `factionStanding` (belief-gated regard through a faction-mate, `standingUnless`'s shape) ships
+  spec-tested but unwired into any world. Join/leave/exile practices and place-scoped deontic
+  norm-sets are not this round's scope — `joins`/`comrades`/`factionStanding` are the vocabulary;
+  authoring practices on top of them is free)*. Banked: multi-affiliation (one character, several
+  factions at once), faction offices/leadership beyond bare succession, place-scoped deontic
+  norm-sets, village wiring for `factionStanding`.
 - **Debt & favors** (`Prax.Debt`) *(done — v30: `owe`/`settle`, thin over `Prax.Deontic` — a debt
   *is* an obligation with a beneficiary, `debt.<creditor>.<debtor>.<content>` inserted alongside
   `oblige`, both facts one call, one call to reverse both. Default becomes belief-gated **deadbeat
@@ -468,9 +522,19 @@ Tier 1 — compiled social structures:
   unavoidably co-present at his own default, so he always regards himself a deadbeat regardless of
   any outside witness, a self-regard/third-party-spread distinction review found underspecified and
   the shipped test now asserts explicitly)*.
-- **Kinship & households** (`Prax.Kin`): family relations + axioms (sibling symmetry, in-law
-  derivation), marriage as bond+obligations, inheritance on death (cast removal exists). Offices as
-  single-slot `!` facts (`mayor!bob`) — exclusion semantics are succession semantics.
+- **Kinship & households** (`Prax.Kin`) *(done — v31, folded with Factions above: kinship is what
+  *generates* memberships. Base vocabulary is `parent.<parent>.<child>` and `married.<a>.<b>`;
+  `kinAxioms` is pure derivation (marriage symmetry, sibling, grandparent, two in-law rules —
+  **stated one-directional**, acquired-relative-first) — retraction-safe for free, with a designed
+  asymmetry: dissolving a marriage un-derives every in-law, but membership does **not** un-derive,
+  since `wed`'s transfer is a base `!` move, not a derivation. `wed joiner faction spouse` compiles
+  a wedding to the marriage fact plus one membership overwrite — inheritance-as-bond, generalized
+  past the original "marriage as bond+obligations" framing into the same exclusion idiom
+  membership already uses. Offices generalize identically: `office.<name>!<holder>` + `succession`,
+  a claim gated on the holder's death and the claimant being a child — the single slot resolves
+  competing claims to one, honestly, with no invented age/primogeniture)*. Banked: inheritance of
+  holdings beyond bare offices, births (a `parent.*` fact must be asserted, never generated by
+  play), divorce as a driven action (dissolution is tested via raw retraction only).
 
 Tier 2 — agent interiority for long time-spans:
 - **Projects / endeavors** (`Prax.Project`) *(done — v24: `endeavor`/`Stage` — authored project
