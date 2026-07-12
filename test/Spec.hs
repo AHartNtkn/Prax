@@ -2,6 +2,7 @@ module Main (main) where
 
 import Test.Tasty (defaultMain, testGroup)
 
+import qualified Prax.SymSpec
 import qualified Prax.DbSpec
 import qualified Prax.QuerySpec
 import qualified Prax.CookedSpec
@@ -40,7 +41,8 @@ import qualified Prax.VillageSpec
 
 main :: IO ()
 main = defaultMain $ testGroup "prax"
-  [ Prax.DbSpec.tests
+  [ Prax.SymSpec.tests
+  , Prax.DbSpec.tests
   , Prax.QuerySpec.tests
   , Prax.CookedSpec.tests
   , Prax.EngineSpec.tests

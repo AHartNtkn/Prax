@@ -23,7 +23,8 @@ library
                     , containers
                     , aeson >=2.0
                     , bytestring
-    exposed-modules:  Prax.Db
+    exposed-modules:  Prax.Sym
+                      Prax.Db
                       Prax.Query
                       Prax.Types
                       Prax.Cooked
@@ -83,7 +84,8 @@ test-suite prax-test
                     , prax
                     , tasty
                     , tasty-hunit
-    other-modules:    Prax.DbSpec
+    other-modules:    Prax.SymSpec
+                      Prax.DbSpec
                       Prax.QuerySpec
                       Prax.CookedSpec
                       Prax.EngineSpec
