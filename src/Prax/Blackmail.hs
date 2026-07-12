@@ -67,12 +67,24 @@ shakedown sid copresence pat price w
   | any (`elem` (".!" :: String)) sid =
       error ("shakedown: id " ++ show sid
              ++ " must be a single path segment (no '.' or '!')")
+  | (bad : _) <- reservedClash =
+      error ("shakedown: evidence pattern " ++ show pat
+             ++ " names a secondary variable " ++ show bad
+             ++ ", but the punitive desire quantifies over D (the victim), W"
+             ++ " (the believer) and Owner (the extorter) — pick a different"
+             ++ " variable name for anyone besides the victim")
   | otherwise = (punitive, [threaten, comply, defy, expose])
   where
     victim = case filter isVariable (pathNames pat) of
       (v : _) -> v
       []      -> error ("shakedown: evidence pattern " ++ show pat
                         ++ " names no one (a threat needs a victim)")
+
+    -- Beyond the victim, 'patD' reuses D/W/Owner as the punitive desire's own
+    -- variables (below); a secondary evidence variable bearing one of those
+    -- names would silently merge with them under 'renameVictim' or grounding.
+    reservedClash =
+      [ v | v <- pathNames pat, isVariable v, v /= victim, v `elem` ["D", "W", "Owner"] ]
 
     -- Fact conventions, id-scoped so multiple shakedowns coexist.
     threatPath extorter v = "threatened." ++ sid ++ "." ++ extorter ++ "." ++ v

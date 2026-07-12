@@ -137,6 +137,18 @@ tests = testGroup "Prax.Blackmail"
     , testCase "an evidence pattern naming no one errors loudly" $ do
         r <- try (evaluate (length (show (shakedown "defiance" together "somethinghappened" "favor" 6))))
         assertBool "a threat must be about someone" (isLeft (r :: Either ErrorCall Int))
+    , testCase "a secondary evidence variable named D collides with the punitive desire's D" $ do
+        r <- try (evaluate (length (show (shakedown "x" [] "took.V.from.D" "favor" 1))))
+        assertBool "D is reserved for the punitive desire's own victim variable"
+          (isLeft (r :: Either ErrorCall Int))
+    , testCase "a secondary evidence variable named W collides with the punitive desire's believer" $ do
+        r <- try (evaluate (length (show (shakedown "x" [] "took.V.by.W" "favor" 1))))
+        assertBool "W is reserved for the punitive desire's own believer variable"
+          (isLeft (r :: Either ErrorCall Int))
+    , testCase "a secondary evidence variable named Owner collides with the desire's Owner" $ do
+        r <- try (evaluate (length (show (shakedown "x" [] "took.V.for.Owner" "favor" 1))))
+        assertBool "Owner is reserved for the desire's own Owner-templated variable"
+          (isLeft (r :: Either ErrorCall Int))
     ]
 
   , testGroup "threaten: the extorter is motivated to threaten, and the threat deposits"
