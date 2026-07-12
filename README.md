@@ -217,6 +217,10 @@ utility. See the design writeups:
   world construction and the hot paths (candidate enumeration, outcome application, want
   scoring, the closure loop) run on names end to end, with the string evaluator retained as
   the independently-verified reference. Profiled round 1.32s → 0.69s; suite ~22–30s.
+- **v29 — segment interning**: path segments intern to machine integers (variable-ness in
+  the parity bit) and the engine computes in symbols end to end, strings only at the
+  authoring/display boundary. Honestly reported: a wash on wall time (~10% within noise) —
+  kept as the consistent endpoint of v28's design, with the attribution lesson recorded.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).

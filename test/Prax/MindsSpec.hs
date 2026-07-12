@@ -54,7 +54,7 @@ tests = testGroup "Prax.Minds"
       Map.keys (cookedWants st) @?= ["ida", "rex"]
       Map.lookup "ida" (cookedWants st) @?= Just []
       Map.lookup "rex" (cookedWants st)
-        @?= Just [ [ CMatch (map intern ["x"]) ], [ CMatch (map intern ["y", "Z"]) ] ]
+        @?= Just [ [ CMatch [intern "x"] ], [ CMatch (map intern ["y", "Z"]) ] ]
       -- cookedDesires: keyed by desireName, the vocabulary's Owner-template
       -- conditions precooked once, independent of which characters hold them.
       Map.keys (cookedDesires st) @?= ["grudge-rex", "sweet-tooth"]

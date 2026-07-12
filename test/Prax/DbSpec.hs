@@ -1,5 +1,6 @@
 module Prax.DbSpec (tests) where
 
+import           Data.Bifunctor (first)
 import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, (@?=))
@@ -102,7 +103,7 @@ tests = testGroup "Prax.Db"
 
   , testGroup "internTokens / unifySyms (the Sym-level cores unify/unifyNames delegate to)"
     [ testCase "internTokens interns tokens' segment names, preserving operators" $
-        map (\(s, op) -> (symName s, op)) (internTokens "at.Who!Where")
+        map (first symName) (internTokens "at.Who!Where")
           @?= tokens "at.Who!Where"
     , testCase "unifySyms agrees with unifyNames (Bindings is Sym-keyed natively)" $ do
         let db = insertAll ["at.bob!square", "at.eve!mill"] emptyDb

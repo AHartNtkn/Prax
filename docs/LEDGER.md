@@ -201,6 +201,22 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   **0.69s** (allocation 2.2GB → 0.75GB); full suite ~55s → **~22–30s** (320 tests). The
   post-round profile's top centres are now segment *comparisons* (`mayUnifyNames` ~25%,
   `unifyNames` ~25%) — the interning criterion is met, designating v29.
+- **v29** — **segment interning** (spec `docs/specs/2026-07-12-v29-interning.md`), and an
+  honest wash. `Prax.Sym` (FastString-style global pool; variable-ness packed into id parity;
+  three pool doors each carrying a load-bearing bang after two lazy-argument races were found
+  by implementation and the third by review); the `Db` trie re-keyed on `IntMap` with every
+  String signature unchanged and tie-break name-ordering explicitly restored where the old
+  `Map String` gave it for free; `Val`/`Bindings`/the cooked pipeline symbolic end to end.
+  Exactness held (goldens byte-identical, ViewInvariant green throughout; DbSpec/ELSpec/
+  QuerySpec passed untouched). **Measured result: ~10% at best, within machine noise**
+  (unprofiled A/B round 0.19–0.33s vs v28's 0.22–0.36s; suite flat at ~24–26s, 329 tests).
+  The v28 profile's "segment comparisons ~50%" attribution was misleading: the cost was list
+  traversal and allocation around the comparisons — short segments fail at the first
+  character, nearly as cheap as an Int test. Recorded as the round's lesson: cost-centre
+  shares attribute time to a function, not to the instruction the optimization targets.
+  Kept (correct, reviewed, marginally positive, and the consistent endpoint of v28's
+  strings-stop-being-computational design); the next real levers are architectural — delta
+  scoring/undo-log search, or the eventual embedding port — not representation.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
