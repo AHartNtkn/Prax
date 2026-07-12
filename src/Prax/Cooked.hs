@@ -1,14 +1,13 @@
--- | The cooked mirror of the outcome language, plus the re-exported cooked
--- condition API from "Prax.Query" — together, the authored world compiled to
--- token/name form once. Strings remain the authoring surface; they stop being
--- the computation surface (see @docs/specs/2026-07-12-v28-cooked-world.md@).
+-- | The cooked mirror of the outcome language — the authored world compiled
+-- to token/name form once. Strings remain the authoring surface; they stop
+-- being the computation surface (see
+-- @docs/specs/2026-07-12-v28-cooked-world.md@). The cooked condition side
+-- ('CookedCondition', 'cookCondition', 'groundNames', 'groundCookedCondition')
+-- lives in "Prax.Query" — its one home — and is imported here, not
+-- re-exported; callers needing it import "Prax.Query" directly.
 module Prax.Cooked
-  ( CookedCondition(..)
-  , CookedOutcome(..)
-  , cookCondition
+  ( CookedOutcome(..)
   , cookOutcome
-  , groundNames
-  , groundCookedCondition
   , groundCookedOutcome
   ) where
 

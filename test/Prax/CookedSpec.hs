@@ -2,11 +2,14 @@ module Prax.CookedSpec (tests) where
 
 import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
-import           Test.Tasty.HUnit (testCase, (@?=))
+import           Test.Tasty.HUnit (assertEqual, testCase, (@?=))
 
-import           Prax.Cooked
+import           Prax.Cooked (cookOutcome, groundCookedOutcome)
 import           Prax.Db (Db, Val (..), emptyDb, insertAll)
-import           Prax.Query (CmpOp (..), Condition (..), query, queryCooked)
+import           Prax.Engine (groundOutcome)
+import           Prax.Query (CalcOp (..), CmpOp (..), Condition (..), cookCondition,
+                              groundCondition, groundCookedCondition, groundNames, query,
+                              queryCooked)
 import           Prax.Types (Outcome (..))
 
 -- A fixture exercising every pattern-bearing construct: exclusion paths,
@@ -29,16 +32,62 @@ cases =
   , [ Match "at.Who!Where", Neq "Who" "bob", Eq "Place" "Where" ]
   ]
 
+-- The binding grounded against below: every one of "Who"/"Where"/"N"/"M" is
+-- actually bound, so every construct's grounding is exercised with a real
+-- substitution, not a no-op pass-through.
+groundBindings :: Map.Map String Val
+groundBindings = Map.fromList
+  [ ("Who", VStr "bob"), ("Where", VStr "square"), ("N", VNum 5), ("M", VNum 3) ]
+
+-- One condition per remaining 'CookedCondition' constructor (Match/Not are
+-- pinned directly above; every other constructor gets its grounding branch
+-- exercised here).
+groundFixtureConditions :: [Condition]
+groundFixtureConditions =
+  [ Not "holding.Who.loaf"
+  , Eq "Who" "bob"
+  , Neq "Who" "eve"
+  , Cmp Gte "N" "M"
+  , Calc "R" Add "N" "M"
+  , Count "R2" "N"
+  , Subquery "Rs" ["Who"] [ Match "regards.Who.carol.thief" ]
+  , Or [ [ Match "at.Who!square" ], [ Match "regards.Who.carol.thief" ] ]
+  , Absent [ Match "regards.Who.carol.thief" ]
+  , Exists [ Match "holding.Who.loaf" ]
+  ]
+
+-- One outcome per remaining 'CookedOutcome' constructor (Insert is pinned
+-- directly above). 'ForEach' substitutes both its conditions and its nested
+-- outcomes.
+groundFixtureOutcomes :: [Outcome]
+groundFixtureOutcomes =
+  [ Delete "holding.Who.loaf"
+  , Call "greet" ["Who", "bob"]
+  , ForEach [ Match "regards.Who.carol.thief" ]
+            [ Insert "shunned.Who!true", Delete "trusted.Who" ]
+  ]
+
 tests :: TestTree
 tests = testGroup "Prax.Cooked"
   [ testCase "queryCooked equals the string evaluator on every fixture case" $
       [ queryCooked db (map cookCondition cs) Map.empty | cs <- cases ]
         @?= [ query db cs Map.empty | cs <- cases ]
   , testCase "grounding cooked matches grounding strings (incl. '!' outcomes)" $ do
-      let b = Map.fromList [ ("Who", VStr "bob"), ("Where", VStr "square") ]
-      groundNames b ["at", "Who", "Where"] @?= ["at", "bob", "square"]
-      groundCookedOutcome b (cookOutcome (Insert "at.Who!Where"))
+      groundNames groundBindings ["at", "Who", "Where"] @?= ["at", "bob", "square"]
+      groundCookedOutcome groundBindings (cookOutcome (Insert "at.Who!Where"))
         @?= cookOutcome (Insert "at.bob!square")
-      groundCookedCondition b (cookCondition (Match "at.Who!Where"))
+      groundCookedCondition groundBindings (cookCondition (Match "at.Who!Where"))
         @?= cookCondition (Match "at.bob!square")
+  , testCase "groundCookedCondition matches groundCondition for every remaining construct" $
+      mapM_
+        (\c -> assertEqual (show c)
+                 (cookCondition (groundCondition groundBindings c))
+                 (groundCookedCondition groundBindings (cookCondition c)))
+        groundFixtureConditions
+  , testCase "groundCookedOutcome matches groundOutcome for every remaining construct" $
+      mapM_
+        (\o -> assertEqual (show o)
+                 (cookOutcome (groundOutcome o groundBindings))
+                 (groundCookedOutcome groundBindings (cookOutcome o)))
+        groundFixtureOutcomes
   ]
