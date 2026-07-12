@@ -23,16 +23,17 @@ module Prax.Cooked
 import           Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Bindings, groundTokens, pathNames, tokens)
+import           Prax.Db (Bindings, groundTokens, internTokens, pathNames)
 import           Prax.Query (cookCondition, groundCookedCondition, groundNames)
+import           Prax.Sym (intern)
 import           Prax.Types
 
 -- | Compile an 'Outcome' to its cooked form (see 'CookedOutcome').
 cookOutcome :: Outcome -> CookedOutcome
 cookOutcome o = case o of
-  Insert s          -> CInsert (tokens s)
-  Delete s          -> CDelete (tokens s)
-  Call fn args      -> CCall fn args
+  Insert s          -> CInsert (internTokens s)
+  Delete s          -> CDelete (internTokens s)
+  Call fn args      -> CCall fn (map intern args)
   ForEach conds outs -> CForEach (map cookCondition conds) (map cookOutcome outs)
 
 -- | Substitute bindings into a cooked outcome. 'CInsert'/'CDelete' reuse
@@ -52,7 +53,7 @@ groundCookedOutcome b o = case o of
 -- (@practice.\<pid\>.\<Role1\>...@) pre-split once.
 cookPractice :: Practice -> CookedPractice
 cookPractice p = CookedPractice
-  { cpInstanceNames = pathNames ("practice." ++ practiceId p ++ "." ++ intercalate "." (roles p))
+  { cpInstanceNames = map intern (pathNames ("practice." ++ practiceId p ++ "." ++ intercalate "." (roles p)))
   , cpActions = map cookAction (actions p)
   , cpInits   = map cookOutcome (initOutcomes p)
   , cpFns     = Map.fromListWith (\_new old -> old)

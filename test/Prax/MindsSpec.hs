@@ -7,6 +7,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..), CookedCondition (..))
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, possibleActions, performAction, setCharacters)
 import           Prax.Minds
@@ -53,13 +54,13 @@ tests = testGroup "Prax.Minds"
       Map.keys (cookedWants st) @?= ["ida", "rex"]
       Map.lookup "ida" (cookedWants st) @?= Just []
       Map.lookup "rex" (cookedWants st)
-        @?= Just [ [ CMatch ["x"] ], [ CMatch ["y", "Z"] ] ]
+        @?= Just [ [ CMatch (map intern ["x"]) ], [ CMatch (map intern ["y", "Z"]) ] ]
       -- cookedDesires: keyed by desireName, the vocabulary's Owner-template
       -- conditions precooked once, independent of which characters hold them.
       Map.keys (cookedDesires st) @?= ["grudge-rex", "sweet-tooth"]
-      Map.lookup "grudge-rex" (cookedDesires st) @?= Just [ CMatch ["shamed", "rex"] ]
+      Map.lookup "grudge-rex" (cookedDesires st) @?= Just [ CMatch (map intern ["shamed", "rex"]) ]
       Map.lookup "sweet-tooth" (cookedDesires st)
-        @?= Just [ CMatch ["holding", "Owner", "cake"] ]
+        @?= Just [ CMatch (map intern ["holding", "Owner", "cake"]) ]
 
   , testCase "a profession derives presumed motive-beliefs across the cast" $ do
       let v = readView world

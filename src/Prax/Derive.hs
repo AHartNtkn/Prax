@@ -44,9 +44,10 @@ import           Data.List (nub)
 import           Data.Maybe (mapMaybe)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Db, insertToks, insertAll, emptyDb, tokens, groundTokens, tokensToSentence, dbToSentences)
+import           Prax.Db (Db, insertToks, insertAll, emptyDb, internTokens, groundTokens, tokensToSentence, dbToSentences)
 import           Prax.Query (Condition (..), CmpOp (..), query, CookedCondition (..), cookCondition, queryCooked)
 import           Prax.EL (meet, leq)
+import           Prax.Sym (Sym)
 
 -- | An implication rule @axiomWhen → axiomThen@: when the body holds for some
 -- binding of its variables, assert each (grounded) head sentence. Heads are
@@ -87,10 +88,10 @@ closureFrom axs closed facts =
 
 -- Shared by 'run' and 'runCooked': does @m@ already entail head tokens @h@,
 -- and meet a fresh head into the model (⊥ iff incompatible).
-entailed :: Db -> [(String, Maybe Char)] -> Bool
+entailed :: Db -> [(Sym, Maybe Char)] -> Bool
 entailed m h = leq m (insertToks h emptyDb)
 
-meetOne :: Db -> [(String, Maybe Char)] -> Either Contradiction Db
+meetOne :: Db -> [(Sym, Maybe Char)] -> Either Contradiction Db
 meetOne m h = maybe (Left (Contradiction (tokensToSentence h))) Right
                     (meet m (insertToks h emptyDb))
 
@@ -99,7 +100,7 @@ meetOne m h = maybe (Left (Contradiction (tokensToSentence h))) Right
 run :: [Axiom] -> Db -> Db -> Either Contradiction Db
 run axs = go
   where
-    rules = [ (body, map tokens hs)
+    rules = [ (body, map internTokens hs)
             | Axiom body hs <- axs ++ mapMaybe liftObliged axs ]
 
     -- Semi-naive evaluation: each round fires the rules using at least one fact
@@ -132,11 +133,11 @@ run axs = go
 
 -- | An axiom's body and heads, precompiled once per world (see 'cookAxioms'):
 -- the body pattern-split ('Prax.Query.cookCondition') and the head sentences
--- pre-tokenized ('Prax.Db.tokens') — the same compilation 'run'\'s local
--- @rules@ otherwise redoes on every call.
+-- pre-tokenized and interned ('Prax.Db.internTokens') — the same compilation
+-- 'run'\'s local @rules@ otherwise redoes on every call.
 data CookedRule = CookedRule
   { crBody  :: [CookedCondition]
-  , crHeads :: [[(String, Maybe Char)]]
+  , crHeads :: [[(Sym, Maybe Char)]]
   }
   deriving (Eq, Show)
 
@@ -147,7 +148,7 @@ data CookedRule = CookedRule
 -- times a round — never re-cooks the axiom set.
 cookAxioms :: [Axiom] -> [CookedRule]
 cookAxioms axs =
-  [ CookedRule (map cookCondition body) (map tokens hs)
+  [ CookedRule (map cookCondition body) (map internTokens hs)
   | Axiom body hs <- axs ++ mapMaybe liftObliged axs ]
 
 -- | 'run'\'s cooked mirror: case-for-case the same semi-naive loop

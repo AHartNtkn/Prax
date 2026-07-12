@@ -6,12 +6,13 @@ import           Test.Tasty.HUnit (testCase, (@?=), assertFailure)
 
 import           Prax.Db
 import           Prax.Query (CmpOp(..), CalcOp(..), Condition(..), forAll, implies, groundCondition, query)
+import           Prax.Sym (Sym, intern)
 
 build :: [String] -> Db
 build ss = insertAll ss emptyDb
 
 look :: String -> Bindings -> Maybe Val
-look = Map.lookup
+look name = Map.lookup (intern name)
 
 tests :: TestTree
 tests = testGroup "Prax.Query"
@@ -28,21 +29,21 @@ tests = testGroup "Prax.Query"
   , testGroup "eq / neq"
     [ testCase "eq binds an unbound variable to a constant" $
         case query emptyDb [Eq "X" "beer"] Map.empty of
-          [b] -> look "X" b @?= Just (VStr "beer")
+          [b] -> look "X" b @?= Just (VSym (intern "beer"))
           bs  -> assertFailure ("expected exactly one binding, got " ++ show (length bs))
     , testCase "eq of two equal bound values keeps the binding" $
-        query emptyDb [Eq "X" "Y"] (Map.fromList [("X", VStr "a"), ("Y", VStr "a")])
-          @?= [Map.fromList [("X", VStr "a"), ("Y", VStr "a")]]
+        query emptyDb [Eq "X" "Y"] (Map.fromList [(intern "X", VSym (intern "a")), (intern "Y", VSym (intern "a"))])
+          @?= [Map.fromList [(intern "X", VSym (intern "a")), (intern "Y", VSym (intern "a"))]]
     , testCase "eq of two differing bound values drops the binding" $
-        query emptyDb [Eq "X" "Y"] (Map.fromList [("X", VStr "a"), ("Y", VStr "b")])
+        query emptyDb [Eq "X" "Y"] (Map.fromList [(intern "X", VSym (intern "a")), (intern "Y", VSym (intern "b"))])
           @?= []
     , testCase "neq keeps distinct, drops equal" $ do
-        query emptyDb [Neq "X" "Y"] (Map.fromList [("X", VStr "a"), ("Y", VStr "b")])
-          @?= [Map.fromList [("X", VStr "a"), ("Y", VStr "b")]]
-        query emptyDb [Neq "X" "Y"] (Map.fromList [("X", VStr "a"), ("Y", VStr "a")])
+        query emptyDb [Neq "X" "Y"] (Map.fromList [(intern "X", VSym (intern "a")), (intern "Y", VSym (intern "b"))])
+          @?= [Map.fromList [(intern "X", VSym (intern "a")), (intern "Y", VSym (intern "b"))]]
+        query emptyDb [Neq "X" "Y"] (Map.fromList [(intern "X", VSym (intern "a")), (intern "Y", VSym (intern "a"))])
           @?= []
     , testCase "neq with an unbound operand drops the binding (tie-game reliance)" $
-        query emptyDb [Neq "Actor" "Winner"] (Map.fromList [("Actor", VStr "tim")]) @?= []
+        query emptyDb [Neq "Actor" "Winner"] (Map.fromList [(intern "Actor", VSym (intern "tim"))]) @?= []
     ]
 
   , testGroup "numeric: cmp / calc  (port of tests.js math block)"
@@ -56,7 +57,7 @@ tests = testGroup "Prax.Query"
         -- replace counter with the new value; now gt 4 holds
         let db1 = insert "counter!5" db0
             rs  = query db1 [Match "counter.Val", Cmp Gt "Val" "4"] Map.empty
-        map (look "Val") rs @?= [Just (VStr "5")]
+        map (look "Val") rs @?= [Just (VSym (intern "5"))]
     , testCase "chained calc: mul then sub yields -20" $
         let db = build ["counter!5"]
         in case query db
@@ -82,7 +83,7 @@ tests = testGroup "Prax.Query"
               , Count "NumDancers" "Dancers"
               , Eq "NumDancers" "2"
               ]
-            rs = query db conds (Map.fromList [("Actor", VStr "tim")])
+            rs = query db conds (Map.fromList [(intern "Actor", VSym (intern "tim"))])
         in do
           length rs @?= 1
           -- The set holds the two other dancers (kevin, jer), one column each.
@@ -103,13 +104,13 @@ tests = testGroup "Prax.Query"
               , Count "NumDancers" "Dancers"
               , Eq "NumDancers" "2"
               ]
-        in query db conds (Map.fromList [("Actor", VStr "solo")]) @?= []
+        in query db conds (Map.fromList [(intern "Actor", VSym (intern "solo"))]) @?= []
           -- solo sees only tim dancing (count 1), so eq 2 fails.
     ]
 
   , testGroup "groundCondition"
     [ testCase "groundCondition substitutes bindings through every constructor" $ do
-        let b = Map.fromList [("A", VStr "bob")]
+        let b = Map.fromList [(intern "A", VSym (intern "bob"))]
         groundCondition b (Match "at.A!P")        @?= Match "at.bob!P"
         groundCondition b (Not "seen.A")          @?= Not "seen.bob"
         groundCondition b (Eq "A" "X")            @?= Eq "bob" "X"
@@ -129,7 +130,7 @@ tests = testGroup "Prax.Query"
     [ testCase "Or binds via either clause (disjunction)" $
         let db = build ["p.a", "q.b"]
             rs = query db [ Or [ [Match "p.X"], [Match "q.X"] ] ] Map.empty
-        in sortVals (concatMap (maybe [] pure . look "X") rs) @?= [VStr "a", VStr "b"]
+        in sortVals (concatMap (maybe [] pure . look "X") rs) @?= [VSym (intern "a"), VSym (intern "b")]
 
     , testCase "Or deduplicates overlapping clauses" $
         let db = build ["p.a", "q.a"]  -- both clauses yield X=a
@@ -171,12 +172,12 @@ tests = testGroup "Prax.Query"
   ]
 
 sortVals :: [Val] -> [Val]
-sortVals = map VStr . sortStr . map valToString
+sortVals = map (VSym . intern) . sortStr . map valToString
   where sortStr = foldr ins []
         ins x [] = [x]
         ins x (y:ys) | x <= y    = x : y : ys
                      | otherwise = y : ins x ys
 
-asSet :: Val -> Maybe [[String]]
+asSet :: Val -> Maybe [[Sym]]
 asSet (VSet xs) = Just xs
 asSet _         = Nothing

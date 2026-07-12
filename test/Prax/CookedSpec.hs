@@ -5,11 +5,12 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (assertEqual, testCase, (@?=))
 
 import           Prax.Cooked (cookOutcome, groundCookedOutcome)
-import           Prax.Db (Db, Val (..), emptyDb, insertAll)
+import           Prax.Db (Bindings, Db, Val (..), emptyDb, insertAll)
 import           Prax.Engine (groundOutcome)
 import           Prax.Query (CalcOp (..), CmpOp (..), Condition (..), cookCondition,
                               groundCondition, groundCookedCondition, groundNames, query,
                               queryCooked)
+import           Prax.Sym (intern, symName)
 import           Prax.Types (Outcome (..))
 
 -- A fixture exercising every pattern-bearing construct: exclusion paths,
@@ -35,9 +36,10 @@ cases =
 -- The binding grounded against below: every one of "Who"/"Where"/"N"/"M" is
 -- actually bound, so every construct's grounding is exercised with a real
 -- substitution, not a no-op pass-through.
-groundBindings :: Map.Map String Val
+groundBindings :: Bindings
 groundBindings = Map.fromList
-  [ ("Who", VStr "bob"), ("Where", VStr "square"), ("N", VNum 5), ("M", VNum 3) ]
+  [ (intern "Who", VSym (intern "bob")), (intern "Where", VSym (intern "square"))
+  , (intern "N", VNum 5), (intern "M", VNum 3) ]
 
 -- One condition per remaining 'CookedCondition' constructor (Match/Not are
 -- pinned directly above; every other constructor gets its grounding branch
@@ -73,7 +75,8 @@ tests = testGroup "Prax.Cooked"
       [ queryCooked db (map cookCondition cs) Map.empty | cs <- cases ]
         @?= [ query db cs Map.empty | cs <- cases ]
   , testCase "grounding cooked matches grounding strings (incl. '!' outcomes)" $ do
-      groundNames groundBindings ["at", "Who", "Where"] @?= ["at", "bob", "square"]
+      map symName (groundNames groundBindings (map intern ["at", "Who", "Where"]))
+        @?= ["at", "bob", "square"]
       groundCookedOutcome groundBindings (cookOutcome (Insert "at.Who!Where"))
         @?= cookOutcome (Insert "at.bob!square")
       groundCookedCondition groundBindings (cookCondition (Match "at.Who!Where"))

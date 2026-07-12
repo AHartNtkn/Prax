@@ -7,6 +7,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Db (Val (..), exists, dbToSentences)
 import           Prax.Query (Condition (..), groundCondition, query)
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, performOutcome, setDesires)
 import           Prax.Loop (advance, npcAct)
@@ -260,7 +261,8 @@ tests = testGroup "Prax.Worlds.Village"
             not (null (query (readView st) (groundedScope st actor witness) Map.empty))
           groundedScope st actor witness =
             map (groundCondition
-                   (Map.fromList [ ("Actor", VStr actor), ("Witness", VStr witness) ]))
+                   (Map.fromList [ (intern "Actor", VSym (intern actor))
+                                 , (intern "Witness", VSym (intern witness)) ]))
                 (predictionScope st)
       fmap gaLabel (predictMove st1 dana bob) @?= Just "bob: steal the loaf from the stall"
       -- ...but dana (at the mill) has never sighted bob (at the square, and

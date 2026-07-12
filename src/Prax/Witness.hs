@@ -27,6 +27,7 @@ import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Val (..))
 import           Prax.Query (Condition (..), groundCondition)
+import           Prax.Sym (intern)
 import           Prax.Types (Action (..), Outcome (..))
 import           Prax.Beliefs (beliefAbout)
 
@@ -60,4 +61,4 @@ saw who event = Match (beliefAbout who event ++ ".seen")
 -- @Witness@ (e.g. @Hearer@), so the template stays single-sourced in the
 -- world while other layers quantify over their own role.
 asRole :: String -> CoPresence -> [Condition]
-asRole v = map (groundCondition (Map.singleton "Witness" (VStr v)))
+asRole v = map (groundCondition (Map.singleton (intern "Witness") (VSym (intern v))))

@@ -15,6 +15,7 @@ import           System.IO (BufferMode (NoBuffering), hPutStrLn, hSetBuffering, 
 import           Text.Read (readMaybe)
 
 import           Prax.Db (Bindings, unify, valToString)
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Engine (performAction)
 import           Prax.Planner (candidateActions)
@@ -163,7 +164,7 @@ play args = do
 endingOf :: PraxState -> Maybe String
 endingOf st =
   listToMaybe [ e | b <- unify "ending.E" (db st) Map.empty
-                  , Just e <- [valToString <$> Map.lookup "E" b] ]
+                  , Just e <- [valToString <$> Map.lookup (intern "E") b] ]
 
 loop :: String -> PraxState -> IO ()
 loop player st =
@@ -257,7 +258,7 @@ renderScene st =
   where
     -- read the *closed* view, so derived facts (e.g. propagated enmity) are shown
     rows sentence = unify sentence (readView st) Map.empty
-    val k b = valToString <$> Map.lookup k (b :: Bindings)
+    val k b = valToString <$> Map.lookup (intern k) (b :: Bindings)
 
     -- derived (or authored) social structure in the emergent sandbox
     grudges =

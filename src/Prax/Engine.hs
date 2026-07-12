@@ -27,11 +27,12 @@ import           Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db
-import           Prax.Query (queryCooked, groundCondition, CookedCondition, cookCondition)
+import           Prax.Query (queryCooked, groundCondition, groundNames, CookedCondition, cookCondition)
 import           Prax.Types
 import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, monotoneAxioms, cookAxioms, runCooked)
-import           Prax.Relevance (improvableDesires, mayUnifyNames, evictionShadows, evictionShadowNames)
+import           Prax.Relevance (improvableDesires, mayUnifySyms, evictionShadows, evictionShadowNames)
 import           Prax.Cooked (cookOutcome, cookPractice, groundCookedOutcome)
+import           Prax.Sym (Sym, intern, symName)
 
 -- | Rebuild the derived vocabulary tables. Internal: every helper that
 -- changes 'practiceDefs', 'desires', or 'characters' must end here.
@@ -46,43 +47,45 @@ retable st = st
   , cookedDesires = Map.fromList
       [ (desireName d, map cookCondition (wantConditions (desireWant d))) | d <- desires st ]
   , improvables  = improvableDesires (practiceDefs st) (axioms st) (desires st)
-  , footprint    = map pathNames (axiomFootprint (axioms st))
-  , negFootprint = map pathNames (axiomNegPatterns (axioms st))
+  , footprint    = map (map intern . pathNames) (axiomFootprint (axioms st))
+  , negFootprint = map (map intern . pathNames) (axiomNegPatterns (axioms st))
   , contMonotone = monotoneAxioms (axioms st) }
 
--- | 'relevantDelta' generalized to operate on already-split names: the
--- primary delta's names and its eviction shadows (each already a name list).
--- The hot cooked path ('performCooked') calls this directly — it never
--- reparses a sentence to recover what it already has as tokens.
-relevantNames :: [String] -> [[String]] -> PraxState -> Bool
+-- | 'relevantDelta' generalized to operate on already-split, interned names:
+-- the primary delta's names and its eviction shadows (each already a name
+-- list). The hot cooked path ('performCooked') calls this directly — it
+-- never reparses or re-interns a sentence to recover what it already has as
+-- tokens.
+relevantNames :: [Sym] -> [[Sym]] -> PraxState -> Bool
 relevantNames names shadows st =
-  any (\ns -> any (mayUnifyNames ns) (footprint st)) (names : shadows)
+  any (\ns -> any (mayUnifySyms ns) (footprint st)) (names : shadows)
 
 -- | Can this ground delta change what the axioms derive? Conservative:
 -- False only when the sentence — and anything its exclusions evict —
 -- may-unify nothing in the axioms' footprint (v27 spec theorem). False is
 -- the licence for 'performOutcome' to skip 'reclose'.
 relevantDelta :: String -> PraxState -> Bool
-relevantDelta s = relevantNames (pathNames s) (map pathNames (evictionShadows s))
+relevantDelta s = relevantNames (map intern (pathNames s)) (map (map intern . pathNames) (evictionShadows s))
 
--- | 'monotoneInsert' generalized to operate on already-split tokens.
-monotoneToks :: [(String, Maybe Char)] -> PraxState -> Bool
+-- | 'monotoneInsert' generalized to operate on already-split, interned
+-- tokens.
+monotoneToks :: [(Sym, Maybe Char)] -> PraxState -> Bool
 monotoneToks toks st =
   contMonotone st
     && all ((/= Just '!') . snd) toks
-    && not (any (mayUnifyNames (map fst toks)) (negFootprint st))
+    && not (any (mayUnifySyms (map fst toks)) (negFootprint st))
 
 -- | May this insert take the continuation tier: the world is
 -- continuation-safe, the insert evicts nothing, and it can defeat nothing.
 monotoneInsert :: String -> PraxState -> Bool
-monotoneInsert s = monotoneToks (tokens s)
+monotoneInsert s = monotoneToks (internTokens s)
 
 -- | The continuation tier, natively on tokens: grow the base and continue the
 -- ALREADY-CLOSED view with the one new fact via 'runCooked' and the state's
 -- precompiled 'cookedRules' — no string is ever rebuilt from @toks@. A
 -- contradiction (⊥) falls back to the full 'reclose' path, which reaches the
 -- same "contradiction" marker from scratch.
-applyGrowToks :: [(String, Maybe Char)] -> PraxState -> PraxState
+applyGrowToks :: [(Sym, Maybe Char)] -> PraxState -> PraxState
 applyGrowToks toks st =
   case runCooked (cookedRules st) (insertToks toks (readView st)) (insertToks toks emptyDb) of
     Right v -> st { db = insertToks toks (db st), readView = v }
@@ -109,7 +112,7 @@ renderText template b = go template
     go ('[' : rest) =
       case break (== ']') rest of
         (name, ']' : after) ->
-          maybe ('[' : name ++ "]") valToString (Map.lookup name b) ++ go after
+          maybe ('[' : name ++ "]") valToString (Map.lookup (intern name) b) ++ go after
         _ -> '[' : go rest      -- unterminated '['; emit literally
     go (c : rest) = c : go rest
 
@@ -163,14 +166,14 @@ possibleActions :: PraxState -> String -> [GroundedAction]
 possibleActions st actor =
   [ GroundedAction
       { gaPracticeId = pid
-      , gaInstanceId = ground (intercalate "." (cpInstanceNames cp)) inst
+      , gaInstanceId = intercalate "." (map symName (groundNames inst (cpInstanceNames cp)))
       , gaActionId   = caName ca
       , gaBindings   = binding
       , gaLabel      = renderText (caName ca) binding
       }
   | pid <- childKeys "practice" view
   , Just cp <- [Map.lookup pid (cookedDefs st)]
-  , inst <- unifyNames (cpInstanceNames cp) view (Map.singleton "Actor" (VStr actor))
+  , inst <- unifySyms (cpInstanceNames cp) view (Map.singleton (intern "Actor") (VSym (intern actor)))
   , ca <- cpActions cp
   , binding <- queryCooked view (caConds ca) inst
   ]
@@ -223,7 +226,7 @@ performCooked (CInsert toks) st =
           | otherwise                              = withDb (insertToks toks) st
   in case spawnedInstanceNames names st of
        Just (def, cp, roleVals) ->
-         let roleBindings = Map.fromList (zip (roles def) (map VStr roleVals))
+         let roleBindings = Map.fromList (zip (map intern (roles def)) (map VSym roleVals))
          in foldl' (\s2 o -> performCooked (groundCookedOutcome roleBindings o) s2)
                    st' (cpInits cp)
        Nothing -> st'
@@ -231,7 +234,7 @@ performCooked (CCall fn args) st =
   case lookupCookedFn fn st of
     Nothing -> st
     Just (params, cases) ->
-      let paramBindings = Map.fromList (zip params (map VStr args))
+      let paramBindings = Map.fromList (zip (map intern params) (map VSym args))
           firstMatch =
             [ (outs, res)
             | (conds, outs) <- cases
@@ -246,23 +249,25 @@ performCooked (CForEach conds outs) st =
 
 -- If inserting the sentence named by @names@ brings a not-yet-existing
 -- practice instance into being, return its (string-side) definition, its
--- cooked form (for 'cpInits'), and the role values — so its @init@ can run
--- once.
-spawnedInstanceNames :: [String] -> PraxState -> Maybe (Practice, CookedPractice, [String])
+-- cooked form (for 'cpInits'), and the role values (still 'Sym's — the
+-- caller builds 'Bindings' directly from them, no render/re-intern round
+-- trip) — so its @init@ can run once.
+spawnedInstanceNames :: [Sym] -> PraxState -> Maybe (Practice, CookedPractice, [Sym])
 spawnedInstanceNames names st =
   case names of
-    ("practice" : pid : rest) -> do
-      def <- Map.lookup pid (practiceDefs st)
-      cp  <- Map.lookup pid (cookedDefs st)
-      let roleVals = take (length (roles def)) rest
-          instanceNames = "practice" : pid : roleVals
-      if length roleVals == length (roles def) && not (existedBefore instanceNames)
-        then Just (def, cp, roleVals)
-        else Nothing
+    (p : pidSym : rest) | p == intern "practice" ->
+      let pid = symName pidSym in do
+        def <- Map.lookup pid (practiceDefs st)
+        cp  <- Map.lookup pid (cookedDefs st)
+        let roleVals = take (length (roles def)) rest
+            instanceNames = p : pidSym : roleVals
+        if length roleVals == length (roles def) && not (existedBefore instanceNames)
+          then Just (def, cp, roleVals)
+          else Nothing
     _ -> Nothing
   where
     -- The instance is newly spawned iff it did not exist before this insert.
-    existedBefore ns = not (null (unifyNames ns (db st) Map.empty))
+    existedBefore ns = not (null (unifySyms ns (db st) Map.empty))
 
 -- | The function named @fn@'s params and cooked cases: the first practice
 -- (in 'Map.elems' order) whose 'cpFns' declares it — 'cpFns' itself is

@@ -17,6 +17,7 @@ import           Data.Maybe (listToMaybe)
 
 import           Prax.Db (Bindings, Db, Val (..), childKeys, unify)
 import           Prax.Query (Condition, query)
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Engine (renderText)
 
@@ -38,7 +39,7 @@ explain st actor needle =
   | pid <- childKeys "practice" (db st)
   , Just def <- [Map.lookup pid (practiceDefs st)]
   , let instanceQuery = "practice." ++ pid ++ "." ++ intercalate "." (roles def)
-  , inst <- unify instanceQuery (db st) (Map.singleton "Actor" (VStr actor))
+  , inst <- unify instanceQuery (db st) (Map.singleton (intern "Actor") (VSym (intern actor)))
   , a <- actions def
   , let label = renderText (actionName a) inst
   , needle `isInfixOf` label

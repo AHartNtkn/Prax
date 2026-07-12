@@ -7,6 +7,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Db (Db, dbToSentences, emptyDb, insertAll, valToString)
 import           Prax.Query (Condition (..), query)
+import           Prax.Sym (intern)
 import           Prax.Types (Outcome (..), PraxState (..), emptyState)
 import           Prax.Engine (performOutcome, withDb)
 import           Prax.Beliefs
@@ -49,5 +50,5 @@ tests = testGroup "Prax.Beliefs"
       assertBool "bex's belief diverges" ("bex.believes.adaMood.cross" `elem` fs)
       -- Querying bex's belief yields 'cross', not the world's 'pleased'.
       let bel = query (db st) [ Match (beliefAbout "bex" "adaMood" ++ "!V") ] Map.empty
-      map (fmap valToString . Map.lookup "V") bel @?= [Just "cross"]
+      map (fmap valToString . Map.lookup (intern "V")) bel @?= [Just "cross"]
   ]

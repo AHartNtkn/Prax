@@ -26,13 +26,14 @@ import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Val (..), exists)
 import           Prax.Query (Condition (..), groundCondition, CookedCondition, groundCookedCondition)
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Derive (Axiom, axiom)
 
 -- | Instantiate a desire template for its owner (grounds @Owner@).
 wantFor :: String -> Desire -> Want
 wantFor owner (Desire _ (Want cs u)) =
-  Want (map (groundCondition (Map.singleton "Owner" (VStr owner))) cs) u
+  Want (map (groundCondition (Map.singleton (intern "Owner") (VSym (intern owner)))) cs) u
 
 -- | What a character plans with: their whole mind — unnamed wants plus their
 -- own named desires, instantiated.
@@ -68,7 +69,7 @@ cookedDesiresFor st owner ds =
   [ ( map (groundCookedCondition ownerB) (Map.findWithDefault [] (desireName d) (cookedDesires st))
     , wantUtility (desireWant d) )
   | d <- ds ]
-  where ownerB = Map.singleton "Owner" (VStr owner)
+  where ownerB = Map.singleton (intern "Owner") (VSym (intern owner))
 
 -- | 'selfWants''s cooked mirror: cooked conditions paired with utility, fed
 -- to 'Prax.Planner.evaluateCooked'. Same-source-same-order invariant with

@@ -13,10 +13,15 @@
 -- display/matching); 'dbToLabeledSentences' re-emits them (for exact
 -- serialization).
 --
--- Every exported function keeps its String-facing signature and observable
--- behavior from the pre-interning version — callers intern at entry and
--- render (via 'Prax.Sym.symName') at exit, so worlds, tests, 'Prax.Persist'
--- and 'Prax.Inspect' are unaffected by the representation change. 'Sym'
+-- The authoring/display surface (@insert@, @unify@, @exists@,
+-- @dbToSentences@, @dbToLabeledSentences@, @ground@, …) stays String-facing —
+-- interning at entry, rendering at exit — so worlds, tests, 'Prax.Persist'
+-- and 'Prax.Inspect' are unaffected by the representation change. The engine
+-- itself computes on 'Prax.Sym.Sym': 'Val'\/'Bindings' carry symbols
+-- natively, and the Sym-level cores ('insertToks', 'retractNames',
+-- 'unifySyms', 'groundTokens', 'tokensToSentence') are exported for callers
+-- that already hold split, interned tokens (the cooked pipeline — "Prax.Cooked",
+-- "Prax.Query", "Prax.Derive") and must not re-parse or re-render them. 'Sym'
 -- ids are first-encounter ordered and therefore run-dependent
 -- ('Prax.Sym'); anywhere the old code observed @Map String@'s alphabetical
 -- iteration order (unify's unbound-variable branching, 'childKeys'), the
@@ -33,8 +38,8 @@ module Prax.Db
   , dbExcl
   , Val(..)
   , Bindings
-  , SymBindings
   , valToString
+  , valToSym
   , isVariable
   , insert
   , insertToks
@@ -82,30 +87,38 @@ emptyDb :: Db
 emptyDb = Db False IntMap.empty
 
 -- | A value a logic variable can be bound to. 'unify' only ever produces
--- 'VStr' (trie keys are strings); 'VNum' and 'VSet' arise from query
+-- 'VSym' (trie keys are symbols); 'VNum' and 'VSet' arise from query
 -- operators (@calc@, subqueries) in "Prax.Query".
 data Val
-  = VStr !String
+  = VSym !Sym
   | VNum !Integer
-  | VSet ![[String]]
+  | VSet ![[Sym]]
   deriving (Eq, Show)
 
--- | Map of logic-variable name to bound value.
-type Bindings = Map String Val
-
--- | 'Bindings', keyed by interned symbol instead of by name — the
--- representation 'unifySyms' operates on internally, and the core a future
--- task can promote to be 'Bindings' itself once callers carry 'Sym's
--- natively.
-type SymBindings = Map Sym Val
+-- | Map of logic-variable symbol to bound value — the representation the
+-- engine computes over natively (spec
+-- @docs/specs/2026-07-12-v29-interning.md@); Strings appear only at the
+-- authoring/display boundary.
+type Bindings = Map Sym Val
 
 -- | Render a value the way Praxish's @DB.ground@/@String()@ coercion does:
 -- sets collapse to an opaque @\<Set(n)\>@ marker (they are not meant to be
 -- grounded into sentences).
 valToString :: Val -> String
-valToString (VStr s) = s
+valToString (VSym s) = symName s
 valToString (VNum n) = show n
 valToString (VSet xs) = "<Set(" ++ show (length xs) ++ ")>"
+
+-- | The symbol a value substitutes as, when grounding a Sym-token position
+-- ('groundTokens'): a bound 'VSym' is returned as-is (no render/re-intern
+-- round trip); any other 'Val' is rendered via 'valToString' and interned.
+-- Consistent with 'valToString' by construction — 'Prax.Sym.intern' is a
+-- deterministic, injective map on Strings, so @valToSym x == valToSym y@ iff
+-- @valToString x == valToString y@ — which is what lets "Prax.Query" compare
+-- bound values by 'Sym' (an 'Int') instead of by String equality.
+valToSym :: Val -> Sym
+valToSym (VSym s) = s
+valToSym v         = intern (valToString v)
 
 -- | A path segment is a variable iff its first character is uppercase
 -- (Praxish's @DB.isVariable@ convention).
@@ -130,8 +143,9 @@ tokens = go . trim
            []          -> [(name, Nothing)]
            (op : more) -> (name, Just op) : go more
 
--- | 'tokens', interning each segment name — the Sym-level core a future
--- task's hot path builds on directly, skipping the String round-trip.
+-- | 'tokens', interning each segment name — the Sym-level entry every
+-- computation path builds on: parsing an authored sentence into the tokens
+-- the engine actually unifies\/grounds\/inserts against.
 internTokens :: String -> [(Sym, Maybe Char)]
 internTokens = map (first intern) . tokens
 
@@ -153,14 +167,15 @@ pathNames = parseNames
 -- (Praxish's @DB.insert@ instead resets @n@ to empty, discarding that
 -- subtree; see the regression test in @Prax.DbSpec@.)
 insert :: String -> Db -> Db
-insert = insertToks . tokens
+insert = insertToks . internTokens
 
-insertToks :: [(String, Maybe Char)] -> Db -> Db
-insertToks = insertSyms . map (first intern)
-
-insertSyms :: [(Sym, Maybe Char)] -> Db -> Db
-insertSyms [] db = db
-insertSyms ((n, op) : rest) (Db e m) =
+-- | Insert already-interned tokens — the Sym-level core: 'insert' is
+-- @insertToks . internTokens@; the cooked hot path ('Prax.Engine') builds
+-- its tokens once (at cook time or via 'internTokens' at the delta site) and
+-- calls this directly, never re-parsing or re-interning a sentence.
+insertToks :: [(Sym, Maybe Char)] -> Db -> Db
+insertToks [] db = db
+insertToks ((n, op) : rest) (Db e m) =
   let i = symId n
       Db _ existing = IntMap.findWithDefault emptyDb i m
       -- @n@'s node is exclusive iff this insert reaches it via a @!@ operator.
@@ -170,7 +185,7 @@ insertSyms ((n, op) : rest) (Db e m) =
           -- Exclusion: n keeps only the next child, with its subtree intact.
           IntMap.filterWithKey (\k _ -> k == symId nextSym) existing
         _ -> existing
-      child' = insertSyms rest (Db childExcl cleared)
+      child' = insertToks rest (Db childExcl cleared)
   in Db e (IntMap.insert i child' m)
 
 -- | Insert many sentences left to right.
@@ -180,35 +195,26 @@ insertAll ss db = foldl (flip insert) db ss
 -- | Retract: delete the leaf named by the final segment of the path. Missing
 -- intermediate nodes make this a no-op (nothing to remove).
 retract :: String -> Db -> Db
-retract = retractNames . parseNames
+retract = retractNames . map intern . parseNames
 
--- | 'retract' with the sentence already split into names — for callers that
--- already hold the names (e.g. cooked outcomes) and must not re-parse them.
-retractNames :: [String] -> Db -> Db
-retractNames = retractSyms . map intern
-
-retractSyms :: [Sym] -> Db -> Db
-retractSyms [] db = db
-retractSyms [n] (Db e m) = Db e (IntMap.delete (symId n) m)
-retractSyms (n : ns) (Db e m) =
+-- | 'retract' with the sentence already split into interned names — for
+-- callers that already hold them (e.g. cooked outcomes) and must not
+-- re-parse\/re-intern.
+retractNames :: [Sym] -> Db -> Db
+retractNames [] db = db
+retractNames [n] (Db e m) = Db e (IntMap.delete (symId n) m)
+retractNames (n : ns) (Db e m) =
   case IntMap.lookup (symId n) m of
     Nothing    -> Db e m
-    Just child -> Db e (IntMap.insert (symId n) (retractSyms ns child) m)
+    Just child -> Db e (IntMap.insert (symId n) (retractNames ns child) m)
 
 -- | 'unify' with the sentence already split into names — for callers that
 -- evaluate one pattern against many binding sets ('Prax.Query' hoists the
--- parse out of that loop).
---
--- TEMPORARY (v29 Task 2 scaffolding — deleted by v29 Task 3 once 'Bindings'
--- itself carries 'Sym's): interns the pattern and the incoming bindings'
--- keys at entry, delegates to 'unifySyms', then renders the resulting
--- 'SymBindings' back to String keys at exit, so this task's 'Bindings' type
--- is unchanged. 'intern'/'symName' are mutual inverses on interned strings,
--- so both 'Map.mapKeys' calls are injective (no collisions).
+-- parse out of that loop). Interns the pattern names, then delegates
+-- directly to 'unifySyms' — 'Bindings' is already Sym-keyed, so there is no
+-- render/re-intern boundary to cross.
 unifyNames :: [String] -> Db -> Bindings -> [Bindings]
-unifyNames names db0 bindings =
-  map (Map.mapKeys symName)
-      (unifySyms (map intern names) db0 (Map.mapKeys intern bindings))
+unifyNames names = unifySyms (map intern names)
 
 -- | The Sym-level unification core: descends the trie by 'IntMap' lookup,
 -- using the parity bit test ('Prax.Sym.symIsVar') for the hottest
@@ -221,7 +227,7 @@ unifyNames names db0 bindings =
 -- which feeds planner tie-breaks and the goldens. The unbound-variable
 -- branch therefore sorts explicitly by 'symName' before branching (cost:
 -- only at variable-branch points, over small per-node child lists).
-unifySyms :: [Sym] -> Db -> SymBindings -> [SymBindings]
+unifySyms :: [Sym] -> Db -> Bindings -> [Bindings]
 unifySyms syms db0 bindings =
   map snd (foldl step [(db0, bindings)] syms)
   where
@@ -229,11 +235,11 @@ unifySyms syms db0 bindings =
     descend sym (Db _ m, b)
       | symIsVar sym =
           case Map.lookup sym b of
-            Just v  -> case IntMap.lookup (symId (intern (valToString v))) m of
+            Just v  -> case IntMap.lookup (symId (valToSym v)) m of
                          Just sub -> [(sub, b)]
                          Nothing  -> []
             Nothing ->
-              [ (sub, Map.insert sym (VStr (symName (symOfId k))) b)
+              [ (sub, Map.insert sym (VSym (symOfId k)) b)
               | (k, sub) <- sortOn (symName . symOfId . fst) (IntMap.toList m) ]
       | otherwise =
           case IntMap.lookup (symId sym) m of
@@ -253,9 +259,10 @@ unifyAll :: [String] -> Db -> [Bindings]
 unifyAll sentences db = foldl step [Map.empty] sentences
   where step bss s = concatMap (unify s db) bss
 
--- | 'ground' at the token level: substitute bindings into already-split
--- tokens. 'Prax.Derive.closure' grounds each axiom head once per binding —
--- tokenizing the head template once per closure, not once per binding.
+-- | 'ground' at the token level: substitute bindings into already-split,
+-- interned tokens. 'Prax.Derive.closure' grounds each axiom head once per
+-- binding — tokenizing the head template once per closure, not once per
+-- binding.
 --
 -- __Invariant:__ a substituted value replaces its token as a single segment
 -- — it is never re-split on @.@/@!@, unlike 'ground' followed by
@@ -266,21 +273,22 @@ unifyAll sentences db = foldl step [Map.empty] sentences
 -- therefore relies on every bound value being separator-free — true for all
 -- unify-produced bindings, and required of any literal an axiom body binds
 -- via @Eq@.
-groundTokens :: [(String, Maybe Char)] -> Bindings -> [(String, Maybe Char)]
+groundTokens :: [(Sym, Maybe Char)] -> Bindings -> [(Sym, Maybe Char)]
 groundTokens toks b = [ (value n, op) | (n, op) <- toks ]
   where
-    value name
-      | isVariable name = maybe name valToString (Map.lookup name b)
-      | otherwise       = name
+    value n
+      | symIsVar n = maybe n valToSym (Map.lookup n b)
+      | otherwise  = n
 
--- | Re-emit tokens as a sentence (inverse of 'tokens' up to trimming).
-tokensToSentence :: [(String, Maybe Char)] -> String
+-- | Re-emit interned tokens as a sentence (inverse of 'internTokens' up to
+-- trimming).
+tokensToSentence :: [(Sym, Maybe Char)] -> String
 tokensToSentence = concatMap emit
-  where emit (name, mop) = name ++ maybe "" pure mop
+  where emit (name, mop) = symName name ++ maybe "" pure mop
 
 -- | Substitute bound variables back into a sentence, preserving @.@/@!@.
 ground :: String -> Bindings -> String
-ground sentence b = tokensToSentence (groundTokens (tokens sentence) b)
+ground sentence b = tokensToSentence (groundTokens (internTokens sentence) b)
 
 -- | The keys directly beneath the node at a (constant) dotted path, sorted
 -- by name, or @[]@ if the path is absent. Used to enumerate instantiated

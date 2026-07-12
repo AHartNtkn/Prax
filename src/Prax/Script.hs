@@ -68,6 +68,7 @@ import qualified Data.Map.Strict as Map
 
 import           Prax.Db (unify, valToString)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome, setCharacters)
 import           Prax.Core (coreLib)
@@ -230,7 +231,7 @@ scriptPlayer scr = case [ castName c | c <- scriptCast scr, castPlayable c ] of
 currentSceneOf :: PraxState -> Maybe String
 currentSceneOf st =
   case [ v | b <- unify "currentScene.S" (db st) Map.empty
-           , Just v <- [valToString <$> Map.lookup "S" b] ] of
+           , Just v <- [valToString <$> Map.lookup (intern "S") b] ] of
     (s : _) -> Just s
     []      -> Nothing
 

@@ -26,6 +26,7 @@ import           Data.Ord (Down(..))
 
 import           Prax.Db (Val (..), exists)
 import           Prax.Query (countSatisfying, groundCondition, query, CookedCondition, queryCooked)
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction)
 import           Prax.Minds (believedDesires, cookedSelfWants, cookedDesiresFor)
@@ -69,8 +70,8 @@ inScope st actor m =
   not (null (query (readView st) grounded Map.empty))
   where
     grounded = map (groundCondition binds) (predictionScope st)
-    binds = Map.fromList [ ("Actor",   VStr (charName actor))
-                         , ("Witness", VStr (charName m)) ]
+    binds = Map.fromList [ (intern "Actor",   VSym (intern (charName actor)))
+                         , (intern "Witness", VSym (intern (charName m))) ]
 
 -- | The predictor's guess at the mover's next move: the mover's best candidate
 -- under the predictor's believed model of them — and only if it strictly

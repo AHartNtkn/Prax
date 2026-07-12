@@ -23,6 +23,7 @@ import qualified Data.Set as Set
 import           Data.Word (Word64)
 
 import           Prax.Db (unify, valToString)
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction)
 import           Prax.Loop (advance)
@@ -39,14 +40,14 @@ pick n s = let s' = lcg s in (fromIntegral (s' `mod` fromIntegral n), s')
 endingReached :: PraxState -> Maybe String
 endingReached st =
   listToMaybe [ e | b <- unify "ending.E" (db st) Map.empty
-                  , Just e <- [valToString <$> Map.lookup "E" b] ]
+                  , Just e <- [valToString <$> Map.lookup (intern "E") b] ]
 
 -- The active scene, if any (a @currentScene!\<id\>@ fact from a "Prax.Script"
 -- world). Non-scene worlds have none, so scene coverage is simply empty there.
 sceneReached :: PraxState -> Maybe String
 sceneReached st =
   listToMaybe [ s | b <- unify "currentScene.S" (db st) Map.empty
-                  , Just s <- [valToString <$> Map.lookup "S" b] ]
+                  , Just s <- [valToString <$> Map.lookup (intern "S") b] ]
 
 -- | The result of one random play.
 data RunResult = RunResult

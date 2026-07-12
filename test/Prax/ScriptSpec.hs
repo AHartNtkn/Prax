@@ -8,6 +8,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Db (exists, unify, valToString)
 import           Prax.Query (Condition (..), CmpOp (..))
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction)
 import           Prax.Core (adjustScore)
@@ -20,7 +21,7 @@ import           Prax.Worlds.Audience (audienceWorld)
 endingOf :: PraxState -> Maybe String
 endingOf st =
   listToMaybe [ e | b <- unify "ending.E" (db st) Map.empty
-                  , Just e <- [valToString <$> Map.lookup "E" b] ]
+                  , Just e <- [valToString <$> Map.lookup (intern "E") b] ]
 
 -- One of a character's currently-available actions whose label mentions @needle@.
 actionMatching :: String -> String -> PraxState -> GroundedAction

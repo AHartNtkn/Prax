@@ -21,7 +21,7 @@
 -- violation as a dropped prediction.
 module Prax.Relevance
   ( mayUnify
-  , mayUnifyNames
+  , mayUnifySyms
   , improvableDesires
   , evictionShadows
   , evictionShadowNames
@@ -30,9 +30,10 @@ module Prax.Relevance
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (isVariable, pathNames, tokens, tokensToSentence)
+import           Prax.Db (internTokens, pathNames, tokensToSentence)
 import           Prax.Derive (Axiom (..))
 import           Prax.Query (Condition (..))
+import           Prax.Sym (Sym, intern, symIsVar)
 import           Prax.Types
 
 -- | Could a grounded instance of one path pattern be an instance (or a
@@ -50,16 +51,19 @@ import           Prax.Types
 -- want always shares an aligned literal, so the anchor removes only
 -- coincidence.
 mayUnify :: String -> String -> Bool
-mayUnify a b = mayUnifyNames (pathNames a) (pathNames b)
+mayUnify a b = mayUnifySyms (map intern (pathNames a)) (map intern (pathNames b))
 
--- | 'mayUnify' on pre-split paths — the planner-hot form ('relevantDelta'
--- classifies every primitive delta against every footprint pattern).
-mayUnifyNames :: [String] -> [String] -> Bool
-mayUnifyNames as bs = anchored && and (zipWith seg as bs)
+-- | 'mayUnify' on pre-split, pre-interned paths — the planner-hot form
+-- ('relevantDelta' classifies every primitive delta against every footprint
+-- pattern). Variable-ness is the parity bit ('Prax.Sym.symIsVar'); a shared
+-- literal segment is Int equality — the hottest classification in the
+-- engine, now Int equality instead of String equality.
+mayUnifySyms :: [Sym] -> [Sym] -> Bool
+mayUnifySyms as bs = anchored && and (zipWith seg as bs)
   where
-    seg x y = isVariable x || isVariable y || x == y
+    seg x y = symIsVar x || symIsVar y || x == y
     anchored = or (zipWith literalMatch as bs)
-    literalMatch x y = not (isVariable x) && not (isVariable y) && x == y
+    literalMatch x y = not (symIsVar x) && not (symIsVar y) && x == y
 
 -- The insert- and delete-shaped atoms an outcome can produce, resolving
 -- 'Call's through the worlds' declared functions (conservatively: all cases).
@@ -87,16 +91,18 @@ outcomeAtoms fns visited o = case o of
       pure (concatMap fst pairs, concatMap snd pairs)
 
 -- | The eviction shadows of an exclusion insert, computed directly on
--- already-split tokens — the single implementation (both 'evictionShadows'
--- below and 'Prax.Engine.performCooked'\'s cooked hot path go through this,
--- so there is one name-shape, one implementation). One shadow per @!@
--- operator: the names up to and including that point, followed by a fresh
--- @"Evicted"@ segment. Each exclusion clears the displaced sibling's entire
--- subtree — arbitrary depth and shape — and 'mayUnifyNames' compares only up
--- to the shorter path, so the truncated shadow covers every want under it.
-evictionShadowNames :: [(String, Maybe Char)] -> [[String]]
+-- already-split, interned tokens — the single implementation (both
+-- 'evictionShadows' below and 'Prax.Engine.performCooked'\'s cooked hot path
+-- go through this, so there is one name-shape, one implementation). One
+-- shadow per @!@ operator: the names up to and including that point,
+-- followed by a fresh @"Evicted"@ segment (interns as a variable — uppercase
+-- initial — so 'mayUnifySyms' treats it as the wildcard it denotes). Each
+-- exclusion clears the displaced sibling's entire subtree — arbitrary depth
+-- and shape — and 'mayUnifySyms' compares only up to the shorter path, so
+-- the truncated shadow covers every want under it.
+evictionShadowNames :: [(Sym, Maybe Char)] -> [[Sym]]
 evictionShadowNames toks =
-  [ map fst (take i toks) ++ ["Evicted"]
+  [ map fst (take i toks) ++ [intern "Evicted"]
   | (i, (_, op)) <- zip [1 ..] toks, op == Just '!' ]
 
 -- | The eviction shadows of an exclusion insert, as sentences — 'mayUnify'
@@ -107,7 +113,7 @@ evictionShadowNames toks =
 -- last needs one to keep the names from gluing together).
 evictionShadows :: String -> [String]
 evictionShadows s =
-  [ tokensToSentence (dotted ns) | ns <- evictionShadowNames (tokens s) ]
+  [ tokensToSentence (dotted ns) | ns <- evictionShadowNames (internTokens s) ]
   where
     dotted ns = zip ns (replicate (length ns - 1) (Just '.') ++ [Nothing])
 

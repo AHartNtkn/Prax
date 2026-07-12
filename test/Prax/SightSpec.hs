@@ -6,6 +6,7 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Db (Val (..), exists)
 import           Prax.Query (Condition (..), groundCondition, query)
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome, possibleActions,
                                performAction, setCharacters)
@@ -58,8 +59,8 @@ tests = testGroup "Prax.Sight"
 
   , testCase "sightedWithin is a window over the stamp" $ do
       -- Direct query of the scope fragment, grounded to a fixed Actor/Witness pair.
-      let grounded h = map (groundCondition (Map.fromList [ ("Actor", VStr "ute")
-                                                            , ("Witness", VStr "vic") ]))
+      let grounded h = map (groundCondition (Map.fromList [ (intern "Actor", VSym (intern "ute"))
+                                                            , (intern "Witness", VSym (intern "vic")) ]))
                             (sightedWithin h)
           holds h st = not (null (query (readView st) (grounded h) Map.empty))
 

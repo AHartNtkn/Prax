@@ -38,6 +38,7 @@ import qualified Data.Map.Strict as Map
 import           Prax.Db (Bindings, Db, emptyDb, exists)
 import           Prax.Query (Condition, CookedCondition)
 import           Prax.Derive (Axiom, CookedRule)
+import           Prax.Sym (Sym)
 
 -- | A social practice: a role-parameterized bundle of affordances.
 data Practice = Practice
@@ -95,19 +96,20 @@ data FnCase = FnCase
   }
   deriving (Eq, Show)
 
--- | The cooked mirror of 'Outcome' (see @docs/specs/2026-07-12-v28-cooked-world.md@
--- and 'Prax.Cooked.cookOutcome', which builds these): 'Insert'/'Delete' carry the
--- sentence already split into @(name, punctuationAfterName)@ tokens
--- ('Prax.Db.tokens'); 'Call'\/'ForEach' recurse. Declared here rather than in
--- "Prax.Cooked" because 'PraxState' below embeds 'CookedPractice' (built from
--- these), and "Prax.Cooked" depends on this module for 'Outcome'\/'Practice' —
--- these are pure mirror shapes with no dependency on "Prax.Cooked"; the
--- conversion functions ('Prax.Cooked.cookOutcome', 'Prax.Cooked.cookPractice')
--- live there.
+-- | The cooked mirror of 'Outcome' (see @docs/specs/2026-07-12-v28-cooked-world.md@,
+-- @docs/specs/2026-07-12-v29-interning.md@ and 'Prax.Cooked.cookOutcome', which
+-- builds these): 'Insert'/'Delete' carry the sentence already split into
+-- @(symbol, punctuationAfterName)@ tokens ('Prax.Db.internTokens'); 'CCall'\'s
+-- @fn@ stays a String (a @cpFns@ lookup key, never unified) while its @args@
+-- are interned; 'CForEach' recurses. Declared here rather than in "Prax.Cooked"
+-- because 'PraxState' below embeds 'CookedPractice' (built from these), and
+-- "Prax.Cooked" depends on this module for 'Outcome'\/'Practice' — these are
+-- pure mirror shapes with no dependency on "Prax.Cooked"; the conversion
+-- functions ('Prax.Cooked.cookOutcome', 'Prax.Cooked.cookPractice') live there.
 data CookedOutcome
-  = CInsert [(String, Maybe Char)]
-  | CDelete [(String, Maybe Char)]
-  | CCall String [String]
+  = CInsert [(Sym, Maybe Char)]
+  | CDelete [(Sym, Maybe Char)]
+  | CCall String [Sym]
   | CForEach [CookedCondition] [CookedOutcome]
   deriving (Eq, Show)
 
@@ -125,9 +127,10 @@ data CookedAction = CookedAction
 -- and 'Prax.Engine.performAction' need, precompiled once by
 -- 'Prax.Cooked.cookPractice' and cached in 'PraxState''s 'cookedDefs'.
 data CookedPractice = CookedPractice
-  { cpInstanceNames :: [String]
-    -- ^ 'Prax.Db.pathNames' of @practice.\<pid\>.\<Role1\>...\<RoleN\>@,
-    -- precomputed once per world instead of re-split every 'possibleActions' call.
+  { cpInstanceNames :: [Sym]
+    -- ^ Interned 'Prax.Db.pathNames' of @practice.\<pid\>.\<Role1\>...\<RoleN\>@,
+    -- precomputed once per world instead of re-split (and re-interned) every
+    -- 'possibleActions' call.
   , cpActions :: [CookedAction]
   , cpInits   :: [CookedOutcome]
   , cpFns     :: Map String ([String], [([CookedCondition], [CookedOutcome])])
@@ -217,13 +220,14 @@ data PraxState = PraxState
     -- ('Prax.Relevance.improvableDesires') — rebuilt with the vocabulary
     -- ('Prax.Engine.definePractices' / 'setAxioms' / 'setDesires'); the
     -- planner skips predictions over models with no improvable desire.
-  , footprint :: [[String]]
-    -- ^ Pre-tokenized ('pathNames') patterns the axioms read or write; a
-    -- ground delta unifying none of them commutes with closure (fast path).
-  , negFootprint :: [[String]]
-    -- ^ Pre-tokenized negated body interiors: a '!'-free insert unifying
-    -- none of these (in a 'contMonotone' world) only ADDS derived facts and
-    -- takes the continuation tier.
+  , footprint :: [[Sym]]
+    -- ^ Pre-tokenized ('pathNames'), pre-interned patterns the axioms read
+    -- or write; a ground delta unifying none of them commutes with closure
+    -- (fast path).
+  , negFootprint :: [[Sym]]
+    -- ^ Pre-tokenized, pre-interned negated body interiors: a '!'-free
+    -- insert unifying none of these (in a 'contMonotone' world) only ADDS
+    -- derived facts and takes the continuation tier.
   , contMonotone :: Bool
     -- ^ 'Prax.Derive.monotoneAxioms' of this world's axioms.
   , readView     :: Db

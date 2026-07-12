@@ -58,9 +58,9 @@ tests = testGroup "Prax.Db"
         in do
           -- Both rows fix X=foo (the only head reachable via fizz.buzz.X); Y
           -- ranges over foo's children that have a `woof` leaf: bar and meow.
-          map (Map.lookup "X") results @?= [Just (VStr "foo"), Just (VStr "foo")]
-          sortVals (concatMap (maybe [] pure . Map.lookup "Y") results)
-            @?= [VStr "bar", VStr "meow"]
+          map (Map.lookup (intern "X")) results @?= [Just (VSym (intern "foo")), Just (VSym (intern "foo"))]
+          sortVals (concatMap (maybe [] pure . Map.lookup (intern "Y")) results)
+            @?= [VSym (intern "bar"), VSym (intern "meow")]
 
     , testCase "bound variable descends deterministically" $
         let db = build ["char.tim", "char.kevin"]
@@ -73,12 +73,13 @@ tests = testGroup "Prax.Db"
   , testGroup "ground"
     [ testCase "substitutes bound vars, preserves ! and ." $
         ground "practice.tendBar.B.customer.C!order!Bev"
-          (Map.fromList [("B", VStr "ada"), ("C", VStr "beth"), ("Bev", VStr "cider")])
+          (Map.fromList [ (intern "B", VSym (intern "ada")), (intern "C", VSym (intern "beth"))
+                        , (intern "Bev", VSym (intern "cider")) ])
           @?= "practice.tendBar.ada.customer.beth!order!cider"
     , testCase "unbound var grounds to its own name" $
         ground "foo.Bar" Map.empty @?= "foo.Bar"
     , testCase "set-valued binding renders as opaque marker" $
-        ground "all.Dancers" (Map.fromList [("Dancers", VSet [["a"], ["b"]])])
+        ground "all.Dancers" (Map.fromList [(intern "Dancers", VSet [[intern "a"], [intern "b"]])])
           @?= "all.<Set(2)>"
     ]
 
@@ -91,10 +92,11 @@ tests = testGroup "Prax.Db"
 
   , testGroup "groundTokens"
     [ testCase "groundTokens substitutes bindings segment-wise, preserving operators" $ do
-        let toks = tokens "at.Who!Where"
-            b    = Map.fromList [("Who", VStr "bob"), ("Where", VStr "square")]
+        let toks = internTokens "at.Who!Where"
+            b    = Map.fromList [ (intern "Who", VSym (intern "bob"))
+                                 , (intern "Where", VSym (intern "square")) ]
         tokensToSentence (groundTokens toks b) @?= ground "at.Who!Where" b
-        tokensToSentence (groundTokens (tokens "plain.path") Map.empty)
+        tokensToSentence (groundTokens (internTokens "plain.path") Map.empty)
           @?= "plain.path"
     ]
 
@@ -102,25 +104,23 @@ tests = testGroup "Prax.Db"
     [ testCase "internTokens interns tokens' segment names, preserving operators" $
         map (\(s, op) -> (symName s, op)) (internTokens "at.Who!Where")
           @?= tokens "at.Who!Where"
-    , testCase "unifySyms agrees with unifyNames, rendered back to String keys" $ do
+    , testCase "unifySyms agrees with unifyNames (Bindings is Sym-keyed natively)" $ do
         let db = insertAll ["at.bob!square", "at.eve!mill"] emptyDb
             names = pathNames "at.Who!Where"
-            fromSyms = map (Map.mapKeys symName)
-                           (unifySyms (map intern names) db Map.empty)
-        fromSyms @?= unifyNames names db Map.empty
+        unifySyms (map intern names) db Map.empty @?= unifyNames names db Map.empty
     , testCase "unifySyms branches unbound variables in name order, not id (encounter) order" $ do
         -- Insert children out of alphabetical order, so id order != name order.
         let db = insertAll ["at.zeta", "at.alpha", "at.mu"] emptyDb
             results = unifySyms (map intern (pathNames "at.Who")) db Map.empty
-            names = [ who
-                    | bs <- results, Just (VStr who) <- [Map.lookup (intern "Who") bs] ]
+            names = [ symName who
+                    | bs <- results, Just (VSym who) <- [Map.lookup (intern "Who") bs] ]
         names @?= ["alpha", "mu", "zeta"]
     ]
   ]
 
 -- Deterministic ordering for value lists (Val has no Ord instance).
 sortVals :: [Val] -> [Val]
-sortVals = map VStr . sortStr . map valToString
+sortVals = map (VSym . intern) . sortStr . map valToString
   where sortStr = foldr insertStr []
         insertStr x [] = [x]
         insertStr x (y:ys) | x <= y    = x : y : ys
