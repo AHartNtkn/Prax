@@ -208,6 +208,11 @@ utility. See the design writeups:
   per-state closed views, a conservative relevance pre-filter (`Prax.Relevance`) that skips
   predictions no authored action could motivate, tokenize-once query/closure internals, and
   shared test trajectories: the full suite dropped ~726s → ~114s with zero behavior change.
+- **v27 — incremental view maintenance**: the cached world-view keeps itself, provably — a
+  per-turn invariant suite pins `readView` to a from-scratch closure while three tiers build
+  it (lockstep application for deltas the axioms can't see, in-place growth of the closed
+  view for inserts that defeat nothing, full re-derivation for the rest). A profiled village
+  round fell 7.07s → 1.32s across v26+v27 with bit-for-bit identical decisions throughout.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).

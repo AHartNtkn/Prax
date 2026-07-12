@@ -169,6 +169,22 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   (292 tests) → **~114s (301 tests)**, the `Prax.VillageSpec` group ~580–660s → **~116s**, one
   profiled free-play round 7.07s → 2.83s. The residual planner cost is one axiom-closure per
   *distinct* state the search visits (71.8% of the post-round profile) — v27's target (below).
+- **v27** — **incremental view maintenance** (#17; spec
+  `docs/specs/2026-07-11-v27-incremental-view.md`). The exactness contract carried over, with a
+  stronger net the user designated the round's core: `Prax.ViewInvariantSpec` asserts, after
+  EVERY turn of real drives, that the cached `readView` equals a from-scratch closure
+  (label-faithfully), with a doctored-view test proving the checker can fail. Three tiers now
+  build the view: deltas the axioms cannot see (`relevantDelta` vs the pre-tokenized
+  `axiomFootprint`, eviction shadows included) apply to base and view in lockstep with no
+  derivation at all; `!`-free inserts that defeat nothing (`monotoneInsert`: no negated-body
+  unification, `monotoneAxioms`-safe world) grow the ALREADY-CLOSED view via `closureFrom` —
+  `closure`'s own semi-naive loop re-entered at the old fixpoint; everything else takes the
+  full reclose. Review closed a real classifier hole before it could ever fire: `Eq`/`Neq`
+  over an aggregate-bound variable is anti-monotone (exactly-k un-fires as the count grows) —
+  proven by probe, rejected by `aggVars` tracking. Measured: from-scratch closures 11,840 →
+  ~330 per profiled round; the round 2.83s → **1.32s** (7.07s at v26's start); full suite
+  ~49–60s. DRed-style truth maintenance recorded as **not warranted**: from-scratch closure is
+  ~5% of the round, and the continuation IS the delta derivation DRed would compute.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -258,16 +274,16 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   not the full LRT decision procedure.
 
 ## Future ideas to investigate
-- **Incremental view maintenance for the derivation layer (#17) — designated v27.** Closure is
-  semi-naive and (post-v26) token-level and computed once per state, but the planner's lookahead
-  still re-closes each *distinct* future state from scratch — measured at 71.8% of the post-v26
-  planner profile (11,840 closures per free-play round, one per state the search visits). Since a
-  child state differs from its parent by one action's outcomes, the closed view could be
-  *maintained incrementally* — derive/retract only the delta's consequences. The honest cost: our
-  axioms are **non-monotone** (`standingUnless`'s defeater, `Absent` bodies), so an insert can
-  retract derived facts and a delete can create them; exact incrementality therefore needs truth
-  maintenance (support tracking with deletion propagation, DRed-style), not just a delta join.
-  v26's golden decision-sequence tests are the safety net that makes attempting it sane.
+- **Incremental view maintenance for the derivation layer (#17)** *(done — v27: the
+  irrelevant-delta fast path + the monotone-insert continuation; see the legend row)*. What
+  remains deliberately unbuilt: DRed-style truth maintenance for the non-monotone residue —
+  measured not warranted (from-scratch closure is ~5% of a profiled round after v27; the
+  continuation already computes exactly the delta derivation support-tracking would). Revisit
+  only if a future world's axiom mix (heavy defeaters, anti-monotone counts) pushes the reclose
+  share back up — the ViewInvariant net makes any such attempt safe to try. Smaller residual
+  notes, unmeasured beyond the v27 profile: tokenization inside the continuation's delta-joins
+  (~40% of the now-small round) and the per-primitive classification cost
+  (`mayUnifyNames` ~8%) — diminishing returns at current scale.
 - **Planner runtime under cast growth (v25) — substantially addressed by v26.** The v25 regression
   (full suite ~38.66s → ~726s when gale joined; `Prax.VillageSpec` alone ~580–660s; no isolated
   pre-growth group timing was ever taken) was profiled in v26 and turned out to be dominated by
