@@ -183,7 +183,7 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   over an aggregate-bound variable is anti-monotone (exactly-k un-fires as the count grows) —
   proven by probe, rejected by `aggVars` tracking. Measured: from-scratch closures 11,840 →
   ~330 per profiled round; the round 2.83s → **1.32s** (7.07s at v26's start); full suite
-  ~49–60s. DRed-style truth maintenance recorded as **not warranted**: from-scratch closure is
+  ~50–60s (machine-variance range across the round's recorded runs). DRed-style truth maintenance recorded as **not warranted**: from-scratch closure is
   ~5% of the round, and the continuation IS the delta derivation DRed would compute.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
