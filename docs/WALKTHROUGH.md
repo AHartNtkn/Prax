@@ -1093,19 +1093,37 @@ run to completion in the same six-press window, unstaged and unprompted by eithe
   - carol is notorious as a thief
 ```
 
-Nobody in this scene did anything wrong except eve — and, unwittingly, gale, whose only fault was
-believing what she was told and doing exactly what an honest villager does with a belief: sharing
-it. carol never went near the stall. And yet the regard, the shunning, and the notoriety are all
-real, derived facts, indistinguishable — to `Prax.Repute`, and to every villager but eve — from the
-ones bob earned honestly in §24. That's the design's central claim from the spec, borne out live:
+**Update — v30.** This entire cascade — eve reaching "you" at press 3, then gale at press 4, gale's
+honest corroboration tipping carol into notoriety two presses early — was true through v25 alone. It
+no longer reproduces from the identical input once `Prax.Blackmail` lands (v30, §28): threshold fear
+makes eve prudent the instant she holds two regarders, which happens on her very *first* whisper
+(dana and gale are both co-present at the mill when she frames carol, so one whisper deposits two
+regards at once, the whispering ACT itself now being witnessable). Any whisper after that risks a
+third regarder and notoriety outright, so she never risks it. Driving the identical run today,
+checked directly: eve whispers exactly once, ever; only dana ever comes to regard carol a thief;
+carol is shunned by dana alone; nobody else — not "you", not gale, not bob — ever hears the claim
+from eve, and `notorious.carol.thief` never derives in free play. The two scene blocks above are
+kept as a historical (pre-v30) capture, because they show the mechanism this section is really
+teaching — a fabrication is structurally indistinguishable from truth once believed, and an honest
+believer can spread it just as effectively as the liar — which is still exactly true; §28 reproduces
+it on demand, forced rather than stumbled into, alongside the threshold-fear story that changed
+*this particular free-play outcome*, not the mechanism underneath it.
+
+Nobody in the scene captured above did anything wrong except eve — and, unwittingly, gale, whose only
+fault was believing what she was told and doing exactly what an honest villager does with a belief:
+sharing it. carol never went near the stall. And yet the regard, the shunning, and the notoriety were
+all real, derived facts, indistinguishable — to `Prax.Repute`, and to every villager but eve — from
+the ones bob earned honestly in §24. That's the design's central claim from the spec, borne out live:
 *fabrication planted ordinary `.heard.<liar>` hearsay ... the lie propagates as truth because
 hearsay and fabrication are indistinguishable to everyone but the liar* — and, as of v25, that
 includes propagating through someone who would never lie herself.
 
 **The injustice is honest: carol has no recourse.** eve's frame-up doesn't depend on bob at all —
 it's driven here from a fresh, *unforced* `villageWorld` (exactly `VillageSpec`'s own setup:
-`driveIdle "you" 40 villageWorld`), so the same cascade shown above runs on its own, without
-anyone needing to force anything. Checking carol's own `possibleActions` directly at that point
+`driveIdle "you" 40 villageWorld`); through v25, the same cascade shown above ran on its own from
+there, without anyone needing to force anything (as of v30, dana's own regard is as far as it gets
+unforced — the update above). What doesn't depend on the cascade completing at all: checking carol's
+own `possibleActions` directly at that point
 (compiled directly against the library from the scratchpad, live, same technique as §23–24):
 
 ```
@@ -1219,7 +1237,8 @@ seventh round's margin in the test's own budget), which pins the turn this compl
 (baking) is first true after **turn 37** of that count, `holding.bob.loaf` true, `stall.loaf`
 untouched (he never went near it), and no theft belief about bob anywhere — this is a loaf he
 *baked*, not one anyone had to witness him take. (The very same six presses are also where carol's
-frame-up, running in parallel, tips into notoriety — §25, §27.)
+frame-up, running in parallel, plays out — through v25 alone it tipped into notoriety; as of v30 it
+no longer does, §25's own update explains why, and §28 tells the rest of that story.)
 
 **Watching him work teaches the village his purpose.** Sweeping is public, so anyone who saw it
 comes to believe `swept.bob` — and `villageAxioms` adds one inference rule for exactly this:
@@ -1334,6 +1353,18 @@ no trace at all); the spec was corrected in place once this run was observed
 (`docs/specs/2026-07-11-v25-persona-design.md` §4, "The laundering"), and it's also why carol's
 notoriety tips two presses earlier than any prior round of this world managed — §25 has that count.
 
+**Update — v30.** The transcript above — eve reaching gale directly, in free play, at press 4 — no
+longer reproduces from the identical input. `Prax.Blackmail`'s threshold-fear resolution (§28) makes
+eve prudent after her very first whisper (dana and gale both regard her the instant she frames
+carol, since both are co-present for the act): any further whisper risks the third regarder and
+notoriety outright, so in free play she never sends one, to gale or anyone else. The sharper,
+current free-play fact is "exactly one whisper, ever" (`Prax.VillageSpec`'s own assertion on the
+identical 49-turn trace), not the three-whisper cascade shown above. The laundering *mechanism*
+itself — an honest believer spreading a lie she was honestly deceived by — is still real; it just
+isn't something eve's own planner chooses to demonstrate anymore. §28 forces exactly the whisper her
+prudence now declines and shows gale relay it precisely as she does above, live, so the finding stays
+pinned rather than quietly losing its only test.
+
 **(c) The prediction contrast.** Planting the identical motive-belief about both women in dana's
 head — `dana.believes.desires.eve.spites-carol.heard.you` and the same for gale — and asking
 `predictMove` for each, with gale's conscience already presumed since t=0 (a):
@@ -1350,6 +1381,218 @@ what you actually do — the same believed-mind machinery v23 built for plots no
 → code: `Prax.Persona` (`Trait`/`personaVocabulary`/`bearing`/`transparent`/`cast`), `Prax.Deceit`
 (`lie`'s new mark outcome), `Prax.Worlds.Village` (`honest`, `spitesCarol`, gale); asserted in
 `Prax.PersonaSpec`, `Prax.DeceitSpec`, `Prax.VillageSpec`.
+
+### 28. Leverage: blackmail & debt, priced (`prax village`) (v30)
+
+The backlog's oldest named commitment (parked since v22 for its own design round) lands as two thin
+modules over shipped machinery: `Prax.Debt` (an obligation with a beneficiary) and `Prax.Blackmail`
+(`shakedown`, the threaten/comply/defy/expose protocol). Both were probe-verified live before the
+spec was written — every step in the mechanism is individually motivated, no scripted "villain AI."
+
+**A debt is an obligation, priced.** `owe creditor debtor content` inserts
+`debt.<creditor>.<debtor>.<content>` *and* `oblige debtor content` in one call — a debt *is* an
+obligation, not merely coupled to one. `settle` reverses both. Default becomes reputational the same
+way theft did in v21: a `demand` action wraps `Deontic.breach` in `Prax.Witness.observable`, so a
+*witnessed* default deposits a belief, and `standingUnless` derives `regards.<W>.<debtor>.deadbeat`
+from that belief alone — an unwitnessed default derives no regard for anyone who wasn't there.
+Except one: the debtor himself. He's unavoidably co-present at his own default
+(`Witness.observable`'s `Neq Witness Actor` only excludes the *creditor*, never the debtor), so he
+always regards himself a deadbeat, witnessed by anyone else or not — a self-regard/third-party-spread
+distinction review found underspecified in the first draft, and the shipped test now asserts it
+directly. Repayment defeats the standing by inserting `atoned.<who>` — the identical positive-fact
+defeater idiom v21's thief already uses — while the belief that he once defaulted persists untouched:
+reputation flows from belief, never the raw fact, unchanged since v21.
+
+**A threat is a motive-belief deposit.** `shakedown` compiles four actions around one evidence
+pattern and one price. `threaten` inserts `threatened.<extorter>.<victim>` and plants the identical
+kind of belief confiding and lying already ride (v20/v22): the victim comes to believe the
+extorter's own punitive desire, sourced (`.heard.<extorter>`) — no mind-reading, just the same
+channel every other belief in this engine uses. The victim's own round-walk then does the pricing
+work: it predicts the extorter might *act* on that professed desire, same as it would predict any
+other believed motive.
+
+**Why the threat is credible: self-motivation, not omniscience.** The probe's central finding —
+stated honestly because it wasn't obvious going in — is that the extortionist doesn't need to
+predict compliance to make threatening rational. The punitive desire the threat professes
+(`punishes-<id>`, `+w` per believer once threatened or defied) is genuinely held, and exposing pays
+off from it one lookahead ply away — so `threaten` scores on its own terms, myopic and
+unmotivated-move-blind exactly like every other `predictMove`. A pure bluffer (a deposit without the
+desire) is expressible in the vocabulary but wouldn't be self-motivating to send — banked with the
+script layer, not attempted this round.
+
+**A standing threat is exposable too.** The probe found the classic hole first: gating exposure on
+defiance alone makes stalling free forever — a victim who simply never acts is never punished.
+`expose` fires on *either* `threatened` or `defied`, so waiting ties with defiance rather than
+beating it.
+
+**The compliance arithmetic, pinned both sides.** `BlackmailSpec` ports the session probe's own
+fixture through `shakedown`, asserting the exact numbers, not just the direction: with two
+onlookers, buying silence scores −63.84 against waiting's −71.84 and defying's −75.80 — comply wins.
+Strip it to one onlooker and defy and wait score identically, −54.2 exactly (the stall-tie, asserted
+as an equality, not an inequality) — buy is still −63.84, now the *worst* option. Audience size alone
+flips the decision; the spec states the arithmetic so world authors price threats deliberately, not
+by feel.
+
+**A real bug, found by the planner's own lookahead — and a backlog item banked from it.** Porting
+the probe surfaced a genuine divergence: an early draft of `comply` had no guard against being
+bought twice, and the recursive lookahead discovered it could — a renewed threat after paying once
+re-extracts, and the *prospect* of repeat extraction inflated the very first buy decision's own
+score to −51.24, against the guarded, canonical −63.84. The fix mirrors the probe exactly (`comply`
+now requires no debt already standing); the finding — the planner discovering repeat extortion on
+its own before anyone designed for it — banks **escalating / serial extortion** as a real future
+mechanic in `docs/LEDGER.md`, not a hypothetical one.
+
+**The village demo blocked twice before it shipped.** Both drafted arcs failed on measured traces:
+per-head fear can't be low enough to let eve keep whispering before a guaranteed witness *and* high
+enough to compel compliance — one weight, two irreconcilable jobs. And a theft-evidence shakedown
+catches the framed exactly as readily as the guilty (v22's whole point, still true here), which
+would have displaced dana's already-shipped bread arc rather than added to it. dana/bob is retired
+as an arc outright, recorded as a faithful result rather than a gap: in this village, bob's crimes
+are either fully witnessed (v21's arc already tells that story) or perfectly secret (v22's
+concealment already tells that story) — there's no room left for a *partially*-witnessed crime a
+blackmailer could threaten to expose.
+
+**The resolution: threshold fear, bob's own idiom generalized.** Nonlinear fear serves both masters
+because its marginal price is zero below the brink and catastrophic at it. eve gains
+`Want [Match "notorious.eve.slanderer"] (−15)` — the identical shape and magnitude as bob's own
+`notorious.bob.thief`, wired by `standingUnless … "slanderer"` and `notoriety "slanderer" 3`. The
+whispering *act* itself becomes observable (`witnessed together "whispered.Actor.Hearer"` — the
+content stays exactly as secret as before; only the fact that a whisper happened is witnessable).
+That single change means a witnessed whisper lands *two* regards in one action — the addressee and
+any co-present bystander both come to believe it happened — putting eve one witness from the brink
+the instant anyone catches her in the act.
+
+**Carol's shakedown, captured live.** `VillageSpec`'s own forced trajectory: gale steps out of the
+mill first (otherwise she'd be a third simultaneous witness, tripping notoriety at the instant of
+catching eve rather than leaving her "one exposure from the brink"); carol arrives and witnesses
+directly; both return to the square, where real bystanders (bob, "you") make the exposure threat
+credible rather than empty (`scoreActions`-measured before the arc was built: at the mill, with only
+gale and dana already in on it, buying silence merely *ties* waiting — the threat has no teeth
+without someone new to expose to).
+Verbatim, from a clean `villageWorld` (a co-presence tick, `VillageSpec`'s own "out of sight, out of
+mind" idiom, fires silently between moves):
+
+```
+  gale: Go to square
+  carol: Go to mill
+  eve: whisper to dana that bob stole the loaf
+  carol: Go to square
+  eve: Go to square
+```
+
+Note who gets framed: **bob**, not carol — a different character than every earlier round of this
+world. That's not a scripting mistake; it's the honest consequence of `shakedown`'s evidence pattern
+being *content-blind* (`"whispered.V.H"` — a whisper happened, full stop, no matter what it claimed).
+Carol's leverage over eve never depended on knowing or caring what was said, only that it was said in
+front of her — the same "content stays secret" property the `observable` wrapper states directly,
+visible here in the transcript itself: bob, two lines below having just taken up honest work at the
+stall, gets shunned by dana in the very same round over a slander he had nothing to do with, purely
+because this run's victim-binding happened to land on him.
+
+Free play resumes from there, "you" idling, driven the identical way every other section's headless
+traces are:
+
+```
+  bob: take up honest work at the stall
+  carol: threaten eve with what you know
+  dana: shun bob
+  eve: buy carol's silence
+  gale: Go to mill
+```
+
+Checked directly against the driven state after carol's threat (turn 3):
+
+```
+threatened.whisper.carol.eve: True
+eve's motive-belief deposit (eve.believes.desires.carol.punishes-whisper.heard.carol): True
+notorious.eve.slanderer: False -- still under the brink, only carol and dana regard her
+```
+
+And after eve complies (turn 5):
+
+```
+debt.carol.eve.favor: True
+obliged.eve.favor: True
+threatened.whisper.carol.eve: False -- the threat is bought off
+defied.whisper.eve.carol: False -- she never defied
+notorious.eve.slanderer: False -- real silence bought, not a forced exposure
+```
+
+Eve pays because the arithmetic above says to: one credible witness already in hand (carol), one
+more exposure away from the brink, against a debt she can walk back later. Nobody scripted the
+decision — `pickAction` made it, the same planner every other section in this document exercises.
+
+**Threshold fear's second consequence: eve becomes a one-shot liar.** This is structural, not a
+side-effect of the arc above — it shows up in ordinary, *unforced* free play too. A single witnessed
+whisper lands two regards at once (the addressee and any co-present bystander); with the notoriety
+threshold at three, any *further* whisper to someone new is an instant trip, and no atonement path
+for slander is authored this round. Driving the identical 49-turn free-play trace §25–§27 all draw
+from, checked directly:
+
+```
+eve.lied.* marks across the whole 49-turn trace: ["eve.lied.dana.stole.carol.loaf"]
+regards.dana.eve.slanderer: True    regards.gale.eve.slanderer: True   (both from the ONE whisper)
+notorious.eve.slanderer: False
+regards.dana.carol.thief: True      -- the only regarder carol's own frame-up ever gets
+notorious.carol.thief: False        -- unlike every pre-v30 round of this world
+```
+
+Before v30, that same trace had eve whisper three separate times (turns matching presses 1, 3, and
+4 — to dana, "you", and gale in turn), and carol's frame-up reached notoriety on the strength of it
+(§25). Post-v30, eve whispers exactly once, ever, and carol's frame-up never gets past its first
+believer in free play — both are the same finding from two angles. `Prax.GoldenDriveSpec`'s
+re-capture shows it from a third: of 21 turns, exactly one line drifted — turn 19 (eve's second
+free-play decision) was `"whisper to you that carol stole the loaf"`, is now `"Go to mill"` —
+because by then she already sits at two regarders and a third would tip her over. Bar and intrigue's
+goldens are byte-identical; nothing else in the village moved.
+
+**The laundering mechanism, reproduced on demand.** §27(b) found — live, unpredicted by the spec's
+first draft — that an honest believer is the perfect vector for a lie: gale, deceived like anyone
+else, spreads what she genuinely believes by ordinary `tell`, no `lie`, no mark, no conscience cost,
+and even hands the falsehood back to eve as "evidence" for her own fabrication. Threshold fear means
+eve's own planner no longer walks into that scene voluntarily — so it has to be forced to show it
+still works. Driving 49 turns, then 5 more idle turns to reach a moment eve and gale are actually
+co-present (free play has them drift in and out of sync), then forcing exactly the whisper eve's own
+prudence now declines (still legal — one-shot-per-hearer permits it, since gale's never heard this
+specific claim from anyone), then driving on:
+
+```
+  eve: whisper to gale that carol stole the loaf     -- forced; eve's own planner declines this
+  gale: tell bob that carol stole the loaf
+  gale: tell eve that carol stole the loaf
+```
+
+Checked directly:
+
+```
+heardFromGale (who heard what, from gale): [("bob","carol"), ("eve","carol")]
+everything gale relayed, she honestly believes herself: True
+gale.lied anywhere in the whole run: False
+eve now holds hearsay heard from gale -- the lie laundered back to its own author: True
+```
+
+Exactly the v25 finding, reproduced on demand rather than stumbled into: gale never lies, and the
+falsehood travels through her anyway, indistinguishable from truth on her end because to her it *is*
+truth — including carrying it straight back to the woman who invented it. (An incidental find while
+probing this, outside anything pinned or asserted: carol, once she regains eyewitness evidence of a
+*second* whisper this way, independently rediscovers grounds to shake eve down again — a live,
+unscripted echo of the repeat-extortion question banked above, not a claim this round builds on or
+tests.) `Prax.VillageSpec`'s "same spite, different temperaments" test carries exactly this
+retelling: the free-play assertions that still hold (the frame-up, eve's own mark, gale never lying)
+are kept and sharpened with "exactly one whisper, ever"; the laundering assertion moves to the forced
+continuation above, so v25's mechanism stays pinned rather than silently going untested.
+
+**v25's parked "getting-caught-lying" item, partially landed.** Not lie-detection, and not
+content-exposure — the whisper *act* alone became witnessable this round (`witnessed together
+"whispered.Actor.Hearer"`), so co-present villagers now come to believe *that* a whisper happened,
+while *what was said* stays exactly as secret as it always was. That's enough to give blackmail its
+leverage (carol never needed to know or care what eve whispered, only that she did), but it isn't the
+fuller mechanic v25 parked — nobody can yet catch what a lie actually claimed, only that a
+lying-shaped act occurred.
+
+→ code: `Prax.Debt` (`owe`/`settle`/`owes`), `Prax.Blackmail` (`shakedown`), `Prax.Worlds.Village`
+(`villageP`'s `Scene` role, `whisperShakedown`, eve's threshold-fear want, the `slanderer` standing);
+asserted in `Prax.DebtSpec`, `Prax.BlackmailSpec`, `Prax.VillageSpec`, `Prax.GoldenDriveSpec`.
 
 ---
 
@@ -1407,17 +1650,20 @@ bar, Part I); the second is Part II, one row per world/tool.
 | `standing`/`standingUnless`/`regardedAs`/`notoriety` (derived reputation, base-fact atonement defeater) | `Prax.Repute` | `prax village`: three regards tip `notorious.bob.thief`; atonement dissolves every regard while the belief persists; re-offense revokes it and an atoned bob is deterred from a restocked stall |
 | Secrets & deception (`conceal`/`lie`) | `Prax.Deceit` | `prax village`: bob's concealment want still gates a watched theft (mid-project opportunism, §26; the scripted "secret keeps"/"perfect crime" tests); eve frames carol, and the lie cascades into real shunning and notoriety with no recourse for the framed |
 | Endeavors: staged practices, dormant pursuits (`endeavor`/`Stage`) | `Prax.Project` | `prax village`: bob undertakes `earnBread` unprompted at t=0, sweeps the square in public, and bakes the loaf he'd otherwise have to steal; watching him sweep is enough for the village to presume his purpose and predict his next stage |
-| Temperament as conduct-valuations (`Trait`/`personaVocabulary`/`bearing`/`transparent`/`cast`); a lie marks the liar (`Actor.lied.Hearer.<event>`) | `Prax.Persona`, `Prax.Deceit` | `prax village`: gale bears `honest` and never lies despite sharing eve's exact spite; everyone presumes her conscience from t=0; a believed conscience nets against a believed motive in `predictMove`; eve's whisper deceives gale too, and gale spreads it onward by ordinary gossip, no mark, carrying it back to eve as "evidence" for her own fabrication |
+| Temperament as conduct-valuations (`Trait`/`personaVocabulary`/`bearing`/`transparent`/`cast`); a lie marks the liar (`Actor.lied.Hearer.<event>`) | `Prax.Persona`, `Prax.Deceit` | `prax village`: gale bears `honest` and never lies despite sharing eve's exact spite; everyone presumes her conscience from t=0; a believed conscience nets against a believed motive in `predictMove`; eve's whisper deceives gale too, and (forced, since v30's threshold fear stops her reaching gale unprompted) gale spreads it onward by ordinary gossip, no mark, carrying it back to eve as "evidence" for her own fabrication |
+| Debt as a beneficiary'd obligation (`owe`/`settle`), belief-gated deadbeat standing | `Prax.Debt` | `prax village`: a witnessed default derives `regards.<W>.<debtor>.deadbeat`; the debtor himself, unavoidably co-present at his own default, always regards himself one even when no one else does; repayment defeats it by the same base-fact-defeater idiom as v21's thief |
+| Blackmail (`shakedown`: threaten/comply/defy/expose), threshold fear | `Prax.Blackmail`, `Prax.Worlds.Village` | `prax village`: a threat is a motive-belief deposit the victim's own round-walk prices; a standing threat is exposable, so stalling ties defiance; carol, holding eyewitness evidence of eve's whisper, shakes her down and buys real silence; eve's own fear of the notoriety brink also makes her a one-shot liar in free play, retelling §27's laundering under a forced continuation |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
-same behaviours are asserted in the test suite (`cabal test`, 292 tests). Part I: `Prax.QuerySpec`,
+same behaviours are asserted in the test suite (`cabal test`, 360 tests). Part I: `Prax.QuerySpec`,
 `Prax.EngineSpec`, `Prax.PlannerSpec` + `Prax.MindsSpec` (wants/utility/lookahead, now a round-walk
 over believed minds — `predictMove`, `charDesires`, `professed`/`conventional`), `Prax.CoreSpec`
 (emotions/relationships), `Prax.ReactionsSpec` (reactions, norms, norm-avoidance), `Prax.BeliefsSpec`
 (per-agent & false beliefs), `Prax.ConversationSpec` (speaker turns, topics, one-shot quips),
 `Prax.ArcSpec` (arc stages), `Prax.DeonticSpec` (□, discharge, breach, contrary-to-duty),
-`Prax.BarSpec`, and `Prax.LoopSpec` (a deterministic 25-turn replay — the bar's cast now includes
-the bodiless sight ticker). Part II: `Prax.IntrigueSpec` (death + branching endings, incl. the
+`Prax.DebtSpec` (`owe`/`settle`, the demand→deadbeat-standing lifecycle, belief-gated visibility and
+the debtor's own unavoidable self-regard), `Prax.BarSpec`, and `Prax.LoopSpec` (a deterministic
+25-turn replay — the bar's cast now includes the bodiless sight ticker). Part II: `Prax.IntrigueSpec` (death + branching endings, incl. the
 confidant/victim `predictMove` split), `Prax.StressSpec`, `Prax.PersistSpec` (save/resume),
 `Prax.ScriptSpec` + `Prax.Script.JsonSpec` (scene layer + JSON, incl. memories/timed junctions/sketches
 and the `audience`), `Prax.DirectorSpec` (player-as-DM), `Prax.ELSpec` + `Prax.DeriveSpec` (the
@@ -1443,8 +1689,16 @@ and the mid-project opportunism beat that keeps concealment honest), and `Prax.P
 defeasible presumption, the conduct-valuation core split via `pickAction` on a temptation-bearing
 twin pair, the marginal-lie property, and believed-conscience prediction — `VillageSpec`'s later
 cases carry the same mechanism into the full village: gale's temperament legible from t=0, the
-free-play drive where eve's frame-up proceeds and gale never lies yet the lie still travels through
-her honestly, and the told-about-spite prediction contrast between eve and gale).
+free-play drive where eve's frame-up proceeds and gale never lies unprompted, and the told-about-spite
+prediction contrast between eve and gale), and `Prax.BlackmailSpec` (`shakedown`'s motive-belief
+deposit, self-motivated credibility, standing-threat exposure, and the compliance arithmetic pinned
+on both sides — two onlookers comply, one rationally defies, an exact stall-tie between defy and
+wait — plus the reserved-variable collision guards found in review) — `VillageSpec`'s shakedown-arc
+cases carry the same mechanism into the full village: carol's threat lands once she holds eyewitness
+evidence, eve complies and the reputation stack stays undisturbed for everyone uninvolved, and
+threshold fear leaves eve's below-the-brink free-play whispering exactly as rational as it always
+was while retelling, under a forced continuation, the one free-play consequence (§27's laundering)
+it structurally forecloses.
 
 ---
 

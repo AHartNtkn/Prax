@@ -203,6 +203,17 @@ utility. See the design writeups:
   never does — and, found live rather than authored, eve's whisper deceives gale too, who then
   spreads the falsehood she genuinely believes by ordinary gossip, no lie, no mark, carrying it
   back to eve as "evidence" for her own fabrication. The honest villager launders the lie.
+- `Prax.Debt` + `Prax.Blackmail` (v30) — **leverage, priced**: a debt is an obligation with a
+  beneficiary (`owe`/`settle`), default is belief-gated deadbeat standing, and a threat is a
+  motive-belief deposit (`shakedown`'s threaten/comply/defy/expose) the victim's own round-walk
+  prices — the extortionist is credible because the punitive desire the threat professes is
+  genuinely held, not because it predicts compliance. `Prax.Worlds.Village`'s carol shakes eve down
+  once threshold fear (a nonlinear want mirroring bob's `notorious.bob.thief`) makes a single
+  witnessed whisper land two of the three regards notoriety needs; the same fear makes eve a
+  one-shot liar, retelling v25's "honest villager launders the lie" finding under a forced
+  continuation once free play alone can no longer reach it. Found by the planner's own lookahead,
+  not designed for: an unguarded repeat threat could re-extract silence indefinitely, banking
+  serial extortion as a real future mechanic once guarded shut.
 - **v26 — planner work elimination**: an exactness-contract performance round (golden
   decision-sequence tests pin every planner choice, byte-identical before/after). Cached
   per-state closed views, a conservative relevance pre-filter (`Prax.Relevance`) that skips

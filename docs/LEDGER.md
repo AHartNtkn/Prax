@@ -217,6 +217,93 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   Kept (correct, reviewed, marginally positive, and the consistent endpoint of v28's
   strings-stop-being-computational design); the next real levers are architectural — delta
   scoring/undo-log search, or the eventual embedding port — not representation.
+- **v30** — **leverage: blackmail & debt, priced** (`Prax.Debt`, `Prax.Blackmail`; spec
+  `docs/specs/2026-07-12-v30-blackmail-debt.md`, three in-round amendments). The backlog's oldest
+  named commitment (parked since v22 for its own design round), folded with debt per user direction,
+  probe-verified live before the spec was written (session probe, depth 2). **The leverage model**:
+  a threat is a motive-belief deposit — `threaten` inserts `victim.believes.desires.<extorter>
+  .<punitive-desire>.heard.<extorter>`, the same channel confiding/lying already ride (v20/v22), so
+  the victim's own round-walk predicts and prices the exposure with no new epistemics.
+  **Credibility is self-motivation** (probe finding): the extortionist's punitive desire
+  (`punishes-<id>`) is what motivates *threatening* in the first place — exposing pays off from it
+  one lookahead ply away — so a myopically-unmotivated planner move correctly won't foresee
+  compliance; character coherence, not accident, makes the threat believable (a pure bluffer is
+  expressible but not self-motivating — banked with the script layer). **A standing threat is
+  exposable too** (probe finding: gating exposure on defiance alone makes stalling free forever —
+  the classic hole); with exposure available against silence, waiting ties defiance and never
+  dominates. **The compliance arithmetic, pinned both sides**: `BlackmailSpec` ports the session
+  probe directly — two onlookers, comply scores −63.84 against wait −71.84 and defy −75.80 (buy
+  wins); one onlooker, defy and wait tie exactly at −54.2 (buy still −63.84, now dominated) —
+  audience size alone flips the decision, authored not tuned. `Prax.Debt` gives blackmail something
+  to extract: a debt *is* an obligation with a beneficiary (`owe`/`settle`, thin over
+  `Prax.Deontic`); default is belief-gated deadbeat standing (`standingUnless` on a *witnessed*
+  breach, `Prax.Witness.observable` wrapping `Deontic.breach`) — an unwitnessed default derives no
+  third-party regard, but review found the debtor himself is unavoidably co-present at his own
+  default, so he always regards himself a deadbeat even when no one else does, a
+  self-regard/third-party-spread distinction the shipped test now asserts explicitly rather than
+  leaving implied. **Banked, found in implementation**: porting the probe surfaced a real bug — an
+  unguarded `comply` let a renewed threat re-extract silence indefinitely, the planner's own
+  recursive lookahead discovering repeat extraction before any guard existed and inflating the
+  two-onlooker buy score to −51.24 against the guarded, canonical −63.84; the fix (a re-buy guard,
+  mirroring the probe exactly) closed it in `shakedown`, and the discovery itself banks **repeat /
+  serial extortion** as a real future mechanic (escalating price, multiple blackmailers), not
+  attempted this round.
+
+  **The village demo blocked twice, then resolved.** Both drafted arcs (carol/eve with per-head
+  fear, and a dana/bob theft-evidence fallback) failed on measured traces, not taste: per-head fear
+  can't simultaneously permit witnessed whispering (needs ≤1/head) and compel compliance (needs
+  ~10/head) — one weight, two irreconcilable jobs; and theft-evidence shakedowns catch the framed
+  exactly as readily as the guilty (v22's indistinguishability is the point, not a bug), displacing
+  dana's already-shipped bread arc. dana/bob is retired as an arc outright: in this village, bob's
+  crimes are either fully witnessed or perfectly secret, a Catch-22 recorded as a faithful result of
+  the world as authored, not a gap to fill. The resolution is **threshold fear**, bob's own idiom
+  generalized: nonlinear fear serves both masters because its marginal price is zero below the
+  brink and catastrophic at it. eve gains `Want [Match "notorious.eve.slanderer"] (−15)` (mirroring
+  bob's `notorious.bob.thief` exactly) wired by `standingUnless … "slanderer"` +
+  `notoriety "slanderer" 3`; the whispering ACT itself becomes observable (`witnessed together
+  "whispered.Actor.Hearer"` — content stays secret, only the act is caught). Blackmail victims now
+  live **one witness from the brink**: a single whisper, witnessed by two co-present villagers at
+  once (the addressee plus any bystander), lands two of the three regards notoriety needs in one
+  action — carol, who happens to hold direct `.seen` evidence of that same whisper, shakes eve down
+  (`shakedown` evidence `"whispered.V.H"`, price `favor`), and eve — one exposure from notoriety —
+  pays rather than risk it. Two real bugs the blocked attempt surfaced shipped alongside the
+  resolution: `villageP`'s role `V` (colliding with the shakedown's own evidence-variable
+  convention) renamed to `Scene` at its source, and `shakedown`'s reserved-variable guard extended
+  to `Hearer`/`Actor`.
+
+  **The sanctioned retelling of v25's laundering.** Threshold fear has a structural second
+  consequence beyond the demo itself: once eve holds two regarders (round 1's own whisper — two
+  co-present villagers witness one act), any further whisper to a third party is an instant
+  notoriety trip with no atonement path authored, so she becomes a **one-shot liar** — the pre-v30
+  world had her whisper three times over the same 49-turn free-play trace (dana, "you", gale);
+  post-v30, exactly once, ever, confirmed directly (`["eve.lied.dana.stole.carol.loaf"]`, the
+  crispest fact — no `notorious.eve.slanderer` derives, and carol's own frame-up never gets past its
+  first believer either). This structurally breaks v25's own unmodified "the honest villager
+  launders the lie" test, whose free-play assertion needed eve to eventually reach gale directly —
+  she now structurally never does. Rather than weaken the test, it was **retold**, per the v22
+  retelling precedent (a documented amendment when new vocabulary genuinely changes what free play
+  can show, never a silent edit): the free-play assertions that still hold (the frame-up, eve's
+  mark, gale never lying) are kept and sharpened with "exactly one whisper, ever"; the laundering
+  mechanism itself — v25's real finding, that an honest believer is the perfect vector for a lie —
+  moves to a forced continuation (the affordance is still legally available, one-shot-per-hearer
+  permits it; force it, then drive, and watch gale relay it exactly as she always did) so the
+  mechanism stays pinned rather than silently going untested. `docs/WALKTHROUGH.md` §25/§27/§28
+  retell this honestly, including the golden re-capture's one drift line (round 3's whisper to
+  "you" becomes "Go to mill" — the threshold, not a per-head cost, is what changed it).
+
+  **v25's parked "getting-caught-lying" item (spec §6), partially landed.** Not lie-detection or
+  content-exposure — the whisper ACT alone becomes observable (co-present villagers come to believe
+  *that* a whisper happened, `witnessed together "whispered.Actor.Hearer"`), while *what was said*
+  stays exactly as secret as before. This gives blackmail its leverage (carol needs only the act,
+  never the content) but is not the parked item in full — no one can yet catch what a lie actually
+  claimed, only that a whispering happened. Noted precisely so it isn't mistaken for the fuller
+  mechanic.
+
+  Suite: 339 (`Prax.Debt`) → 354 (`Prax.Blackmail`, incl. a reserved-variable guard fix found by
+  review) → 360 (`Prax.Worlds.Village`'s shakedown arc + the one sanctioned retelling), all green
+  throughout; zero warnings; hlint clean; `prax check` on all 7 worlds; the village golden
+  re-captured once, in its own commit, with exactly one drift line itemized (a world change, never
+  an engine change).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -371,8 +458,16 @@ Tier 1 — compiled social structures:
 - **Factions & membership** (`Prax.Faction`): membership facts + the feud axioms generalized
   ("my faction's enemy is my enemy"), join/leave/exile practices, and faction-/place-scoped deontic
   norm-sets (what's obligatory in the temple isn't at the tavern). Composes Derive + Deontic.
-- **Debt & favors** (`Prax.Debt`): a debt *is* an obligation — `oblige` on borrowing, `discharge`
-  on repayment, `breach` → reputation damage. Zero new semantics.
+- **Debt & favors** (`Prax.Debt`) *(done — v30: `owe`/`settle`, thin over `Prax.Deontic` — a debt
+  *is* an obligation with a beneficiary, `debt.<creditor>.<debtor>.<content>` inserted alongside
+  `oblige`, both facts one call, one call to reverse both. Default becomes belief-gated **deadbeat
+  standing**: a witnessed breach (`Prax.Witness.observable` wrapping `Deontic.breach`) derives
+  `regards.<W>.<debtor>.deadbeat` via `standingUnless`, defeated by repayment inserting
+  `atoned.<debtor>` — the same positive-fact defeater idiom `Prax.Repute` (v21) already uses, not a
+  new mechanism. An unwitnessed default derives no *third-party* regard — but the debtor is
+  unavoidably co-present at his own default, so he always regards himself a deadbeat regardless of
+  any outside witness, a self-regard/third-party-spread distinction review found underspecified and
+  the shipped test now asserts explicitly)*.
 - **Kinship & households** (`Prax.Kin`): family relations + axioms (sibling symmetry, in-law
   derivation), marriage as bond+obligations, inheritance on death (cast removal exists). Offices as
   single-slot `!` facts (`mayor!bob`) — exclusion semantics are succession semantics.
@@ -417,10 +512,28 @@ Tier 2 — agent interiority for long time-spans:
   a mark on the liar alone (`<liar>.lied.<hearer>.<event>`, their own memory — owned, forgettable,
   perishable), never a record anyone can consult as ground truth. Truth recovery, if it is ever
   built, is committed to flow through mark-bearers — confession, testimony — never consultation.
-- **Blackmail** *(v-next candidate, split out from v22)*: obligation extracted under threat of
-  gossip composes Deontic + Rumor, but its leverage model (exclusivity of knowledge; why the
-  blackmailer withholds rather than gossips) deserves its own design round — parked deliberately,
-  not attempted this round.
+- **Blackmail** (`Prax.Blackmail`) *(done — v30, split out from v22)*: `shakedown` compiles the
+  four-action protocol (threaten/comply/defy/expose) the session probe validated live before the
+  spec was written. A threat is a motive-belief deposit (the same channel confiding/lying already
+  ride); credibility is self-motivation, not omniscience — the extortionist's own punitive desire
+  is what motivates threatening in the first place, so a myopically-unmotivated planner move
+  correctly can't foresee compliance, yet the threat is credible anyway (character coherence). A
+  standing threat is exposable too (stalling ties defiance rather than dominating it — the classic
+  hole closed). The compliance arithmetic is pinned both sides in `BlackmailSpec`, ported straight
+  from the probe: two onlookers, comply beats wait/defy (−63.84 vs −71.84/−75.80); one onlooker,
+  defy and wait tie exactly (−54.2), comply no longer worth it. `Prax.Worlds.Village`'s carol/eve
+  arc instantiates it for real: threshold fear (its own legend entry, above) makes a single
+  witnessed whisper land two of the three regards notoriety needs, and carol's shakedown extracts
+  real silence from that one witness's worth of leverage. Bluffing, threat expiry, and
+  counter-blackmail are out of scope, banked below.
+- **Repeat / serial extortion** *(banked — v30, found by the planner's own lookahead)*: porting the
+  session probe into `shakedown`'s `comply` surfaced a real gap before it was guarded — an unguarded
+  repeat threat let the planner's recursive lookahead discover it could be paid off again, inflating
+  the two-onlooker buy score to −51.24 against the guarded, canonical −63.84 (`Prax.BlackmailSpec`).
+  The gap is closed for this round (`comply`'s guard against an already-standing debt, mirroring the
+  probe exactly) — but escalating, serial extortion (a debt that grows, or a threat that renews on
+  its own clock) is a real, planner-discovered future mechanic, not merely a hypothetical extension,
+  banked here rather than built.
 - **Counterfactual placement (per-agent world-views)** *(banked — v23 spec §4a "honest residual")*:
   a predicted in-scope mover is still simulated at their *true* position, not the predictor's
   *believed* one — imagining them where the predictor thinks they are requires giving every
