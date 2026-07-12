@@ -49,7 +49,7 @@ villageGolden =
   , "bob: bob: Go to mill"
   , "carol: carol: Wait a moment"
   , "dana: dana: Go to square"
-  , "eve: eve: whisper to you that carol stole the loaf"
+  , "eve: eve: Go to mill"
   , "gale: gale: Go to square"
   , "_sight: "
   ]
