@@ -44,9 +44,21 @@ module — stated up front.
 ```haskell
 confess :: String       -- mark kind, e.g. "lied" (single segment; loud error)
         -> CoPresence   -- who can be confessed to
-        -> String       -- event pattern (the mark's event arity, e.g. "stole.C.loaf")
+        -> String       -- MARK pattern (the mark's event arity, e.g. "stole.C.loaf")
+        -> String       -- DEPOSIT pattern (what the confession reveals — may
+                        --   reference Actor/H, e.g. "whispered.Actor.H"; must be
+                        --   subject-first for absolve's convention)
         -> String       -- action label
         -> Action
+  -- AMENDED after implementation blocked (the anticipated shape finding): a
+  -- content-shaped mark (conscience: "stole.C.loaf") and an act-shaped standing
+  -- ("whispered.V.H") cannot share one pattern — the deposit decouples them.
+  -- What a confessed lie reveals is the ACT and its falsity, not a re-assertion
+  -- of the content; the deposit pattern is that act-truth, grounded from the
+  -- mark's own bindings (Actor, H, and the mark's event variables). Worlds with
+  -- self-shaped deeds pass the same pattern twice — explicitly, no default
+  -- (one signature, no dual). Un-deceiving the original hearer (retracting the
+  -- planted content-belief) is BANKED: it needs belief-retraction semantics.
   -- conditions: own mark exists (Match "Actor.<kind>.H.<pat>"), hearer co-present
   --   (asRole), hearer ≠ Actor; one confession per (hearer, deed) via the mark
   --   conversion itself (the lied-mark is the precondition and it converts away).
