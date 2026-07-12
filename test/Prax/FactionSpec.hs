@@ -87,4 +87,22 @@ tests = testGroup "Prax.Faction"
       r <- try (evaluate (length (show (factionStanding "struck.A.constant" "brutal"))))
       assertBool "an offender-only pattern is an error, not a silent single-variable guard"
         (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "factionStanding: a pattern reusing W or F (the axiom's own join variables) errors loudly" $ do
+      r1 <- try (evaluate (length (show (factionStanding "struck.W.V" "brutal"))))
+      assertBool "an offender named W collides with the believer variable — must error, not silently no-op"
+        (isLeft (r1 :: Either ErrorCall Int))
+      r2 <- try (evaluate (length (show (factionStanding "struck.A.F" "brutal"))))
+      assertBool "a victim named F collides with the shared-faction variable — must error, not silently no-op"
+        (isLeft (r2 :: Either ErrorCall Int))
+
+  , testCase "factionStanding: the victim's own belief of the offense against them derives their regard too" $ do
+      let world = setAxioms [factionStanding "struck.A.V" "brutal"]
+                    (foldl (flip performOutcome) emptyState
+                       [ joins "ana" "hall", joins "ben" "hall"
+                       , Insert "ben.believes.struck.ana.ben"
+                       ])
+          v = readView world
+      assertBool "ben (the victim, a co-member of himself trivially) regards ana as brutal"
+        (exists "regards.ben.ana.brutal" v)
   ]
