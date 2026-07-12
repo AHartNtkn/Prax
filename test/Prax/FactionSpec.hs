@@ -75,6 +75,23 @@ tests = testGroup "Prax.Faction"
       assertBool "ana (the offender) derives no self-regard, even believing her own act"
         (not (exists "regards.ana.ana.brutal" v))
 
+  , testCase "factionStanding: defection dissolves the regard (retraction's sharpest case)" $ do
+      -- the regard is DERIVED from co-membership; membership is a base fact.
+      -- dave believed the offense while a hall member and regarded ana; the
+      -- moment he defects, the derivation loses its join and the regard is
+      -- gone — while his belief (a base fact) persists untouched.
+      let held = setAxioms [factionStanding "struck.A.V" "brutal"]
+                   (foldl (flip performOutcome) emptyState
+                      [ joins "ana" "hall", joins "ben" "hall", joins "dave" "hall"
+                      , Insert "dave.believes.struck.ana.ben" ])
+          defected = performOutcome (joins "dave" "yard") held
+      assertBool "co-membered: dave regards ana"
+        (exists "regards.dave.ana.brutal" (readView held))
+      assertBool "defected: the regard un-derives"
+        (not (exists "regards.dave.ana.brutal" (readView defected)))
+      assertBool "his belief persists — only the solidarity is gone"
+        (exists "dave.believes.struck.ana.ben" (db defected))
+
   , testCase "memberPath: an empty or separator-bearing name errors loudly" $ do
       r1 <- try (evaluate (length (memberPath "" "hall")))
       assertBool "empty who errors" (isLeft (r1 :: Either ErrorCall Int))
