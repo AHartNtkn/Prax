@@ -13,6 +13,14 @@ import           Prax.Faction (joins)
 
 -- | Marriage symmetry, siblings, grandparents, in-laws — all derived, all
 -- retraction-safe (dissolve the base fact and the closure forgets with it).
+--
+-- The two in-law rules are deliberately one-directional: the ACQUIRED
+-- relative comes first, the ego (the spouse doing the acquiring) second —
+-- @inLaw.P.B@ reads "P is B's in-law", where P is A's parent or sibling and B
+-- is A's spouse, matching the spec's own "spouse's parent / sibling's spouse"
+-- naming. No symmetric @inLaw.B.P@ is derived; a caller wanting the reverse
+-- lookup adds it explicitly, the same way 'married' states its own symmetry
+-- as a rule rather than assuming it.
 kinAxioms :: [Axiom]
 kinAxioms =
   [ axiom [ Match "married.A.B" ]                        [ "married.B.A" ]
@@ -27,9 +35,14 @@ kinAxioms =
 -- overwrite. WHO moves households (and to which faction) is the author's choice
 -- per wedding — world content, not module policy.
 wed :: String -> String -> String -> [Outcome]
-wed joiner faction spouse =
-  [ Insert ("married." ++ joiner ++ "." ++ spouse)
-  , joins joiner faction ]
+wed joiner faction spouse
+  | bad joiner || bad spouse =
+      error ("wed: joiner and spouse must be single path segments (no '.' or '!'): "
+             ++ show (joiner, spouse))
+  | otherwise =
+      [ Insert ("married." ++ joiner ++ "." ++ spouse)
+      , joins joiner faction ]
+  where bad n = null n || any (`elem` (".!" :: String)) n
 
 -- | Succession as exclusion: any child of the dead holder may claim; the
 -- single-slot office takes one — first motivated claimant wins. No invented

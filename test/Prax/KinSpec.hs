@@ -45,6 +45,13 @@ weddedWorld = foldl (flip performOutcome) houseWorld (wed "ana" "yard" "cass")
 
 -- Succession fixture: a single-role-free practice hosting the claim action for
 -- office "throne", rex the holder, ana and ben his children, cass unrelated.
+-- @roles = []@ is a zero-role practice, spawned by inserting the bare
+-- @practice.succession@ fact with no trailing role value — the technique
+-- generalizes ConversationSpec's practice-wrapper idiom for testing a bare
+-- Action (there always instantiated with at least one role), but a
+-- zero-role instance is novel to this spec, not itself precedented
+-- elsewhere in the suite. It works because 'possibleActions' only requires
+-- the instance fact to exist and unify — no role values to bind.
 successionP :: Practice
 successionP = practice
   { practiceId = "succession"
@@ -110,6 +117,14 @@ tests = testGroup "Prax.Kin"
   , testCase "inLaw (sibling's spouse) negative: siblings without a marriage derive no in-law" $
       assertBool "cass and dan are siblings but unmarried — neither is anyone's in-law"
         (not (any (\s -> "inLaw.cass." `isPrefixOf` s || "inLaw.dan." `isPrefixOf` s) kinView))
+
+  , testCase "wed: guards forced — joiner and spouse must be single path segments" $ do
+      r1 <- try (evaluate (length (wed "" "hall" "cass")))
+      assertBool "an empty joiner name errors" (isLeft (r1 :: Either ErrorCall Int))
+      r2 <- try (evaluate (length (wed "ana" "hall" "b.ad")))
+      assertBool "a dotted spouse name errors" (isLeft (r2 :: Either ErrorCall Int))
+      r3 <- try (evaluate (length (wed "ana" "hall" "b!ad")))
+      assertBool "a bang'd spouse name errors" (isLeft (r3 :: Either ErrorCall Int))
 
   , testCase "wed: inserts the marriage fact and overwrites the joiner's membership" $ do
       assertBool "married.ana.cass is a base fact" (exists "married.ana.cass" (db weddedWorld))
