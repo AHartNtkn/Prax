@@ -1,24 +1,39 @@
 -- | The exclusion-logic database underlying Praxis/Versu.
 --
--- The world state is a trie: @data Db = Db Bool (Map String Db)@, where the 'Bool'
--- records whether the node's outgoing edges are __exclusive__. Every fact is a
--- path built from two operators — @.@ (ordinary, multi-valued descent) and @!@
--- (exclusion: the parent has exactly one child). Queries treat @.@ and @!@
--- identically, but the distinction is now /retained/ in the trie (not just applied
--- and forgotten at insert), so the world state is a faithful Exclusion-Logic model
--- — which is what lets 'Prax.EL.meet' detect a contradiction from either side of a
--- clash. 'dbToSentences' flattens the labels (for display/matching);
--- 'dbToLabeledSentences' re-emits them (for exact serialization).
+-- The world state is a trie: @data Db = Db Bool (IntMap Db)@, where the
+-- 'Bool' records whether the node's outgoing edges are __exclusive__, and
+-- the 'IntMap' keys are interned segment ids ('Prax.Sym.symId'; spec
+-- @docs/specs/2026-07-12-v29-interning.md@). Every fact is a path built from
+-- two operators — @.@ (ordinary, multi-valued descent) and @!@ (exclusion:
+-- the parent has exactly one child). Queries treat @.@ and @!@ identically,
+-- but the distinction is now /retained/ in the trie (not just applied and
+-- forgotten at insert), so the world state is a faithful Exclusion-Logic
+-- model — which is what lets 'Prax.EL.meet' detect a contradiction from
+-- either side of a clash. 'dbToSentences' flattens the labels (for
+-- display/matching); 'dbToLabeledSentences' re-emits them (for exact
+-- serialization).
 --
--- See @docs/research/praxis-praxish-notes.md@ for the correspondence to Praxish's
--- @db.js@, including the corrected @!@ semantics (Praxish's own @insert@ has a
--- flagged bug that drops data; we implement the paper's rule instead).
+-- Every exported function keeps its String-facing signature and observable
+-- behavior from the pre-interning version — callers intern at entry and
+-- render (via 'Prax.Sym.symName') at exit, so worlds, tests, 'Prax.Persist'
+-- and 'Prax.Inspect' are unaffected by the representation change. 'Sym'
+-- ids are first-encounter ordered and therefore run-dependent
+-- ('Prax.Sym'); anywhere the old code observed @Map String@'s alphabetical
+-- iteration order (unify's unbound-variable branching, 'childKeys'), the
+-- rewrite explicitly restores name order by sorting on 'symName' — id
+-- (encounter) order must never leak into candidate order or output.
+--
+-- See @docs/research/praxis-praxish-notes.md@ for the correspondence to
+-- Praxish's @db.js@, including the corrected @!@ semantics (Praxish's own
+-- @insert@ has a flagged bug that drops data; we implement the paper's rule
+-- instead).
 module Prax.Db
   ( Db(..)
   , emptyDb
   , dbExcl
   , Val(..)
   , Bindings
+  , SymBindings
   , valToString
   , isVariable
   , insert
@@ -28,6 +43,7 @@ module Prax.Db
   , retractNames
   , unify
   , unifyNames
+  , unifySyms
   , unifyAll
   , ground
   , groundTokens
@@ -38,17 +54,24 @@ module Prax.Db
   , exists
   , pathNames
   , tokens
+  , internTokens
   ) where
 
+import           Data.Bifunctor (first)
 import           Data.Char (isUpper)
-import           Data.List (sort)
+import           Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
+import           Data.List (sort, sortOn)
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
--- | The world state: a trie whose edges are symbols. The 'Bool' is the node's
--- __exclusion flag__ — 'True' when its edges are single-valued (@!@); a valid
--- exclusive node has one child. A leaf is a node with an empty child map.
-data Db = Db Bool (Map String Db)
+import           Prax.Sym (Sym, intern, symId, symIsVar, symName, symOfId)
+
+-- | The world state: a trie whose edges are interned segments. The 'Bool' is
+-- the node's __exclusion flag__ — 'True' when its edges are single-valued
+-- (@!@); a valid exclusive node has one child. A leaf is a node with an
+-- empty child map.
+data Db = Db Bool (IntMap Db)
   deriving (Eq, Show)
 
 -- | Whether a node's outgoing edges are exclusive (@!@).
@@ -56,11 +79,11 @@ dbExcl :: Db -> Bool
 dbExcl (Db e _) = e
 
 emptyDb :: Db
-emptyDb = Db False Map.empty
+emptyDb = Db False IntMap.empty
 
 -- | A value a logic variable can be bound to. 'unify' only ever produces
--- 'VStr' (trie keys are strings); 'VNum' and 'VSet' arise from query operators
--- (@calc@, subqueries) in "Prax.Query".
+-- 'VStr' (trie keys are strings); 'VNum' and 'VSet' arise from query
+-- operators (@calc@, subqueries) in "Prax.Query".
 data Val
   = VStr !String
   | VNum !Integer
@@ -70,9 +93,15 @@ data Val
 -- | Map of logic-variable name to bound value.
 type Bindings = Map String Val
 
--- | Render a value the way Praxish's @DB.ground@/@String()@ coercion does: sets
--- collapse to an opaque @\<Set(n)\>@ marker (they are not meant to be grounded
--- into sentences).
+-- | 'Bindings', keyed by interned symbol instead of by name — the
+-- representation 'unifySyms' operates on internally, and the core a future
+-- task can promote to be 'Bindings' itself once callers carry 'Sym's
+-- natively.
+type SymBindings = Map Sym Val
+
+-- | Render a value the way Praxish's @DB.ground@/@String()@ coercion does:
+-- sets collapse to an opaque @\<Set(n)\>@ marker (they are not meant to be
+-- grounded into sentences).
 valToString :: Val -> String
 valToString (VStr s) = s
 valToString (VNum n) = show n
@@ -88,8 +117,9 @@ isVariable []    = False
 trim :: String -> String
 trim = f . f where f = reverse . dropWhile (`elem` " \t\n\r")
 
--- | Tokenize a sentence into @(name, punctuationAfterName)@ pairs, preserving
--- the operator following each name (used for 'ground', which must re-emit them).
+-- | Tokenize a sentence into @(name, punctuationAfterName)@ pairs,
+-- preserving the operator following each name (used for 'ground', which
+-- must re-emit them).
 tokens :: String -> [(String, Maybe Char)]
 tokens = go . trim
   where
@@ -100,11 +130,18 @@ tokens = go . trim
            []          -> [(name, Nothing)]
            (op : more) -> (name, Just op) : go more
 
--- | Names only (both operators treated identically), for matching and retract.
+-- | 'tokens', interning each segment name — the Sym-level core a future
+-- task's hot path builds on directly, skipping the String round-trip.
+internTokens :: String -> [(Sym, Maybe Char)]
+internTokens = map (first intern) . tokens
+
+-- | Names only (both operators treated identically), for matching and
+-- retract.
 parseNames :: String -> [String]
 parseNames = map fst . tokens
 
--- | Split a sentence into its segment names (both @.@ and @!@ are separators).
+-- | Split a sentence into its segment names (both @.@ and @!@ are
+-- separators).
 pathNames :: String -> [String]
 pathNames = parseNames
 
@@ -113,24 +150,28 @@ pathNames = parseNames
 -- @!@ after a name @n@ means @n@ is single-valued: after the insert, @n@ has
 -- exactly one child — the next segment. We enforce this by clearing @n@'s
 -- /other/ children while preserving the surviving child's existing subtree.
--- (Praxish's @DB.insert@ instead resets @n@ to empty, discarding that subtree;
--- see the regression test in @Prax.DbSpec@.)
+-- (Praxish's @DB.insert@ instead resets @n@ to empty, discarding that
+-- subtree; see the regression test in @Prax.DbSpec@.)
 insert :: String -> Db -> Db
 insert = insertToks . tokens
 
 insertToks :: [(String, Maybe Char)] -> Db -> Db
-insertToks [] db = db
-insertToks ((n, op) : rest) (Db e m) =
-  let Db _ existing = Map.findWithDefault emptyDb n m
+insertToks = insertSyms . map (first intern)
+
+insertSyms :: [(Sym, Maybe Char)] -> Db -> Db
+insertSyms [] db = db
+insertSyms ((n, op) : rest) (Db e m) =
+  let i = symId n
+      Db _ existing = IntMap.findWithDefault emptyDb i m
       -- @n@'s node is exclusive iff this insert reaches it via a @!@ operator.
       childExcl = op == Just '!'
       cleared = case (op, rest) of
-        (Just '!', (nextName, _) : _) ->
+        (Just '!', (nextSym, _) : _) ->
           -- Exclusion: n keeps only the next child, with its subtree intact.
-          Map.filterWithKey (\k _ -> k == nextName) existing
+          IntMap.filterWithKey (\k _ -> k == symId nextSym) existing
         _ -> existing
-      child' = insertToks rest (Db childExcl cleared)
-  in Db e (Map.insert n child' m)
+      child' = insertSyms rest (Db childExcl cleared)
+  in Db e (IntMap.insert i child' m)
 
 -- | Insert many sentences left to right.
 insertAll :: [String] -> Db -> Db
@@ -144,38 +185,66 @@ retract = retractNames . parseNames
 -- | 'retract' with the sentence already split into names — for callers that
 -- already hold the names (e.g. cooked outcomes) and must not re-parse them.
 retractNames :: [String] -> Db -> Db
-retractNames [] db = db
-retractNames [n] (Db e m) = Db e (Map.delete n m)
-retractNames (n : ns) (Db e m) =
-  case Map.lookup n m of
+retractNames = retractSyms . map intern
+
+retractSyms :: [Sym] -> Db -> Db
+retractSyms [] db = db
+retractSyms [n] (Db e m) = Db e (IntMap.delete (symId n) m)
+retractSyms (n : ns) (Db e m) =
+  case IntMap.lookup (symId n) m of
     Nothing    -> Db e m
-    Just child -> Db e (Map.insert n (retractNames ns child) m)
+    Just child -> Db e (IntMap.insert (symId n) (retractSyms ns child) m)
 
 -- | 'unify' with the sentence already split into names — for callers that
 -- evaluate one pattern against many binding sets ('Prax.Query' hoists the
 -- parse out of that loop).
+--
+-- TEMPORARY (v29 Task 2 scaffolding — deleted by v29 Task 3 once 'Bindings'
+-- itself carries 'Sym's): interns the pattern and the incoming bindings'
+-- keys at entry, delegates to 'unifySyms', then renders the resulting
+-- 'SymBindings' back to String keys at exit, so this task's 'Bindings' type
+-- is unchanged. 'intern'/'symName' are mutual inverses on interned strings,
+-- so both 'Map.mapKeys' calls are injective (no collisions).
 unifyNames :: [String] -> Db -> Bindings -> [Bindings]
 unifyNames names db0 bindings =
-  map snd (foldl step [(db0, bindings)] names)
+  map (Map.mapKeys symName)
+      (unifySyms (map intern names) db0 (Map.mapKeys intern bindings))
+
+-- | The Sym-level unification core: descends the trie by 'IntMap' lookup,
+-- using the parity bit test ('Prax.Sym.symIsVar') for the hottest
+-- predicate. An unbound variable branches over all children of the current
+-- subtree.
+--
+-- __Ordering hazard__: 'IntMap.toList' yields id (first-encounter,
+-- run-dependent) order, not the alphabetical order the old
+-- @Map String Db@ gave for free — and that order feeds candidate order,
+-- which feeds planner tie-breaks and the goldens. The unbound-variable
+-- branch therefore sorts explicitly by 'symName' before branching (cost:
+-- only at variable-branch points, over small per-node child lists).
+unifySyms :: [Sym] -> Db -> SymBindings -> [SymBindings]
+unifySyms syms db0 bindings =
+  map snd (foldl step [(db0, bindings)] syms)
   where
-    step worlds part = concatMap (descend part) worlds
-    descend part (Db _ m, b)
-      | isVariable part =
-          case Map.lookup part b of
-            Just v  -> case Map.lookup (valToString v) m of
+    step worlds sym = concatMap (descend sym) worlds
+    descend sym (Db _ m, b)
+      | symIsVar sym =
+          case Map.lookup sym b of
+            Just v  -> case IntMap.lookup (symId (intern (valToString v))) m of
                          Just sub -> [(sub, b)]
                          Nothing  -> []
-            Nothing -> [ (sub, Map.insert part (VStr k) b)
-                       | (k, sub) <- Map.toList m ]
+            Nothing ->
+              [ (sub, Map.insert sym (VStr (symName (symOfId k))) b)
+              | (k, sub) <- sortOn (symName . symOfId . fst) (IntMap.toList m) ]
       | otherwise =
-          case Map.lookup part m of
+          case IntMap.lookup (symId sym) m of
             Just sub -> [(sub, b)]
             Nothing  -> []
 
--- | Unify one sentence against the database under existing @bindings@, yielding
--- every consistent extension. An unbound uppercase segment branches over all
--- keys of the current subtree (the list-monad nondeterminism at the core of
--- pattern matching); a bound variable or constant descends deterministically.
+-- | Unify one sentence against the database under existing @bindings@,
+-- yielding every consistent extension. An unbound uppercase segment
+-- branches over all keys of the current subtree (the list-monad
+-- nondeterminism at the core of pattern matching); a bound variable or
+-- constant descends deterministically.
 unify :: String -> Db -> Bindings -> [Bindings]
 unify sentence = unifyNames (parseNames sentence)
 
@@ -188,14 +257,15 @@ unifyAll sentences db = foldl step [Map.empty] sentences
 -- tokens. 'Prax.Derive.closure' grounds each axiom head once per binding —
 -- tokenizing the head template once per closure, not once per binding.
 --
--- __Invariant:__ a substituted value replaces its token as a single segment —
--- it is never re-split on @.@/@!@, unlike 'ground' followed by re-tokenizing.
--- This is safe only because trie keys (what 'unify' ever binds a variable to)
--- cannot themselves contain @.@ or @!@ (those characters are the tokenizer's
--- own segment separators); a caller feeding this output straight to
--- 'insertToks' (as 'Prax.Derive.closure' does) therefore relies on every
--- bound value being separator-free — true for all unify-produced bindings,
--- and required of any literal an axiom body binds via @Eq@.
+-- __Invariant:__ a substituted value replaces its token as a single segment
+-- — it is never re-split on @.@/@!@, unlike 'ground' followed by
+-- re-tokenizing. This is safe only because trie keys (what 'unify' ever
+-- binds a variable to) cannot themselves contain @.@ or @!@ (those
+-- characters are the tokenizer's own segment separators); a caller feeding
+-- this output straight to 'insertToks' (as 'Prax.Derive.closure' does)
+-- therefore relies on every bound value being separator-free — true for all
+-- unify-produced bindings, and required of any literal an axiom body binds
+-- via @Eq@.
 groundTokens :: [(String, Maybe Char)] -> Bindings -> [(String, Maybe Char)]
 groundTokens toks b = [ (value n, op) | (n, op) <- toks ]
   where
@@ -212,41 +282,50 @@ tokensToSentence = concatMap emit
 ground :: String -> Bindings -> String
 ground sentence b = tokensToSentence (groundTokens (tokens sentence) b)
 
--- | The keys directly beneath the node at a (constant) dotted path, or @[]@ if
--- the path is absent. Used to enumerate instantiated practices.
+-- | The keys directly beneath the node at a (constant) dotted path, sorted
+-- by name, or @[]@ if the path is absent. Used to enumerate instantiated
+-- practices. Explicit sort restores what @Map.keys@ gave for free under the
+-- old String-keyed trie: 'IntMap.keys' yields id (encounter) order, which
+-- is run-dependent and must never leak into an enumeration order that
+-- callers (e.g. 'Prax.Engine.possibleActions') fold into candidate order.
 childKeys :: String -> Db -> [String]
-childKeys path db = case walk (parseNames path) db of
-  Just (Db _ m) -> Map.keys m
+childKeys path db = case walk (map intern (parseNames path)) db of
+  Just (Db _ m) -> sort (map (symName . symOfId) (IntMap.keys m))
   Nothing       -> []
   where
-    walk [] d            = Just d
-    walk (n : ns) (Db _ m) = Map.lookup n m >>= walk ns
+    walk [] d = Just d
+    walk (n : ns) (Db _ m) = IntMap.lookup (symId n) m >>= walk ns
 
 -- | Whether any node exists at the given constant path.
 exists :: String -> Db -> Bool
 exists path db = not (null (unify path db Map.empty))
 
--- | Enumerate all leaf paths (facts) in the database, sorted, joined by @.@.
--- Flattens the @.@/@!@ distinction; intended for display, matching and tests.
+-- | Enumerate all leaf paths (facts) in the database, sorted, joined by
+-- @.@. Flattens the @.@/@!@ distinction; intended for display, matching and
+-- tests. The final 'sort' operates on fully rendered strings, so it is safe
+-- regardless of the (run-dependent) 'IntMap' traversal order feeding it.
 dbToSentences :: Db -> [String]
 dbToSentences = sort . go
   where
     go (Db _ m)
-      | Map.null m = []
-      | otherwise  = concatMap expand (Map.toList m)
+      | IntMap.null m = []
+      | otherwise     = concatMap expand (IntMap.toList m)
     expand (k, child@(Db _ cm))
-      | Map.null cm = [k]
-      | otherwise   = map ((k ++ ".") ++) (go child)
+      | IntMap.null cm = [name]
+      | otherwise      = map ((name ++ ".") ++) (go child)
+      where name = symName (symOfId k)
 
--- | Like 'dbToSentences' but __label-faithful__: each edge is re-emitted with
--- @!@ when its parent node is exclusive, else @.@. Inverse of 'insertAll' — the
--- basis for exact serialization ('Prax.Persist').
+-- | Like 'dbToSentences' but __label-faithful__: each edge is re-emitted
+-- with @!@ when its parent node is exclusive, else @.@. Inverse of
+-- 'insertAll' — the basis for exact serialization ('Prax.Persist'). As with
+-- 'dbToSentences', the final 'sort' operates on rendered strings, so it is
+-- unaffected by 'IntMap' traversal order.
 dbToLabeledSentences :: Db -> [String]
 dbToLabeledSentences = sort . go
   where
     go (Db _ m) = concat
       [ case go child of
-          []   -> [k]
-          subs -> [ k ++ sep (dbExcl child) ++ s | s <- subs ]
-      | (k, child) <- Map.toList m ]
+          []   -> [name]
+          subs -> [ name ++ sep (dbExcl child) ++ s | s <- subs ]
+      | (k, child) <- IntMap.toList m, let name = symName (symOfId k) ]
     sep e = if e then "!" else "."

@@ -16,4 +16,10 @@ tests = testGroup "Prax.Sym"
       assertBool "empty segment is a constant" (not (symIsVar (intern "")))
   , testCase "distinct names get distinct symbols" $
       assertBool "" (intern "mill" /= intern "square")
+  , testCase "symId/symOfId round-trip (Prax.Db's IntMap-keying escape hatch)" $ do
+      let a = intern "gazebo"
+      symOfId (symId a) @?= a
+      symName (symOfId (symId a)) @?= "gazebo"
+  , testCase "distinct symbols have distinct ids" $
+      assertBool "" (symId (intern "alpha") /= symId (intern "beta"))
   ]

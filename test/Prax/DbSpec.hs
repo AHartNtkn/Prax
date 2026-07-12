@@ -5,6 +5,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, (@?=))
 
 import           Prax.Db
+import           Prax.Sym (intern, symName)
 
 -- Build a database from a list of sentences inserted left to right.
 build :: [String] -> Db
@@ -95,6 +96,25 @@ tests = testGroup "Prax.Db"
         tokensToSentence (groundTokens toks b) @?= ground "at.Who!Where" b
         tokensToSentence (groundTokens (tokens "plain.path") Map.empty)
           @?= "plain.path"
+    ]
+
+  , testGroup "internTokens / unifySyms (the Sym-level cores unify/unifyNames delegate to)"
+    [ testCase "internTokens interns tokens' segment names, preserving operators" $
+        map (\(s, op) -> (symName s, op)) (internTokens "at.Who!Where")
+          @?= tokens "at.Who!Where"
+    , testCase "unifySyms agrees with unifyNames, rendered back to String keys" $ do
+        let db = insertAll ["at.bob!square", "at.eve!mill"] emptyDb
+            names = pathNames "at.Who!Where"
+            fromSyms = map (Map.mapKeys symName)
+                           (unifySyms (map intern names) db Map.empty)
+        fromSyms @?= unifyNames names db Map.empty
+    , testCase "unifySyms branches unbound variables in name order, not id (encounter) order" $ do
+        -- Insert children out of alphabetical order, so id order != name order.
+        let db = insertAll ["at.zeta", "at.alpha", "at.mu"] emptyDb
+            results = unifySyms (map intern (pathNames "at.Who")) db Map.empty
+            names = [ who
+                    | bs <- results, Just (VStr who) <- [Map.lookup (intern "Who") bs] ]
+        names @?= ["alpha", "mu", "zeta"]
     ]
   ]
 

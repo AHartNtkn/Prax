@@ -24,7 +24,7 @@ module Prax.EL
   ) where
 
 import           Control.Monad (foldM)
-import qualified Data.Map.Strict as Map
+import qualified Data.IntMap.Strict as IntMap
 
 import           Prax.Db (Db (..))
 
@@ -35,23 +35,23 @@ import           Prax.Db (Db (..))
 -- (the more specific label wins, @Excl ≤ Multi@).
 meet :: Db -> Db -> Maybe Db
 meet (Db e1 k1) (Db e2 k2) = do
-  merged <- foldM ins k1 (Map.toList k2)
+  merged <- foldM ins k1 (IntMap.toList k2)
   let e = e1 || e2
-  if e && Map.size merged > 1
+  if e && IntMap.size merged > 1
     then Nothing                          -- exclusive node forced to two children ⇒ ⊥
     else Just (Db e merged)
   where
-    ins acc (k, v2) = case Map.lookup k acc of
-      Nothing -> Just (Map.insert k v2 acc)
-      Just v1 -> do v <- meet v1 v2; Just (Map.insert k v acc)
+    ins acc (k, v2) = case IntMap.lookup k acc of
+      Nothing -> Just (IntMap.insert k v2 acc)
+      Just v1 -> do v <- meet v1 v2; Just (IntMap.insert k v acc)
 
 -- | The information order @≤@ (Def 6): @a `leq` b@ iff @a@ has every edge of @b@,
 -- with labels at least as specific (@Excl ≤ Multi@), recursively — i.e. @a@
 -- entails @b@.
 leq :: Db -> Db -> Bool
 leq (Db ea ka) (Db eb kb) =
-  (ea || not eb) && all present (Map.toList kb)   -- Excl ≤ Multi, Multi ⋠ Excl
+  (ea || not eb) && all present (IntMap.toList kb)   -- Excl ≤ Multi, Multi ⋠ Excl
   where
-    present (k, bChild) = case Map.lookup k ka of
+    present (k, bChild) = case IntMap.lookup k ka of
       Nothing     -> False
       Just aChild -> leq aChild bChild
