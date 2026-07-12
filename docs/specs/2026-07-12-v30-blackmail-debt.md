@@ -43,7 +43,11 @@ New vocabulary `debt.<creditor>.<debtor>.<content>`, thin combinators over `Prax
   demanded) marks refusal via Deontic's `breach` (→ `violated.*`), made `observable`
   (v19) so witnesses believe it; one `standingUnless`-style axiom derives
   `regards.<W>.<debtor>.deadbeat` from the believed default, defeated by eventual repayment
-  (`atoned`-shaped: settling deletes the breach base). Reputation flows from belief, never
+  (`atoned`-shaped: settling inserts `atoned.<debtor>` as the `standingUnless` defeater, per
+  `Prax.Repute`'s own idiom — a positive fact whose insertion dissolves every derived regard
+  at once; the breach's raw fact and the witness's belief both persist undisturbed, which is
+  the point — reputation derives from belief, never the raw fact, so only the defeater's
+  presence, not the breach's absence, can dissolve it). Reputation flows from belief, never
   from the raw fact — the K-discipline unchanged.
 - Guards: content must be a single sentence (Deontic's stratification rule restated), loud
   errors in the established idiom.
