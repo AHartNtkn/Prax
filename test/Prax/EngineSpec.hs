@@ -1,6 +1,7 @@
 module Prax.EngineSpec (tests) where
 
 import           Data.List (isInfixOf)
+import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, (@?=), assertBool, assertFailure)
 
@@ -100,7 +101,11 @@ labels st actor = map gaLabel (possibleActions st actor)
 
 tests :: TestTree
 tests = testGroup "Prax.Engine"
-  [ testCase "definePractice inserts static data under practiceData" $
+  [ testCase "cookedDefs mirrors practiceDefs' keys after definePractices" $
+      let st = definePractices [greetP, tendBarP, duelP, mathP] emptyState
+      in Map.keys (cookedDefs st) @?= Map.keys (practiceDefs st)
+
+  , testCase "definePractice inserts static data under practiceData" $
       let st = definePractice tendBarP emptyState
       in assertBool "beverageType present"
            ("practiceData.tendBar.beverageType.cider.alcoholic"

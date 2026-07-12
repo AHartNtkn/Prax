@@ -18,6 +18,9 @@ module Prax.Types
   , Outcome(..)
   , Function(..)
   , FnCase(..)
+  , CookedOutcome(..)
+  , CookedAction(..)
+  , CookedPractice(..)
   , Character(..)
   , character
   , Want(..)
@@ -33,7 +36,7 @@ import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Bindings, Db, emptyDb, exists)
-import           Prax.Query (Condition)
+import           Prax.Query (Condition, CookedCondition)
 import           Prax.Derive (Axiom)
 
 -- | A social practice: a role-parameterized bundle of affordances.
@@ -92,6 +95,47 @@ data FnCase = FnCase
   }
   deriving (Eq, Show)
 
+-- | The cooked mirror of 'Outcome' (see @docs/specs/2026-07-12-v28-cooked-world.md@
+-- and 'Prax.Cooked.cookOutcome', which builds these): 'Insert'/'Delete' carry the
+-- sentence already split into @(name, punctuationAfterName)@ tokens
+-- ('Prax.Db.tokens'); 'Call'\/'ForEach' recurse. Declared here rather than in
+-- "Prax.Cooked" because 'PraxState' below embeds 'CookedPractice' (built from
+-- these), and "Prax.Cooked" depends on this module for 'Outcome'\/'Practice' —
+-- these are pure mirror shapes with no dependency on "Prax.Cooked"; the
+-- conversion functions ('Prax.Cooked.cookOutcome', 'Prax.Cooked.cookPractice')
+-- live there.
+data CookedOutcome
+  = CInsert [(String, Maybe Char)]
+  | CDelete [(String, Maybe Char)]
+  | CCall String [String]
+  | CForEach [CookedCondition] [CookedOutcome]
+  deriving (Eq, Show)
+
+-- | The cooked mirror of 'Action': 'actionConditions'\/'actionOutcomes' precooked;
+-- 'caName' carries 'actionName' unchanged (a display template, not a pattern —
+-- never re-parsed by the query/unify machinery, so it needs no cooking).
+data CookedAction = CookedAction
+  { caName  :: String
+  , caConds :: [CookedCondition]
+  , caOuts  :: [CookedOutcome]
+  }
+  deriving (Eq, Show)
+
+-- | The cooked mirror of 'Practice': everything 'Prax.Engine.possibleActions'
+-- and 'Prax.Engine.performAction' need, precompiled once by
+-- 'Prax.Cooked.cookPractice' and cached in 'PraxState''s 'cookedDefs'.
+data CookedPractice = CookedPractice
+  { cpInstanceNames :: [String]
+    -- ^ 'Prax.Db.pathNames' of @practice.\<pid\>.\<Role1\>...\<RoleN\>@,
+    -- precomputed once per world instead of re-split every 'possibleActions' call.
+  , cpActions :: [CookedAction]
+  , cpInits   :: [CookedOutcome]
+  , cpFns     :: Map String [([CookedCondition], [CookedOutcome])]
+    -- ^ Cooked 'Function' cases, keyed by 'fnName'; a case's 'caseConditions'\/
+    -- 'caseOutcomes' cooked in place.
+  }
+  deriving (Eq, Show)
+
 -- | A character/agent. Wants drive autonomous choice; a practice-bound character
 -- only acts within its bound practice (e.g. an ambient jukebox).
 data Character = Character
@@ -138,6 +182,10 @@ data GroundedAction = GroundedAction
 data PraxState = PraxState
   { db           :: Db
   , practiceDefs :: Map String Practice
+  , cookedDefs   :: Map String CookedPractice
+    -- ^ 'practiceDefs' compiled to cooked/token form
+    -- ('Prax.Cooked.cookPractice'), rebuilt in lockstep by the same Engine
+    -- helper ('Prax.Engine.retable') that maintains 'improvables'\/'footprint'.
   , characters   :: [Character]
   , cursor       :: Int          -- ^ round-robin index of the last actor
   , axioms       :: [Axiom]       -- ^ domain rules; reads see their forward-chained closure (default none)
@@ -168,7 +216,7 @@ data PraxState = PraxState
 -- | An empty interpreter state (cursor before the first actor).
 emptyState :: PraxState
 emptyState = PraxState
-  { db = emptyDb, practiceDefs = Map.empty, characters = [], cursor = -1
+  { db = emptyDb, practiceDefs = Map.empty, cookedDefs = Map.empty, characters = [], cursor = -1
   , axioms = [], sorts = [], desires = [], predictionScope = []
   , improvables = [], footprint = [], negFootprint = [], contMonotone = True
   , readView = emptyDb }

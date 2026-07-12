@@ -25,6 +25,7 @@ module Prax.Db
   , insertToks
   , insertAll
   , retract
+  , retractNames
   , unify
   , unifyNames
   , unifyAll
@@ -139,13 +140,16 @@ insertAll ss db = foldl (flip insert) db ss
 -- intermediate nodes make this a no-op (nothing to remove).
 retract :: String -> Db -> Db
 retract = retractNames . parseNames
-  where
-    retractNames [] db = db
-    retractNames [n] (Db e m) = Db e (Map.delete n m)
-    retractNames (n : ns) (Db e m) =
-      case Map.lookup n m of
-        Nothing    -> Db e m
-        Just child -> Db e (Map.insert n (retractNames ns child) m)
+
+-- | 'retract' with the sentence already split into names — for callers that
+-- already hold the names (e.g. cooked outcomes) and must not re-parse them.
+retractNames :: [String] -> Db -> Db
+retractNames [] db = db
+retractNames [n] (Db e m) = Db e (Map.delete n m)
+retractNames (n : ns) (Db e m) =
+  case Map.lookup n m of
+    Nothing    -> Db e m
+    Just child -> Db e (Map.insert n (retractNames ns child) m)
 
 -- | 'unify' with the sentence already split into names — for callers that
 -- evaluate one pattern against many binding sets ('Prax.Query' hoists the
