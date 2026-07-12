@@ -43,6 +43,7 @@ library
                       Prax.Rumor
                       Prax.Repute
                       Prax.Faction
+                      Prax.Kin
                       Prax.Deceit
                       Prax.Minds
                       Prax.Relevance
@@ -111,6 +112,7 @@ test-suite prax-test
                       Prax.RumorSpec
                       Prax.ReputeSpec
                       Prax.FactionSpec
+                      Prax.KinSpec
                       Prax.DeceitSpec
                       Prax.MindsSpec
                       Prax.PersonaSpec
