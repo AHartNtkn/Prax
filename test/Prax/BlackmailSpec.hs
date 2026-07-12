@@ -149,6 +149,14 @@ tests = testGroup "Prax.Blackmail"
         r <- try (evaluate (length (show (shakedown "x" [] "took.V.for.Owner" "favor" 1))))
         assertBool "Owner is reserved for the desire's own Owner-templated variable"
           (isLeft (r :: Either ErrorCall Int))
+    , testCase "a secondary evidence variable named Hearer collides with expose's own hearer" $ do
+        r <- try (evaluate (length (show (shakedown "x" [] "took.V.before.Hearer" "favor" 1))))
+        assertBool "Hearer is reserved for expose's (and gossip's) own hearer variable"
+          (isLeft (r :: Either ErrorCall Int))
+    , testCase "a secondary evidence variable named Actor collides with the generated actions' own actor" $ do
+        r <- try (evaluate (length (show (shakedown "x" [] "took.V.with.Actor" "favor" 1))))
+        assertBool "Actor is reserved for the generated actions' own actor variable"
+          (isLeft (r :: Either ErrorCall Int))
     ]
 
   , testGroup "threaten: the extorter is motivated to threaten, and the threat deposits"

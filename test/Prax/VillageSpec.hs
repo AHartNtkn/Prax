@@ -1,6 +1,6 @@
 module Prax.VillageSpec (tests) where
 
-import           Data.List (isInfixOf)
+import           Data.List (isInfixOf, isPrefixOf)
 import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
@@ -45,6 +45,37 @@ freePlayAt = (trace !!)
 postTheftAt :: Int -> PraxState
 postTheftAt = (trace !!)
   where trace = iterate (idleStep "you") (doAct "bob" "steal the loaf" villageWorld)
+
+-- Fire the sight ticker directly (VillageSpec's own idiom, "out of sight,
+-- out of mind"): makes a just-established co-presence concrete in each
+-- character's own memory before the next decision is scored.
+tick :: PraxState -> PraxState
+tick st = case possibleActions st sightName of
+  (ga : _) -> performAction st ga
+  []       -> error "no sight action available"
+
+-- The shakedown's forced trajectory (the theft tests' own convention: a
+-- scripted opening, then free play). gale steps out of the mill first --
+-- otherwise she'd be a third simultaneous witness to eve's whisper, tripping
+-- notoriety at the instant of witnessing rather than leaving it "one
+-- predicted exposure from the brink." Carol then arrives and witnesses
+-- directly (no gossip relay needed); both return to the square, where real
+-- bystanders (bob, you) make carol's exposure threat credible rather than
+-- empty (the mill, once gale and dana already know, offers no one left to
+-- expose to). The sight ticks after each move are what let each
+-- character's own round-walk correctly price a threat from someone just
+-- out of the room, not only someone still in it.
+whisperArcSetup :: PraxState
+whisperArcSetup = foldl (flip ($)) villageWorld
+  [ tick . doAct "gale" "Go to square"
+  , tick . doAct "carol" "Go to mill"
+  , tick . doAct "eve" "whisper to dana that"
+  , tick . doAct "carol" "Go to square"
+  , tick . doAct "eve" "Go to square"
+  ]
+
+whisperArcAt :: Int -> PraxState
+whisperArcAt n = iterate (idleStep "you") whisperArcSetup !! n
 
 -- The named villager from the cast.
 villager :: String -> Character
@@ -378,20 +409,37 @@ tests = testGroup "Prax.Worlds.Village"
         (exists "eve.lied.dana.stole.carol.loaf" (db st))
       assertBool "gale, bearing the same spite, never lied (her psyche is unmarked)"
         (not (exists "gale.lied" (db st)))
-      -- the emergent sting, kept honest rather than asserted away: eve's
-      -- whisper deceives gale too (an honest believer is the perfect vector),
-      -- and gale spreads the falsehood she now honestly holds -- ordinary
-      -- gossip, no lie, no mark, no conscience cost. The honest villager
-      -- launders the lie. Assert the laundering, and its honesty: everything
-      -- traced to gale is something gale herself believes.
-      let heardFromGale =
+      -- v30's threshold fear (spec §3/§4, the v22 retelling precedent):
+      -- once carol and dana regard her a slanderer (round 1's whisper), any
+      -- FURTHER whisper to someone new would land the third regarder and
+      -- trip notoriety -- so eve, now prudent, never risks a second
+      -- frame-up in free play. The pre-v30 world had her whisper three
+      -- times by t=33 (dana, then you, then gale); the crispest fact for
+      -- "exactly once, ever" is her own mark count.
+      assertBool "exactly one whisper, ever -- the brink made her prudent"
+        ([ s | s <- dbToSentences (db st), "eve.lied." `isPrefixOf` s ]
+           == ["eve.lied.dana.stole.carol.loaf"])
+
+      -- The v25 mechanism (an honest believer launders a lie she's been
+      -- honestly deceived by) still holds -- it just needs a hand now that
+      -- eve's own prudence stops her from ever handing gale the lie
+      -- herself in free play. Force exactly the whisper her prudence
+      -- declines (one-shot-per-hearer still permits it: gale has never
+      -- heard this specific claim from anyone); drive a few turns first to
+      -- reach a moment they're actually co-present (free play has them
+      -- pass in and out of sync), then let gale relay it honestly, exactly
+      -- as the v25 mechanism always has.
+      let stCoPresent = driveIdle "you" 5 st
+          stWhisper = doAct "eve" "whisper to gale that carol stole the loaf" stCoPresent
+          stLaundered = driveIdle "you" 20 stWhisper
+          heardFromGale =
             [ (w, c) | w <- vs, c <- vs
                      , exists (w ++ ".believes.stole." ++ c
-                                 ++ ".loaf.heard.gale") (db st) ]
+                                 ++ ".loaf.heard.gale") (db stLaundered) ]
       assertBool "the lie traveled through the honest villager"
         (not (null heardFromGale))
       assertBool "whatever gale passed on, she honestly believes"
-        (all (\(_, c) -> exists ("gale.believes.stole." ++ c ++ ".loaf") (db st))
+        (all (\(_, c) -> exists ("gale.believes.stole." ++ c ++ ".loaf") (db stLaundered))
              heardFromGale)
 
   , testCase "a told-about spite predicts eve's whisper but not gale's" $ do
@@ -409,4 +457,51 @@ tests = testGroup "Prax.Worlds.Village"
         (maybe False (\l -> "whisper" `isInfixOf` l
                             && "carol stole" `isInfixOf` l) p)
       predictMove st (villager "dana") (villager "gale") @?= Nothing
+
+  , testCase "threshold fear leaves eve's free-play whispering unchanged: still rational below the brink" $ do
+      -- 5 idle-steps: you, bob, carol, dana, eve's own first turn -- the
+      -- SAME decision v22/v25 always made, now made under a threshold fear
+      -- that simply hasn't fired yet (dana + gale = 2 regarders < 3).
+      let st = freePlayAt 5
+      assertBool "eve still whispered, framing carol, exactly as before threshold fear existed"
+        (exists "eve.lied.dana.stole.carol.loaf" (db st))
+      assertBool "two regarders (dana, gale) -- still under the brink"
+        (exists "regards.dana.eve.slanderer" (readView st)
+         && exists "regards.gale.eve.slanderer" (readView st))
+      assertBool "not yet notorious" (not (exists "notorious.eve.slanderer" (readView st)))
+
+  , testCase "carol's shakedown: the threat fires once she holds eyewitness evidence" $ do
+      let st = whisperArcAt 3
+      assertBool "carol threatened eve" (exists "threatened.whisper.carol.eve" (db st))
+      assertBool "the motive-belief deposit: eve hears carol's professed punitive intent"
+        (exists "eve.believes.desires.carol.punishes-whisper.heard.carol" (db st))
+      assertBool "still under the brink -- only carol and dana regard her"
+        (not (exists "notorious.eve.slanderer" (readView st)))
+
+  , testCase "carol's shakedown: eve complies -- the debt exists, the threat is gone, no exposure happened" $ do
+      let st = whisperArcAt 6
+      assertBool "the debt fact" (exists "debt.carol.eve.favor" (db st))
+      assertBool "the obligation Debt composes it from" (exists "obliged.eve.favor" (db st))
+      assertBool "the threat is gone" (not (exists "threatened.whisper.carol.eve" (db st)))
+      assertBool "eve never defied" (not (exists "defied.whisper.eve.carol" (db st)))
+      assertBool "no exposure happened -- no one new heard it from carol"
+        (not (any (\w -> exists (w ++ ".believes.whispered.eve.dana.heard.carol") (db st))
+                  ["bob", "you", "gale"]))
+      assertBool "eve never crossed into notoriety -- the threat bought real silence"
+        (not (exists "notorious.eve.slanderer" (readView st)))
+
+  , testCase "carol's shakedown: the reputation stack is undisturbed for uninvolved parties" $ do
+      let st = whisperArcAt 6
+      assertBool "bob was never threatened over anything"
+        (not (any (\s -> "threatened.whisper." `isInfixOf` s && ".bob" `isInfixOf` s)
+                  (dbToSentences (db st))))
+      assertBool "dana holds no debt or obligation of her own"
+        (not (exists "debt.carol.dana.favor" (db st))
+         && not (any (\s -> "obliged.dana." `isInfixOf` s) (dbToSentences (db st))))
+      assertBool "gale is neither extorter nor victim of anything"
+        (not (any (\s -> ("threatened.whisper." `isInfixOf` s || "debt." `isInfixOf` s)
+                         && "gale" `isInfixOf` s)
+                  (dbToSentences (db st))))
+      assertBool "bob's own standing (thief/notoriety track) is untouched by any of this"
+        (not (exists "notorious.bob.thief" (readView st)))
   ]

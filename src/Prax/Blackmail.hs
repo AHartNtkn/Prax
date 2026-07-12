@@ -70,9 +70,10 @@ shakedown sid copresence pat price w
   | (bad : _) <- reservedClash =
       error ("shakedown: evidence pattern " ++ show pat
              ++ " names a secondary variable " ++ show bad
-             ++ ", but the punitive desire quantifies over D (the victim), W"
-             ++ " (the believer) and Owner (the extorter) — pick a different"
-             ++ " variable name for anyone besides the victim")
+             ++ ", but D (the punitive desire's victim), W (its believer),"
+             ++ " Owner (its extorter), Actor and Hearer (the generated"
+             ++ " actions' own actor/hearer) are all reserved — pick a"
+             ++ " different variable name for anyone besides the victim")
   | otherwise = (punitive, [threaten, comply, defy, expose])
   where
     victim = case filter isVariable (pathNames pat) of
@@ -81,10 +82,15 @@ shakedown sid copresence pat price w
                         ++ " names no one (a threat needs a victim)")
 
     -- Beyond the victim, 'patD' reuses D/W/Owner as the punitive desire's own
-    -- variables (below); a secondary evidence variable bearing one of those
-    -- names would silently merge with them under 'renameVictim' or grounding.
+    -- variables (below), and the generated actions bind Actor/Hearer as
+    -- their own local roles ('threaten'/'comply'/'defy' via the actor, plus
+    -- 'expose' and any world-supplied 'gossip' over the same pattern via
+    -- their own Hearer); a secondary evidence variable bearing any of those
+    -- five names would silently merge with them under 'renameVictim',
+    -- grounding, or the shared query scope.
     reservedClash =
-      [ v | v <- pathNames pat, isVariable v, v /= victim, v `elem` ["D", "W", "Owner"] ]
+      [ v | v <- pathNames pat, isVariable v, v /= victim
+          , v `elem` ["D", "W", "Owner", "Actor", "Hearer"] ]
 
     -- Fact conventions, id-scoped so multiple shakedowns coexist.
     threatPath extorter v = "threatened." ++ sid ++ "." ++ extorter ++ "." ++ v

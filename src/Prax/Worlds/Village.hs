@@ -39,6 +39,8 @@ import           Prax.Repute
 import           Prax.Sight
 import           Prax.Deceit
 import           Prax.Persona
+import           Prax.Debt (owes)
+import           Prax.Blackmail (shakedown)
 
 -- | You are a villager — one agent among many.
 playerName :: String
@@ -113,12 +115,36 @@ honest = Trait "honest"
 spitesCarol :: Desire
 spitesCarol = Desire "spites-carol" (Want [ Match "regards.W.carol.thief" ] 4)
 
+-- The shakedown: carol, who already holds eyewitness evidence eve whispers
+-- (v22's frame-up act made observable below), presses her for a favor.
+-- Threshold fear (v30 §3, bob's own idiom): notoriety is nonlinear, so this
+-- serves both masters a per-head cost couldn't — free below the brink,
+-- catastrophic at it (see 'villageAxioms' and eve's own want below).
+whisperShakedown :: (Desire, [Action])
+whisperShakedown = shakedown "whisper" together "whispered.V.H" "favor" 6
+
+punishesWhisper :: Desire
+punishesWhisper = fst whisperShakedown
+
+threatenWhisper, complyWhisper, defyWhisper, exposeWhisper :: Action
+(threatenWhisper, complyWhisper, defyWhisper, exposeWhisper) =
+  case snd whisperShakedown of
+    [t, c, d, e] -> (t, c, d, e)
+    acts -> error ("whisperShakedown: expected 4 actions, got "
+                   ++ show (length acts))
+
 -- Village life: the theft (observable) and the belief-gated confrontation.
+--
+-- The role is named "Scene" (a v30 rename): the singleton instance key
+-- silently pre-binds any action-local variable of the same name before that
+-- action's own conditions are ever evaluated, so a role named "V" collided
+-- with the shakedown evidence-pattern convention (found and fixed during
+-- v30's implementation).
 villageP :: Practice
 villageP = practice
   { practiceId = "village"
   , practiceName = "Village life"
-  , roles = ["V"]
+  , roles = ["Scene"]
   , actions =
       [ -- Anyone at the stall can steal — bob is merely the one who wants to.
         observable together "stole.Actor.loaf" $
@@ -191,7 +217,8 @@ villageP = practice
         -- scapegoat from the village roster. The deceived hold real hearsay --
         -- the whole rumor/reputation stack cascades on the falsehood, and
         -- nobody in the village can tell it from truth.
-      , lie together
+      , observable together "whispered.Actor.Hearer" $
+        lie together
           [ Absent [ Match "Actor.relationship.Hearer.trust.score!TrustScore"
                    , Cmp Lt "TrustScore" "0" ] ]
           [ Match "practice.world.world.at.Culprit!AnywhereQ" ]
@@ -200,6 +227,10 @@ villageP = practice
 
         -- The lawful alternative to the stall's temptation.
       , earnBreadTake
+      , threatenWhisper
+      , complyWhisper
+      , defyWhisper
+      , exposeWhisper
       ]
   }
 
@@ -217,11 +248,18 @@ villageAxioms =
     -- temperament is worn on the sleeve: the whole village presumes a
     -- bearer's conduct-valuations from t=0 (v25)
   , transparent
+    -- Threshold fear, bob's own idiom (v30 §3): standing derives per
+    -- believer of the whispering ACT (content stays secret); "recanted"
+    -- names the never-exercised defeater (no atonement act for slander is
+    -- authored this round — banked, per spec), kept for symmetry with
+    -- 'stole.Culprit.loaf's own standingUnless.
+  , standingUnless "whispered.V.H" "recanted.V" "slanderer"
+  , notoriety "slanderer" 3
   ]
 
 villageWorld :: PraxState
 villageWorld =
-  (setDesires ([ earnBreadPursuit, spitesCarol ] ++ personaVocabulary [honest])
+  (setDesires ([ earnBreadPursuit, spitesCarol, punishesWhisper ] ++ personaVocabulary [honest])
      (setAxioms villageAxioms (foldl (flip performOutcome) base (setup ++ personaFacts))))
   -- an epistemic prediction scope: you credit another's predicted move only
   -- if you're with them now, or you sighted them within the last 2 ticks —
@@ -263,7 +301,13 @@ villageWorld =
                                 , Match "Other.believes.stole.bob.loaf.heard.carol" ] 5
                          , Want [ Match "shunned.carol.T", Match "regards.carol.T.thief" ] 5
                          , Want [ Match "shunned.carol.T"
-                                , Absent [ Match "regards.carol.T.thief" ] ] (-5) ] }, [])
+                                , Absent [ Match "regards.carol.T.thief" ] ] (-5)
+                           -- the shakedown's price: carol wants the favor
+                           -- eve's silence-money buys her (small — the
+                           -- punitive desire is what motivates the threat;
+                           -- this just makes the payoff concrete)
+                         , Want [ owes "carol" "eve" "favor" ] 4 ]
+           , charDesires = ["punishes-whisper"] }, [])
       , ((character "dana")
            { charWants = [ Want [ Match "confronted.dana.T" ] 5
                          , Want [ Match "eyed.dana.T" ] 5
@@ -275,8 +319,13 @@ villageWorld =
                          , Want [ Match "practice.world.world.at.dana!mill" ] 1 ] }, [])
         -- eve's authored malice, named vocabulary since v25 (spitesCarol
         -- above): the same +4/head spite gale carries, and — unheralded —
-        -- exactly as unreadable as the unnamed want it replaces
-      , ((character "eve") { charDesires = ["spites-carol"] }, [])
+        -- exactly as unreadable as the unnamed want it replaces. Her own
+        -- threshold fear (v30 §3) mirrors bob's notorious -15 exactly —
+        -- being the village's KNOWN slanderer destroys her; free below the
+        -- brink (1-2 regards), catastrophic at it.
+      , ((character "eve")
+           { charWants = [ Want [ Match "notorious.eve.slanderer" ] (-15) ]
+           , charDesires = ["spites-carol"] }, [])
         -- gale: eve's contrast pair. The same spite, plus a temperament —
         -- her conscience (-6/lie) outprices what any single whisper buys
         -- (+4/head), so eve whispers and gale never does
