@@ -27,9 +27,11 @@ module Prax.Engine
 import           Data.List (intercalate)
 import           Data.Maybe (listToMaybe)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import           Data.Set (Set)
 
 import           Prax.Db
-import           Prax.Query (queryCooked, groundCondition, groundNames, CookedCondition, cookCondition)
+import           Prax.Query (queryCooked, groundCondition, groundNames, CookedCondition(..), cookCondition)
 import           Prax.Types
 import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, axiomHeadPatterns, monotoneAxioms, cookAxioms, runCooked)
 import           Prax.Relevance (improvableDesires, livenessOf, mayUnifySyms, evictionShadows, evictionShadowNames)
@@ -290,14 +292,15 @@ lookupCookedFn fn st =
 -- touch — 'performAction''s effects, bounded statically per call by walking
 -- the same cooked outcomes 'performAction' itself executes. @Nothing@ when
 -- the effects cannot be bounded: an unresolvable 'CCall', or an insert whose
--- first segment is (or could ground to) @practice@ — such an insert may
--- bring an instance into being ('spawnedInstanceNames') and run that
--- practice's 'cpInits', arbitrary further outcomes this walk does not model.
--- The caller (the planner's prediction reuse) treats @Nothing@ as opaque: no
--- reuse at or below the node. Conservative by construction: 'CForEach'
--- bodies are included whether or not their guards would fire, with unbound
--- variables left as 'mayUnifySyms' wildcards; 'CCall' includes every case of
--- the resolved function, cycle-guarded like 'Prax.Relevance''s string-side
+-- first segment is a variable that is not a safe ForEach binder
+-- ('safeBinders') — such a head could ground to @practice@ and spawn an
+-- instance ('spawnedInstanceNames'), running that practice's 'cpInits',
+-- arbitrary further outcomes this walk does not model. The caller (the
+-- planner's prediction reuse) treats @Nothing@ as opaque: no reuse at or
+-- below the node. Conservative by construction: 'CForEach' bodies are
+-- included whether or not their guards would fire, a safe binder head kept
+-- as a 'mayUnifySyms' wildcard anchor; 'CCall' includes every case of the
+-- resolved function, cycle-guarded like 'Prax.Relevance''s string-side
 -- atom walk.
 groundedDeltaAnchors :: PraxState -> GroundedAction -> Maybe [[Sym]]
 groundedDeltaAnchors st ga = do
@@ -306,14 +309,15 @@ groundedDeltaAnchors st ga = do
   outcomeDeltaAnchors st [] (map (groundCookedOutcome (gaBindings ga)) (caOuts ca))
 
 outcomeDeltaAnchors :: PraxState -> [String] -> [CookedOutcome] -> Maybe [[Sym]]
-outcomeDeltaAnchors st visited = fmap concat . traverse go
+outcomeDeltaAnchors st visited = go' Set.empty
   where
-    go o = case o of
+    go' safe = fmap concat . traverse (go safe)
+    go safe o = case o of
       CInsert toks
-        | mightSpawn (map fst toks) -> Nothing
+        | mightSpawn safe (map fst toks) -> Nothing
         | otherwise -> Just (map fst toks : evictionShadowNames toks)
       CDelete toks  -> Just (map fst toks : evictionShadowNames toks)
-      CForEach _ os -> outcomeDeltaAnchors st visited os
+      CForEach conds os -> go' (safe `Set.union` safeBinders conds) os
       CCall fn args
         | fn `elem` visited -> Just []
         | otherwise -> case lookupCookedFn fn st of
@@ -324,5 +328,28 @@ outcomeDeltaAnchors st visited = fmap concat . traverse go
                    (\(_, os) -> outcomeDeltaAnchors st (fn : visited)
                                   (map (groundCookedOutcome b) os))
                    cases)
-    mightSpawn (n : _) = symIsVar n || n == intern "practice"
-    mightSpawn []      = False
+    mightSpawn safe (n : _)
+      | symIsVar n = not (n `Set.member` safe)
+      | otherwise  = n == intern "practice"
+    mightSpawn _ [] = False
+
+-- | The ForEach binders that provably cannot take the value @practice@:
+-- variables bound at a NON-FIRST position of a top-level positive 'CMatch'
+-- guard and never occurring at the first position of any such guard. Spends
+-- the authored-world structural invariant (the family "Prax.Relevance"'s
+-- header states for predicate literals, extended to the registry root): the
+-- literal @practice@ roots practice-registry paths and is never an entity,
+-- place, value, or id name — so a value read out of a fact's INTERIOR can
+-- never be @practice@, and an insert headed by such a binder can never reach
+-- 'spawnedInstanceNames'. Deliberately narrow: 'CExists'\/'CAbsent'\/'CNot'
+-- do not bind outward, 'COr' branches may leave the binder unbound, subquery
+-- variables carry sets, and a FIRST-position variable really can unify
+-- @practice@ against the registry — none of those yield safe binders, and
+-- 'CCall' resets the safe set (call-scoped parameters are not the mover's
+-- bindings). Uncertainty stays opaque.
+safeBinders :: [CookedCondition] -> Set Sym
+safeBinders conds = Set.difference boundDeep firstPos
+  where
+    pats = [ p | CMatch p <- conds ]
+    boundDeep = Set.fromList [ v | p <- pats, v <- drop 1 p, symIsVar v ]
+    firstPos  = Set.fromList [ v | (v : _) <- pats, symIsVar v ]

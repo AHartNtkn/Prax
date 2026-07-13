@@ -271,6 +271,37 @@ tests = testGroup "Prax.Engine"
         Just as -> assertBool "Call-resolved insert, arg-grounded" (has "blessed.ada" as)
       anchorsOf "ada: chant" @?= Nothing            -- unresolvable Call
 
+  , testCase "groundedDeltaAnchors: safe ForEach binders bound; unsafe heads stay opaque" $ do
+      let p = practice
+            { practiceId = "gossipy", roles = ["R"]
+            , actions =
+                [ action "[Actor]: broadcast"
+                    [] [ ForEach [ Match "together.W" ]
+                           [ Insert "W.believes.rumor" ] ]
+                , action "[Actor]: reshape"
+                    [] [ ForEach [ Match "X.y.Z" ]
+                           [ Insert "X.marked" ] ]
+                , action "[Actor]: phantom"
+                    [] [ ForEach [ Exists [ Match "roster.W" ] ]
+                           [ Insert "W.tagged" ] ]
+                ]
+            }
+          st = definePractices [p] emptyState
+          st1 = performOutcome (Insert "practice.gossipy.here") st
+          gaOf label = case [ ga | ga <- possibleActions st1 "ada", gaLabel ga == label ] of
+            (ga : _) -> ga
+            []       -> error ("no such grounded action: " ++ label)
+      -- The broadcast: W is bound at position 2 of a top-level Match — a
+      -- safe binder; the insert is bounded with W as a wildcard anchor.
+      case groundedDeltaAnchors st1 (gaOf "ada: broadcast") of
+        Nothing -> assertFailure "broadcast must be bounded (safe binder)"
+        Just as -> assertBool "wildcard-headed believes anchor"
+          (map intern (pathNames "W.believes.rumor") `elem` as)
+      -- A position-1 binder really can unify practice-registry paths.
+      groundedDeltaAnchors st1 (gaOf "ada: reshape") @?= Nothing
+      -- Exists does not bind outward; its "binder" is not safe.
+      groundedDeltaAnchors st1 (gaOf "ada: phantom") @?= Nothing
+
   , testCase "axiomHeads: fireable heads, lifted forms, the contradiction witness" $ do
       let axs = [ axiom [ Match "starving.X" ] [ "hungry.X" ] ]
           st = setAxioms axs emptyState
