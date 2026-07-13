@@ -194,6 +194,30 @@ insertAll ss db = foldl (flip insert) db ss
 
 -- | Retract: delete the leaf named by the final segment of the path. Missing
 -- intermediate nodes make this a no-op (nothing to remove).
+--
+-- __Ambiguity, not yet resolved:__ this does /not/ prune ancestors left
+-- childless by the deletion, and that is deliberate for now, not an
+-- oversight. The trie has no way to distinguish "a node that is itself an
+-- asserted fact, which happens to also have children" from "a node that is
+-- merely an interior step toward some deeper fact, now childless because its
+-- only occupant was retracted" — both look identical: present in the map,
+-- empty child set. Pruning on emptiness (tried and reverted; see git
+-- history and @.superpowers/sdd/task-2b-report.md@) is correct for the
+-- second case and actively wrong for the first: several authored practices
+-- (e.g. @Prax.Worlds.Bar@'s @tendBarP@) assert an instance fact at a path
+-- (@practice.tendBar.\<Place\>.\<Bartender\>@) and then nest transient,
+-- fully-drainable state (per-customer orders) /underneath/ that same path —
+-- 'possibleActions' discovers the instance by its presence in the trie, not
+-- from any separate registry, so pruning it away the moment its transient
+-- children happen to reach zero permanently destroys the instance. Until
+-- the trie can mark a node as an asserted endpoint independently of whether
+-- it has children (the banked fix — see the LEDGER's "asserted-endpoint
+-- marking" entry), retract leaves ancestors exactly as this dual use
+-- requires: present, but indistinguishable from a fact. The consequence is
+-- 'dbToSentences'\/'exists' can read a drained-but-never-independently-
+-- asserted ancestor as if it were its own fact (the phantom-emission limit
+-- documented in 'dbToSentences' below) — a real but currently unavoidable
+-- imprecision, not a bug to be silently patched around at this layer.
 retract :: String -> Db -> Db
 retract = retractNames . map intern . parseNames
 
@@ -312,6 +336,19 @@ exists path db = not (null (unify path db Map.empty))
 -- @.@. Flattens the @.@/@!@ distinction; intended for display, matching and
 -- tests. The final 'sort' operates on fully rendered strings, so it is safe
 -- regardless of the (run-dependent) 'IntMap' traversal order feeding it.
+--
+-- __Phantom-emission limit:__ "childless node" is the only signal this
+-- function has for "this is a fact" ('expand' below treats any node with an
+-- empty child map as terminal). The trie does not separately record
+-- /whether a path was ever asserted/ versus /merely present as an ancestor
+-- that currently has nothing under it/ — see 'retract''s haddock for why
+-- that ambiguity is currently load-bearing, not just an oversight. A path
+-- that was never itself inserted, but is an ancestor of something that was
+-- and has since been fully retracted, is indistinguishable here from a
+-- genuine fact and will be emitted as one. Resolving this requires marking
+-- asserted endpoints in the trie independently of child-emptiness (banked,
+-- not yet implemented — see the LEDGER's "asserted-endpoint marking"
+-- entry).
 dbToSentences :: Db -> [String]
 dbToSentences = sort . go
   where

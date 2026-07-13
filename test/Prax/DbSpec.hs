@@ -49,6 +49,55 @@ tests = testGroup "Prax.Db"
     , testCase "retracting a missing path is a no-op" $
         dbToSentences (retract "nope.nothere" (build ["foo.bar"]))
           @?= ["foo.bar"]
+
+    , testCase "INSTANCE PERSISTENCE: draining transient state nested under an asserted path leaves the path intact" $
+        -- Distills Prax.Worlds.Bar's `tendBarP` pattern to the Db level: an
+        -- instance fact (e.g. "practice.tendBar.bar.ada") doubles as the
+        -- parent namespace for fully-drainable, transient per-customer state
+        -- nested underneath the SAME path (order -> fulfill deletes order,
+        -- inserts beverage -> drink deletes beverage, nothing reinserted).
+        -- `Prax.Engine.possibleActions` discovers practice instances by trie
+        -- presence alone (no separate registry), so retracting the last
+        -- transient child down to nothing must NOT take the instance path
+        -- down with it, or the bartender's own instance is gone forever with
+        -- no way to ever reinsert it.
+        --
+        -- This is the regression net for a real bug found (and reverted) in
+        -- this task: pruning ancestors left childless by retract broke
+        -- exactly this pattern (`BarSpec`'s "drinking two beers" test failed
+        -- on the second order after that fix). See
+        -- `.superpowers/sdd/task-2b-report.md` for the full trace. The trie
+        -- currently cannot distinguish "asserted instance fact that happens
+        -- to have children" from "ordinary ancestor, now childless" — see
+        -- `retract`'s haddock — so this drained ancestor is (unavoidably,
+        -- for now) ALSO what `dbToSentences` emits as a phantom fact; that
+        -- emission is the documented cost of keeping the instance alive.
+        let instanceFact = "practice.tendBar.bar.ada"
+            db0 = build [instanceFact]
+            db1 = insert (instanceFact ++ ".customer.you!order!beer") db0
+            db2 = retract (instanceFact ++ ".customer.you!order") db1
+            db3 = insert (instanceFact ++ ".customer.you!beverage!beer") db2
+            db4 = retract (instanceFact ++ ".customer.you!beverage") db3
+        in do
+          exists instanceFact db4 @?= True
+          exists (instanceFact ++ ".customer.you") db4 @?= True
+          dbToSentences db4 @?= [instanceFact ++ ".customer.you"]
+
+    , testCase "sibling and shared ancestors survive retracting the other sibling" $
+        -- Two facts sharing a prefix (two children under `carol`): retracting
+        -- one must prune nothing above `carol`, since `carol` still has the
+        -- surviving sibling as a child.
+        let db  = build ["eve.lied.dana.stole.carol.loaf", "eve.lied.dana.stole.carol.purse"]
+            db' = retract "eve.lied.dana.stole.carol.loaf" db
+        in do
+          exists "eve.lied.dana.stole.carol.loaf" db' @?= False
+          exists "eve.lied.dana.stole.carol.purse" db' @?= True
+          exists "eve.lied.dana.stole.carol" db' @?= True
+          exists "eve.lied.dana.stole" db' @?= True
+          exists "eve.lied.dana" db' @?= True
+          exists "eve.lied" db' @?= True
+          exists "eve" db' @?= True
+          dbToSentences db' @?= ["eve.lied.dana.stole.carol.purse"]
     ]
 
   , testGroup "unify"
