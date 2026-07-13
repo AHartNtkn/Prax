@@ -552,7 +552,66 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   throughout. **Banked, not built** (targeting the world-richness residual this round's
   profiling isolated, not the pre-filter question this round closed): footprint
   discrimination indexing and axiom-family partitioning for the continuation loop (see
-  "Future ideas to investigate," below).
+  "Future ideas to investigate," below). **v34 built exactly the mechanism this residual
+  pointed at and measured it directly**: reuse reclaims ≈9.5% of the post-v33 runtime
+  (120.10s vs. 132.75s) — not the rest of the residual. The remainder of the recursion cost
+  turns out to be semantically necessary under the exactness contract: the village's own
+  reputation-cascade writes (the whisper's `Delete recanted.Actor`, the `believes`→`regards`
+  cone) genuinely reach every mover's reads, so those predictions must recompute, not merely
+  be re-derived waste — see the v34 legend row below for the measured account.
+- **v34** — **prediction reuse — and the honest limit of it** (spec
+  `docs/specs/2026-07-13-v34-prediction-reuse.md`). User-directed from measured branch
+  statistics: over 70 village free-play turns (60 NPC picks at depth 2), the same picks cost
+  **89ms at depth 0, 2.3s at depth 1, 44.5s at depth 2** — each lookahead level multiplying
+  by ~20–26×, pure recursive branching, not state machinery. One template is most of the
+  tree: the gossip whisper grounds 458 of 674 top-level candidates (68%), each taken at most
+  once per pick. And within a pick, sibling post-states' predictions equalled the parent
+  state's prediction in **4,014 of 4,014** observed (candidate, mover) comparisons —
+  `scoreActions` was re-running `predictMove` at every tree node even where a node's state
+  differed from the pick's root by only a few outcome tokens that provably couldn't change
+  most movers' predictions. This round makes that proof and reuses the root's prediction
+  wherever it holds: three static per-world enumerations (what a `predictMove` pair reads;
+  what an action's grounded outcomes touch; which axiom heads a fact family can fire), a
+  root-memo prediction per pick filled lazily per mover, and a per-node path-delta anchor set
+  expanded through a derived-fact cone (an axiom's head joins the cone whenever any body atom
+  may-unifies something already in it) — a node reuses the root's prediction exactly when the
+  cone misses the mover's read set, and goes opaque (no reuse anywhere below it) on anything
+  unboundable. **Task 2b tightened the opacity rule itself**: a broadcast `ForEach` insert
+  (the whisper's own shape, previously forced opaque unconditionally) is bounded instead when
+  its variable head is a *safe binder* — never occurring at the first position of any guard
+  `Match`, so it can never unify the registry literal `practice` — while an evidence-free
+  (all-variable) path stays opaque by construction regardless of binder safety, closing an
+  in-principle soundness hole the safe-binder rule would otherwise have opened. Exactness held
+  throughout: goldens byte-identical, ViewInvariant green, decisions bit-for-bit; both reuse
+  guards are mutation-verified in both directions (dropping the reuse guard entirely fails
+  both payoff fixtures verbatim; dropping only the cone fails the derived-fact fixture alone,
+  leaving the base-fact fixture green exactly as the discrimination predicts).
+
+  **The measured recovery, and why the projection came up short.** The same 31-test village
+  A/B (uncontended, best-of-3) against the recorded epochs — 31.11s pre-v32, 171.64s
+  post-v32, 132.75s post-v33 — landed at **120.10s** post-Task-2, a real ≈9.5% reclaim, then
+  **123.57s** post-2b, overlapping Task 2's own 120.10–130.85s run range: 2b is a perf
+  **wash**, kept for the correctness it buys (closing the haddock's stated-vs-actual
+  divergence) rather than for speed. Full suite: 449 tests @ ~165–187s (machine-noise range).
+  An attribution pass over 68,286 `predictAt` calls explains the shortfall against the spec's
+  projected win (whisper subtrees collapsing to the depth-0 floor): before 2b, 98% of calls
+  sat on opaque paths (every broadcast `ForEach` insert tripped the spawn guard); 2b brought
+  opacity down to 25%, but the freed 73% moved into cone∩read-set **INTERSECTION** (74%), not
+  reuse (still 1%) — the whisper's own writes (`Delete recanted.Actor`, forfeiting amends; the
+  `believes`→`regards` cone) genuinely reach every mover's reputation read. The branch probe's
+  4,014/4,014 equality was contingent on that one traced state, not provable: under the exact
+  contract, those pairs must recompute live. The residual 25% opacity is exactly two
+  literal-`practice`-rooted templates (`Go to [Place]`, `take up honest work`) — the sound
+  floor of the current rule, not a missed case.
+
+  **Banked**: below-existing-instance practice-path inserts could bound exactly rather than
+  stay opaque (`spawnedInstanceNames`'s existed-before semantics would let `Go to`/`honest
+  work` un-opaque); per-reachable-head cone precision (`extendDelta` currently joins every
+  axiom head on any feed — a per-head reachable-from-the-delta cone would free some
+  whisper-adjacent pairs, though the raw `recanted.V` dependency would still defeat the
+  culprit-facing ones — see "Future ideas to investigate," below). Suite: 445 (Task 1) → 448
+  (Task 2) → 449 (Task 2b + its own evidence-free-path fix), all green throughout; zero
+  warnings; hlint clean; goldens byte-identical; ViewInvariant green throughout.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -706,6 +765,31 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   only the family a given delta could possibly affect, rather than every axiom unconditionally,
   is the natural lever this profile points at — unbuilt, and not designed against a concrete
   world this round beyond the profiling that found it.
+- **Below-existing-instance practice-path bounding** *(banked — v34, found while attributing
+  Task 2b's opacity residual)*. The two templates still opaque after the safe-binder rule —
+  `Go to [Place]` (`Insert "practice.world.World.at.Actor!Place"`) and `take up honest work`
+  (practice-namespaced progress inserts) — are opaque because a literal-`practice`-headed
+  insert can in general bring a new practice instance into being, which `groundedDeltaAnchors`
+  cannot bound. But both templates only ever insert *beneath an instance path that already
+  exists* at prediction time (the world/place registry and the endeavor's own staged practice
+  are both spawned once, at world construction or undertake, never per-move) — `Prax.Engine`'s
+  `spawnedInstanceNames` already tracks exactly this existed-before fact. A refinement that
+  checks the insert's instance prefix against `spawnedInstanceNames` before falling back to the
+  unconditional practice-opacity rule could bound these two templates exactly, un-opaquing the
+  two paths that currently poison every route through a `Go to` or `honest work` step — not
+  attempted this round; the attribution pass located the lever, it didn't design the check.
+- **Per-reachable-head cone precision** *(banked — v34, the same attribution pass)*.
+  `extendDelta` joins every `axiomHeads`-reachable family into the cone the moment a delta
+  feeds any of them, rather than only the heads actually reachable *from that specific delta*.
+  For the village, one whisper's delta feeds the reputation axioms and so drags every mover's
+  `regards` read into cone∩read-set intersection, even for movers whose own read is on a
+  disjoint head reachable from a *different* fed family. A per-head reachability refinement
+  (propagate only the heads the delta's own fed families can actually reach, rather than the
+  transitive closure over all axioms touched) could free some of the 74% currently sitting in
+  INTERSECTION back into REUSE — though the raw `recanted.<actor>` anchor dependency (not
+  axiom-derived at all) would still defeat the pairs that read it directly, so this bounds the
+  achievable gain, it doesn't eliminate the live-recompute floor. Unbuilt; located by profiling
+  attribution, not designed against a concrete implementation.
 
 ## Sandbox extension backlog (brainstormed 2026-07-10)
 
