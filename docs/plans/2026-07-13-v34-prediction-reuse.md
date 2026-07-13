@@ -460,7 +460,11 @@ intersects, so the pair recomputes live and `candidateActions` returns `[]`.
       -- unifies NOTHING beth's prediction reads directly — only the cone
       -- (delta feeds the axiom => its head regards.W.C.thief joins) reaches
       -- her fear and her amends gate. A cone-less implementation reuses the
-      -- stale Nothing and idles; the correct one denounces.
+      -- stale Nothing and bides; the correct one denounces. (The do-nothing
+      -- label must sort BEFORE "denounce beth" — a mutation's score-tie
+      -- falls back to the label order, and a do-nothing that sorted after
+      -- would hand the tie to the very label the test asserts, making the
+      -- guard vacuous. "bide time" < "denounce beth"; "idle about" is not.)
       let p = practice
             { practiceId = "court", roles = ["R"]
             , actions =
@@ -469,7 +473,7 @@ intersects, so the pair recomputes live and `candidateActions` returns `[]`.
                 , action "[Actor]: make amends"
                     [ Match "regards.V.Actor.thief" ]
                     [ Insert "recanted.Actor", Insert "apology.Actor" ]
-                , action "[Actor]: idle about" [] []
+                , action "[Actor]: bide time" [] []
                 ]
             }
           axs = [ axiom [ Match "W.believes.C.thief", Not "recanted.C" ]
