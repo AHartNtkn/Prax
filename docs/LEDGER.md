@@ -536,7 +536,7 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 
   **The measured recovery, and the correction it forces.** The same 31 pre-existing,
   uncontended `Prax.Worlds.Village` tests v32 A/B'd: **132.75s** (best of 3:
-  140.02s/132.75s/135.00s), down from v32's **171.64s** — a real ≈39s (≈23%) reclaim of the
+  140.02s/132.75s/135.00s), down from v32's **171.64s** — a real ≈39s reclaim (≈23% of the regressed 171.64s runtime; ≈28% of the
   ≈140.5s v32 regression, not a full return to the pre-v32 **31.11s**. This ≈39s IS the
   pre-filter's actual cost, which is why the v32 entry's "the gap... is the pre-filter loss
   alone" is amended above rather than left standing beside a truer number: a controller
