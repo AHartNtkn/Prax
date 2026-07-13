@@ -71,7 +71,7 @@ livenessOf :: Map String Practice -> [Axiom] -> [Desire] -> Map String Liveness
   only; a positive desire whose candidate gate is axiom-derivable (fixture axiom head
   unifying it) ⇒ AlwaysLive (the conservative case); a Subquery-bearing want ⇒ AlwaysLive.
 - The field: `liveness villageWorld` maps `clean-conscience`/`conscience-remembers` to
-  FloorCheck and `pursues-earnBread`/`spites-carol`/`fears-scandal` to their expected
+  FloorCheck and `pursues-earnBread`/`spites-carol`/`punishes-whisper` to their expected
   classes (derive the expectations by reading the village vocabulary, assert exactly).
 
 - [ ] RED (names missing) → implement → GREEN (`-p "Relevance"`, then suite once, count
