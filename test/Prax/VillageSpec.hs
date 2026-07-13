@@ -504,4 +504,104 @@ tests = testGroup "Prax.Worlds.Village"
                   (dbToSentences (db st))))
       assertBool "bob's own standing (thief/notoriety track) is untouched by any of this"
         (not (exists "notorious.bob.thief" (readView st)))
+
+    --------------------------------------------------------------------------
+    -- v32: eve's road back -- confession, absolution, re-offense,
+    -- incorrigibility. Two arcs were probed (both traces in the task
+    -- report): primary -- carol, the wronged, even with an arbitrarily
+    -- generous professed "merciful" desire, never rationally beats eve's
+    -- ordinary baseline (the momentary notoriety spike from a freshly
+    -- informed third regarder is only HALF-relieved by the planner's own
+    -- 0.5 discount on a PREDICTED absolution -- a ceiling no authored value
+    -- clears); fallback -- gale, who already regards eve a slanderer from
+    -- directly witnessing the whisper, costs nothing to confess to ("free
+    -- below the brink," v30's own idiom) and does drive. Shipped: the
+    -- fallback, forced here per the wedding/theft precedent (whisperArcSetup's
+    -- own idiom).
+    --------------------------------------------------------------------------
+
+  , testCase "confessing to gale converts the mark and deposits the ACT, self-sourced, not the content" $ do
+      let st = doAct "eve" "confess to gale about framing carol"
+                 (tick (doAct "eve" "whisper to dana that carol stole the loaf" villageWorld))
+      assertBool "the content-mark converted"
+        (exists "eve.confessed.dana.stole.carol.loaf" (db st))
+      assertBool "the lied-mark is gone"
+        (not (exists "eve.lied.dana.stole.carol.loaf" (db st)))
+      assertBool "gale learns the ACT, sourced from eve herself"
+        (exists "gale.believes.whispered.eve.dana.heard.eve" (db st))
+      assertBool "gale does NOT learn a re-assertion of the framed content"
+        (not (exists "gale.believes.stole.carol.loaf.heard.eve" (db st)))
+
+  , testCase "absolution inserts the defeater; slanderer regards dissolve; every belief persists" $ do
+      let st = redemptionArcSetup
+          v  = readView st
+      assertBool "the defeater" (exists "recanted.eve" (db st))
+      assertBool "dana's slanderer regard dissolved" (not (exists "regards.dana.eve.slanderer" v))
+      assertBool "gale's own slanderer regard dissolved" (not (exists "regards.gale.eve.slanderer" v))
+      assertBool "not notorious" (not (exists "notorious.eve.slanderer" v))
+      assertBool "dana still remembers witnessing the whisper (memory persists)"
+        (exists "dana.believes.whispered.eve.dana.seen" (db st))
+      assertBool "gale still remembers both her own witness and eve's confession"
+        (exists "gale.believes.whispered.eve.dana.seen" (db st)
+         && exists "gale.believes.whispered.eve.dana.heard.eve" (db st))
+
+  , testCase "re-offense: a fresh whisper snaps the defeater away, standing returns" $ do
+      let st = reoffendArcSetup
+          v  = readView st
+      assertBool "the defeater is gone: standing snaps back from memory nobody lost"
+        (not (exists "recanted.eve" (db st)))
+      assertBool "dana's regard is back" (exists "regards.dana.eve.slanderer" v)
+      assertBool "gale's regard is back too" (exists "regards.gale.eve.slanderer" v)
+      -- the re-whisper happened in the crowded square this time (not the
+      -- empty mill), so the SAME snap-back reaches every bystander there --
+      -- a sharper consequence than the original mill-side whisper, not a
+      -- weaker one.
+      assertBool "every square bystander regards her too now"
+        (all (\w -> exists ("regards." ++ w ++ ".eve.slanderer") v) ["you", "bob", "carol"])
+      assertBool "the crowd makes her notorious"
+        (exists "notorious.eve.slanderer" v)
+
+  , testCase "incorrigibility: gale, now knowing two distinct instances, refuses further absolution" $ do
+      let st = reoffendArcSetup
+          v  = readView st
+      assertBool "gale believes two distinct whispered instances by eve"
+        (exists "gale.believes.whispered.eve.dana.seen" (db st)
+         && exists "gale.believes.whispered.eve.bob.seen" (db st))
+      assertBool "gale now regards eve incorrigible" (exists "regards.gale.eve.incorrigible" v)
+      assertBool "gale's absolve affordance is gone -- her patience is spent"
+        (not (any (("absolve eve" `isInfixOf`) . gaLabel) (possibleActions st "gale")))
+      assertBool "dana, who witnessed only the original mill-side instance, is not yet fed up"
+        (not (exists "regards.dana.eve.incorrigible" v))
+
+  , testCase "free-play preservation: eve does not confess or get absolved unprompted" $ do
+      -- her secret is expensive to spend: no motive exists for her to trade
+      -- the momentary notoriety risk against, absent a believed merciful
+      -- absolver at depth-2 (measured and found wanting -- see the task
+      -- report). The affordance exists from t=0; free play never takes it.
+      let st = freePlayAt 100
+      assertBool "her lied-mark survives, unconfessed, through extended free play"
+        (exists "eve.lied.dana.stole.carol.loaf" (db st))
+      assertBool "no confession, ever" (not (exists "eve.confessed.dana.stole.carol.loaf" (db st)))
+      assertBool "no absolution, ever" (not (exists "recanted.eve" (db st)))
   ]
+  where
+    -- The fallback arc's own forced trajectory (whisperArcSetup's idiom):
+    -- eve whispers to dana (gale, still at the mill, witnesses the act
+    -- directly); eve confesses to gale (costless -- gale already regarded
+    -- her); gale absolves.
+    redemptionArcSetup :: PraxState
+    redemptionArcSetup = foldl (flip ($)) villageWorld
+      [ tick . doAct "eve" "whisper to dana that carol stole the loaf"
+      , tick . doAct "eve" "confess to gale about framing carol"
+      , tick . doAct "gale" "absolve eve of slander"
+      ]
+
+    -- Continues the trajectory: gale and eve relocate to the square (where
+    -- bob/carol/you already are), and eve whispers again -- a genuinely NEW
+    -- hearer (bob), so a genuinely new distinct 'whispered.eve.H' instance.
+    reoffendArcSetup :: PraxState
+    reoffendArcSetup = foldl (flip ($)) redemptionArcSetup
+      [ tick . doAct "gale" "Go to square"
+      , tick . doAct "eve" "Go to square"
+      , tick . doAct "eve" "whisper to bob that carol stole the loaf"
+      ]

@@ -21,14 +21,32 @@ tests = testGroup "Prax.Relevance"
       assertBool "distinct constants do not unify"
         (not (mayUnify "regards.W.carol.thief" "practice.earnBread.Owner.done.S"))
 
-  , testCase "the village table: conscience dead, spite and pursuit live" $ do
+  , testCase "the village table: conscience live, spite and pursuit live" $ do
       let tbl = improvableDesires (practiceDefs villageWorld)
                                   (axioms villageWorld)
                                   (desires villageWorld)
-      -- No authored village action Deletes a lied-mark, no axiom head touches
-      -- one: a conscience-only believed model can never be improved.
-      assertBool "clean-conscience is not improvable"
-        ("clean-conscience" `notElem` tbl)
+      -- v32: confess's own outcome list Deletes exactly the "lied"-shaped
+      -- mark clean-conscience's condition matches (villageP's confessWhisper
+      -- now authors that delete) -- a conscience-only believed model CAN now
+      -- be improved (predicting a confession relieves it), so the table
+      -- correctly flips from the pre-v32 "never improvable" finding.
+      --
+      -- Performance consequence, recorded honestly rather than papered over:
+      -- 'Prax.Planner.predictMove''s v26 pre-filter skips grounding/scoring a
+      -- mover's candidates entirely when EVERY desire in the predictor's
+      -- believed model is un-improvable (no authored action could possibly
+      -- improve it, so predicting is pointless work). Gale's "honest" trait
+      -- is presumed by every character from t=0 ('Prax.Persona.transparent'),
+      -- so any predictor whose believed model of gale is conscience-only
+      -- used to hit that skip for free. Now that clean-conscience (and its
+      -- v32 sibling conscience-remembers) are improvable, that skip no
+      -- longer fires for her -- every in-scope predictor evaluates her
+      -- candidates again, same as any other motivated mind. The cost is
+      -- real but bounded (gale's own candidate set, not the whole village);
+      -- a measured perf note is Task 3's to land in the LEDGER, not mine to
+      -- pre-empt here.
+      assertBool "clean-conscience is improvable"
+        ("clean-conscience" `elem` tbl)
       -- spites-carol counts DERIVED regards facts (standingUnless's head):
       -- conservatively improvable, so eve's predicted whisper stays live.
       assertBool "spites-carol is improvable" ("spites-carol" `elem` tbl)

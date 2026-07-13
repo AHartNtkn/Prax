@@ -41,6 +41,7 @@ import           Prax.Deceit
 import           Prax.Persona
 import           Prax.Debt (owes)
 import           Prax.Blackmail (shakedown)
+import           Prax.Confession (confess, absolve, incorrigible)
 
 -- | You are a villager — one agent among many.
 playerName :: String
@@ -103,10 +104,27 @@ earnBreadPursuit :: Desire
 -- deceived head's contempt for carol is worth to her spite (so at these
 -- stakes it never pays), yet nothing forbids it. The mark it values is the
 -- liar's own memory (Prax.Deceit): conscience fires seen or unseen.
+--
+-- The confessed form is priced identically (v32's own "0 or a mild authored
+-- residue" — this trait authors the FULL residue, not a mild one): a truly
+-- honest person's conscience is about having deceived at all, not about
+-- being caught or having covered it up, so confessing doesn't relieve it.
+-- Without this second desire, 'Prax.Confession.confess' (now generally
+-- available in the village, v32) opens a cheap-grace loophole this trait's
+-- own design forbids: since 'confess' converts the mark away and this trait
+-- would otherwise price ONLY the "lied" form, a bearer's depth-2 lookahead
+-- would see "lie, then immediately confess" as a way to buy the +4/head
+-- spite payoff for the price of a momentary, self-erasable -6 — defeating
+-- the "never pays" invariant the weight above is authored to hold. Found by
+-- measurement (VillageSpec regression, not by inspection): gale's own
+-- free-play choice flipped to lying once confess became available, until
+-- this residue was added.
 honest :: Trait
 honest = Trait "honest"
   [ Desire "clean-conscience"
-      (Want [ Match "Owner.lied.H.stole.C.loaf" ] (-6)) ]
+      (Want [ Match "Owner.lied.H.stole.C.loaf" ] (-6))
+  , Desire "conscience-remembers"
+      (Want [ Match "Owner.confessed.H.stole.C.loaf" ] (-6)) ]
 
 -- Malice with a name: wanting carol ill-regarded, per head. Naming it makes
 -- it believable (a told-about spite enters prediction) but it stays
@@ -132,6 +150,44 @@ threatenWhisper, complyWhisper, defyWhisper, exposeWhisper :: Action
     [t, c, d, e] -> (t, c, d, e)
     acts -> error ("whisperShakedown: expected 4 actions, got "
                    ++ show (length acts))
+
+-- Fabrication: assert a theft you have no evidence for, binding the
+-- scapegoat from the village roster. The deceived hold real hearsay -- the
+-- whole rumor/reputation stack cascades on the falsehood, and nobody in the
+-- village can tell it from truth. Re-offending forfeits any amends already
+-- made for the SLANDER (v21's re-steal idiom, mirrored from 'stole.Actor.loaf'
+-- above): a fresh whisper deletes the standing defeater, snapping notoriety
+-- back from the beliefs nobody lost, before a now-less-patient audience.
+whisperAct :: Action
+whisperAct =
+  observable together "whispered.Actor.Hearer"
+    rawLie { actionOutcomes = actionOutcomes rawLie ++ [ Delete "recanted.Actor" ] }
+  where
+    rawLie = lie together
+      [ Absent [ Match "Actor.relationship.Hearer.trust.score!TrustScore"
+               , Cmp Lt "TrustScore" "0" ] ]
+      [ Match "practice.world.world.at.Culprit!AnywhereQ" ]
+      "stole.Culprit.loaf"
+      "[Actor]: whisper to [Hearer] that [Culprit] stole the loaf"
+
+-- Confession & absolution over the whisper (v32, spec
+-- @docs/specs/2026-07-12-v32-confession.md@): eve's conscience-mark from
+-- 'whisperAct' is CONTENT-shaped ("stole.C.loaf" -- who she framed), but her
+-- slanderer standing derives from the ACT ("whispered.V.H" above). One
+-- pattern cannot serve both what the mark IS and what confessing it REVEALS
+-- (the anticipated shape finding, confirmed empirically and resolved by
+-- amending 'Prax.Confession.confess' to take the two patterns separately):
+-- the MARK pattern matches her content-shaped conscience; the DEPOSIT
+-- pattern is the act-shaped truth confessing it reveals, grounded straight
+-- from the mark's own bindings (Actor, H) -- not a re-assertion of the
+-- fabricated content.
+confessWhisper :: Action
+confessWhisper = confess "lied" together "stole.C.loaf" "whispered.Actor.H"
+  "[Actor]: confess to [Hearer] about framing [C]"
+
+absolveWhisper :: Action
+absolveWhisper = absolve "recanted" "whispered.V.H" "incorrigible"
+  "[Actor]: absolve [V] of slander"
 
 -- Village life: the theft (observable) and the belief-gated confrontation.
 --
@@ -213,17 +269,13 @@ villageP = practice
           , Absent [ Match "regards.Actor.T.thief" ] ]
           [ Delete "shunned.Actor.T" ]
 
-        -- Fabrication: assert a theft you have no evidence for, binding the
-        -- scapegoat from the village roster. The deceived hold real hearsay --
-        -- the whole rumor/reputation stack cascades on the falsehood, and
-        -- nobody in the village can tell it from truth.
-      , observable together "whispered.Actor.Hearer" $
-        lie together
-          [ Absent [ Match "Actor.relationship.Hearer.trust.score!TrustScore"
-                   , Cmp Lt "TrustScore" "0" ] ]
-          [ Match "practice.world.world.at.Culprit!AnywhereQ" ]
-          "stole.Culprit.loaf"
-          "[Actor]: whisper to [Hearer] that [Culprit] stole the loaf"
+        -- Fabrication, and its road back: confessing self-incriminates
+        -- through the ordinary hearsay channel; absolution is a refusable
+        -- second-party grant (see 'whisperAct'/'confessWhisper'/
+        -- 'absolveWhisper' above).
+      , whisperAct
+      , confessWhisper
+      , absolveWhisper
 
         -- The lawful alternative to the stall's temptation.
       , earnBreadTake
@@ -255,6 +307,14 @@ villageAxioms =
     -- 'stole.Culprit.loaf's own standingUnless.
   , standingUnless "whispered.V.H" "recanted.V" "slanderer"
   , notoriety "slanderer" 3
+    -- Fed-up-ness is knowledge, not bookkeeping (v32 spec point 4): an
+    -- absolver's patience is spent once she personally believes (witnessed
+    -- or told, provenance doesn't matter) 2 DISTINCT whispered-lie instances
+    -- by the same person -- a "two strikes" threshold, one warning's worth
+    -- of patience before further absolution is refused. Permanent by memory
+    -- (a later absolution elsewhere never un-learns the count) and per
+    -- absolver (one villager's fed-up-ness is not another's).
+  , incorrigible "whispered.V.H" 2 "incorrigible"
   ]
 
 villageWorld :: PraxState
