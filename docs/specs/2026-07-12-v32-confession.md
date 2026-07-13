@@ -10,7 +10,14 @@ module — stated up front.
 1. **Marks convert, never delete** (atonement-not-amnesia, aimed at the psyche):
    confession turns `<who>.lied.<hearer>.<event>` into `<who>.confessed.<hearer>.<event>`.
    The memory persists; its *valence* changes — traits price `lied` marks negatively and
-   `confessed` marks at 0 or a mild authored residue. The conversion shape is the fixed
+   `confessed` marks at 0, a mild authored residue, or — for the strictest consciences —
+   the full price (found in implementation: gale's honest trait must price `confessed` at
+   the same −6, or lie-then-confess becomes a cheap-grace loophole her depth-2 lookahead
+   exploits, defeating the v25 never-lies invariant; her conscience is about having
+   deceived, not about the ledger). A side effect recorded honestly: once confession's
+   Delete makes `lied` marks improvable, conscience-only believed models lose their v26
+   pre-filter skip — the RelevanceSpec table assertion flips with a stated reason, and the
+   perf note lands in the LEDGER. The conversion shape is the fixed
    vocabulary convention (per-event arity preserved) so traits price it consistently.
 2. **Confession is self-incriminating by design**: the act deposits the deed into the
    hearer's beliefs through the normal sourced-hearsay channel
