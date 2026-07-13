@@ -405,4 +405,51 @@ tests = testGroup "Prax.Planner"
       -- toiling (which derives it via the axiom) is still predicted, exactly
       -- as it would be with no dead-now check at all.
       fmap gaLabel (predictMove believed priya beth') @?= Just "beth: toil"
+
+  , testCase "deadNow gates the SKIP, never the model: a mixed model evaluates in FULL, dead deterrent included" $ do
+      -- wants-treasure (AlwaysLive: its own condition is action-insertable,
+      -- so it never gates) keeps this pair from EVER being skipped -- the
+      -- point of this test is what happens once it's NOT skipped: does the
+      -- floor-dead "hates-lying" still cost what it should, even though
+      -- deadNow currently reads it as dead? "grab openly" (no lie) is
+      -- unconditionally available; "grab boldly" (treasure + a NEW lie)
+      -- only when clean; "confess" (removes an existing lie) only when
+      -- marked -- so the two states offer genuinely different choices.
+      let treasureP = practice
+            { practiceId = "treasure", roles = ["R"]
+            , actions =
+                [ action "[Actor]: grab openly" [] [ Insert "has.Actor.treasure" ]
+                , action "[Actor]: grab boldly" [ Not "lied.Actor" ]
+                    [ Insert "has.Actor.treasure", Insert "lied.Actor" ]
+                , action "[Actor]: confess" [ Match "lied.Actor" ] [ Delete "lied.Actor" ]
+                , action "[Actor]: Wait about" [] []
+                ]
+            }
+          vocab = [ Desire "wants-treasure" (Want [ Match "has.Owner.treasure" ] 5)
+                  , Desire "hates-lying"    (Want [ Match "lied.Owner" ] (-6)) ]
+          priya = character "priya"
+          beth' = character "beth"
+          st0   = setDesires vocab
+                    (setCharacters [priya, beth'] (definePractices [treasureP] emptyState))
+          st1   = performOutcome (Insert "practice.treasure.here") st0
+          believed = foldl (flip performOutcome) st1
+            [ Insert "priya.believes.desires.beth.wants-treasure.heard.gossip"
+            , Insert "priya.believes.desires.beth.hates-lying.heard.gossip" ]
+      -- markless: hates-lying is dead-now (floor), yet the FULL model still
+      -- prices "grab boldly"'s NEW lie at -6 against "grab openly"'s clean
+      -- +5 -- so the honest option wins (5 > 5-6=-1), not a tie. A buggy
+      -- implementation that dropped a dead-now desire from the scored
+      -- model (rather than only from the skip check) would score both
+      -- grab options at 5 (a tie broken alphabetically toward "grab
+      -- boldly") -- wrong. This is the discriminating half for THIS state.
+      fmap gaLabel (predictMove believed priya beth') @?= Just "beth: grab openly"
+      -- marked: hates-lying is now live (an existing, unrelated lie), which
+      -- flips the decision -- confessing (relief worth 6) now beats
+      -- grabbing openly (worth only 5), even though "grab boldly" itself is
+      -- no longer on the table (Not "lied.Actor" fails). The SAME pair,
+      -- the SAME never-skipped mixed model, a different answer because the
+      -- deterrent's current state changed -- deadNow gated no skip here at
+      -- all; the model's content did all the work, both times.
+      let marked = performOutcome (Insert "lied.beth") believed
+      fmap gaLabel (predictMove marked priya beth') @?= Just "beth: confess"
   ]
