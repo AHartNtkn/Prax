@@ -5,7 +5,8 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Engine (setDesires, relevantDelta, monotoneInsert)
-import           Prax.Query (Condition (..))
+import           Prax.Query (Condition (..), cookCondition)
+import           Prax.Derive (axiom)
 import           Prax.Types
 import           Prax.Worlds.Village (villageWorld)
 import           Prax.Relevance
@@ -112,4 +113,61 @@ tests = testGroup "Prax.Relevance"
         (not (monotoneInsert "atoned.bob" villageWorld))
       assertBool "an exclusion insert never takes the continuation"
         (not (monotoneInsert "practice.world.world.at.bob!square" villageWorld))
+
+  , testCase "livenessOf: a negative desire is FloorCheck unconditionally" $ do
+      let ds = [ Desire "hates-mud" (Want [ Match "muddy.Owner" ] (-3)) ]
+      livenessOf Map.empty [] ds @?= Map.fromList [ ("hates-mud", FloorCheck) ]
+
+  , testCase "livenessOf: a weight-0 desire is AlwaysLive (defensive; screened statically first)" $ do
+      let ds = [ Desire "indifferent" (Want [ Match "whatever.Owner" ] 0) ]
+      livenessOf Map.empty [] ds @?= Map.fromList [ ("indifferent", AlwaysLive) ]
+
+  , testCase "livenessOf: a positive desire with a ticker-only conjunct gates on it alone" $ do
+      -- The only action in this world inserts meal.*, never hungry.* -- so
+      -- "hungry.Owner" is environment-gated (no authored outcome can raise
+      -- it) while "meal.M" is action-insertable and so is NOT a gate.
+      let bakery = practice
+            { practiceId = "bakery", roles = ["R"]
+            , actions = [ action "[Actor]: bake"
+                            [ Match "practice.bakery.here" ]
+                            [ Insert "meal.bread" ] ] }
+          ds = [ Desire "pursues-lunch"
+                   (Want [ Match "hungry.Owner", Match "meal.M" ] 5) ]
+          tbl = livenessOf (Map.fromList [("bakery", bakery)]) [] ds
+      tbl @?= Map.fromList
+        [ ("pursues-lunch", GateCheck [ [ cookCondition (Match "hungry.Owner") ] ]) ]
+
+  , testCase "livenessOf: an axiom-derivable candidate gate never qualifies (conservative)" $ do
+      -- "hungry.Owner" is never Inserted, but an axiom's head unifies it, so
+      -- it is conservatively excluded from gating and no other conjunct
+      -- qualifies -- the whole want stays AlwaysLive.
+      let ax = axiom [ Match "starving.Owner" ] [ "hungry.Owner" ]
+          ds = [ Desire "pursues-food" (Want [ Match "hungry.Owner" ] 5) ]
+      livenessOf Map.empty [ax] ds @?= Map.fromList [ ("pursues-food", AlwaysLive) ]
+
+  , testCase "livenessOf: a Subquery-bearing want is AlwaysLive (uncertainty always wins)" $ do
+      let ds = [ Desire "counts-friends"
+                   (Want [ Subquery "Fs" ["F"] [ Match "friend.Owner.F" ] ] 5) ]
+      livenessOf Map.empty [] ds @?= Map.fromList [ ("counts-friends", AlwaysLive) ]
+
+  , testCase "the village's liveness field: floors for consciences, classes for the rest" $ do
+      let tbl = liveness villageWorld
+      tbl Map.! "clean-conscience" @?= FloorCheck
+      tbl Map.! "conscience-remembers" @?= FloorCheck
+      -- pursues-earnBread's condition is a done-fact every stage action
+      -- inserts (practice.earnBread.Owner.done.S) -- action-insertable, so
+      -- no conjunct qualifies as a gate.
+      tbl Map.! "pursues-earnBread" @?= AlwaysLive
+      -- spites-carol's condition (regards.W.carol.thief) is standingUnless's
+      -- own axiom head -- conservatively excluded from gating.
+      tbl Map.! "spites-carol" @?= AlwaysLive
+      -- punishes-whisper's top-level conjuncts are an Or (never a gate
+      -- candidate) and a belief-Match that expose's own outcome inserts --
+      -- action-insertable, so again no qualifying conjunct remains.
+      tbl Map.! "punishes-whisper" @?= AlwaysLive
+      assertBool "the field matches the module computation"
+        (liveness villageWorld
+           == livenessOf (practiceDefs villageWorld)
+                         (axioms villageWorld)
+                         (desires villageWorld))
   ]

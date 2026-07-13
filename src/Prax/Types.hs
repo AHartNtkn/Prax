@@ -21,6 +21,7 @@ module Prax.Types
   , CookedOutcome(..)
   , CookedAction(..)
   , CookedPractice(..)
+  , Liveness(..)
   , Character(..)
   , character
   , Want(..)
@@ -143,6 +144,30 @@ data CookedPractice = CookedPractice
   }
   deriving (Eq, Show)
 
+-- | Per-desire state-check recipe for the planner's dead-now test (spec
+-- @docs/specs/2026-07-13-v33-live-relevance.md@), computed once per world by
+-- 'Prax.Relevance.livenessOf' (declared here, alongside 'CookedPractice',
+-- because 'PraxState' embeds it — the same rationale as that type's own
+-- haddock). 'FloorCheck': a negative want-kind is at its floor (unimprovable
+-- by anything) when its own Owner-grounded conditions have zero bindings —
+-- sound unconditionally, count zero is the minimum. 'GateCheck': a positive
+-- want-kind cannot gain a binding while any environment-gated conjunct (a
+-- base-fact family no authored outcome inserts and no axiom derives) is
+-- empty. 'AlwaysLive': no cheap state test applies — the static verdict
+-- stands alone.
+--
+-- Conservativity note: gates only ever REMOVE work when provably safe;
+-- @Or@\/@Absent@\/@Exists@ conjuncts are never gates (only top-level
+-- positive @Match@es), and any uncertainty (an axiom-derivable candidate, an
+-- unresolvable outcome, a @Subquery@\/@Count@\/@Calc@-bearing want) keeps
+-- the desire 'AlwaysLive'.
+data Liveness
+  = FloorCheck                    -- ^ negative: check the desire's own conditions
+  | GateCheck [[CookedCondition]] -- ^ positive: each inner list is ONE gate
+                                   -- conjunct (cooked, Owner-templated)
+  | AlwaysLive
+  deriving (Eq, Show)
+
 -- | A character/agent. Wants drive autonomous choice; a practice-bound character
 -- only acts within its bound practice (e.g. an ambient jukebox).
 data Character = Character
@@ -220,6 +245,12 @@ data PraxState = PraxState
     -- ('Prax.Relevance.improvableDesires') — rebuilt with the vocabulary
     -- ('Prax.Engine.definePractices' / 'setAxioms' / 'setDesires'); the
     -- planner skips predictions over models with no improvable desire.
+  , liveness :: Map String Liveness
+    -- ^ Each named desire's dead-now recipe ('Liveness') —
+    -- ('Prax.Relevance.livenessOf') — rebuilt with the vocabulary alongside
+    -- 'improvables' by 'Prax.Engine.retable'; the planner consults it to
+    -- skip state-dead predictions for desires the static filter has already
+    -- let through.
   , footprint :: [[Sym]]
     -- ^ Pre-tokenized ('pathNames'), pre-interned patterns the axioms read
     -- or write; a ground delta unifying none of them commutes with closure
@@ -243,7 +274,7 @@ emptyState = PraxState
   { db = emptyDb, practiceDefs = Map.empty, cookedDefs = Map.empty, characters = []
   , cookedWants = Map.empty, cookedDesires = Map.empty, cursor = -1
   , axioms = [], cookedRules = [], sorts = [], desires = [], predictionScope = []
-  , improvables = [], footprint = [], negFootprint = [], contMonotone = True
+  , improvables = [], liveness = Map.empty, footprint = [], negFootprint = [], contMonotone = True
   , readView = emptyDb }
 
 -- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead

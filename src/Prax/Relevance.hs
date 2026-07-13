@@ -23,6 +23,8 @@ module Prax.Relevance
   ( mayUnify
   , mayUnifySyms
   , improvableDesires
+  , Liveness(..)
+  , livenessOf
   , evictionShadows
   , evictionShadowNames
   ) where
@@ -32,7 +34,7 @@ import qualified Data.Map.Strict as Map
 
 import           Prax.Db (internTokens, pathNames, tokensToSentence)
 import           Prax.Derive (Axiom (..))
-import           Prax.Query (Condition (..))
+import           Prax.Query (Condition (..), cookCondition)
 import           Prax.Sym (Sym, intern, symIsVar)
 import           Prax.Types
 
@@ -141,28 +143,52 @@ wantPatterns = foldr step ([], [], False)
       Count {}     -> (pos, neg, True)
       Subquery {}  -> (pos, neg, True)
 
+-- Every effect an authored action can cause, resolved once per world: the
+-- insert- and delete-shaped atom pools ('outcomeAtoms' over every action's
+-- declared outcomes, plus every practice's 'initOutcomes' — spawning runs
+-- those too), and whether any of them is "wild" (an unresolvable 'Call',
+-- conservatively improves-everything). Shared by 'improvableDesires' and
+-- 'livenessOf' — one atom-pool computation, not two.
+data AtomPools = AtomPools
+  { poolInserted :: [String]
+  , poolDeleted  :: [String]
+  , poolWild     :: Bool
+  }
+
+worldAtomPools :: Map String Practice -> AtomPools
+worldAtomPools defs = AtomPools
+  { poolInserted = concatMap (maybe [] fst) atoms
+  , poolDeleted  = concatMap (maybe [] snd) atoms
+  , poolWild     = Nothing `elem` atoms
+  }
+  where
+    practices = Map.elems defs
+    fns = Map.fromList [ (fnName f, concatMap caseOutcomes (fnCases f))
+                       | p <- practices, f <- functions p ]
+    atoms = [ outcomeAtoms fns [] o
+            | p <- practices, a <- actions p, o <- actionOutcomes a ]
+         ++ [ outcomeAtoms fns [] o | p <- practices, o <- initOutcomes p ]
+
+-- Axiom heads, including their auto-□-lifted forms, count as derivable: a
+-- want (or gate candidate) over a derivable pattern is conservatively
+-- improvable\/never a gate. Shared by 'improvableDesires' and 'livenessOf'.
+axiomDerivable :: [Axiom] -> String -> Bool
+axiomDerivable axs p = any (mayUnify p) (heads ++ liftedHeads)
+  where
+    heads = concatMap axiomThen axs
+    liftedHeads = [ "obliged.W." ++ h | h <- heads ]
+
 -- | The names of the desires some authored action might improve. See the
 -- module header for the conservativity contract.
 improvableDesires :: Map String Practice -> [Axiom] -> [Desire] -> [String]
 improvableDesires defs axs ds =
   [ desireName d | d <- ds, improvable d ]
   where
-    practices = Map.elems defs
-    fns = Map.fromList [ (fnName f, concatMap caseOutcomes (fnCases f))
-                       | p <- practices, f <- functions p ]
-    -- every effect an authored action can cause: its declared outcomes, plus
-    -- the initOutcomes of any practice (spawning runs them)
-    atoms = [ outcomeAtoms fns [] o
-            | p <- practices, a <- actions p, o <- actionOutcomes a ]
-         ++ [ outcomeAtoms fns [] o | p <- practices, o <- initOutcomes p ]
-    wild = Nothing `elem` atoms
-    inserted = concatMap (maybe [] fst) atoms
-    deleted  = concatMap (maybe [] snd) atoms
-    -- axiom heads, including their auto-□-lifted forms, count as derivable:
-    -- a want over a derivable pattern is conservatively improvable.
-    heads = concatMap axiomThen axs
-    liftedHeads = [ "obliged.W." ++ h | h <- heads ]
-    derivable p = any (mayUnify p) (heads ++ liftedHeads)
+    pools = worldAtomPools defs
+    wild = poolWild pools
+    inserted = poolInserted pools
+    deleted  = poolDeleted pools
+    derivable = axiomDerivable axs
     improvable (Desire _ (Want conds u))
       | u == 0    = False
       | wild      = True
@@ -173,3 +199,31 @@ improvableDesires defs axs ds =
       | otherwise = any (\dl -> any (mayUnify dl) pos) deleted
                     || any (\i -> any (mayUnify i) neg) inserted
       where (pos, neg, unc) = wantPatterns conds
+
+-- | Classify every named desire's dead-now recipe (see 'Liveness'): a
+-- negative want-kind is unconditionally 'FloorCheck'; a positive want-kind
+-- gates on its top-level positive @Match@ conjuncts that are neither
+-- action-insertable nor axiom-derivable (each such conjunct, cooked, is one
+-- gate — 'null' qualifying conjuncts, an unresolvable\/wild outcome, or a
+-- @Subquery@\/@Count@\/@Calc@-tainted want all fall back to 'AlwaysLive');
+-- weight 0 is statically never-improvable already and is mapped 'AlwaysLive'
+-- defensively (the static filter, 'improvableDesires', screens it first).
+livenessOf :: Map String Practice -> [Axiom] -> [Desire] -> Map String Liveness
+livenessOf defs axs ds =
+  Map.fromList [ (desireName d, classify d) | d <- ds ]
+  where
+    pools = worldAtomPools defs
+    derivable = axiomDerivable axs
+    classify (Desire _ (Want conds u))
+      | u < 0     = FloorCheck
+      | u > 0     = positive conds
+      | otherwise = AlwaysLive
+    positive conds
+      | unc || poolWild pools || null gates = AlwaysLive
+      | otherwise = GateCheck gates
+      where
+        (_, _, unc) = wantPatterns conds
+        candidates = [ p | Match p <- conds ]
+        qualifies p = not (any (mayUnify p) (poolInserted pools))
+                    && not (derivable p)
+        gates = [ [cookCondition (Match p)] | p <- candidates, qualifies p ]

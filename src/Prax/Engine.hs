@@ -30,7 +30,7 @@ import           Prax.Db
 import           Prax.Query (queryCooked, groundCondition, groundNames, CookedCondition, cookCondition)
 import           Prax.Types
 import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, monotoneAxioms, cookAxioms, runCooked)
-import           Prax.Relevance (improvableDesires, mayUnifySyms, evictionShadows, evictionShadowNames)
+import           Prax.Relevance (improvableDesires, livenessOf, mayUnifySyms, evictionShadows, evictionShadowNames)
 import           Prax.Cooked (cookOutcome, cookPractice, groundCookedOutcome)
 import           Prax.Sym (Sym, intern, symName)
 
@@ -47,6 +47,7 @@ retable st = st
   , cookedDesires = Map.fromList
       [ (desireName d, map cookCondition (wantConditions (desireWant d))) | d <- desires st ]
   , improvables  = improvableDesires (practiceDefs st) (axioms st) (desires st)
+  , liveness     = livenessOf (practiceDefs st) (axioms st) (desires st)
   , footprint    = map (map intern . pathNames) (axiomFootprint (axioms st))
   , negFootprint = map (map intern . pathNames) (axiomNegPatterns (axioms st))
   , contMonotone = monotoneAxioms (axioms st) }
