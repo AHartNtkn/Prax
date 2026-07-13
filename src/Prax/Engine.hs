@@ -21,18 +21,20 @@ module Prax.Engine
   , groundOutcome
   , relevantDelta
   , monotoneInsert
+  , groundedDeltaAnchors
   ) where
 
 import           Data.List (intercalate)
+import           Data.Maybe (listToMaybe)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db
 import           Prax.Query (queryCooked, groundCondition, groundNames, CookedCondition, cookCondition)
 import           Prax.Types
-import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, monotoneAxioms, cookAxioms, runCooked)
+import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, axiomHeadPatterns, monotoneAxioms, cookAxioms, runCooked)
 import           Prax.Relevance (improvableDesires, livenessOf, mayUnifySyms, evictionShadows, evictionShadowNames)
 import           Prax.Cooked (cookOutcome, cookPractice, groundCookedOutcome)
-import           Prax.Sym (Sym, intern, symName)
+import           Prax.Sym (Sym, intern, symIsVar, symName)
 
 -- | Rebuild the derived vocabulary tables. Internal: every helper that
 -- changes 'practiceDefs', 'desires', or 'characters' must end here.
@@ -49,6 +51,8 @@ retable st = st
   , improvables  = improvableDesires (practiceDefs st) (axioms st) (desires st)
   , liveness     = livenessOf (practiceDefs st) (axioms st) (desires st)
   , footprint    = map (map intern . pathNames) (axiomFootprint (axioms st))
+  , axiomHeads   = [ map intern (pathNames h) | h <- axiomHeadPatterns (axioms st) ]
+                   ++ [[intern "contradiction"]]
   , negFootprint = map (map intern . pathNames) (axiomNegPatterns (axioms st))
   , contMonotone = monotoneAxioms (axioms st) }
 
@@ -281,3 +285,44 @@ lookupCookedFn fn st =
   case [ entry | cp <- Map.elems (cookedDefs st), Just entry <- [Map.lookup fn (cpFns cp)] ] of
     (e : _) -> Just e
     []      -> Nothing
+
+-- | The insert\/delete anchor families one grounded action's outcomes can
+-- touch — 'performAction''s effects, bounded statically per call by walking
+-- the same cooked outcomes 'performAction' itself executes. @Nothing@ when
+-- the effects cannot be bounded: an unresolvable 'CCall', or an insert whose
+-- first segment is (or could ground to) @practice@ — such an insert may
+-- bring an instance into being ('spawnedInstanceNames') and run that
+-- practice's 'cpInits', arbitrary further outcomes this walk does not model.
+-- The caller (the planner's prediction reuse) treats @Nothing@ as opaque: no
+-- reuse at or below the node. Conservative by construction: 'CForEach'
+-- bodies are included whether or not their guards would fire, with unbound
+-- variables left as 'mayUnifySyms' wildcards; 'CCall' includes every case of
+-- the resolved function, cycle-guarded like 'Prax.Relevance''s string-side
+-- atom walk.
+groundedDeltaAnchors :: PraxState -> GroundedAction -> Maybe [[Sym]]
+groundedDeltaAnchors st ga = do
+  cp <- Map.lookup (gaPracticeId ga) (cookedDefs st)
+  ca <- listToMaybe [ a | a <- cpActions cp, caName a == gaActionId ga ]
+  outcomeDeltaAnchors st [] (map (groundCookedOutcome (gaBindings ga)) (caOuts ca))
+
+outcomeDeltaAnchors :: PraxState -> [String] -> [CookedOutcome] -> Maybe [[Sym]]
+outcomeDeltaAnchors st visited = fmap concat . traverse go
+  where
+    go o = case o of
+      CInsert toks
+        | mightSpawn (map fst toks) -> Nothing
+        | otherwise -> Just (map fst toks : evictionShadowNames toks)
+      CDelete toks  -> Just (map fst toks : evictionShadowNames toks)
+      CForEach _ os -> outcomeDeltaAnchors st visited os
+      CCall fn args
+        | fn `elem` visited -> Just []
+        | otherwise -> case lookupCookedFn fn st of
+            Nothing -> Nothing
+            Just (params, cases) ->
+              let b = Map.fromList (zip (map intern params) (map VSym args))
+              in fmap concat (traverse
+                   (\(_, os) -> outcomeDeltaAnchors st (fn : visited)
+                                  (map (groundCookedOutcome b) os))
+                   cases)
+    mightSpawn (n : _) = symIsVar n || n == intern "practice"
+    mightSpawn []      = False

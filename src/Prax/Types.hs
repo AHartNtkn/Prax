@@ -39,7 +39,7 @@ import qualified Data.Map.Strict as Map
 import           Prax.Db (Bindings, Db, emptyDb, exists)
 import           Prax.Query (Condition, CookedCondition)
 import           Prax.Derive (Axiom, CookedRule)
-import           Prax.Sym (Sym)
+import           Prax.Sym (Sym, intern)
 
 -- | A social practice: a role-parameterized bundle of affordances.
 data Practice = Practice
@@ -255,6 +255,13 @@ data PraxState = PraxState
     -- ^ Pre-tokenized ('pathNames'), pre-interned patterns the axioms read
     -- or write; a ground delta unifying none of them commutes with closure
     -- (fast path).
+  , axiomHeads :: [[Sym]]
+    -- ^ Interned anchors of every axiom head that can fire
+    -- ('Prax.Derive.axiomHeadPatterns') plus the @contradiction@ witness
+    -- ('Prax.Engine.reclose' inserts it when a delta trips ⊥). Maintained by
+    -- 'Prax.Engine.retable'; consumed by the planner's prediction-reuse cone:
+    -- a path delta that feeds any axiom ('footprint') can change derived
+    -- facts only in these families.
   , negFootprint :: [[Sym]]
     -- ^ Pre-tokenized, pre-interned negated body interiors: a '!'-free
     -- insert unifying none of these (in a 'contMonotone' world) only ADDS
@@ -274,7 +281,9 @@ emptyState = PraxState
   { db = emptyDb, practiceDefs = Map.empty, cookedDefs = Map.empty, characters = []
   , cookedWants = Map.empty, cookedDesires = Map.empty, cursor = -1
   , axioms = [], cookedRules = [], sorts = [], desires = [], predictionScope = []
-  , improvables = [], liveness = Map.empty, footprint = [], negFootprint = [], contMonotone = True
+  , improvables = [], liveness = Map.empty, footprint = []
+  , axiomHeads = [[intern "contradiction"]]
+  , negFootprint = [], contMonotone = True
   , readView = emptyDb }
 
 -- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead

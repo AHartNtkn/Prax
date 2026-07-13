@@ -5,11 +5,12 @@ import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, (@?=), assertBool, assertFailure)
 
-import           Prax.Db (dbToSentences, exists)
+import           Prax.Db (dbToSentences, exists, pathNames)
 import           Prax.Query
 import           Prax.Types
 import           Prax.Engine
 import           Prax.Derive (axiom)
+import           Prax.Sym (intern)
 
 -- Practices ported from praxish demos/test/tests.js into the eDSL. --------------
 
@@ -235,4 +236,46 @@ tests = testGroup "Prax.Engine"
       -- and the view tracks subsequent writes through the helpers
       let st2 = performOutcome (Insert "parent.bea.cal") st1
       assertBool "new base fact derives too" (exists "elder.bea" (readView st2))
+
+  , testCase "groundedDeltaAnchors: bounded effects, shadows, spawn opacity, Call resolution" $ do
+      let p = practice
+            { practiceId = "market", roles = ["R"]
+            , actions =
+                [ action "[Actor]: trade"
+                    [] [ Insert "coin.Actor!spent", Delete "stock.Actor" ]
+                , action "[Actor]: enroll"
+                    [] [ Insert "practice.market.Actor" ]
+                , action "[Actor]: ritual" [] [ Call "bless" ["Actor"] ]
+                , action "[Actor]: chant"  [] [ Call "unknownFn" ["Actor"] ]
+                ]
+            , functions =
+                [ Function "bless" ["Who"]
+                    [ FnCase [] [ Insert "blessed.Who" ] ] ]
+            }
+          st = definePractices [p] emptyState
+          st1 = performOutcome (Insert "practice.market.here") st
+          gaOf label = case [ ga | ga <- possibleActions st1 "ada", gaLabel ga == label ] of
+            (ga : _) -> ga
+            []       -> error ("no such grounded action: " ++ label)
+          anchorsOf label = groundedDeltaAnchors st1 (gaOf label)
+          has s as = map intern (pathNames s) `elem` as
+      case anchorsOf "ada: trade" of
+        Nothing -> assertFailure "trade must be bounded"
+        Just as -> do
+          assertBool "grounded insert path" (has "coin.ada.spent" as)
+          assertBool "eviction shadow"      (has "coin.ada.Evicted" as)
+          assertBool "grounded delete path" (has "stock.ada" as)
+      anchorsOf "ada: enroll" @?= Nothing           -- spawn opacity
+      case anchorsOf "ada: ritual" of
+        Nothing -> assertFailure "resolvable Call must be bounded"
+        Just as -> assertBool "Call-resolved insert, arg-grounded" (has "blessed.ada" as)
+      anchorsOf "ada: chant" @?= Nothing            -- unresolvable Call
+
+  , testCase "axiomHeads: fireable heads, lifted forms, the contradiction witness" $ do
+      let axs = [ axiom [ Match "starving.X" ] [ "hungry.X" ] ]
+          st = setAxioms axs emptyState
+          has s = map intern (pathNames s) `elem` axiomHeads st
+      assertBool "the head"        (has "hungry.X")
+      assertBool "the lifted head" (has "obliged.Obligor.hungry.X")
+      assertBool "the ⊥ witness"   (has "contradiction")
   ]

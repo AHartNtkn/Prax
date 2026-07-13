@@ -33,6 +33,7 @@ module Prax.Derive
   , contradiction
   , axiomFootprint
   , axiomNegPatterns
+  , axiomHeadPatterns
   , monotoneAxioms
   , CookedRule(..)
   , cookAxioms
@@ -248,6 +249,13 @@ axiomNegPatterns axs = concat
       Or clauses     -> concatMap (concatMap negOf) clauses
       Subquery _ _ w -> concatMap negOf w
       _              -> []
+
+-- | Every head template the axioms can write — 'axiomThen' plus the □-lifted
+-- forms of liftable rules ('liftObliged', the same notion 'axiomFootprint'
+-- uses: heads of rules that can actually fire). A delta that feeds some
+-- axiom can change derived facts only in these families.
+axiomHeadPatterns :: [Axiom] -> [String]
+axiomHeadPatterns axs = concat [ hs | Axiom _ hs <- axs ++ mapMaybe liftObliged axs ]
 
 -- | Is the axiom set continuation-safe: does adding base facts only ever ADD
 -- derived facts (given the caller also avoids negated patterns)? Conditions

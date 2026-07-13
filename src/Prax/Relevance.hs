@@ -40,14 +40,16 @@ module Prax.Relevance
   , livenessOf
   , evictionShadows
   , evictionShadowNames
+  , cookedReadAnchors
+  , moverReadAnchors
   ) where
 
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (internTokens, pathNames, tokensToSentence)
+import           Prax.Db (Bindings, Val (..), internTokens, pathNames, tokensToSentence)
 import           Prax.Derive (Axiom (..))
-import           Prax.Query (Condition (..), cookCondition)
+import           Prax.Query (Condition (..), CookedCondition (..), cookCondition, groundCookedCondition, groundNames)
 import           Prax.Sym (Sym, intern, symIsVar)
 import           Prax.Types
 
@@ -240,3 +242,69 @@ livenessOf defs axs ds =
         qualifies p = not (any (mayUnify p) (poolInserted pools))
                     && not (derivable p)
         gates = [ [cookCondition (Match p)] | p <- candidates, qualifies p ]
+
+-- | Every DB path a cooked-condition query can consult, at any polarity —
+-- including inside Or\/Absent\/Exists\/Subquery. Complete by construction:
+-- CEq\/CNeq\/CCmp\/CCalc compare already-bound values and CCount measures a
+-- bound set (produced by a CSubquery, whose inner conditions ARE walked), so
+-- none of them reads a path this walk misses.
+cookedReadAnchors :: [CookedCondition] -> [[Sym]]
+cookedReadAnchors = concatMap go
+  where
+    go c = case c of
+      CMatch p         -> [p]
+      CNot p           -> [p]
+      COr clauses      -> concatMap cookedReadAnchors clauses
+      CAbsent cs       -> cookedReadAnchors cs
+      CExists cs       -> cookedReadAnchors cs
+      CSubquery _ _ ws -> cookedReadAnchors ws
+      CEq {}           -> []
+      CNeq {}          -> []
+      CCmp {}          -> []
+      CCalc {}         -> []
+      CCount {}        -> []
+
+-- | Everything 'Prax.Planner.predictMove' (scope gate included) can read when
+-- the pick's actor predicts mover @m@, as pattern anchors grounded to the
+-- pair: the prediction-scope template (Actor:=actor, Witness:=m); the
+-- believed-model source family (@\<actor\>.believes.desires.\<m\>.*@ — the
+-- exact family "Prax.Minds" consults); the mover's death mark; every
+-- practice's instance pattern, action conditions, and outcome-embedded
+-- conditions (ForEach guards recursively, every function case — the imagined
+-- apply queries these) with Actor:=m; and every vocabulary desire's
+-- conditions with Owner:=m (model evaluation and the dead-now checks).
+-- Ungrounded variables stay variables ('mayUnifySyms' wildcards): partial
+-- grounding only ever widens the set, never narrows it — 'cpInits' and
+-- function cases are left fully wild because their call-time bindings are
+-- not the mover's.
+moverReadAnchors :: PraxState -> Character -> Character -> [[Sym]]
+moverReadAnchors st actor m =
+  scopeReads ++ [believesRead, deadRead] ++ affordanceReads ++ desireReads
+  where
+    mSym   = intern (charName m)
+    actorB = Map.singleton (intern "Actor") (VSym mSym)
+    ownerB = Map.singleton (intern "Owner") (VSym mSym)
+    scopeB = Map.fromList [ (intern "Actor",   VSym (intern (charName actor)))
+                          , (intern "Witness", VSym mSym) ]
+    readsOf b conds = cookedReadAnchors (map (groundCookedCondition b) conds)
+    scopeReads   = readsOf scopeB (map cookCondition (predictionScope st))
+    believesRead = [ intern (charName actor), intern "believes"
+                   , intern "desires", mSym, intern "D" ]
+    deadRead     = map intern (pathNames (deadSentence (charName m)))
+    affordanceReads = concat
+      [ groundNames actorB (cpInstanceNames cp)
+        : concatMap (\ca -> readsOf actorB (caConds ca)
+                            ++ outcomeCondReads actorB (caOuts ca))
+                    (cpActions cp)
+        ++ outcomeCondReads Map.empty (cpInits cp)
+        ++ concat [ readsOf Map.empty cs
+                  | (_, cases) <- Map.elems (cpFns cp), (cs, _) <- cases ]
+      | cp <- Map.elems (cookedDefs st) ]
+    desireReads = concat [ readsOf ownerB conds | conds <- Map.elems (cookedDesires st) ]
+
+-- Conditions embedded in outcomes ('CForEach' guards, recursively) — the
+-- imagined apply queries these against the node's view.
+outcomeCondReads :: Bindings -> [CookedOutcome] -> [[Sym]]
+outcomeCondReads b outs = concat
+  [ cookedReadAnchors (map (groundCookedCondition b) cs) ++ outcomeCondReads b os
+  | CForEach cs os <- outs ]

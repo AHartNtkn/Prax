@@ -4,9 +4,11 @@ import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
-import           Prax.Engine (setDesires, relevantDelta, monotoneInsert)
-import           Prax.Query (Condition (..), cookCondition)
+import           Prax.Engine (setDesires, setCharacters, definePractices, relevantDelta, monotoneInsert)
+import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..), cookCondition)
 import           Prax.Derive (axiom)
+import           Prax.Db (pathNames)
+import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Worlds.Village (villageWorld)
 import           Prax.Relevance
@@ -170,4 +172,43 @@ tests = testGroup "Prax.Relevance"
            == livenessOf (practiceDefs villageWorld)
                          (axioms villageWorld)
                          (desires villageWorld))
+
+  , testCase "cookedReadAnchors walks every polarity, including subquery internals" $ do
+      let conds = map cookCondition
+            [ Match "a.X", Not "b.X"
+            , Subquery "S" ["W"] [ Match "c.W.deed", Cmp Gte "N" "2" ]
+            , Count "N" "S", Calc "M" Add "N" "1", Eq "X" "y"
+            , Or [ [ Match "d.X" ], [ Absent [ Match "e.X" ] ] ]
+            ]
+          anchors = cookedReadAnchors conds
+          want p = map intern (pathNames p) `elem` anchors
+      assertBool "a.X read"        (want "a.X")
+      assertBool "b.X (Not) read"  (want "b.X")
+      assertBool "subquery inner read" (want "c.W.deed")
+      assertBool "Or branch read"  (want "d.X")
+      assertBool "Absent-in-Or read" (want "e.X")
+      length anchors @?= 5
+
+  , testCase "moverReadAnchors: scope, believes, death, affordances, desires — grounded to the pair" $ do
+      let p = practice
+            { practiceId = "eatery", roles = ["R"]
+            , actions = [ action "[Actor]: eat"
+                            [ Match "hungry.Actor" ]
+                            [ ForEach [ Match "crumb.C" ] [ Delete "crumb.C" ]
+                            , Insert "meal.Actor" ] ]
+            }
+          vocab = [ Desire "wants-food" (Want [ Match "hungry.Owner" ] 5) ]
+          priya = character "priya"
+          beth' = character "beth"
+          st = setDesires vocab
+                 (setCharacters [priya, beth'] (definePractices [p] emptyState))
+          anchors = moverReadAnchors st priya beth'
+          has s = map intern (pathNames s) `elem` anchors
+      assertBool "believes family, actor+mover grounded"
+        (has "priya.believes.desires.beth.D")
+      assertBool "death mark" (has "dead.beth")
+      assertBool "affordance condition, Actor:=beth" (has "hungry.beth")
+      assertBool "ForEach guard read" (has "crumb.C")
+      assertBool "desire condition, Owner:=beth" (has "hungry.beth")
+      assertBool "NOT grounded to the predictor" (not (has "hungry.priya"))
   ]
