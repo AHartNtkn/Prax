@@ -232,6 +232,17 @@ utility. See the design writeups:
   the planner has her shunning alice, unprompted, on the first try. The village is untouched this
   round (goldens byte-identical); `factionStanding` (belief-gated regard through a faction-mate)
   ships spec-tested but unwired into any world, a stated and deferred decision.
+- `Prax.Confession` (v32) — **the road back is real, and it narrows**: a lied-mark converts to a
+  confessed one (never deleted, so a trait can still price the residue), confessing
+  self-incriminates through the same sourced-hearsay channel gossip already rides, and absolution
+  is a separate, refusable second-party act that inserts the world's own standing-defeater. An
+  absolver's patience (`incorrigible`) points `Prax.Repute.notoriety`'s own counting idiom inward —
+  fed-up-ness is what she *believes*, not a bookkept tally. `Prax.Worlds.Village`'s eve confesses to
+  gale, who already regards her a slanderer from witnessing the whisper directly, and it costs
+  nothing; confessing to carol, the party actually wronged, was probed and measured never to beat
+  eve's baseline at any authored generosity — the planner's own discount on a *predicted* absolution
+  caps the achievable relief regardless. The road back closes the liar's own conscience and standing,
+  never a third party's frame-up: carol still has no recourse.
 - **v26 — planner work elimination**: an exactness-contract performance round (golden
   decision-sequence tests pin every planner choice, byte-identical before/after). Cached
   per-state closed views, a conservative relevance pre-filter (`Prax.Relevance`) that skips

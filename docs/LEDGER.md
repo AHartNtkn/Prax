@@ -348,6 +348,150 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   (`Prax.Kin`, incl. the `wed`-guard fix) → 392 (`Prax.Worlds.Feud` refactor + the wedding beat),
   all green throughout; zero warnings; hlint clean; `prax check` on all 7 worlds; grep-gates
   empty.
+- **v32** — **confession & absolution: the road back is real, and it narrows**
+  (`Prax.Confession`; spec `docs/specs/2026-07-12-v32-confession.md`, two in-round amendments).
+  A deliberately small round closing two dangling hooks at once: v25's parked "getting-caught"
+  item (banked in v25 as "truth recovery, if it is ever built, is committed to flow through
+  mark-bearers — confession, testimony — never consultation") and v30's inert `recanted.<who>`
+  defeater name (`standingUnless "whispered.V.H" "recanted.V" "slanderer"` had no action that
+  ever inserted it — "no atonement path authored" — until now). **Marks convert, never delete**:
+  `confess` turns `<who>.lied.<hearer>.<event>` into `<who>.confessed.<hearer>.<event>` — the
+  memory persists, only its valence changes, so a trait can price the confessed form at 0, a mild
+  residue, or the full price. **Confession is self-incriminating by design**: it deposits the
+  deed into the hearer's beliefs through the ordinary sourced-hearsay channel (v20's `.heard`),
+  so the whole rumor/reputation stack cascades on a confession exactly as on gossip. **Absolution
+  is a separate, refusable, second-party act**: confessing clears your conscience; only an
+  absolver's grant (inserting the world's defeater) clears your standing — you can confess and be
+  refused. **Fed-up-ness is knowledge, not bookkeeping**: `incorrigible` points `Prax.Repute.
+  notoriety`'s own Count idiom inward — an absolver's patience is spent once she *believes* ≥k
+  distinct past instances of the deed, by any provenance, so permanence (beliefs never die),
+  per-absolver independence, and confession-shopping-until-word-spreads all fall out rather than
+  being bolted on. **Re-offense deletes the defeater** (v21's re-steal idiom again): a fresh lie
+  snaps standing back from memory nobody lost, before a now-less-patient audience.
+
+  **The deposit-pattern amendment, forced by an empirical block.** `confess`'s first cut took one
+  pattern, matched against the mark *and* deposited to the hearer. Task 1 shipped it clean (28
+  tests), but Task 2's village wiring hit exactly the shape mismatch the spec had flagged as a
+  risk: eve's conscience-mark is content-shaped (`stole.C.loaf`, naming the person she framed)
+  while her slanderer standing is act-shaped (`whispered.V.H`, naming her). One pattern cannot
+  serve both what the mark *is* and what confessing it *reveals*; built and probed both naive
+  wirings live against the engine, watched `absolve` never get offered to anyone under either,
+  and reported the BLOCK rather than improvising. The spec was amended (`confess` gains a second,
+  `depositPat` argument, groundable only from `Actor`/`H`/the mark's own variables, checked and
+  loudly erroring otherwise — worlds whose deed is self-shaped pass the same pattern twice,
+  explicitly, no default) and the module fixed to match, both before Task 2 resumed.
+
+  **Task 1's own incorrigible bug, found before a single test was written.** The plan's own
+  worked code for `incorrigible` reused the deed pattern's non-offender variables verbatim in
+  both the outer existence `Match` and the counting `Subquery` — but `Prax.Repute.notoriety`'s
+  own shape (the pattern this was meant to mirror) uses *different* names for the counted role in
+  each. A literal transcription binds every deed variable in the outer `Match` before the
+  `Subquery` ever runs, so the count is always 1 and a `k > 1` threshold can never fire, in any
+  multi-variable deed pattern — confirmed directly against the engine (a believer of two distinct
+  instances, `k=2`, evaluated `False`) before any assertion was pinned. Fixed by generalizing
+  `notoriety`'s own `W`/`W0` convention to every deed variable (dummy `<name>0` witnesses in the
+  outer `Match`, the true names free for the `Subquery` alone to count) — `k=2`/`k=3` then
+  evaluated correctly against the same fixture.
+
+  **The probed arithmetic, measured live before being pinned** (`scoreActions`/`pickAction`
+  against the real module, v30's own discipline). Spontaneous confession: a mild secret (stake 4)
+  scores confess = 0.0 against holding your tongue at −2.0 — confesses; an expensive one (stake
+  20) scores hold-your-tongue = 37.94 against confess = 0.0 — doesn't. Confession as blackmail
+  defense (a confessed secret is spent leverage: the extorter's `expose` deposits nothing new
+  once the hearer already has it self-sourced): at a steep price against a mild secret (price 30,
+  fear 3), confessing to the sole co-present hearer beats complying and defying on the merits, not
+  a tie — and `expose` is then fully dead (no other hearer left to expose to); at a cheap price
+  against a severe secret (price 1, fear 30), complying still wins. Both sides matched the spec's
+  stated expectation on first measurement, no BLOCK — but the first pin (steep-price case) rested
+  on a three-way label tie between confess/defy/wait because the fixture's victim carried no
+  conscience cost on the underlying mark; review caught it, a matching conscience desire was added
+  to that fixture alone, and the case was re-measured and re-pinned on an honest, strict margin.
+
+  **The village demo: two arcs probed, one structurally capped, one shipped.** Primary arc — carol
+  (the wronged party, given an arbitrarily generous professed `merciful` desire) absolving eve
+  after confession — was built and measured across `mercifulValue ∈ {0,5,…,50}` and never beats
+  eve's ordinary baseline at *any* value: confessing to a genuinely new regarder (carol wasn't yet
+  one) eats the full, immediate notoriety-threshold hit, while the planner's own `othersScore` term
+  applies only a fixed 0.5 discount to a *predicted* absolution's value — a hard ceiling no
+  authored desire magnitude can clear. Documented, not shipped — the "threshold drama" the spec
+  asked to measure, measured and found insufficient. Fallback arc — eve confesses to gale, who
+  already regards her a slanderer from directly witnessing the whisper — costs nothing ("free
+  below the brink," v30's own idiom: confessing scores exactly tied with eve's routine baseline,
+  no notoriety spike) and cleanly unlocks gale's `absolve`. Shipped, forced per the wedding/theft
+  precedent.
+
+  **A real regression, root-caused, not patched around: gale's cheap-grace loophole.** Making
+  `confess` generally available (not just to eve) gave gale's `honest` trait a hole its own design
+  forbids: her only desire priced the *lied* form of her mark at −6 and said nothing about the
+  *confessed* form (defaulting to 0 relief once it converts), so her depth-2 lookahead saw
+  "lie, then immediately confess" as a way to buy the +4/head spite payoff for the price of a
+  self-erasable −6 — defeating the v25 "her conscience outprices the spite" invariant outright
+  (traced turn-by-turn: her first free-play whisper decision flipped from losing, 5.42 vs. a 10.84
+  baseline, to winning, 15.68 vs. 12.28, with the wiring present). The spec was amended to allow —
+  and, for a bearer whose entire narrative purpose is unconditional honesty, require — pricing the
+  confessed form at the *full* price too: a second `honest` desire prices `confessed` identically
+  to `lied`. Re-verified byte-for-byte against the pre-confession-wiring trace.
+
+  **A mechanical, honestly-recorded side effect: the v26 pre-filter pays.** `confessWhisper`'s own
+  outcome list `Delete`s a `lied`-mark shape — the first authored village action ever to do so —
+  which mechanically flips `Prax.Relevance.improvableDesires`'s analysis of `clean-conscience`
+  from un-improvable to improvable (its premise, "no action deletes a lied-mark," is no longer
+  true). `Prax.RelevanceSpec`'s table assertion flips accordingly, with the mechanism stated in
+  its own comment. Consequence: `predictMove`'s v26 skip — free for any conscience-only believed
+  model of a `transparent`-presumed bearer since t=0 — no longer applies to gale, so every in-scope
+  predictor now scores her candidates on every relevant turn instead of skipping the round
+  entirely. **Measured, isolated, three ways** (`cabal run -v0 prax-test -- -p "Village"`,
+  best-of-3, zero concurrent builds verified before each side, a dedicated `git worktree` for the
+  pre-arc side so it never shares a build with HEAD): the full 36-test Village group at HEAD
+  (post-round, pre-filter spent) runs **219.38s** (227.17s/246.78s/219.38s); the SAME 31
+  pre-existing tests alone (excluding the 5 new v32 additions, via an explicit `-p` exclusion
+  filter) run **171.64s** at HEAD (190.64s/171.64s/180.98s); the identical 31-test group at
+  `fd436de` (the commit immediately before the village wiring landed, pre-filter still intact)
+  runs **31.11s** (31.11s/32.23s/31.35s). The gap between the pre-arc and HEAD-filtered numbers —
+  **≈140.5s, a ≈5.5× slowdown on 31 tests whose own code never changed** — is the pre-filter loss
+  alone, cleanly isolated from the 5 new tests' own ≈47.7s cost (219.38s − 171.64s). Stated
+  plainly, per the round's own instruction: a 5.5× multiple on unrelated tests is a large cost for
+  one round's mechanical side effect to have paid, and it is real signal — not noise — for the v33
+  decision on state-conditioned relevance (a pre-filter that could re-earn the skip once it knows
+  no `confess`-shaped action is reachable from the current state, rather than losing it globally
+  the moment any world authors one).
+
+  **Task 2b's ghost investigation: a premise disproved, a fix reverted, the real fix banked.**
+  Probing `Prax.Db.retract`'s known ghost-ancestor imprecision (a drained ancestor path reads as a
+  phantom fact) under the controller's premise that interior nodes aren't independently
+  representable facts, pruning childless ancestors on retraction was implemented, RED/GREEN-pinned,
+  and then broke a real, unmodified test: `Prax.Worlds.Bar`'s `tendBarP` practice asserts a
+  bartender's instance fact at a path (`practice.tendBar.<Place>.<Bartender>`) that *also* anchors
+  transient per-customer state nested beneath it — draining that transient state to zero (a normal
+  order→fulfill→drink cycle) pruned the instance fact itself, permanently destroying the
+  bartender's affordance for the rest of the run. The trie cannot distinguish "an asserted fact
+  that happens to be childless" from "an ordinary ancestor, now childless because its only occupant
+  was retracted" — both are represented identically. Pruning is correct for the first half of that
+  ambiguity and actively wrong for the second; the premise that motivated the attempt was
+  disproved by evidence, not just complicated by it. **Reverted** (`retractNames` restored
+  byte-identical to its pre-task form); the DbSpec ghost-pruning test was **replaced**, not
+  deleted, with an INSTANCE PERSISTENCE test pinning the opposite (a drained instance path must
+  still `exist`) as the regression net against ever reintroducing the pruning by accident. The
+  principled fix — marking a node as an asserted endpoint independently of child-emptiness — is a
+  distinct `Db`-type change, banked as **asserted-endpoint marking** (see "Future ideas to
+  investigate," below); `retract`'s and `dbToSentences`'s haddocks now name it directly so the
+  ambiguity is found already-planned, not rediscovered.
+
+  **Banked, per the user: recidivism into character.** Becoming a liar *by* lying (fed-up-ness
+  shaping the offender's own future disposition, not just an observer's regard) needs bearer-side
+  desires to be fact-driven — but `charDesires :: [String]` (`Prax.Types`) is a static field fixed
+  at character construction, not something an in-world action can insert or delete the way a base
+  fact can. Closing this needs a `Prax.Minds`-level engine change (desires gated on believed-own
+  facts, not just assigned at cast time), belonging with a future Arc-vocabulary round, not this
+  one. Stated with the obstacle, not silently dropped.
+
+  Suite: 421 (`Prax.Confession`, incl. the `incorrigible` fix and the RED-checked blackmail-margin
+  fix) → 424 (the deposit-pattern amendment's own 3 new tests) → 429 (`Prax.Worlds.Village`'s
+  redemption arc, incl. the `honest`-trait fix and the sanctioned `RelevanceSpec` flip) → 431
+  (`Prax.Db`'s reverted-and-repinned ghost investigation), all green throughout; zero warnings;
+  hlint clean; `prax check` on all 7 worlds; grep-gates empty; `Prax.GoldenDriveSpec`/
+  `Prax.ViewInvariantSpec` byte-identical throughout — no golden re-capture needed anywhere this
+  round (the new affordances are forced-trajectory only; eve's free play is unperturbed).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -468,6 +612,21 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   Praxish's alt selector, whereas we (faithfully) use Versu's utility planner — and combining hard
   tiers with N-ply lookahead (prune forbidden branches, propagate required) is the non-trivial part.
   A "beyond Versu" enhancement, not a parity gap.
+- **Asserted-endpoint marking for `Prax.Db`** *(banked — v32, found while investigating the
+  known ghost-ancestor imprecision)*. `retract` never prunes an ancestor left childless by a
+  deletion, so `dbToSentences`/`exists` can emit a drained ancestor path as if it were its own
+  fact — a real imprecision. Pruning on emptiness was tried, RED/GREEN-pinned, and then
+  **reverted** on evidence: `Prax.Worlds.Bar`'s `tendBarP` practice asserts a bartender's
+  instance fact at a path that *also* anchors transient per-customer state nested beneath it, and
+  draining that transient state to zero (an ordinary order→fulfill→drink cycle) pruned the
+  instance fact itself, permanently destroying the affordance — `Prax.Engine.possibleActions`
+  discovers instances by trie presence alone, with no separate registry. The trie cannot tell "an
+  asserted fact that happens to be childless" from "an ordinary ancestor, now childless because
+  its only occupant was retracted" — both are represented identically, and pruning is correct for
+  the first case and wrong for the second. The principled fix is a `Db`-type change: mark a node
+  as an asserted endpoint independently of whether it currently has children, so retraction can
+  prune the second case without touching the first. Out of scope as a `retract`-only patch;
+  `src/Prax/Db.hs`'s `retract`/`dbToSentences` haddocks name this entry directly.
 
 ## Sandbox extension backlog (brainstormed 2026-07-10)
 
@@ -498,7 +657,11 @@ Tier 1 — compiled social structures:
   deleting the belief — atonement, not amnesia, so re-offense (which revokes the defeater fact)
   makes standing snap back from memory that was never lost; `notoriety` counts derived regards at
   an authored threshold)*. Score effects from standing (a reaction, not an axiom) remain unbuilt —
-  not needed for the village's arc.
+  not needed for the village's arc. `notoriety`'s counting shape (an outer existence check and an
+  inner counting `Subquery` deliberately naming the counted role differently) gets a **second use
+  in v32**: `Prax.Confession.incorrigible` points the identical Count idiom inward — regard
+  yourself, not a third party — to derive an absolver's patience from what she *believes*, not
+  from any separately bookkept count.
 - **Factions & membership** (`Prax.Faction`) *(done — v31, folded with Kinship below onto one
   shared spine: **membership**. `member.<who>!<faction>` is a base, single-slot fact; the `!` is
   the whole semantics — joining, defecting, and marrying-in are the same exclusion overwrite.
@@ -576,6 +739,26 @@ Tier 2 — agent interiority for long time-spans:
   a mark on the liar alone (`<liar>.lied.<hearer>.<event>`, their own memory — owned, forgettable,
   perishable), never a record anyone can consult as ground truth. Truth recovery, if it is ever
   built, is committed to flow through mark-bearers — confession, testimony — never consultation.
+  **The confession half arrives in v32** (below): a lied-mark converts to a confessed one and
+  deposits sourced testimony through the ordinary hearsay channel, exactly the mark-bearer path
+  this commitment named. It closes the liar's *own* road back — her mark, her standing — not a
+  third party's frame-up: carol, framed by eve in v22, still has no recourse, since nothing in
+  v32 lets anyone but the liar herself confess to a lie she told.
+- **Confession & absolution** (`Prax.Confession`) *(done — v32: `confess`/`absolve`/
+  `incorrigible` — a lied-mark converts to a confessed one (never deleted, so a trait can still
+  price the residue); confessing self-incriminates through the ordinary sourced-hearsay channel
+  (v20), so the whole reputation stack cascades on it exactly as on gossip; absolution is a
+  separate, refusable second-party act that inserts the world's own standing-defeater; an
+  absolver's patience (`incorrigible`, `Prax.Repute.notoriety`'s Count idiom pointed inward) is
+  what she *believes*, permanent by memory and per-absolver. `Prax.Worlds.Village` wires eve's
+  road back onto it: confessing to gale, who already regards her a slanderer, costs nothing and
+  unlocks absolution; confessing to the *actually* wronged party (carol) was probed and found
+  structurally incapable of beating eve's baseline at any authored generosity — documented, not
+  shipped)*. Banked: recidivism into character (an offender's own future disposition shifting from
+  repeated lies needs `charDesires` to be fact-driven rather than a static field — a `Prax.Minds`
+  engine change); un-deceiving the original hearer (retracting a planted content-belief needs
+  belief-retraction semantics); confessor-side penance obligations; public (one-to-many)
+  confession; priest-like roles.
 - **Blackmail** (`Prax.Blackmail`) *(done — v30, split out from v22)*: `shakedown` compiles the
   four-action protocol (threaten/comply/defy/expose) the session probe validated live before the
   spec was written. A threat is a motive-belief deposit (the same channel confiding/lying already

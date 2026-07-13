@@ -1172,6 +1172,49 @@ every menu throughout this section) — nothing stops *you* from framing someone
 clearing carol's name by simply not believing eve's lie, which changes nothing about what everyone
 else now believes.
 
+**Update — v32.** The central claim is still true, checked directly, not merely still-plausible:
+`Prax.Confession` (§30) gives the *liar* a road back — eve can confess and be absolved — but
+confession only converts the confessor's own mark and clears the confessor's own standing. Nothing
+in it lets anyone confess *on carol's behalf*, and no affordance retracts the false belief eve's lie
+already planted in dana, gale, and anyone else it reached. Re-checked live rather than assumed
+unchanged, carol's own menu after the identical 40-turn drive does differ from the dump above in
+one respect — not the one that would matter: eve, who never confesses in unforced play (her secret
+stays expensive, exactly as §30's own free-play pin shows), happens to be standing in the square
+by turn 40 rather than the mill, so four new `whisper to eve` options appear (she's now a reachable
+hearer, nothing more):
+
+```
+carol: steal the loaf from the stall
+carol: whisper to eve that bob stole the loaf
+carol: whisper to gale that bob stole the loaf
+carol: whisper to you that bob stole the loaf
+carol: whisper to bob that dana stole the loaf
+carol: whisper to eve that dana stole the loaf
+carol: whisper to gale that dana stole the loaf
+carol: whisper to you that dana stole the loaf
+carol: whisper to bob that eve stole the loaf
+carol: whisper to gale that eve stole the loaf
+carol: whisper to you that eve stole the loaf
+carol: whisper to bob that gale stole the loaf
+carol: whisper to eve that gale stole the loaf
+carol: whisper to you that gale stole the loaf
+carol: whisper to bob that you stole the loaf
+carol: whisper to eve that you stole the loaf
+carol: whisper to gale that you stole the loaf
+carol: take up honest work at the stall
+carol: Go to mill
+carol: Wait a moment
+```
+
+Where a mover ends up by turn 40 is sensitive to the whole cast's candidate sets on every
+intervening turn (this trace was never one of `VillageSpec`'s own pinned trajectories — only
+`freePlayAt`/`whisperArcAt`/`redemptionArcSetup` are — so nothing in the suite depends on it
+holding byte-for-byte), and this round adds candidate actions to several characters' turns even
+when never taken. What matters is unaffected: still no `return the loaf with apologies`, still no
+exculpation affordance of any kind, for carol or anyone confessing on her behalf. The road back this
+round builds narrows the space of injustice — a liar can now make it right with the people she
+wronged directly — without touching this one at all.
+
 → code: `Prax.Deceit` (`conceal`/`lie`), `Prax.Worlds.Village`; asserted in `Prax.DeceitSpec`,
 `Prax.VillageSpec`.
 
@@ -1717,6 +1760,145 @@ imports `Prax.Faction` or `Prax.Kin` this round.
 
 ---
 
+### 30. Confession & absolution — the road back is real, and it narrows (`prax village`) (v32)
+
+`Prax.Confession` gives the village its first way back from a lie. A mark doesn't delete when
+confessed — it *converts*: `<who>.lied.<hearer>.<event>` becomes `<who>.confessed.<hearer>.<event>`,
+the same memory, a changed valence, so a trait can still price what's left of it. Confessing is
+self-incriminating by design: it deposits the deed into the hearer's beliefs through the identical
+sourced-hearsay channel gossip and lying already ride (v20), so everything §24's reputation stack
+does with a belief, it does with a confession too. Absolution is a separate act, and a refusable
+one: confessing clears your own conscience; only a second party's *grant* clears your standing, by
+inserting the world's defeater fact. You can confess and be refused — conscience clean, standing
+still dirty. And an absolver's patience is not a counter someone increments; it's knowledge —
+`incorrigible` points §24's `notoriety` Count idiom inward, so "I've forgiven you enough" derives
+from what an absolver *believes*, the same way notoriety itself derives from what a village
+believes.
+
+**The shape problem confession almost couldn't solve.** eve's conscience-mark from §25/§28 is
+content-shaped — `eve.lied.dana.stole.carol.loaf`, naming *carol*, the person she framed. Her
+slanderer standing (§28) derives from something else entirely — the act, `whispered.eve.dana`,
+naming *eve*. A confession that converts the mark has to deposit belief in the *act* (what actually
+gets eve in trouble) — not a re-assertion of the fabricated content (which would just plant the
+frame-up on a new believer). One pattern can't be both the mark's own shape and the deposit's shape
+at once; this was flagged as a risk before implementation started, hit for real once the village
+wiring was attempted (both naive wirings were built and probed live against the engine; `absolve`
+was never offered to anyone under either), and resolved by amending `confess` to take the mark
+pattern and the deposit pattern as two separate arguments — grounded only from what the mark itself
+binds (the confessor, the original hearer, the mark's own event variables), checked and loudly
+erroring on anything else.
+
+**Live, from a clean `villageWorld`.** eve whispers to dana; gale, still at the mill, witnesses the
+whisper directly — she already regards eve a slanderer before anyone confesses anything:
+
+```
+eve.lied.dana.stole.carol.loaf: True
+dana.believes.whispered.eve.dana.seen: True
+gale.believes.whispered.eve.dana.seen: True
+```
+
+Confessing to gale costs eve nothing — gale already held the regard, so there's no new believer to
+spook, and the notoriety threshold doesn't move:
+
+```
+eve.confessed.dana.stole.carol.loaf: True
+eve.lied.dana.stole.carol.loaf (the lied form, converted away): False
+gale.believes.whispered.eve.dana.heard.eve: True
+gale.believes.stole.carol.loaf.heard.eve (a re-assertion of the fabricated content): False
+```
+
+Note what gale does *not* come to believe: not a re-assertion of "carol stole the loaf" (the
+content eve fabricated), only the act and its falsity, sourced from eve herself. That's the
+deposit-pattern amendment doing its job — confessing implicates eve directly while leaving carol's situation exactly as §25 left it (untouched, not helped).
+
+gale grants absolution — the defeater lands, both her own and dana's slanderer regards dissolve
+from the derived view, and nothing is forgotten:
+
+```
+recanted.eve: True
+regards.dana.eve.slanderer (derived view): False
+regards.gale.eve.slanderer (derived view): False
+dana.believes.whispered.eve.dana.seen (memory persists): True
+gale.believes.whispered.eve.dana.heard.eve (memory persists): True
+```
+
+**Re-offense snaps it back, and this time it's worse.** eve and gale return to the square — where
+bob, carol, and "you" already are — and eve whispers again, to bob. The defeater she was just
+granted disappears (the same re-steal idiom §24's thief lives under), and because this whisper
+happens in a crowded square rather than an empty mill, every bystander there regards her at once —
+crossing the notoriety threshold in a single action, something the original mill-side whisper never
+did:
+
+```
+recanted.eve (snapped away): False
+regards.you.eve.slanderer: True
+regards.bob.eve.slanderer: True
+regards.carol.eve.slanderer: True
+notorious.eve.slanderer: True
+```
+
+**Fed-up-ness, and its limit.** gale now believes two distinct whispered-lie instances from eve —
+the original and the re-offense — and her patience (`incorrigible "whispered.V.H" 2 "incorrigible"`,
+a two-strikes threshold authored into `villageAxioms`) is spent:
+
+```
+regards.gale.eve.incorrigible: True
+gale's own "absolve eve" affordance gone from her menu: True
+regards.dana.eve.incorrigible (dana witnessed only the original instance): False
+```
+
+dana, who only ever witnessed the first instance, is not yet fed up — patience is per-absolver,
+exactly like every other regard in this engine.
+
+**The arc that didn't ship: confessing to the person actually wronged.** The natural redemption
+would run through carol, not gale — she's the one eve framed, and forgiving your actual victim
+means more than forgiving a bystander. It was built and measured, not just imagined: give carol a
+professed `merciful` desire (so eve's own depth-2 lookahead can see through confess→absolve via a
+believed model of her), and sweep its magnitude from 0 to 50. At every positive value the result is
+identical — confessing to carol scores far below eve's ordinary baseline, never crossing it no
+matter how generous the authored mercy (measured live via `scoreActions`, verbatim):
+
+```
+mercifulValue=0:      confess to carol about framing carol  ->  -19.73   (worst option)
+mercifulValue=5..50:  confess to carol about framing carol  ->    7.92   (FLAT -- value plateaus)
+                       eve's routine baseline (Go to mill / Wait / steal / honest work) -> 14.08-17.68
+```
+
+The mechanism is structural, not a tuning shortfall. Confessing to carol makes her a *new* believer
+of the whispered act — carol wasn't yet a regarder — so the confession itself eats the full,
+immediate notoriety-threshold hit, on top of which the planner's own `othersScore` term applies only
+a fixed 0.5 discount to the value of a *predicted* third-party absolution. That 0.5 ceiling caps the
+achievable relief regardless of how large the authored desire gets; carol's own choice to absolve,
+once profitable to her, is a discrete switch, not something that scales continuously with how
+merciful she's said to be. Documented here rather than shipped — the "threshold drama" the round set
+out to measure, measured, and found insufficient to drive an unforced arc.
+
+**Free play: the secret stays expensive.** Left alone, eve never confesses and gale never absolves —
+her lie is not cheap enough, nor is there a believed merciful absolver at depth 2, for the arithmetic
+to favor spending it. Driven 100 turns past the original free-play trace §25/§27/§28 all draw from
+(double the longest precedent so far), pinned in `VillageSpec` and confirmed green in this round's
+own full-suite run:
+
+```
+eve.lied.dana.stole.carol.loaf (still unconfessed after 100 turns): True
+eve.confessed.dana.stole.carol.loaf: False
+recanted.eve: False
+```
+
+**Falsification sweep: does the road back reach carol's own injustice?** No — §25 covers this
+directly (its own "Update — v32" paragraph, re-checked live rather than assumed): confession clears
+the *confessor's* mark and the *confessor's* standing; nothing in this round retracts a belief
+already planted in someone else, and nothing lets a third party confess on the framed victim's
+behalf. The road back this round builds is real, but it narrows to exactly the people a liar can
+face directly — it does not extend to the people her lie reached secondhand, and it does nothing at
+all for the people she framed.
+
+→ code: `Prax.Confession` (`confess`/`absolve`/`incorrigible`), `Prax.Worlds.Village`
+(`confessWhisper`/`absolveWhisper`, the `honest` trait's second desire, `villageAxioms`'s
+`incorrigible` wiring); asserted in `Prax.ConfessionSpec`, `Prax.VillageSpec`.
+
+---
+
 ## Feature coverage map
 
 Everything implemented, where it lives, and how to see it. The first block is the engine core (the
@@ -1775,16 +1957,23 @@ bar, Part I); the second is Part II, one row per world/tool.
 | Debt as a beneficiary'd obligation (`owe`/`settle`), belief-gated deadbeat standing | `Prax.Debt` | `prax village`: a witnessed default derives `regards.<W>.<debtor>.deadbeat`; the debtor himself, unavoidably co-present at his own default, always regards himself one even when no one else does; repayment defeats it by the same base-fact-defeater idiom as v21's thief |
 | Blackmail (`shakedown`: threaten/comply/defy/expose), threshold fear | `Prax.Blackmail`, `Prax.Worlds.Village` | `prax village`: a threat is a motive-belief deposit the victim's own round-walk prices; a standing threat is exposable, so stalling ties defiance; carol, holding eyewitness evidence of eve's whisper, shakes her down and buys real silence; eve's own fear of the notoriety brink also makes her a one-shot liar in free play, retelling §27's laundering under a forced continuation |
 | Membership as one spine (`member.<who>!<faction>`, `comrades`, belief-gated `factionStanding`); kin derivation (`kinAxioms`: marriage symmetry, sibling, grandparent, one-directional in-laws) and `wed`'s marriage-fact-plus-membership-overwrite; succession as single-slot exclusion | `Prax.Faction`, `Prax.Kin` | `prax feud`: bob/carol/dave share house `kestrel` (`comrades` derives their alliance, replacing the old hand-authored pairwise ties — §19/§29); esme weds into it (`wed "esme" "kestrel" "dave"`), inherits the grudge, and shuns alice unprompted on her first turn |
+| Confession & absolution (`confess`/`absolve`/`incorrigible`): a mark converts rather than deletes, confessing self-incriminates through sourced hearsay, absolution is a refusable second-party grant, and an absolver's patience is `notoriety`'s Count idiom pointed inward | `Prax.Confession` | `prax village`: eve confesses her frame-up to gale (already a believer — costless) and gale absolves; a fresh whisper snaps the absolution away; a second absolver, now knowing two instances, refuses further absolution — and confessing to carol, the party actually wronged, never rationally beats eve's baseline at any authored generosity |
 
 If the tables and scene lines don't convince you a feature is really doing what's claimed, the
-same behaviours are asserted in the test suite (`cabal test`, 392 tests). Part I: `Prax.QuerySpec`,
+same behaviours are asserted in the test suite (`cabal test`, 431 tests). Part I: `Prax.QuerySpec`,
 `Prax.EngineSpec`, `Prax.PlannerSpec` + `Prax.MindsSpec` (wants/utility/lookahead, now a round-walk
 over believed minds — `predictMove`, `charDesires`, `professed`/`conventional`), `Prax.CoreSpec`
 (emotions/relationships), `Prax.ReactionsSpec` (reactions, norms, norm-avoidance), `Prax.BeliefsSpec`
 (per-agent & false beliefs), `Prax.ConversationSpec` (speaker turns, topics, one-shot quips),
 `Prax.ArcSpec` (arc stages), `Prax.DeonticSpec` (□, discharge, breach, contrary-to-duty),
 `Prax.DebtSpec` (`owe`/`settle`, the demand→deadbeat-standing lifecycle, belief-gated visibility and
-the debtor's own unavoidable self-regard), `Prax.BarSpec`, and `Prax.LoopSpec` (a deterministic
+the debtor's own unavoidable self-regard), `Prax.ConfessionSpec` (mark conversion and its priced
+residue, the deposit landing as sourced hearsay, absolution's grant/refusal gate, `incorrigible`'s
+Count idiom pinned at threshold and per-absolver, re-offense snapping a defeater, and both sides of
+the spontaneous-confession and blackmail-defense arithmetic measured live before being pinned),
+`Prax.DbSpec` (the trie's exact `!`/`.`/retract semantics, incl. the reverted ghost-pruning
+attempt's own regression net — an asserted instance fact must survive its transient children
+draining to zero), `Prax.BarSpec`, and `Prax.LoopSpec` (a deterministic
 25-turn replay — the bar's cast now includes the bodiless sight ticker). Part II: `Prax.IntrigueSpec` (death + branching endings, incl. the
 confidant/victim `predictMove` split), `Prax.StressSpec`, `Prax.PersistSpec` (save/resume),
 `Prax.ScriptSpec` + `Prax.Script.JsonSpec` (scene layer + JSON, incl. memories/timed junctions/sketches
@@ -1827,7 +2016,12 @@ including the fratricide and victim-self-belief pins — and its reserved-variab
 name guards, dissolution un-deriving in-laws while membership persists, and the succession
 lifecycle's death-gating, child-only claims, and single-slot race resolution) — `Prax.FeudSpec`
 carries both into the emergent sandbox unmodified: the five original assertions untouched by the
-refactor, plus the wedding beat's derivation flip and driven shunning.
+refactor, plus the wedding beat's derivation flip and driven shunning — `VillageSpec`'s own later
+cases carry `Prax.Confession` into the full village: eve's costless confession to gale (the
+deposit self-sourced, not a re-assertion of the framed content), absolution dissolving standing
+while every belief persists, a fresh whisper snapping the defeater away and landing every square
+bystander at once, gale's patience running out at the second instance while dana's (one instance)
+doesn't, and eve's frame-up surviving unconfessed through 100 turns of unforced free play.
 
 ---
 
