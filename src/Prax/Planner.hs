@@ -73,6 +73,32 @@ inScope st actor m =
     binds = Map.fromList [ (intern "Actor",   VSym (intern (charName actor)))
                          , (intern "Witness", VSym (intern (charName m))) ]
 
+-- | Is a believed desire dead RIGHT NOW: at its floor (a negative want-kind's
+-- own conditions have zero bindings) or gated shut (a positive want-kind's
+-- environment gate has zero bindings)? ('Prax.Relevance.livenessOf'; Owner
+-- grounds to the mover @m@, matching 'Prax.Minds.cookedDesiesFor'\/
+-- 'cookedSelfWants'.) A desire with no 'liveness' recipe, or classified
+-- 'AlwaysLive', is never dead-now — only 'FloorCheck'\/'GateCheck' fire.
+--
+-- The Owner binding is passed to 'queryCooked' as a seed binding rather than
+-- substituted into the conditions up front: 'Prax.Db.unifySyms' consults an
+-- already-bound variable at every occurrence, so one seed binding grounds
+-- @Owner@ everywhere it appears in the (possibly multi-condition) conjunct.
+--
+-- A 'FloorCheck' desire absent from 'cookedDesires' (@conds = []@) queries
+-- via the empty-conjunction identity ('Prax.Query.queryCookedWith'\'s fold
+-- over @[]@ returns @[b0]@ unchanged) — one binding, non-null, so it counts
+-- LIVE, not dead: an unrecorded desire must never silently read as at-floor.
+deadNow :: PraxState -> Character -> Desire -> Bool
+deadNow st m d = case Map.lookup (desireName d) (liveness st) of
+  Just FloorCheck     -> null (queryCooked v conds owner)
+    where conds = Map.findWithDefault [] (desireName d) (cookedDesires st)
+  Just (GateCheck gs) -> any (\g -> null (queryCooked v g owner)) gs
+  _                   -> False
+  where
+    v     = readView st
+    owner = Map.singleton (intern "Owner") (VSym (intern (charName m)))
+
 -- | The predictor's guess at the mover's next move: the mover's best candidate
 -- under the predictor's believed model of them — and only if it strictly
 -- improves that model over doing nothing (unmotivated moves are noise, not
@@ -82,11 +108,13 @@ predictMove st p m =
   case believedDesires st p m of
     [] -> Nothing
     ds
-      -- no believed desire is improvable by any authored action: no candidate
-      -- can strictly beat standing still, so don't ground or evaluate any
-      -- (Prax.Relevance; exact — improvable desires keep the FULL model,
-      -- unimprovable costs included, so deterrents still deter)
-      | all ((`notElem` improvables st) . desireName) ds -> Nothing
+      -- every believed desire is DEAD: statically dead (no authored action
+      -- could ever improve it) OR dead-now (improvable in principle, but not
+      -- in THIS state) — no candidate can strictly beat standing still, so
+      -- don't ground or evaluate any (Prax.Relevance; exact — a single LIVE
+      -- desire keeps the FULL model, unimprovable/dead-now costs included,
+      -- so deterrents still deter)
+      | all (\d -> desireName d `notElem` improvables st || deadNow st m d) ds -> Nothing
       | otherwise ->
           let model  = cookedDesiresFor st (charName m) ds
               still  = evaluateCooked st model

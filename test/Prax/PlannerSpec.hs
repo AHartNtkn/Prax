@@ -7,6 +7,7 @@ import           Prax.Query
 import           Prax.Types
 import           Prax.Engine
 import           Prax.Planner
+import           Prax.Derive (axiom)
 
 -- A minimal tend-bar practice (walk up + order) for planner tests.
 tendBarP :: Practice
@@ -321,4 +322,87 @@ tests = testGroup "Prax.Planner"
       -- "delivered". othersScore = 0, selfNext = 0.9*0 = 0. Total:
       -- 0 + 0 + 0 = 0.0.
       scoreOf "alice: signal" believeBoth @?= Just 0.0
+
+  , testCase "deadNow (floor): a markless conscience skips; one lied-mark goes live" $ do
+      -- A negative want-kind ("hates-lying") is at its floor whenever the
+      -- mover carries no lied-mark at all: zero is the minimum, so no
+      -- candidate (confess included) can improve it, and the pair-skip
+      -- fires without grounding or scoring beth's candidates.
+      let confessP = practice
+            { practiceId = "confess", roles = ["R"]
+            , actions =
+                [ action "[Actor]: confess" [ Match "lied.Actor" ] [ Delete "lied.Actor" ]
+                , action "[Actor]: Wait about" [] []
+                ]
+            }
+          vocab = [ Desire "hates-lying" (Want [ Match "lied.Owner" ] (-5)) ]
+          priya = character "priya"
+          beth' = character "beth"
+          st0   = setDesires vocab
+                    (setCharacters [priya, beth'] (definePractices [confessP] emptyState))
+          st1   = performOutcome (Insert "practice.confess.here") st0
+          markless = performOutcome
+            (Insert "priya.believes.desires.beth.hates-lying.heard.gossip") st1
+      -- markless: "lied.beth" has zero bindings -- already at the floor.
+      predictMove markless priya beth' @?= Nothing
+      -- one lied-mark lifts the floor: confess strictly improves the desire
+      -- (utility rises from -5 to 0), so the FULL model evaluates and finds it.
+      let marked = performOutcome (Insert "lied.beth") markless
+      fmap gaLabel (predictMove marked priya beth') @?= Just "beth: confess"
+
+  , testCase "deadNow (gate): absent hunger skips; the hunger fact goes live" $ do
+      -- A positive want-kind ("wants-food") gates on "hungry.Owner": no
+      -- authored outcome inserts "hungry.*" (only "meal.*"), so it is a pure
+      -- environment gate -- dead while absent, live once the fact appears.
+      let eateryP = practice
+            { practiceId = "eatery", roles = ["R"]
+            , actions =
+                [ action "[Actor]: eat lunch"
+                    [ Match "practice.eatery.here" ] [ Insert "meal.Actor" ]
+                , action "[Actor]: Wait about" [] []
+                ]
+            }
+          vocab = [ Desire "wants-food" (Want [ Match "hungry.Owner", Match "meal.M" ] 5) ]
+          priya = character "priya"
+          beth' = character "beth"
+          st0   = setDesires vocab
+                    (setCharacters [priya, beth'] (definePractices [eateryP] emptyState))
+          st1   = performOutcome (Insert "practice.eatery.here") st0
+          believed = performOutcome
+            (Insert "priya.believes.desires.beth.wants-food.heard.gossip") st1
+      -- no hunger fact: the gate is empty, the pair skips.
+      predictMove believed priya beth' @?= Nothing
+      -- hunger fact present: the gate opens; eating creates the joint
+      -- hungry+meal binding the FULL model needed to see the improvement.
+      let hungry = performOutcome (Insert "hungry.beth") believed
+      fmap gaLabel (predictMove hungry priya beth') @?= Just "beth: eat lunch"
+
+  , testCase "deadNow (conservative): an axiom-derivable gate candidate never skips" $ do
+      -- "hungry.Owner" looks environment-gated (no action inserts it
+      -- directly), but an axiom derives it from "starving.Owner" -- the
+      -- static classifier must exclude it from gating (livenessOf's
+      -- conservativity), so the desire stays AlwaysLive and predictMove is
+      -- never skipped by the state check, regardless of "hungry.beth"'s
+      -- current truth.
+      let toilP = practice
+            { practiceId = "toil", roles = ["R"]
+            , actions =
+                [ action "[Actor]: toil" [] [ Insert "starving.Actor" ]
+                , action "[Actor]: Wait about" [] []
+                ]
+            }
+          vocab = [ Desire "craves-hunger" (Want [ Match "hungry.Owner" ] 5) ]
+          axs   = [ axiom [ Match "starving.Owner" ] [ "hungry.Owner" ] ]
+          priya = character "priya"
+          beth' = character "beth"
+          st0   = setDesires vocab
+                    (setAxioms axs
+                       (setCharacters [priya, beth'] (definePractices [toilP] emptyState)))
+          st1   = performOutcome (Insert "practice.toil.here") st0
+          believed = performOutcome
+            (Insert "priya.believes.desires.beth.craves-hunger.heard.gossip") st1
+      -- "hungry.beth" is absent, but the desire is conservatively AlwaysLive:
+      -- toiling (which derives it via the axiom) is still predicted, exactly
+      -- as it would be with no dead-now check at all.
+      fmap gaLabel (predictMove believed priya beth') @?= Just "beth: toil"
   ]
