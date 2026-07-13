@@ -537,6 +537,131 @@ cabal test prax-test --test-options='-p "/Prax.Worlds.Village/ && !/confessing t
 
 ---
 
+### Task 2b: The safe-binder rule — broadcast ForEach inserts bound, not opaque
+
+Added mid-round after Task 2's attribution profiling (measured on the real trajectory,
+68,286 predictAt calls): reuse fired on 1% of calls because 98% sat on OPAQUE paths —
+`outcomeDeltaAnchors`' `mightSpawn` treats ANY variable-headed insert as spawn-capable, and
+every broadcast `ForEach` body (`CInsert` headed by the `Witness` binder — the whisper,
+68% of the tree) hit that arm. The spec's amended §1 states the fix: a binder bound at a
+non-first `Match` position provably cannot take the value `practice`.
+
+**Files:**
+- Modify: `src/Prax/Engine.hs` (`outcomeDeltaAnchors` + new `safeBinders`; haddock of
+  `groundedDeltaAnchors` updated to state the refined rule exactly)
+- Test: `test/Prax/EngineSpec.hs`
+
+**Design.** Engine adds `import qualified Data.Set as Set` and `Data.Set (Set)`. Replace
+`outcomeDeltaAnchors` with:
+
+```haskell
+outcomeDeltaAnchors :: PraxState -> [String] -> [CookedOutcome] -> Maybe [[Sym]]
+outcomeDeltaAnchors st visited = go' Set.empty
+  where
+    go' safe = fmap concat . traverse (go safe)
+    go safe o = case o of
+      CInsert toks
+        | mightSpawn safe (map fst toks) -> Nothing
+        | otherwise -> Just (map fst toks : evictionShadowNames toks)
+      CDelete toks  -> Just (map fst toks : evictionShadowNames toks)
+      CForEach conds os -> go' (safe `Set.union` safeBinders conds) os
+      CCall fn args
+        | fn `elem` visited -> Just []
+        | otherwise -> case lookupCookedFn fn st of
+            Nothing -> Nothing
+            Just (params, cases) ->
+              let b = Map.fromList (zip (map intern params) (map VSym args))
+              in fmap concat (traverse
+                   (\(_, os) -> outcomeDeltaAnchors st (fn : visited)
+                                  (map (groundCookedOutcome b) os))
+                   cases)
+    mightSpawn safe (n : _)
+      | symIsVar n = not (n `Set.member` safe)
+      | otherwise  = n == intern "practice"
+    mightSpawn _ [] = False
+
+-- | The ForEach binders that provably cannot take the value @practice@:
+-- variables bound at a NON-FIRST position of a top-level positive 'CMatch'
+-- guard and never occurring at the first position of any such guard. Spends
+-- the authored-world structural invariant (the family "Prax.Relevance"'s
+-- header states for predicate literals, extended to the registry root): the
+-- literal @practice@ roots practice-registry paths and is never an entity,
+-- place, value, or id name — so a value read out of a fact's INTERIOR can
+-- never be @practice@, and an insert headed by such a binder can never reach
+-- 'spawnedInstanceNames'. Deliberately narrow: 'CExists'\/'CAbsent'\/'CNot'
+-- do not bind outward, 'COr' branches may leave the binder unbound, subquery
+-- variables carry sets, and a FIRST-position variable really can unify
+-- @practice@ against the registry — none of those yield safe binders, and
+-- 'CCall' resets the safe set (call-scoped parameters are not the mover's
+-- bindings). Uncertainty stays opaque.
+safeBinders :: [CookedCondition] -> Set Sym
+safeBinders conds = Set.difference boundDeep firstPos
+  where
+    pats = [ p | CMatch p <- conds ]
+    boundDeep = Set.fromList [ v | p <- pats, v <- drop 1 p, symIsVar v ]
+    firstPos  = Set.fromList [ v | (v : _) <- pats, symIsVar v ]
+```
+
+Update `groundedDeltaAnchors`' haddock sentence about opacity to: "…or an insert whose
+first segment is a variable that is not a safe ForEach binder ('safeBinders') — such a
+head could ground to @practice@ and spawn."
+
+**Tests (EngineSpec, RED-first):**
+
+- [ ] **Step 1: Write the failing test** (append beside the existing
+  `groundedDeltaAnchors` case):
+
+```haskell
+  , testCase "groundedDeltaAnchors: safe ForEach binders bound; unsafe heads stay opaque" $ do
+      let p = practice
+            { practiceId = "gossipy", roles = ["R"]
+            , actions =
+                [ action "[Actor]: broadcast"
+                    [] [ ForEach [ Match "together.W" ]
+                           [ Insert "W.believes.rumor" ] ]
+                , action "[Actor]: reshape"
+                    [] [ ForEach [ Match "X.y.Z" ]
+                           [ Insert "X.marked" ] ]
+                , action "[Actor]: phantom"
+                    [] [ ForEach [ Exists [ Match "roster.W" ] ]
+                           [ Insert "W.tagged" ] ]
+                ]
+            }
+          st = definePractices [p] emptyState
+          st1 = performOutcome (Insert "practice.gossipy.here") st
+          gaOf label = case [ ga | ga <- possibleActions st1 "ada", gaLabel ga == label ] of
+            (ga : _) -> ga
+            []       -> error ("no such grounded action: " ++ label)
+      -- The broadcast: W is bound at position 2 of a top-level Match — a
+      -- safe binder; the insert is bounded with W as a wildcard anchor.
+      case groundedDeltaAnchors st1 (gaOf "ada: broadcast") of
+        Nothing -> assertFailure "broadcast must be bounded (safe binder)"
+        Just as -> assertBool "wildcard-headed believes anchor"
+          (map intern (pathNames "W.believes.rumor") `elem` as)
+      -- A position-1 binder really can unify practice-registry paths.
+      groundedDeltaAnchors st1 (gaOf "ada: reshape") @?= Nothing
+      -- Exists does not bind outward; its "binder" is not safe.
+      groundedDeltaAnchors st1 (gaOf "ada: phantom") @?= Nothing
+```
+
+- [ ] **Step 2: RED.** The broadcast case FAILS today (`Nothing` — assertFailure fires);
+  the reshape/phantom cases pass (they pin the conservative arms so the relaxation cannot
+  overshoot). Record the observed failure.
+- [ ] **Step 3: Implement** exactly the design. GREEN on `-p "Engine"`.
+- [ ] **Step 4: Nets + suite.** `-p "GoldenDrive"` byte-identical (all four worlds),
+  `-p "ViewInvariant"` green, full suite green (448), timed.
+- [ ] **Step 5: Re-run the attribution probe** (scratchpad harness from the Task 2
+  profiling): report the new predictAt split (reuse / opaque / missing / intersection) on
+  the same 70-turn drive. Whisper-bearing picks must now show bounded deltas; report
+  whatever the defeat profile becomes (intersection defeats are expected to rise — the
+  cone doing its job — report as measured).
+- [ ] **Step 6: Re-run the A/B** — uncontended, best-of-3, the exact 31-test filter;
+  report against all four epochs (31.11 / 171.64 / 132.75 / 120.10). Then the timed full
+  suite.
+- [ ] **Step 7: Gates + commit** `"Engine: a broadcast's binder can never be practice — bound, not opaque"`.
+
+---
+
 ### Task 3: Docs
 
 **Files:**
