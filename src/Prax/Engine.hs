@@ -291,17 +291,19 @@ lookupCookedFn fn st =
 -- | The insert\/delete anchor families one grounded action's outcomes can
 -- touch — 'performAction''s effects, bounded statically per call by walking
 -- the same cooked outcomes 'performAction' itself executes. @Nothing@ when
--- the effects cannot be bounded: an unresolvable 'CCall', or an insert whose
--- first segment is a variable that is not a safe ForEach binder
--- ('safeBinders') — such a head could ground to @practice@ and spawn an
--- instance ('spawnedInstanceNames'), running that practice's 'cpInits',
--- arbitrary further outcomes this walk does not model. The caller (the
--- planner's prediction reuse) treats @Nothing@ as opaque: no reuse at or
--- below the node. Conservative by construction: 'CForEach' bodies are
--- included whether or not their guards would fire, a safe binder head kept
--- as a 'mayUnifySyms' wildcard anchor; 'CCall' includes every case of the
--- resolved function, cycle-guarded like 'Prax.Relevance''s string-side
--- atom walk.
+-- the effects cannot be bounded: an unresolvable 'CCall'; an insert whose
+-- first segment IS the literal @practice@; or an insert whose first segment
+-- is a variable that is not a safe ForEach binder ('safeBinders') — such a
+-- head could ground to @practice@ and spawn an instance
+-- ('spawnedInstanceNames'), running that practice's 'cpInits', arbitrary
+-- further outcomes this walk does not model. Paths with no literal segment
+-- at all are likewise opaque — they carry no anchor evidence for
+-- 'Prax.Relevance.mayUnifySyms'. The caller (the planner's prediction reuse)
+-- treats @Nothing@ as opaque: no reuse at or below the node. Conservative by
+-- construction: 'CForEach' bodies are included whether or not their guards
+-- would fire, a safe binder head kept as a 'mayUnifySyms' wildcard anchor;
+-- 'CCall' includes every case of the resolved function, cycle-guarded like
+-- 'Prax.Relevance''s string-side atom walk.
 groundedDeltaAnchors :: PraxState -> GroundedAction -> Maybe [[Sym]]
 groundedDeltaAnchors st ga = do
   cp <- Map.lookup (gaPracticeId ga) (cookedDefs st)
@@ -313,10 +315,16 @@ outcomeDeltaAnchors st visited = go' Set.empty
   where
     go' safe = fmap concat . traverse (go safe)
     go safe o = case o of
-      CInsert toks
-        | mightSpawn safe (map fst toks) -> Nothing
-        | otherwise -> Just (map fst toks : evictionShadowNames toks)
-      CDelete toks  -> Just (map fst toks : evictionShadowNames toks)
+      CInsert toks ->
+        let names = map fst toks
+        in if mightSpawn safe names || unanchored names
+             then Nothing
+             else Just (names : evictionShadowNames toks)
+      CDelete toks ->
+        let names = map fst toks
+        in if unanchored names
+             then Nothing
+             else Just (names : evictionShadowNames toks)
       CForEach conds os -> go' (safe `Set.union` safeBinders conds) os
       CCall fn args
         | fn `elem` visited -> Just []
@@ -332,6 +340,13 @@ outcomeDeltaAnchors st visited = go' Set.empty
       | symIsVar n = not (n `Set.member` safe)
       | otherwise  = n == intern "practice"
     mightSpawn _ [] = False
+    -- A path with no literal segment carries no anchor evidence at all —
+    -- 'mayUnifySyms' would clear it against every read pattern (the
+    -- anchored-literal rule discards evidence-free overlaps), so bounding it
+    -- would license unsound reuse. Opaque instead. Well-formed facts always
+    -- carry a literal predicate segment (the authored-world invariant), so
+    -- this arm is unreachable in shipped worlds.
+    unanchored = all symIsVar
 
 -- | The ForEach binders that provably cannot take the value @practice@:
 -- variables bound at a NON-FIRST position of a top-level positive 'CMatch'

@@ -284,6 +284,9 @@ tests = testGroup "Prax.Engine"
                 , action "[Actor]: phantom"
                     [] [ ForEach [ Exists [ Match "roster.W" ] ]
                            [ Insert "W.tagged" ] ]
+                , action "[Actor]: void gesture"
+                    [] [ ForEach [ Match "roster.W" ]
+                           [ Insert "W" ] ]
                 ]
             }
           st = definePractices [p] emptyState
@@ -301,6 +304,9 @@ tests = testGroup "Prax.Engine"
       groundedDeltaAnchors st1 (gaOf "ada: reshape") @?= Nothing
       -- Exists does not bind outward; its "binder" is not safe.
       groundedDeltaAnchors st1 (gaOf "ada: phantom") @?= Nothing
+      -- A safe binder heading an ALL-VARIABLE path: no literal anchor, no
+      -- evidence — must be opaque, not bounded.
+      groundedDeltaAnchors st1 (gaOf "ada: void gesture") @?= Nothing
 
   , testCase "axiomHeads: fireable heads, lifted forms, the contradiction witness" $ do
       let axs = [ axiom [ Match "starving.X" ] [ "hungry.X" ] ]
