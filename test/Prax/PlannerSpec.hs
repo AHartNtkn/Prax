@@ -8,6 +8,9 @@ import           Prax.Types
 import           Prax.Engine
 import           Prax.Planner
 import           Prax.Derive (axiom)
+import           Prax.Relevance (moverReadAnchors)
+import           Prax.Db (pathNames)
+import           Prax.Sym (intern)
 
 -- A minimal tend-bar practice (walk up + order) for planner tests.
 tendBarP :: Practice
@@ -452,4 +455,89 @@ tests = testGroup "Prax.Planner"
       -- all; the model's content did all the work, both times.
       let marked = performOutcome (Insert "lied.beth") believed
       fmap gaLabel (predictMove marked priya beth') @?= Just "beth: confess"
+
+  , testCase "prediction reuse: a base-fact delta that enables the mover is recomputed, not reused" $ do
+      -- priya's "taunt" inserts beth's hunger — the gate fact of beth's
+      -- believed desire. At the pick's ROOT beth has no motivated move
+      -- (Nothing); after taunt she is predicted to eat, and the imagined
+      -- meal is priya's own payoff. If the planner wrongly reused the
+      -- root's Nothing (the taunt delta unifies beth's read set — both her
+      -- affordance condition and her desire condition read hungry.beth —
+      -- so it must NOT), taunting would score no better than idling and
+      -- lose the label tie-break to "idle about". The pick is the witness.
+      let p = practice
+            { practiceId = "mess", roles = ["R"]
+            , actions =
+                [ action "[Actor]: taunt beth" [ Neq "Actor" "beth" ]
+                    [ Insert "hungry.beth" ]
+                , action "[Actor]: eat lunch" [ Match "hungry.Actor" ]
+                    [ Insert "meal.Actor" ]
+                , action "[Actor]: idle about" [] []
+                ]
+            }
+          vocab = [ Desire "wants-food"
+                      (Want [ Match "hungry.Owner", Match "meal.Owner" ] 5) ]
+          priya = (character "priya")
+            { charWants = [ Want [ Match "meal.beth" ] 10 ] }
+          beth' = character "beth"
+          st0 = setDesires vocab
+                  (setCharacters [priya, beth'] (definePractices [p] emptyState))
+          st1 = performOutcome (Insert "practice.mess.here") st0
+          st  = performOutcome
+                  (Insert "priya.believes.desires.beth.wants-food.heard.gossip") st1
+      -- Sanity: the root prediction really is Nothing (beth unmotivated).
+      predictMove st priya beth' @?= Nothing
+      -- The pick sees through the taunt: enabling beth's meal beats idling.
+      fmap gaLabel (pickAction 2 st priya) @?= Just "priya: taunt beth"
+
+  , testCase "prediction reuse: a DERIVED-fact flip (the cone) is recomputed, not reused" $ do
+      -- priya's "denounce" inserts only a believes fact; an axiom derives
+      -- the regard beth fears; beth's amends (gated on the DERIVED fact
+      -- only) is her motivated answer, and the apology is priya's payoff.
+      -- The raw taunt... the raw denounce delta (priya.believes.beth.thief)
+      -- unifies NOTHING beth's prediction reads directly — only the cone
+      -- (delta feeds the axiom => its head regards.W.C.thief joins) reaches
+      -- her fear and her amends gate. A cone-less implementation reuses the
+      -- stale Nothing and bides; the correct one denounces. (The do-nothing
+      -- label must sort BEFORE "denounce beth" — a mutation's score-tie
+      -- falls back to the label order, and a do-nothing that sorted after
+      -- would hand the tie to the very label the test asserts, making the
+      -- guard vacuous. "bide time" < "denounce beth"; "idle about" is not.)
+      let p = practice
+            { practiceId = "court", roles = ["R"]
+            , actions =
+                [ action "[Actor]: denounce beth" [ Neq "Actor" "beth" ]
+                    [ Insert "Actor.believes.beth.thief" ]
+                , action "[Actor]: make amends"
+                    [ Match "regards.V.Actor.thief" ]
+                    [ Insert "recanted.Actor", Insert "apology.Actor" ]
+                , action "[Actor]: bide time" [] []
+                ]
+            }
+          axs = [ axiom [ Match "W.believes.C.thief", Not "recanted.C" ]
+                        [ "regards.W.C.thief" ] ]
+          vocab = [ Desire "hates-infamy"
+                      (Want [ Match "regards.V.Owner.thief" ] (-8)) ]
+          priya = (character "priya")
+            { charWants = [ Want [ Match "apology.beth" ] 10 ] }
+          beth' = character "beth"
+          st0 = setDesires vocab
+                  (setAxioms axs
+                     (setCharacters [priya, beth'] (definePractices [p] emptyState)))
+          st1 = performOutcome (Insert "practice.court.here") st0
+          st  = performOutcome
+                  (Insert "priya.believes.desires.beth.hates-infamy.heard.gossip") st1
+      predictMove st priya beth' @?= Nothing
+      fmap gaLabel (pickAction 2 st priya) @?= Just "priya: denounce beth"
+
+  , testCase "prediction reuse: a mid-path death is recomputed (the dead anchor)" $ do
+      -- The existing "mid-round death silences the rest of the imagined
+      -- round" test already pins this behavior end-to-end; this case pins
+      -- the read-set half directly: the death mark is in every mover's
+      -- read anchors, so no reuse can survive a kill on the path.
+      let priya = character "priya"
+          beth' = character "beth"
+          st = setCharacters [priya, beth'] emptyState
+      assertBool "dead.beth is read"
+        (map intern (pathNames "dead.beth") `elem` moverReadAnchors st priya beth')
   ]

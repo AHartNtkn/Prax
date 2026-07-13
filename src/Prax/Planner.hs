@@ -26,10 +26,11 @@ import           Data.Ord (Down(..))
 
 import           Prax.Db (Val (..), exists)
 import           Prax.Query (countSatisfying, groundCondition, query, CookedCondition, queryCooked)
-import           Prax.Sym (intern)
+import           Prax.Sym (Sym, intern)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction)
+import           Prax.Engine (possibleActions, performAction, groundedDeltaAnchors)
 import           Prax.Minds (believedDesires, cookedSelfWants, cookedDesiresFor)
+import           Prax.Relevance (moverReadAnchors, mayUnifySyms)
 
 -- | Total utility of a world to a set of wants: @Σ utility × #satisfying@.
 evaluate :: PraxState -> [Want] -> Int
@@ -136,29 +137,73 @@ othersAfter st actor =
            (k : _) -> k
            []      -> length cs - 1   -- an actor outside the cast walks everyone
 
+-- | One imagined path's accumulated effect on the pick's root state, as
+-- anchor families with the derived-fact cone folded in: the moment any
+-- extension feeds an axiom ('footprint'), every fireable head ('axiomHeads')
+-- joins the delta — and stays, because heads are themselves in the
+-- footprint. 'Nothing' is the opaque path: some applied outcome could not
+-- be bounded ('Prax.Engine.groundedDeltaAnchors'), so nothing at or below
+-- it may reuse. Spec: docs/specs/2026-07-13-v34-prediction-reuse.md.
+type PathDelta = Maybe [[Sym]]
+
+extendDelta :: PraxState -> PathDelta -> Maybe [[Sym]] -> PathDelta
+extendDelta st (Just old) (Just new) =
+  Just (old ++ new ++ [ h | feeds, h <- axiomHeads st, h `notElem` old ])
+  where feeds = any (\n -> any (mayUnifySyms n) (footprint st)) new
+extendDelta _ _ _ = Nothing
+
 -- | Score each candidate by the imagined round it opens (best first; ties
--- broken by label for determinism).
+-- broken by label for determinism). Within one pick, every prediction is
+-- either the root state's — reused when the path delta provably cannot
+-- reach anything that (actor, mover) prediction reads — or computed live,
+-- exactly as before; the reused value is EQUAL to the live one (the spec's
+-- soundness argument), so decisions are bit-for-bit unchanged.
 scoreActions :: Int -> PraxState -> Character -> [(GroundedAction, Double)]
-scoreActions depth st actor =
-  sortOn (\(ga, s) -> (Down s, gaLabel ga))
-    [ (a, valueAfter depth (performAction st a)) | a <- candidateActions st actor ]
+scoreActions depth st0 actor = go depth (Just []) st0
   where
-    valueAfter d st1 = base + rest
+    -- The root memo: each mover's step decision (scope gate + prediction)
+    -- at the PICK's root state. Map values are lazy — a mover whose pairs
+    -- never reuse never computes its root prediction.
+    rootStep = Map.fromList
+      [ (charName m, stepPredict st0 m) | m <- othersAfter st0 actor ]
+    rootReads = Map.fromList
+      [ (charName m, moverReadAnchors st0 actor m) | m <- othersAfter st0 actor ]
+    stepPredict s m
+      | inScope s actor m = predictMove s actor m
+      | otherwise         = Nothing
+
+    -- Reuse the root's decision when sound; live otherwise (opaque path,
+    -- a mover the root never enumerated, or a delta/read intersection).
+    predictAt :: PathDelta -> PraxState -> Character -> Maybe GroundedAction
+    predictAt (Just delta) s m
+      | Just rs <- Map.lookup (charName m) rootReads
+      , not (any (\d -> any (mayUnifySyms d) rs) delta)
+      = Map.findWithDefault (stepPredict s m) (charName m) rootStep
+    predictAt _ s m = stepPredict s m
+
+    go d delta st =
+      sortOn (\(ga, s) -> (Down s, gaLabel ga))
+        [ (a, valueAfter d
+                (extendDelta st0 delta (groundedDeltaAnchors st a))
+                (performAction st a))
+        | a <- candidateActions st actor ]
+
+    valueAfter d delta st1 = base + rest
       where
         base = fromIntegral (evaluateCooked st1 (cookedSelfWants st1 actor))
         rest
           | d <= 0    = 0
           | otherwise = othersScore + selfNext
           where
-            (afterRound, othersScore) = foldl step (st1, 0) (othersAfter st1 actor)
-            step (s, acc) m
-              | not (inScope s actor m) = (s, acc)
-              | otherwise = case predictMove s actor m of
-                  Nothing -> (s, acc)
-                  Just ga ->
-                    let s' = performAction s ga
-                    in (s', acc + 0.5 * fromIntegral (evaluateCooked s' (cookedSelfWants s' actor)))
-            selfNext = case scoreActions (d - 1) afterRound actor of
+            (afterRound, afterDelta, othersScore) =
+              foldl step (st1, delta, 0) (othersAfter st1 actor)
+            step (s, dlt, acc) m = case predictAt dlt s m of
+              Nothing -> (s, dlt, acc)
+              Just ga ->
+                let s'   = performAction s ga
+                    dlt' = extendDelta st0 dlt (groundedDeltaAnchors s ga)
+                in (s', dlt', acc + 0.5 * fromIntegral (evaluateCooked s' (cookedSelfWants s' actor)))
+            selfNext = case go (d - 1) afterDelta afterRound of
               ((_, v) : _) -> 0.9 * v
               []           -> 0
 
