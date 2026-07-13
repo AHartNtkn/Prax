@@ -54,9 +54,11 @@ tree node, `predictMove` for a mover is replaced by:
    entity-names-vs-predicate-literals invariant, stated where spent) reserves the literal
    `practice` for registry roots — it is never an entity, place, value, or id name.
    Inserts headed by a safe binder are bounded with the variable as a `mayUnifySyms`
-   wildcard; every other variable head (first-position binders, which really can unify
-   `practice` against the registry; `Exists`/`Or`/subquery-scoped variables, which do not
-   bind outward; call-scoped parameters) stays opaque. Conservativity is unchanged in
+   wildcard — unless the whole path is variables: an evidence-free path carries no anchor
+   for the anchored-literal rule and would clear against every read, so it stays opaque
+   (inserts and deletes both). Every other variable head (first-position binders, which
+   really can unify `practice` against the registry; `Exists`/`Or`/subquery-scoped
+   variables, which do not bind outward; call-scoped parameters) stays opaque. Conservativity is unchanged in
    direction: uncertainty ⇒ opaque ⇒ live.
 2. **The affected cone.** A static, per-world relation (computed in `retable`, alongside
    `footprint`): fact family A *feeds* an axiom when ANY body atom of the axiom may-unifies
