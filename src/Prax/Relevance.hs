@@ -19,11 +19,24 @@
 -- a predicate segment would void the analysis; every shipped world satisfies
 -- the invariant, and the golden decision-sequence tests would surface a
 -- violation as a dropped prediction.
+--
+-- 'livenessOf' (spec @docs/specs/2026-07-13-v33-live-relevance.md@) adds the
+-- state-conditioned dimension over the same vocabulary: not just "could
+-- anything ever improve this want-kind?" but "is that improvability LIVE
+-- right now?" Each named desire's per-'Prax.Types.Liveness' recipe — a
+-- negative want-kind's floor check, a positive want-kind's environment
+-- gates, or 'Prax.Types.AlwaysLive' when no cheap state test applies — is
+-- computed once per world and cached on 'Prax.Types.PraxState' (like
+-- 'improvableDesires' itself), for the planner's per-state dead-now test to
+-- consult cheaply. Conservativity runs the same direction as above: a gate
+-- only ever removes work when provably safe (axiom-derivable or otherwise
+-- uncertain candidates are never gates), and every uncertainty — an
+-- unresolvable outcome, a @Subquery@\/@Count@\/@Calc@-tainted want — keeps
+-- the desire 'Prax.Types.AlwaysLive'.
 module Prax.Relevance
   ( mayUnify
   , mayUnifySyms
   , improvableDesires
-  , Liveness(..)
   , livenessOf
   , evictionShadows
   , evictionShadowNames
