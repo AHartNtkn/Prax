@@ -261,6 +261,12 @@ utility. See the design writeups:
   the parity bit) and the engine computes in symbols end to end, strings only at the
   authoring/display boundary. Honestly reported: a wash on wall time (~10% within noise) —
   kept as the consistent endpoint of v28's design, with the attribution lesson recorded.
+- **v33 — state-conditioned relevance**: v26's relevance skip asks vocabulary alone
+  ("could ANY action ever improve this want-kind?"); this round adds "could it matter NOW,"
+  a per-state floor/gate check consulted alongside it. A 31-test village A/B recovers ≈39s of
+  a prior round's regression (171.64s → 132.75s) — a real but partial reclaim, not a return to
+  that round's own pre-regression 31.11s, the residual being the world's own accumulated
+  richness, not the filter.
 
 See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
 player as DM, …).

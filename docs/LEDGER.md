@@ -162,7 +162,9 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   field behind `Prax.Engine.withDb`/`setAxioms`/`setDesires` (one closure per state instead of
   ~15k re-computations per village round); `Prax.Relevance` skips predictions no authored
   action could motivate (conservative outcome↔want pattern analysis with polarity, resting on
-  one stated invariant — entity names never collide with predicate-name literals); pattern
+  one stated invariant — entity names never collide with predicate-name literals; a
+  vocabulary-only "could it EVER matter" check — v33 later adds the missing state dimension,
+  "could it matter NOW," alongside it — see the v33 legend row); pattern
   parsing hoisted out of the binding loops with a token-level closure loop (tokenization was
   ~48% of runtime); and the village tests share their two deterministic drive trajectories
   instead of re-simulating overlapping prefixes. Measured, uncontended: the full suite ~726s
@@ -448,13 +450,26 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   filter) run **171.64s** at HEAD (190.64s/171.64s/180.98s); the identical 31-test group at
   `fd436de` (the commit immediately before the village wiring landed, pre-filter still intact)
   runs **31.11s** (31.11s/32.23s/31.35s). The gap between the pre-arc and HEAD-filtered numbers —
-  **≈140.5s, a ≈5.5× slowdown on 31 tests whose own code never changed** — is the pre-filter loss
-  alone, cleanly isolated from the 5 new tests' own ≈47.7s cost (219.38s − 171.64s). Stated
-  plainly, per the round's own instruction: a 5.5× multiple on unrelated tests is a large cost for
-  one round's mechanical side effect to have paid, and it is real signal — not noise — for the v33
-  decision on state-conditioned relevance (a pre-filter that could re-earn the skip once it knows
-  no `confess`-shaped action is reachable from the current state, rather than losing it globally
-  the moment any world authors one).
+  **≈140.5s, a ≈5.5× slowdown on 31 tests whose own code never changed**, cleanly isolated from
+  the 5 new tests' own ≈47.7s cost (219.38s − 171.64s) — was recorded here as "the pre-filter loss
+  alone." **Amended in place by v33, on remeasurement, not confession: that attribution was
+  wrong.** v33 built exactly the state-aware pre-filter this entry called for and re-ran the
+  identical 31-test A/B: reclaiming the skip recovers ≈39s (171.64s → **132.75s**), not ≈140.5s —
+  the pre-filter's real cost is the smaller number, not the whole gap. A controller profile at
+  HEAD (3.0s vs. 0.69s at v28-on-the-pre-v30 world) attributes the residual ≈100s to
+  **world-richness** in the village's grown axiom set, not to the pre-filter: three Count-bearing
+  aggregate axioms now run in every closure continuation (`notoriety "thief" 3`,
+  `notoriety "slanderer" 3`, `incorrigible "whispered.V.H" 2 …` — `deltaJoinCooked` ~17%, `num`
+  ~3.7% of the profile) alongside larger per-primitive classification footprints (`mayUnifySyms`
+  ~11%) — cost the 31.11s-era world never carried and that no relevance filter removes without
+  shrinking the world itself. (The v33 implementer's own first guess, that this residual was a
+  confound from `Prax.Repute` merging in just before this round, was checked against `git log` and
+  rejected: `Prax.Repute` dates to v21, well before this round's own `fd436de` baseline, so it was
+  already present on both sides of the gap and explains none of it.) The 31.11s epoch belongs to a
+  poorer world and was never reachable by fixing the filter alone. Stated plainly, per the round's
+  own instruction: the 5.5× multiple was real and worth investigating — it correctly pointed at
+  the v33 decision below — but this entry's original explanation of *why* the gap was that large
+  was itself wrong; see the v33 legend row for the corrected account and the measured recovery.
 
   **Task 2b's ghost investigation: a premise disproved, a fix reverted, the real fix banked.**
   Probing `Prax.Db.retract`'s known ghost-ancestor imprecision (a drained ancestor path reads as a
@@ -492,6 +507,52 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   hlint clean; `prax check` on all 7 worlds; grep-gates empty; `Prax.GoldenDriveSpec`/
   `Prax.ViewInvariantSpec` byte-identical throughout — no golden re-capture needed anywhere this
   round (the new affordances are forced-trajectory only; eve's free play is unperturbed).
+- **v33** — **state-conditioned relevance** (spec
+  `docs/specs/2026-07-13-v33-live-relevance.md`). v26's relevance pre-filter reasons from
+  vocabulary alone — "could ANY action EVER improve this want-kind?" — a question v32's
+  `confess` made permanently true for every conscience desire, spending the skip world-wide
+  even though it stays sound in almost every actual state (the v32 entry above is amended in
+  place with the corrected accounting). This round adds the missing dimension: **could it
+  matter NOW?** Two liveness recipes, classified once per world by
+  `Prax.Relevance.livenessOf` and consulted by `predictMove`'s pair-skip
+  (`Prax.Planner.deadNow`) alongside the existing static check: **FloorCheck** (negative
+  want-kinds) — a rule improves only by LOWERING its satisfaction count, so a count of zero
+  right now is unconditionally the floor, sound regardless of conjunct structure, decided by
+  one `countSatisfying` against the desire's own Owner-grounded conditions; **GateCheck**
+  (positive want-kinds) — a top-level conjunct that (a) no authored action outcome
+  may-unify-inserts, AND (b) no axiom head derives (the existing `derivable` conservatism),
+  AND (c) currently has zero bindings, makes the WHOLE conjunction's rise impossible this
+  turn. Everything else (`Subquery`/`Count`/`Calc`-tainted wants, an unresolvable `wild`
+  pool, weight 0) stays **AlwaysLive**, conservative by construction. Both checks are
+  **pair-level only**: if any believed desire is live, the FULL model scores, dead
+  deterrents included — a mixed live+dead believed model must still have its dead deterrent
+  deter, pinned by a dedicated test and RED-verified against a model-content-filtering
+  mutation (a wrong implementation that dropped dead-now desires from the SCORED model,
+  rather than only from the skip decision, flips a real tie between two otherwise-equal
+  actions). Task 1 caught its own plan's error before a test was built against it: the plan
+  named the village's third positive desire `fears-scandal`; grepping `src/` found no such
+  desire anywhere in `Prax.Worlds.Village` — the actual one is `punishes-whisper` — and the
+  plan doc was corrected rather than a test written against a name that isn't there.
+
+  **The measured recovery, and the correction it forces.** The same 31 pre-existing,
+  uncontended `Prax.Worlds.Village` tests v32 A/B'd: **132.75s** (best of 3:
+  140.02s/132.75s/135.00s), down from v32's **171.64s** — a real ≈39s (≈23%) reclaim of the
+  ≈140.5s v32 regression, not a full return to the pre-v32 **31.11s**. This ≈39s IS the
+  pre-filter's actual cost, which is why the v32 entry's "the gap... is the pre-filter loss
+  alone" is amended above rather than left standing beside a truer number: a controller
+  profile at HEAD (3.0s vs. 0.69s at v28-on-the-pre-v30 world) assigns the residual ≈100s to
+  **world-richness** — three Count-bearing aggregate axioms now running in every closure
+  continuation (`deltaJoinCooked` ~17%, `num` ~3.7% of the profile) plus larger per-primitive
+  classification footprints (`mayUnifySyms` ~11%) — cost the 31.11s-era world never carried
+  and that no relevance filter, however state-aware, removes without shrinking the world
+  itself. The 31.11s epoch belongs to a poorer world and was never reachable by fixing the
+  filter alone. Suite: 437 → **441** (`RelevanceSpec`/`PlannerSpec` additions, incl. the
+  mixed-model pin), ~236s → **~188s**, all green throughout; zero warnings; hlint clean;
+  `prax check` on all 7 worlds; grep-gates empty; goldens byte-identical; ViewInvariant green
+  throughout. **Banked, not built** (targeting the world-richness residual this round's
+  profiling isolated, not the pre-filter question this round closed): footprint
+  discrimination indexing and axiom-family partitioning for the continuation loop (see
+  "Future ideas to investigate," below).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -627,6 +688,24 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   as an asserted endpoint independently of whether it currently has children, so retraction can
   prune the second case without touching the first. Out of scope as a `retract`-only patch;
   `src/Prax/Db.hs`'s `retract`/`dbToSentences` haddocks name this entry directly.
+- **Footprint discrimination indexing** *(banked — v33, found while profiling the residual gap
+  the round's A/B left after the state-aware relevance filter shipped)*. The controller's
+  profile at HEAD attributes ≈11% of the profiled round to `mayUnifySyms` inside
+  per-primitive classification: the atom-pool footprints every axiom/desire is tested
+  against have grown with the village's authored vocabulary since v28, so each may-unify
+  scan now walks a larger pool than it did at the world this cost was last measured against.
+  An index keyed on a cheap discriminant (head symbol, arity) could narrow a footprint scan
+  to only the atoms that could possibly may-unify before falling back to the general test,
+  rather than scanning the whole pool per candidate. Located by profiling, not designed or
+  attempted this round.
+- **Axiom-family partitioning for the continuation loop** *(banked — v33, the same profiling
+  pass)*. `deltaJoinCooked` (~17%) and `num` (~3.7%) together are the closure continuation's
+  own cost for the village's Count-bearing aggregate axioms (`notoriety` ×2, `incorrigible`)
+  — three of them now run in every continuation, where the 31.11s-era world ran none.
+  Partitioning axioms by family (Count-bearing vs. plain Horn) so a continuation re-evaluates
+  only the family a given delta could possibly affect, rather than every axiom unconditionally,
+  is the natural lever this profile points at — unbuilt, and not designed against a concrete
+  world this round beyond the profiling that found it.
 
 ## Sandbox extension backlog (brainstormed 2026-07-10)
 
