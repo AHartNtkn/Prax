@@ -41,6 +41,23 @@ tree node, `predictMove` for a mover is replaced by:
    (the `[[Sym]]`-style anchored segment lists of v26) — inserts and deletes both. This is
    collected from the grounded outcomes themselves; no dependence on which engine path
    (`applyDirect`/`applyGrow`/`withDb`) performed them.
+
+   **The variable-headed insert rule** (amended after Task 2's attribution profiling: the
+   original guard forced EVERY broadcast `ForEach` insert — `Witness.believes...`, the
+   whisper's own shape, 68% of the tree — opaque, leaving reuse firing on 1% of calls and
+   the A/B at −9.5%): an insert whose first segment is a variable can spawn a practice
+   instance only if that variable can take the value `practice`. A **safe binder** — a
+   variable bound at a NON-FIRST position of a top-level positive `Match` guard of the
+   enclosing `ForEach`, and never occurring at the first position of any such guard —
+   provably cannot: values read out of a fact's interior are entity/value names, and the
+   authored-world structural invariant (the same family as Relevance's
+   entity-names-vs-predicate-literals invariant, stated where spent) reserves the literal
+   `practice` for registry roots — it is never an entity, place, value, or id name.
+   Inserts headed by a safe binder are bounded with the variable as a `mayUnifySyms`
+   wildcard; every other variable head (first-position binders, which really can unify
+   `practice` against the registry; `Exists`/`Or`/subquery-scoped variables, which do not
+   bind outward; call-scoped parameters) stays opaque. Conservativity is unchanged in
+   direction: uncertainty ⇒ opaque ⇒ live.
 2. **The affected cone.** A static, per-world relation (computed in `retable`, alongside
    `footprint`): fact family A *feeds* an axiom when ANY body atom of the axiom may-unifies
    A; the axiom's head family is then affected; close transitively. Expanding the path
