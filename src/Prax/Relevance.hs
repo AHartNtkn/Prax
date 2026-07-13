@@ -297,8 +297,8 @@ moverReadAnchors st actor m =
                             ++ outcomeCondReads actorB (caOuts ca))
                     (cpActions cp)
         ++ outcomeCondReads Map.empty (cpInits cp)
-        ++ concat [ readsOf Map.empty cs
-                  | (_, cases) <- Map.elems (cpFns cp), (cs, _) <- cases ]
+        ++ concat [ readsOf Map.empty cs ++ outcomeCondReads Map.empty os
+                  | (_, cases) <- Map.elems (cpFns cp), (cs, os) <- cases ]
       | cp <- Map.elems (cookedDefs st) ]
     desireReads = concat [ readsOf ownerB conds | conds <- Map.elems (cookedDesires st) ]
 

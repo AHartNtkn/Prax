@@ -195,7 +195,12 @@ tests = testGroup "Prax.Relevance"
             , actions = [ action "[Actor]: eat"
                             [ Match "hungry.Actor" ]
                             [ ForEach [ Match "crumb.C" ] [ Delete "crumb.C" ]
-                            , Insert "meal.Actor" ] ]
+                            , Insert "meal.Actor" ]
+                        , action "[Actor]: clean up" [] [ Call "tidy" ["Actor"] ]
+                        ]
+            , functions =
+                [ Function "tidy" ["Who"]
+                    [ FnCase [] [ ForEach [ Match "dish.D" ] [ Delete "dish.D" ] ] ] ]
             }
           vocab = [ Desire "wants-food" (Want [ Match "hungry.Owner" ] 5) ]
           priya = character "priya"
@@ -209,6 +214,7 @@ tests = testGroup "Prax.Relevance"
       assertBool "death mark" (has "dead.beth")
       assertBool "affordance condition, Actor:=beth" (has "hungry.beth")
       assertBool "ForEach guard read" (has "crumb.C")
+      assertBool "function-body ForEach guard read" (has "dish.D")
       assertBool "desire condition, Owner:=beth" (has "hungry.beth")
       assertBool "NOT grounded to the predictor" (not (has "hungry.priya"))
   ]
