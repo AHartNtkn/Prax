@@ -167,6 +167,10 @@ tests = testGroup "Prax.Relevance"
       -- candidate) and a belief-Match that expose's own outcome inserts --
       -- action-insertable, so again no qualifying conjunct remains.
       tbl Map.! "punishes-whisper" @?= AlwaysLive
+      -- v36: suffers-hunger is a negative desire (-22) -- FloorCheck
+      -- unconditionally, same as the consciences above, so a sated bob's
+      -- pair-skip against it fires between meals.
+      tbl Map.! "suffers-hunger" @?= FloorCheck
       assertBool "the field matches the module computation"
         (liveness villageWorld
            == livenessOf (practiceDefs villageWorld)

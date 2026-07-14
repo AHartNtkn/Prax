@@ -37,6 +37,7 @@ import           Prax.Witness
 import           Prax.Rumor
 import           Prax.Repute
 import           Prax.Sight
+import           Prax.Drift (DriftRule (..), driftChar, driftP, driftSetup)
 import           Prax.Deceit
 import           Prax.Persona
 import           Prax.Debt (owes)
@@ -98,6 +99,26 @@ earnBreadPursuit :: Desire
         [ Delete "carrying.Actor.flour"
         , Insert "holding.Actor.loaf" ]
     ]
+
+-- Hunger, the build-up cargo (v36 spec @docs/specs/2026-07-14-v36-drift.md@):
+-- an episodic pulse that closes bob's bread economy into a cycle instead of
+-- a one-shot want. One village mealtime ~ three rounds: hunger returns
+-- three rounds after eating; the due re-arms from the pulse, so a fed bob
+-- stays fed for a full period regardless of when he ate.
+hungerPulse :: DriftRule
+hungerPulse = DriftRule "hunger" 3
+  [ ( [ Match "appetite.X", Not "hungry.X" ], [ Insert "hungry.X" ] ) ]
+
+-- Hunger, when it arrives, outranks pride and larder both: eating spends
+-- the +10 loaf AND forfeits the finished endeavor's +9 stage credit (3
+-- stages x 3, torn down by the eat), so the relief must beat 19 -- at -22,
+-- a hungry bob eats (net +3) and the emptied hand re-opens the earn cycle.
+-- Side effect to expect in the golden: a hungry, breadless bob weighs the
+-- stall's loaf again -- hunger pressure re-opens the village's original
+-- temptation. Itemize whatever the drive shows; that is the fiction
+-- working, not drift noise.
+suffersHunger :: Desire
+suffersHunger = Desire "suffers-hunger" (Want [ Match "hungry.Owner" ] (-22))
 
 -- Temperament: honesty as conduct, not prohibition. The weight is authored
 -- meaning: a lie costs gale 6 per hearer per event — more than the +4 a
@@ -279,6 +300,20 @@ villageP = practice
 
         -- The lawful alternative to the stall's temptation.
       , earnBreadTake
+
+        -- Closing the loop: hunger is a physical precondition of eating (the
+        -- ordinary practice sense, like holding the loaf), so the
+        -- emotions-never-gate discipline does not apply here.
+      , action "[Actor]: eat the loaf"
+          [ Match "hungry.Actor", Match "holding.Actor.loaf" ]
+          [ Delete "hungry.Actor", Delete "holding.Actor.loaf"
+            -- eating ends the finished bread-project: the endeavor instance
+            -- (stage counter included) is torn down, so undertake's own
+            -- Not-gate re-opens and the work can begin again. Without this,
+            -- 'endeavor' is one-shot and the cycle dies at one loaf. A no-op
+            -- for eaters who never baked (Delete on a missing path).
+          , Delete "practice.earnBread.Actor" ]
+
       , threatenWhisper
       , complyWhisper
       , defyWhisper
@@ -319,7 +354,8 @@ villageAxioms =
 
 villageWorld :: PraxState
 villageWorld =
-  (setDesires ([ earnBreadPursuit, spitesCarol, punishesWhisper ] ++ personaVocabulary [honest])
+  (setDesires ([ earnBreadPursuit, spitesCarol, punishesWhisper, suffersHunger ]
+                 ++ personaVocabulary [honest])
      (setAxioms villageAxioms (foldl (flip performOutcome) base (setup ++ personaFacts))))
   -- an epistemic prediction scope: you credit another's predicted move only
   -- if you're with them now, or you sighted them within the last 2 ticks —
@@ -346,7 +382,7 @@ villageWorld =
                          , conceal "stole.bob.loaf" 12 ]
              -- his disposition to honest work: dormant until he
              -- takes it up (undertaking is a live planner choice)
-           , charDesires = ["pursues-earnBread"] }, [])
+           , charDesires = ["pursues-earnBread", "suffers-hunger"] }, [])
       , ((character "carol")
            { charWants = [ Want [ Match "confronted.carol.T" ] 5
                            -- keeps to the square unless something needs doing (the
@@ -391,8 +427,12 @@ villageWorld =
         -- (+4/head), so eve whispers and gale never does
       , ((character "gale") { charDesires = ["spites-carol"] }, [honest])
       ]
-    base = setCharacters (roster ++ [sightChar])
-             (definePractices [coreLib, worldP, villageP, earnBreadP, sightP villageSighting] emptyState)
+    -- driftChar rides after sightChar (the clock advances before bodies feel
+    -- it, stated): within a round, sight's tick has already bumped turn!N
+    -- by the time the drifter's due-gate reads it.
+    base = setCharacters (roster ++ [sightChar, driftChar])
+             (definePractices [coreLib, worldP, villageP, earnBreadP, sightP villageSighting
+                               , driftP [hungerPulse]] emptyState)
     setup =
       [ Insert "practice.village.here"
       , Insert "practice.world.world.connected.square.mill"
@@ -404,4 +444,5 @@ villageWorld =
       , Insert "practice.world.world.at.eve!mill"
       , Insert "practice.world.world.at.gale!mill"
       , Insert "stall.loaf"
-      ] ++ sightSetup
+      , Insert "appetite.bob"
+      ] ++ sightSetup ++ driftSetup [hungerPulse]

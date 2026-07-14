@@ -205,8 +205,12 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "the stall is restocked" (exists "stall.loaf" (db st2))
 
   , testCase "the whole arc runs itself: notoriety tips bob; forgiveness follows" $ do
-      -- 70 turns: 10 rounds
-      let st = postTheftAt 70
+      -- 96 turns: 12 rounds (v36: the round grew an eighth member, the
+      -- drifter -- bob, now hungry, eats the stolen loaf outright rather
+      -- than ever returning it, so atonement waits on a second, honestly
+      -- EARNED loaf; 10 rounds (70 turns under the old 7-member round) no
+      -- longer reaches it, measured to land at 12)
+      let st = postTheftAt 96
           v  = readView st
       assertBool "bob atoned on his own" (exists "atoned.bob" (db st))
       assertBool "no regard survives"    (not (exists "regards.carol.bob.thief" v))
@@ -371,6 +375,72 @@ tests = testGroup "Prax.Worlds.Village"
       fmap gaLabel (pickAction 2 st1 (villager "bob"))
         @?= Just "bob: steal the loaf from the stall"
 
+    --------------------------------------------------------------------------
+    -- v36: the hunger pulse (Prax.Drift's build-up cargo) closes bob's bread
+    -- economy into a cycle -- earn, eat, hunger again.
+    --------------------------------------------------------------------------
+
+  , testCase "the hunger pulse: absent before turn 3, present exactly at it; the next pulse re-hungers a fed bob" $ do
+      -- driftChar rides after sightChar, so within round 3 the clock has
+      -- already reached turn!3 (sight's own tick) one step before the
+      -- drifter reads it and fires -- "the clock advances before bodies
+      -- feel it," stated in the wiring comment.
+      let stBefore = freePlayAt 23
+          stAfter  = freePlayAt 24
+      assertBool "turn already reached 3" (exists "turn!3" (db stBefore))
+      assertBool "hungry.bob still absent, one step short of the pulse"
+        (not (exists "hungry.bob" (db stBefore)))
+      assertBool "hungry.bob present once the drifter takes its turn"
+        (exists "hungry.bob" (db stAfter))
+      -- force a loaf into his hand (the spec's own sanctioned shortcut:
+      -- "force holding.bob.loaf (or drive until earned)") and let him eat.
+      let stFed = performOutcome (Insert "holding.bob.loaf") stAfter
+          stAte = doAct "bob" "eat the loaf" stFed
+      assertBool "hunger and the loaf are both spent by eating"
+        (not (exists "hungry.bob" (db stAte))
+         && not (exists "holding.bob.loaf" (db stAte)))
+      -- the due re-armed to turn 6 (3 + the 3-round period) when it fired at
+      -- turn 3, regardless of exactly when within the period bob ate -- so
+      -- 3 more rounds (24 more idle-steps) lands squarely on the re-fire.
+      let stNext = driveIdle "you" 24 stAte
+      assertBool "the next pulse (3 rounds later) re-hungers him"
+        (exists "hungry.bob" (db stNext))
+
+  , testCase "the arithmetic pin: a hungry bob with bread and a finished project eats; a sated one does not" $ do
+      -- construct the completed-endeavor state directly (deterministic,
+      -- no free-play timing dependency): undertake, sweep, fetch flour,
+      -- bake -- the lawful loaf, held, project done.
+      let stBaked = doAct "bob" "bake and earn the loaf"
+                    (doAct "bob" "Go to square"
+                    (doAct "bob" "fetch flour from the mill"
+                    (doAct "bob" "Go to mill"
+                    (doAct "bob" "sweep the square"
+                    (doAct "bob" "take up honest work" villageWorld)))))
+      assertBool "the project is complete" (exists "practice.earnBread.bob.done.s3" (db stBaked))
+      assertBool "he holds the loaf" (exists "holding.bob.loaf" (db stBaked))
+      -- not hungry: eating is not even offered (hunger is a physical
+      -- precondition of the affordance, not merely a utility factor) --
+      -- larder plus finished work are worth more than a needless meal.
+      assertBool "sated: eat is not among his candidates"
+        (not (any (("eat the loaf" `isInfixOf`) . gaLabel) (possibleActions stBaked "bob")))
+      -- now hungry: the relief (+22) beats keeping the loaf (+10) plus the
+      -- finished endeavor's stage credit (+9, forfeit by the eat's own
+      -- tear-down) by the stated +3 margin -- pickAction takes it.
+      let stReady = performOutcome (Insert "hungry.bob") stBaked
+      fmap gaLabel (pickAction 2 stReady (villager "bob")) @?= Just "bob: eat the loaf"
+      -- the re-take: eating tears down the finished instance, so undertake's
+      -- own Not-gate re-opens and the earn cycle can begin again.
+      let stAte = doAct "bob" "eat the loaf" stReady
+      assertBool "the endeavor instance is torn down"
+        (not (exists "practice.earnBread.bob" (db stAte)))
+      assertBool "undertake grounds again"
+        (any (("take up honest work" `isInfixOf`) . gaLabel) (possibleActions stAte "bob"))
+
+  , testCase "no appetite, no hunger: gale and carol never seed hungry, however long free play runs" $ do
+      let st = freePlayAt 56
+      assertBool "carol never hungers" (not (exists "hungry.carol" (db st)))
+      assertBool "gale never hungers"  (not (exists "hungry.gale" (db st)))
+
   , testCase "watching him work teaches the village his purpose" $ do
       -- carol witnesses the sweep -> the inference axiom presumes his pursuit.
       -- predictMove is MYOPIC, so the flour prediction fires once bob stands
@@ -401,8 +471,11 @@ tests = testGroup "Prax.Worlds.Village"
         (not (exists "carol.believes.desires.eve.clean-conscience" v))
 
   , testCase "same spite, different temperaments: eve whispers, gale never does" $ do
+      -- 56 turns: 7 rounds (v36: the round grew an eighth member, the
+      -- drifter, so 7 rounds is now 56 turns, not 49 -- the same moment in
+      -- the story, re-measured against the longer round)
       let vs = ["you", "bob", "carol", "dana", "eve", "gale"]
-          st = freePlayAt 49
+          st = freePlayAt 56
       assertBool "eve's frame-up went ahead"
         (exists "dana.believes.stole.carol.loaf.heard.eve" (db st))
       assertBool "and eve carries the mark of it"
