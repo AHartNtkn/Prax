@@ -38,6 +38,7 @@ villageGolden =
   , "eve: eve: whisper to dana that carol stole the loaf"
   , "gale: gale: Go to square"
   , "_sight: "
+  , "_drift: "
   , "you: -"
   , "bob: bob: sweep the square"
   , "carol: carol: Wait a moment"
@@ -45,13 +46,12 @@ villageGolden =
   , "eve: eve: Go to square"
   , "gale: gale: Go to mill"
   , "_sight: "
+  , "_drift: "
   , "you: -"
   , "bob: bob: Go to mill"
   , "carol: carol: Wait a moment"
   , "dana: dana: Go to square"
   , "eve: eve: Go to mill"
-  , "gale: gale: Go to square"
-  , "_sight: "
   ]
 
 barGolden :: [String]
