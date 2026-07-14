@@ -81,6 +81,8 @@ runCheck args = do
       "undefined reference " ++ n ++ " (" ++ w ++ ")"
     describe (SortConflict w d) =
       "sort conflict at " ++ w ++ ": " ++ d
+    describe ClocklessDrift =
+      "drift practice registered but no clock: add the sight ticker (turn!0) before driftSetup"
 
 main :: IO ()
 main = do

@@ -28,7 +28,7 @@ import           Data.List (intercalate, nub)
 import           Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences)
+import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
 import           Prax.Derive (Axiom (..))
@@ -43,6 +43,9 @@ data TypeError
     -- ^ a @Call@/spawn (at @teWhere@) names something never defined.
   | SortConflict { teWhere :: String, teDetail :: String }
     -- ^ a position/variable (@teWhere@) is inferred to have two sorts (@teDetail@).
+  | ClocklessDrift
+    -- ^ a world registers the drift practice ('Prax.Drift.driftP') but has
+    -- no sight clock (@turn@): its pulses would silently never fire.
   deriving (Eq, Show)
 
 -- | Every well-formedness problem in a world (empty ⇒ the world is well-formed).
@@ -53,6 +56,7 @@ typeCheck st =
   ++ cardinalityErrors (assertedSentences st)
   ++ refErrors st
   ++ sortErrors st
+  ++ clocklessDriftErrors st
   where ps = Map.elems (practiceDefs st)
 
 -- Variables mentioned in a sentence / condition -------------------------------
@@ -224,6 +228,16 @@ sortErrors st
     readable key = case filter (/= "_") (pathNames key) of
       [] -> key
       ns -> intercalate "." ns
+
+-- Check 5: the drift practice depends on the sight clock -----------------
+
+-- A world registering "drift" (see 'Prax.Drift.driftP') without a @turn@
+-- fact would compile every pulse's due-gate against a clock that never
+-- exists: the gate can never hold, so the practice silently never fires.
+clocklessDriftErrors :: PraxState -> [TypeError]
+clocklessDriftErrors st =
+  [ ClocklessDrift
+  | Map.member "drift" (practiceDefs st), not (exists "turn" (db st)) ]
 
 -- A tiny union-find over position-key strings.
 find :: Map.Map String String -> String -> String
