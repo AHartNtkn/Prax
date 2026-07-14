@@ -27,6 +27,8 @@ module Prax.Types
   , Want(..)
   , Desire(..)
   , GroundedAction(..)
+  , MotiveSignature(..)
+  , Intention(..)
   , PraxState(..)
   , emptyState
   , deadSentence
@@ -210,6 +212,38 @@ data GroundedAction = GroundedAction
   }
   deriving (Eq, Show)
 
+-- | The inputs to /wanting to reconsider/ (spec
+-- @docs/specs/2026-07-13-v35-intentions.md@, as amended): what I can do
+-- THAT I CARE ABOUT (want-bearing templates — full-grounding equality made
+-- the mechanism inert, measured; staleness is prevented by npcAct's
+-- standing-offered check instead), how I am doing (per-want satisfaction
+-- counts, 'selfWants' order — counts, not their weighted sum, so two
+-- profiles cannot mask each other), what is driving me (own live desires:
+-- statically improvable and not dead-now), and what motives I know of
+-- (believed-motive facts, the family "Prax.Minds" reads). Compared for
+-- equality at the character's own turn against their last deliberation.
+data MotiveSignature = MotiveSignature
+  { msBearing      :: [String]
+    -- ^ the /want-bearing/ affordance templates currently offered: action
+    -- identities both grounded now ('Prax.Planner.candidateActions') and
+    -- listed in the character's 'bearing' table. Opportunities that touch
+    -- what I care about interrupt me; irrelevant comings and goings do not.
+    -- (Standing-action validity is checked separately by 'Prax.Loop.npcAct'
+    -- — a movement pick is rarely bearing but must still expire when acted.)
+  , msSatisfaction :: [Int]
+  , msLiveDesires  :: [String]
+  , msKnownMotives :: [(String, String)]  -- (other, desire name)
+  }
+  deriving (Eq, Show)
+
+-- | A standing intention: the action chosen at the last deliberation (or
+-- the choice to do nothing) and the motive signature it was based on.
+data Intention = Intention
+  { intentAct   :: Maybe GroundedAction
+  , intentBasis :: MotiveSignature
+  }
+  deriving (Eq, Show)
+
 -- | All state a running simulation needs.
 data PraxState = PraxState
   { db           :: Db
@@ -230,6 +264,16 @@ data PraxState = PraxState
     -- once — keyed by 'desireName', independent of which characters hold it.
     -- Maintained by 'Prax.Engine.retable' alongside 'cookedDefs'.
   , cursor       :: Int          -- ^ round-robin index of the last actor
+  , caresAbout :: Map String [String]
+    -- ^ Per character, the affordance templates whose authored outcomes
+    -- could touch their own wants or desires
+    -- ('Prax.Relevance.bearingTemplates') — the opportunity-relevance half
+    -- of 'MotiveSignature'. Maintained by 'Prax.Engine.retable'.
+  , intentions :: Map String Intention
+    -- ^ Each character's standing intention ('Prax.Loop.npcAct' — the
+    -- reconsideration semantics, spec 2026-07-13-v35). Runtime state like
+    -- 'cursor': starts empty (every character's first turn deliberates),
+    -- never derived, never touched by 'Prax.Engine.retable'.
   , axioms       :: [Axiom]       -- ^ domain rules; reads see their forward-chained closure (default none)
   , cookedRules  :: [CookedRule]
     -- ^ 'axioms' precompiled ('Prax.Derive.cookAxioms') — bodies pattern-
@@ -280,6 +324,7 @@ emptyState :: PraxState
 emptyState = PraxState
   { db = emptyDb, practiceDefs = Map.empty, cookedDefs = Map.empty, characters = []
   , cookedWants = Map.empty, cookedDesires = Map.empty, cursor = -1
+  , caresAbout = Map.empty, intentions = Map.empty
   , axioms = [], cookedRules = [], sorts = [], desires = [], predictionScope = []
   , improvables = [], liveness = Map.empty, footprint = []
   , axiomHeads = [[intern "contradiction"]]

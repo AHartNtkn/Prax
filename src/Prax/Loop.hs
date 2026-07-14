@@ -9,10 +9,12 @@ module Prax.Loop
   , runNpcTicks
   ) where
 
+import qualified Data.Map.Strict as Map
+
 import           Prax.Db (exists)
 import           Prax.Types
 import           Prax.Engine (performAction)
-import           Prax.Planner (pickAction)
+import           Prax.Planner (pickAction, motiveSignature, candidateActions)
 
 -- | Advance the round-robin cursor to the next living character and return it.
 -- Dead characters (fact @dead.\<name\>@) are skipped; the cursor stays an index
@@ -26,12 +28,32 @@ advance st =
     n = length (characters st)
     alive i = not (exists (deadSentence (charName (characters st !! i))) (db st))
 
--- | Have an NPC choose (looking @depth@ plies ahead) and perform its best
--- action, returning what it did (if anything) and the resulting state.
+-- | Have an NPC act: if their motive signature equals the one their standing
+-- intention was based on, act that intention WITHOUT deliberating (spec
+-- 2026-07-13-v35 — commitment is the default); otherwise deliberate in full
+-- ('pickAction', unchanged), act the result, and store the new intention.
+-- A standing action whose grounding is no longer offered cannot be acted:
+-- the options component of the signature has necessarily changed.
 npcAct :: Int -> Character -> PraxState -> (Maybe GroundedAction, PraxState)
-npcAct depth actor st = case pickAction depth st actor of
-  Just ga -> (Just ga, performAction st ga)
-  Nothing -> (Nothing, st)
+npcAct depth actor st =
+  case Map.lookup name (intentions st) of
+    Just intent | intentBasis intent == sig, stillOffered (intentAct intent) ->
+      act (intentAct intent) st
+    _ ->
+      let chosen = pickAction depth st actor
+          st1 = st { intentions =
+                       Map.insert name (Intention chosen sig) (intentions st) }
+      in act chosen st1
+  where
+    name = charName actor
+    sig  = motiveSignature st actor
+    -- The standing action must still be offered, by full grounded equality —
+    -- movement picks are rarely want-bearing yet must expire once acted
+    -- (you arrived; decide THERE), and a stale grounding is never performed.
+    stillOffered Nothing   = True
+    stillOffered (Just ga) = ga `elem` candidateActions st actor
+    act (Just ga) s = (Just ga, performAction s ga)
+    act Nothing   s = (Nothing, s)
 
 -- | Run @steps@ NPC turns from the given state, collecting the narration of
 -- each performed action (idle turns produce no line, and neither do silent

@@ -38,6 +38,7 @@ module Prax.Relevance
   , mayUnifySyms
   , improvableDesires
   , livenessOf
+  , bearingTemplates
   , evictionShadows
   , evictionShadowNames
   , cookedReadAnchors
@@ -308,3 +309,34 @@ outcomeCondReads :: Bindings -> [CookedOutcome] -> [[Sym]]
 outcomeCondReads b outs = concat
   [ cookedReadAnchors (map (groundCookedCondition b) cs) ++ outcomeCondReads b os
   | CForEach cs os <- outs ]
+
+-- | Per character, the affordance templates whose authored outcomes could
+-- touch their own wants or desires — the opportunity-relevance half of the
+-- v35 motive signature (spec @docs/specs/2026-07-13-v35-intentions.md@): a
+-- newly available or vanished action interrupts a standing intention only
+-- when some insert- or delete-shaped atom of its outcomes ('outcomeAtoms',
+-- 'Call's resolved through the declared functions) may-unify some pattern
+-- the character's wants or held desires read ('cookedReadAnchors' — total,
+-- subquery internals included). Conservative like everything here: an
+-- unresolvable 'Call' bears on everyone; over-bearing merely re-deliberates,
+-- under-bearing would sleep through an arc (the probed "bold agent" failure:
+-- dana serving Wait all drive while fresh deliberation wanted shun).
+bearingTemplates :: Map String Practice -> [Desire] -> [Character] -> Map String [String]
+bearingTemplates defs ds cs =
+  Map.fromList [ (charName c, bearing (charPats c)) | c <- cs ]
+  where
+    fns = Map.fromList [ (fnName f, concatMap caseOutcomes (fnCases f))
+                       | p <- Map.elems defs, f <- functions p ]
+    actionAtoms = [ (actionName a, atoms a) | p <- Map.elems defs, a <- actions p ]
+    atoms a = do
+      pairs <- traverse (outcomeAtoms fns []) (actionOutcomes a)
+      pure (concatMap fst pairs ++ concatMap snd pairs)
+    charPats c = cookedReadAnchors
+      (  [ cc | w <- charWants c, cc <- map cookCondition (wantConditions w) ]
+      ++ [ cc | d <- ds, desireName d `elem` charDesires c
+              , cc <- map cookCondition (wantConditions (desireWant d)) ] )
+    bearing pats =
+      [ n | (n, m) <- actionAtoms
+          , case m of
+              Nothing -> True
+              Just as -> any (\atom -> any (mayUnifySyms (map intern (pathNames atom))) pats) as ]

@@ -456,6 +456,47 @@ tests = testGroup "Prax.Planner"
       let marked = performOutcome (Insert "lied.beth") believed
       fmap gaLabel (predictMove marked priya beth') @?= Just "beth: confess"
 
+  , testCase "motiveSignature: options, satisfaction, live desires, known motives" $ do
+      let p = practice
+            { practiceId = "mess", roles = ["R"]
+            , actions =
+                [ action "[Actor]: eat lunch" [ Match "hungry.Actor" ]
+                    [ Insert "meal.Actor" ]
+                , action "[Actor]: idle about" [] []
+                ]
+            }
+          vocab = [ Desire "wants-food"
+                      (Want [ Match "hungry.Owner", Match "meal.Owner" ] 5) ]
+          beth' = (character "beth")
+            { charWants   = [ Want [ Match "meal.beth" ] 10 ]
+            , charDesires = ["wants-food"] }
+          st0 = setDesires vocab
+                  (setCharacters [beth'] (definePractices [p] emptyState))
+          st1 = performOutcome (Insert "practice.mess.here") st0
+          sigA = motiveSignature st1 beth'
+      -- bearing templates: eat (inserts meal.*, touching beth's wants) is
+      -- want-bearing but not yet offered; idle is offered but bears nothing.
+      msBearing sigA @?= []
+      -- satisfaction: TWO own wants (the meal.beth charWant AND the
+      -- wants-food desire beth holds), both with zero satisfying bindings.
+      msSatisfaction sigA @?= [0, 0]
+      -- live desires: wants-food is improvable but gated shut (no hungry.*
+      -- insert in the vocabulary => environment gate; absent => dead-now)
+      msLiveDesires sigA @?= []
+      -- known motives: none believed yet
+      msKnownMotives sigA @?= []
+      let st2 = performOutcome (Insert "hungry.beth") st1
+          sigB = motiveSignature st2 beth'
+      -- the hunger fact opens the gate AND grounds the (want-bearing) eat
+      msBearing sigB @?= ["[Actor]: eat lunch"]
+      msLiveDesires sigB @?= ["wants-food"]
+      let st3 = performOutcome
+                  (Insert "beth.believes.desires.carl.wants-food.heard.gossip") st2
+      msKnownMotives (motiveSignature st3 beth') @?= [("carl", "wants-food")]
+      -- and each of those three states carries a DIFFERENT signature
+      assertBool "A /= B" (sigA /= sigB)
+      assertBool "B /= C" (sigB /= motiveSignature st3 beth')
+
   , testCase "prediction reuse: a base-fact delta that enables the mover is recomputed, not reused" $ do
       -- priya's "taunt" inserts beth's hunger — the gate fact of beth's
       -- believed desire. At the pick's ROOT beth has no motivated move

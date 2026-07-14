@@ -17,14 +17,15 @@ module Prax.Planner
   , predictMove
   , scoreActions
   , pickAction
+  , motiveSignature
   ) where
 
-import           Data.List (sortOn)
+import           Data.List (nub, sort, sortOn)
 import qualified Data.Map.Strict as Map
 import           Data.Maybe (listToMaybe)
 import           Data.Ord (Down(..))
 
-import           Prax.Db (Val (..), exists)
+import           Prax.Db (Val (..), exists, childKeys)
 import           Prax.Query (countSatisfying, groundCondition, query, CookedCondition, queryCooked)
 import           Prax.Sym (Sym, intern)
 import           Prax.Types
@@ -210,3 +211,27 @@ scoreActions depth st0 actor = go depth (Just []) st0
 -- | The actor's best action (deterministic), if any.
 pickAction :: Int -> PraxState -> Character -> Maybe GroundedAction
 pickAction depth st actor = fst <$> listToMaybe (scoreActions depth st actor)
+
+-- | The character's current 'MotiveSignature' — cheap by construction:
+-- grounding without scoring, four count\/existence walks against the cached
+-- view, no lookahead. This is the whole cost of a quiet turn.
+motiveSignature :: PraxState -> Character -> MotiveSignature
+motiveSignature st c = MotiveSignature
+  { msBearing      = sort (nub [ aid
+                               | ga <- candidateActions st c
+                               , let aid = gaActionId ga
+                               , aid `elem` bearingSet ])
+  , msSatisfaction = [ length (queryCooked v cs Map.empty)
+                     | (cs, _) <- cookedSelfWants st c ]
+  , msLiveDesires  = [ desireName d
+                     | d <- desires st
+                     , desireName d `elem` charDesires c
+                     , desireName d `elem` improvables st
+                     , not (deadNow st c d) ]
+  , msKnownMotives = [ (m, d)
+                     | m <- childKeys (charName c ++ ".believes.desires") v
+                     , d <- childKeys (charName c ++ ".believes.desires." ++ m) v ]
+  }
+  where
+    v = readView st
+    bearingSet = Map.findWithDefault [] (charName c) (caresAbout st)
