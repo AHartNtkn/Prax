@@ -14,6 +14,7 @@ module Prax.Drift
   ( DriftRule (..)
   , driftName
   , driftChar
+  , driftPracticeId
   , driftP
   , driftSetup
   ) where
@@ -40,6 +41,13 @@ driftName = "_drift"
 driftChar :: Character
 driftChar = (character driftName) { charBoundTo = Just "drift" }
 
+-- | The drift practice's id — exported for "Prax.Relevance", whose analyses
+-- treat this practice's outcomes as ENVIRONMENT dynamics, not authored
+-- affordances (spec 2026-07-14-v37: tickers change motives; a clock-moved
+-- fact is exactly what an environment gate is FOR).
+driftPracticeId :: String
+driftPracticeId = "drift"
+
 -- | Compile the rules into the drifter's single unconditional action: per
 -- rule, its body clauses (due-gated) then its due re-arm. Between pulses
 -- every gate fails and the action is a cheap no-op; under v35 the drifter's
@@ -51,7 +59,7 @@ driftP rules
       error ("Prax.Drift: duplicate rule names would share one due path: "
              ++ show (names \\ nub names))
   | otherwise = practice
-  { practiceId = "drift"
+  { practiceId = driftPracticeId
   , practiceName = "time works on bodies and moods"
   , roles = ["S"]
   , actions =

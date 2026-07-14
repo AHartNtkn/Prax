@@ -4,6 +4,7 @@ import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
+import           Prax.Drift (DriftRule (..), driftChar, driftP)
 import           Prax.Engine (setDesires, setCharacters, definePractices, relevantDelta, monotoneInsert)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..), cookCondition)
 import           Prax.Derive (axiom)
@@ -221,4 +222,71 @@ tests = testGroup "Prax.Relevance"
       assertBool "function-body ForEach guard read" (has "dish.D")
       assertBool "desire condition, Owner:=beth" (has "hungry.beth")
       assertBool "NOT grounded to the predictor" (not (has "hungry.priya"))
+
+  , testCase "clock-moved facts are environment gates (the ticker is not an author)" $ do
+      -- "festive.now" is inserted ONLY by a drift pulse; the desire needs it
+      -- plus an action-reachable conjunct. Pre-v37 the drifter's outcomes
+      -- polluted the insert pool and this classified AlwaysLive; it is a
+      -- GateCheck on the festive conjunct.
+      let p = practice
+            { practiceId = "plaza", roles = ["R"]
+            , actions = [ action "[Actor]: stroll the plaza"
+                            [ Match "practice.plaza.here" ]
+                            [ Insert "strolled.Actor" ] ]
+            }
+          pulse = DriftRule "festival" 4
+            [ ( [], [ Insert "festive.now" ] ) ]
+          vocab = [ Desire "loves-a-crowd"
+                      (Want [ Match "festive.now", Match "strolled.Owner" ] 3) ]
+          st = setDesires vocab
+                 (setCharacters [character "ana", driftChar]
+                    (definePractices [p, driftP [pulse]] emptyState))
+      Map.lookup "loves-a-crowd" (liveness st)
+        @?= Just (GateCheck [[cookCondition (Match "festive.now")]])
+
+  , testCase "action-insertable facts still never gate; the clock cannot launder them" $ do
+      -- Same shape, but a PERSON action also inserts festive.now (lighting
+      -- the lanterns) -- the pool sees it via that authored outcome
+      -- regardless of the drift exclusion, so no conjunct qualifies:
+      -- AlwaysLive (conservative as ever).
+      let p = practice
+            { practiceId = "plaza", roles = ["R"]
+            , actions = [ action "[Actor]: stroll the plaza"
+                            [ Match "practice.plaza.here" ]
+                            [ Insert "strolled.Actor" ]
+                        , action "[Actor]: light the lanterns"
+                            [ Match "practice.plaza.here" ]
+                            [ Insert "festive.now" ]
+                        ]
+            }
+          pulse = DriftRule "festival" 4
+            [ ( [], [ Insert "festive.now" ] ) ]
+          vocab = [ Desire "loves-a-crowd"
+                      (Want [ Match "festive.now", Match "strolled.Owner" ] 3) ]
+          st = setDesires vocab
+                 (setCharacters [character "ana", driftChar]
+                    (definePractices [p, driftP [pulse]] emptyState))
+      Map.lookup "loves-a-crowd" (liveness st) @?= Just AlwaysLive
+
+  , testCase "the village hunger want-shape regains its gate under the reclassification" $ do
+      -- v33's eatery shape: eating only inserts meal.Actor, never
+      -- hungry.itself; ONLY the drift pulse inserts hungry.* (the v36
+      -- shape). Pre-v37 this classified AlwaysLive (the drifter's insert
+      -- polluted the pool the moment it joined the world, the silent
+      -- regression the spec diagnoses); post-v37 the clock-moved
+      -- hungry.Owner regains its GateCheck.
+      let eatery = practice
+            { practiceId = "eatery", roles = ["R"]
+            , actions = [ action "[Actor]: eat"
+                            [ Match "hungry.Actor" ]
+                            [ Insert "meal.Actor" ] ] }
+          pulse = DriftRule "hunger" 3
+            [ ( [ Match "appetite.X", Not "hungry.X" ], [ Insert "hungry.X" ] ) ]
+          vocab = [ Desire "wants-food"
+                      (Want [ Match "hungry.Owner", Match "meal.M" ] 5) ]
+          st = setDesires vocab
+                 (setCharacters [character "bob", driftChar]
+                    (definePractices [eatery, driftP [pulse]] emptyState))
+      Map.lookup "wants-food" (liveness st)
+        @?= Just (GateCheck [[cookCondition (Match "hungry.Owner")]])
   ]

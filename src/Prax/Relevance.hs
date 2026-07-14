@@ -50,6 +50,7 @@ import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Bindings, Val (..), internTokens, pathNames, tokensToSentence)
 import           Prax.Derive (Axiom (..))
+import           Prax.Drift (driftPracticeId)
 import           Prax.Query (Condition (..), CookedCondition (..), cookCondition, groundCookedCondition, groundNames)
 import           Prax.Sym (Sym, intern, symIsVar)
 import           Prax.Types
@@ -172,12 +173,18 @@ data AtomPools = AtomPools
   }
 
 worldAtomPools :: Map String Practice -> AtomPools
-worldAtomPools defs = AtomPools
+worldAtomPools allDefs = AtomPools
   { poolInserted = concatMap (maybe [] fst) atoms
   , poolDeleted  = concatMap (maybe [] snd) atoms
   , poolWild     = Nothing `elem` atoms
   }
   where
+    -- The drifter's outcomes are the world acting on itself: excluding them
+    -- restores the v33 environment-gate semantics to clock-moved facts
+    -- (hungry.*, marketDay.*) — a desire only the clock can improve has no
+    -- improving MOVER action, so the static screen stays exact, and its
+    -- liveness becomes a GateCheck the pulse flips (the v35 wake).
+    defs = Map.delete driftPracticeId allDefs
     practices = Map.elems defs
     fns = Map.fromList [ (fnName f, concatMap caseOutcomes (fnCases f))
                        | p <- practices, f <- functions p ]
