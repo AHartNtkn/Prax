@@ -668,6 +668,89 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   confirm the pins bite: dropping the bearing filter fails the non-bearing pin; dropping the
   `stillOffered` guard lets a vanished action get performed, and the standing-gone pin catches
   it. Zero warnings; hlint clean; no mutation markers remain.
+- **v36** — **decay & drift: episodic state on the clock** (`Prax.Drift`; spec
+  `docs/specs/2026-07-14-v36-drift.md`). User-directed, scope sharpened in review before a
+  line of code, on two rejections. The original "scores cool toward baseline" framing
+  (**grudge-cooling**) is REJECTED: dispositions (grudges, conduct marks, trust, standing)
+  never decay — they change only through ACTS (confession, absolution, amends, the v20–v21
+  machinery already built) — because a timer erasing them would undermine
+  atonement-not-amnesia (discharge must cost something) and history-persists-through-marks
+  (truth going unrecoverable is drama, not bookkeeping). The v35-era **recency-gradient**
+  stays declined, permanently: `Prax.Sight`'s hard `sightedWithin` window is the intended
+  model, not a smoothed approximation of one. What's left is genuinely episodic — appetite,
+  intoxication, arousal — the scale a game actually represents (hours to weeks).
+
+  **The mechanism** (`Prax.Drift`, the v18/`Prax.Sight` idiom pointed at state evolution: a
+  compiler of authored rules into ordinary practice content, zero engine/planner/query
+  surface). A bodiless per-round drifter (`_drift`, blank-label, riding after `_sight` in
+  the cast) carries a `due.<name>!D` fact per rule; its one action gates each body
+  `ForEach` on `turn!Now >= D` and re-arms `due.<name>!D2` at `D2 = Now + period` — **from
+  NOW, not from D**, so a stalled world doesn't rapid-fire its backlog on resume. Three
+  construction-time guards, the v30/v31 class: a rule name must be a single segment; a body
+  may not mention the reserved `D`/`D2`/`Now` variables (collision with the due gate); a
+  period must be positive. `Prax.TypeCheck` gains `ClocklessDrift` (Check 5): a world
+  registering the `drift` practice without a `turn` fact is flagged loudly rather than
+  silently never firing.
+
+  **Two cargo cycles, one shape.** Village hunger (build-up): every `mealPeriod` (3)
+  rounds, `appetite.<who>` bearers gain `hungry.<who>`; `suffers-hunger` (`Want
+  [Match "hungry.Owner"] -22`) prices eating at exactly what it costs — a held loaf
+  forfeits 10, a completed 3-stage endeavor forfeits 9 more (the `eat` action tears the
+  instance down), 19 total against 22 relief, a **+3** margin the planner actually picks
+  (mutation-verified: dropping relief to 12 flips the choice back to hoarding, net −7). Bar
+  metabolism (wear-off): every `soberPeriod` (2) rounds, each patron's `drinks!N`
+  decrements toward a `Gte 1` floor (never negative), and `checkSober` mirrors
+  `checkTipsy`'s own threshold (`Cmp Lte M 1` clears `tipsy`) — the same number read both
+  directions, one home for the fact.
+
+  **The emergent fiction, unplanned.** Village free play produces a hungry bob eating the
+  loaf he *stole* outright — no credit ever forfeited on it — and only later earning and
+  eating a second, honest loaf before the theft's atonement beat completes. `postTheftAt`
+  moved 70→96: 10 rounds under the old 7-member round is 70, 12 under the new 8-member
+  round (`_drift` joins the cast) is 96, and the arc genuinely needs those two extra
+  rounds now — eat-the-stolen-loaf, then earn-and-eat-a-second, not eat-then-forgive. In
+  the bar, the same roster growth costs `LoopSpec`'s fixed 25-turn golden its last two
+  lines: bex's arc-completing "settle in, feeling you belong here" actually lands at turn
+  27 (confirmed directly, not assumed), two turns past the window's edge — bex is
+  `hopeful`, not yet `belonging`, when the replay ends; the warmth held, it just needed two
+  turns the extra silent tick spent elsewhere.
+
+  **The golden protocol held.** Both worlds' goldens were re-captured live from the driven
+  output, never hand-authored, each cargo task's re-capture in its own commit separate from
+  the code that moved it (`cf82427`/`70afce0` village, `0d02b02`/`0957ff7` bar), itemized
+  line by line in both task reports. The village's 21-line window shows only two ordinary
+  `"_drift: "` no-op lines (the due hasn't come due inside that short a capture) — the
+  hunger cycle itself is pinned directly, at the real turn counts, in `VillageSpec` (absent
+  at `freePlayAt 23`, present at `freePlayAt 24`, re-armed three rounds later), not
+  inferred from the golden slice. Intrigue and feud goldens: untouched. ViewInvariant green
+  throughout; suite 465 (Task 1) → 468 (Task 2) → 472 (Task 3), all green; zero warnings;
+  hlint clean throughout.
+
+  **The paired drive bench, re-run against the drifting village** (same 140-turn
+  trajectory, both loops, one process — the v35 protocol exactly), with a same-machine,
+  same-session pre-drift control (commit `81380ed`, the 7-member roster) run alongside it
+  to separate drift's own effect from ordinary run-to-run noise: pre-drift **50.1s / 82.1s
+  / 1.6×** (20 deliberations of 140 turns: bob 7/20, dana 6/20, carol 2/20, eve 2/20, gale
+  2/20, `_sight` 1/20) vs. post-drift **51.8s / 70.9s / 1.4×** (33 deliberations: bob
+  **18/18** — every single one of his turns — dana 6/18, carol 2/18, eve 3/17, gale 2/17,
+  `_sight` 1/17, `_drift` 1/17). The attribution the spec's acceptance demands: bob's count
+  alone absorbs 11 of the 13 added deliberations — the mealtime hunger cycle is a second
+  gate/satisfaction-changing rhythm layered on his existing endeavor-stage churn, pushing
+  him from re-deliberating on roughly a third of his turns to literally all of them; every
+  other named character is flat against the pre-drift control within one deliberation (eve
+  +1, plausibly a downstream motivational ripple, not a sub-threshold read); `_drift`
+  contributes only its own one-time first-turn cost, the same idiom as `_sight`. **The
+  pulse wakes bob and essentially nobody else — the acceptance holds; not BLOCKED.** The
+  intentions loop's wall time is nearly flat (50.1s→51.8s) because bob's added real
+  deliberation work roughly cancels the discount every turn gets from an 8th, mostly-free
+  cast member; the always-deliberate loop, whose cost tracks raw turns rather than
+  deliberations, takes that whole discount (82.1s→70.9s) — the 1.6×→1.4× ratio drop is that
+  discount, not a regression in the reconsideration mechanism. Against the
+  originally-recorded v35 numbers (52.3s/97.1s/1.9×, a different session): intentions is
+  within noise (52.3→51.8s); the rest of the gap is *not* attributable to v36 alone — the
+  same-session pre-drift control already measured 82.1s/1.6×, so roughly half the drop from
+  97.1s is ordinary cross-session variance (the v35 row's own documented pattern), the
+  other half the roster-dilution effect above. Full suite: 472 @ 146.83s.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -1020,9 +1103,10 @@ Tier 2 — agent interiority for long time-spans:
   add authoring surface and per-pair evaluation arithmetic inside the scope check — the hottest
   gate in prediction — for no gameplay-visible behavior difference; complexity up, cost up,
   utility nil-to-negative. Do not re-propose.
-- **Decay & drift** *(in flight — v36, spec `docs/specs/2026-07-14-v36-drift.md`)*: episodic
-  state on the clock; the original "scores cool toward baseline" framing was REJECTED in review
-  (dispositions never decay — they change through acts; games represent hours-to-weeks).
+- **Decay & drift** *(DONE — v36, see the legend row above; spec
+  `docs/specs/2026-07-14-v36-drift.md`)*: episodic state on the clock; the original "scores cool
+  toward baseline" framing was REJECTED in review (dispositions never decay — they change through
+  acts; games represent hours-to-weeks).
 - **Emotions** *(banked — user-proposed at the v36 spec review, deliberately after this round)*:
   episodic feeling-states (`angry.<who>`, `afraid.<who>`) as plain state facts that vocabulary
   desires READ as conditions — an emotion changes the UTILITY of the world-states actions produce
@@ -1031,7 +1115,11 @@ Tier 2 — agent interiority for long time-spans:
   what decisions can be made (user's framing, load-bearing). The existing stack serves it
   wholesale: v33's liveness skip makes unfelt emotions planning-FREE (a cost optimization only —
   the skipped desires would have scored zero), v35 signatures make onset a motivational change
-  (re-deliberation on feeling, quiet otherwise), v36 pulses are the wear-off. Trait-modulated susceptibility (short
+  (re-deliberation on feeling, quiet otherwise), v36 pulses are the wear-off — and that half now
+  actually exists, not just as a description of the stack: `Prax.Drift`'s due-gated pulses are the
+  literal mechanism an emotion's wear-off rule would ride, proven twice over by the round's own
+  cargo (hunger builds up, tipsy wears off) before any emotion fact is authored. Trait-modulated
+  susceptibility (short
   temper ⇒ lower provocation bar / longer duration) is onset conditions reading trait facts — no
   new machinery. THE round-sized piece is stochastic onset: requires a seeded deterministic
   random stream carried in world state (reproducibility, goldens, replay, and persist all
