@@ -1020,8 +1020,20 @@ Tier 2 — agent interiority for long time-spans:
   add authoring surface and per-pair evaluation arithmetic inside the scope check — the hottest
   gate in prediction — for no gameplay-visible behavior difference; complexity up, cost up,
   utility nil-to-negative. Do not re-propose.
-- **Decay & drift**: scores cool toward baseline via a bodiless ticker (the v18 `_clock` pattern);
-  rates must be authored world parameters with stated semantics, not tuned constants.
+- **Decay & drift** *(in flight — v36, spec `docs/specs/2026-07-14-v36-drift.md`)*: episodic
+  state on the clock; the original "scores cool toward baseline" framing was REJECTED in review
+  (dispositions never decay — they change through acts; games represent hours-to-weeks).
+- **Emotions** *(banked — user-proposed at the v36 spec review, deliberately after this round)*:
+  episodic feeling-states (`angry.<who>`, `afraid.<who>`) as gate facts plus vocabulary desires
+  reading them — an emotion prices the states certain actions produce, author-chosen per emotion
+  (temporary trait-shaped pricing). The existing stack serves it wholesale: v33 gates make unfelt
+  emotions planning-free, v35 signatures make onset a motivational change (re-deliberation on
+  feeling, quiet otherwise), v36 pulses are the wear-off. Trait-modulated susceptibility (short
+  temper ⇒ lower provocation bar / longer duration) is onset conditions reading trait facts — no
+  new machinery. THE round-sized piece is stochastic onset: requires a seeded deterministic
+  random stream carried in world state (reproducibility, goldens, replay, and persist all
+  survive a `seed!N` fact; ambient nondeterminism is banned), with probabilities as authored
+  meaning, never tuned constants. Decide the draw primitive when built.
 - **Calendar & gatherings** *(partially seeded — v23: `Prax.Sight`'s ticker already advances a
   global `turn!N` every round, the first brick of the clock; what's missing is authored
   clock-gated scene spawns keyed off it, not the clock itself)*: recurring clock-gated scene
