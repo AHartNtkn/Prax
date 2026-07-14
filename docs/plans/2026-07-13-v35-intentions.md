@@ -34,6 +34,8 @@ consumer rewrite (`npcAct`, Loop). `pickAction` and everything beneath it untouc
 
 ### Task 1: The semantics — signature, store, loop
 
+> **Amended mid-round:** the options component shipped as standing-validity + want-bearing templates — see spec §1 as amended (ac7e26a); the code below is the v1 baseline it replaced.
+
 **Files:**
 - Modify: `src/Prax/Types.hs` (two types + one `PraxState` field)
 - Modify: `src/Prax/Planner.hs` (`motiveSignature`, exported)

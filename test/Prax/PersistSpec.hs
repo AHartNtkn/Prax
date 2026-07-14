@@ -5,9 +5,10 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, assertFailure, (@?=))
 
 import           Prax.Db (dbToSentences)
-import           Prax.Types (PraxState, cursor, db, gaLabel)
+import           Prax.Types (PraxState, Character (..), characters, cursor,
+                              db, gaLabel, intentions)
 import           Prax.Engine (possibleActions, performAction)
-import           Prax.Loop (runNpcTicks)
+import           Prax.Loop (runNpcTicks, npcAct)
 import           Prax.Persist (serializeState, deserializeState)
 import           Prax.Worlds.Intrigue (intrigueWorld)
 
@@ -30,6 +31,18 @@ tests = testGroup "Prax.Persist"
   [ testCase "save/load round-trips the fact database and cursor exactly" $ do
       db reloaded     @?= db mid
       cursor reloaded @?= cursor mid
+
+  , testCase "save/load round-trips standing intentions exactly" $ do
+      intentions reloaded @?= intentions mid
+
+  , testCase "a reloaded standing intention is served without re-deliberating" $
+      case filter ((== "marcus") . charName) (characters intrigueWorld) of
+        (marcus : _) -> do
+          let (contAct, _) = npcAct 2 marcus mid
+              (reloAct, _) = npcAct 2 marcus reloaded
+          fmap gaLabel contAct @?= Just "marcus: bide your time"
+          reloAct              @?= contAct
+        [] -> assertFailure "no marcus in intrigueWorld"
 
   , testCase "a reloaded session continues identically (Marcus can still warn)" $ do
       st <- act reloaded "marcus" "warn artus"

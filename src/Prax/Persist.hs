@@ -1,13 +1,13 @@
 -- | Persistence: save/load a running session (Versu — "it is trivial to
 -- serialize and deserialize the world state").
 --
--- The whole mutable state is the fact database plus the turn cursor. Practices,
--- characters, and their wants are code (the world's rules), so a save captures
--- only @db@ + @cursor@ and is reloaded onto a freshly-constructed world of the
--- same kind. Serialization is just the fact sentences (one per line): because
--- @dbToSentences@ enumerates every leaf and @insertAll@ rebuilds the trie, the
--- round trip is exact (the @!@/@.@ distinction only matters at insert time, and
--- the exclusion has already been applied in the saved structure).
+-- The whole mutable state is the fact database, the turn cursor, and the
+-- standing intentions. Practices, characters, and their wants are code (the
+-- world's rules), so a save captures only @db@ + @cursor@ + @intentions@ and
+-- is reloaded onto a freshly-constructed world of the same kind. Facts
+-- serialize as sentences (one per line, via @dbToLabeledSentences@ /
+-- @insertAll@); intentions serialize on their own labelled lines (below),
+-- so the round trip is exact.
 module Prax.Persist
   ( serializeState
   , deserializeState
@@ -15,26 +15,82 @@ module Prax.Persist
   , loadState
   ) where
 
+import           Data.List (isPrefixOf)
+import qualified Data.Map.Strict as Map
 import           Text.Read (readMaybe)
 
-import           Prax.Db (dbToLabeledSentences, emptyDb, insertAll)
-import           Prax.Types (PraxState (..))
+import           Prax.Db (Val (..), dbToLabeledSentences, emptyDb, insertAll)
+import           Prax.Types (GroundedAction (..), Intention (..),
+                              MotiveSignature (..), PraxState (..))
 import           Prax.Engine (withDb)
+import           Prax.Sym (intern, symName)
 
--- | Serialize the mutable state (@cursor@ + all facts) to text, with @!@/@.@
--- labels so the reload rebuilds the exclusion structure exactly.
+-- | A 'Val' crossing the file boundary as text, since interned symbols are
+-- process-local (spec @docs/specs/2026-07-12-v29-interning.md@) — every
+-- 'Prax.Sym.Sym' is written by name and re-interned on load.
+data ValRepr = RS String | RN Integer | RT [[String]] deriving (Show, Read)
+
+reprVal :: Val -> ValRepr
+reprVal (VSym s)  = RS (symName s)
+reprVal (VNum n)  = RN n
+reprVal (VSet xs) = RT (map (map symName) xs)
+
+unreprVal :: ValRepr -> Val
+unreprVal (RS s)  = VSym (intern s)
+unreprVal (RN n)  = VNum n
+unreprVal (RT xs) = VSet (map (map intern) xs)
+
+type GaRepr = (String, String, String, [(String, ValRepr)], String)
+type IntentRepr = (Maybe GaRepr, ([String], [Int], [String], [(String, String)]))
+
+reprIntention :: Intention -> IntentRepr
+reprIntention (Intention mga sig) =
+  ( fmap (\ga -> ( gaPracticeId ga, gaInstanceId ga, gaActionId ga
+                 , [ (symName k, reprVal v) | (k, v) <- Map.toList (gaBindings ga) ]
+                 , gaLabel ga )) mga
+  , (msBearing sig, msSatisfaction sig, msLiveDesires sig, msKnownMotives sig) )
+
+unreprIntention :: IntentRepr -> Intention
+unreprIntention (mga, (b, s, l, m)) =
+  Intention
+    (fmap (\(pid, iid, aid, bs, lbl) -> GroundedAction pid iid aid
+             (Map.fromList [ (intern k, unreprVal v) | (k, v) <- bs ]) lbl) mga)
+    (MotiveSignature b s l m)
+
+-- | Serialize the mutable state (@cursor@ + standing intentions + all facts)
+-- to text, with @!@/@.@ labels so the reload rebuilds the exclusion structure
+-- exactly. Intention lines are prefixed @"intention "@; since fact sentences
+-- are dot-paths with no spaces, that prefix cannot collide with a fact line
+-- (the same disambiguation the @"cursor "@ header already relies on).
 serializeState :: PraxState -> String
-serializeState st = unlines (("cursor " ++ show (cursor st)) : dbToLabeledSentences (db st))
+serializeState st =
+  unlines
+    ( ("cursor " ++ show (cursor st))
+    : [ "intention " ++ name ++ " " ++ show (reprIntention i)
+      | (name, i) <- Map.toList (intentions st) ]
+    ++ dbToLabeledSentences (db st)
+    )
 
 -- | Rebuild a saved state onto @world@ (a fresh world of the same kind, which
--- supplies the practice definitions and cast). Crashes loudly on malformed input.
+-- supplies the practice definitions and cast). Crashes loudly on malformed
+-- input, including a malformed intention line.
 deserializeState :: String -> PraxState -> PraxState
 deserializeState text world =
   case lines text of
     (hd : rest)
       | ["cursor", n] <- words hd, Just c <- readMaybe n ->
-          (withDb (const (insertAll (filter (not . null) rest) emptyDb)) world) { cursor = c }
+          let intentionLines = filter ("intention " `isPrefixOf`) rest
+              factLines      = filter (not . ("intention " `isPrefixOf`)) rest
+              newIntentions  = Map.fromList (map parseIntentionLine intentionLines)
+          in (withDb (const (insertAll (filter (not . null) factLines) emptyDb)) world)
+               { cursor = c, intentions = newIntentions }
     _ -> error "Prax.Persist.deserializeState: malformed save (expected a 'cursor <n>' header)"
+  where
+    parseIntentionLine line =
+      case break (== ' ') (drop (length "intention ") line) of
+        (name, ' ' : reprText)
+          | Just repr <- readMaybe reprText -> (name, unreprIntention repr)
+        _ -> error ("Prax.Persist.deserializeState: malformed intention line: " ++ line)
 
 -- | Save a session to a file.
 saveState :: FilePath -> PraxState -> IO ()
