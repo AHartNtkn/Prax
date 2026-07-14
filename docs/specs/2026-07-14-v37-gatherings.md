@@ -67,7 +67,14 @@ separate calendar module would be a wrapper). `driftSetup` keeps working for pla
 
 ## Cargo: village market day
 
-Every `marketPeriod` rounds the market convenes in the square for `marketDuration` rounds:
+Every `marketPeriod` rounds the market convenes in the square for `marketDuration` rounds
+(**cadence amended after Task 4's bench**: the original period-2/duration-1 — chosen so the
+golden window would witness a cycle — left NO quiet rounds: the gate toggled town-wide
+every round, every attendee re-deliberated every turn, and 140-turn drives tripled
+(68.3s → 193.2s, 33 → 90 deliberations). The mechanism was exact throughout; the cadence
+was the defect. Shipped: period 6, duration 1 — market day comes every sixth round, most
+days are quiet, and the cycle is pinned at real turn counts rather than golden-visible,
+the v36 hunger precedent):
 the open spawns a `market` practice instance and `marketDay.<square>`-shaped event fact;
 villagers hold an attendance desire (event ∧ at-square, positive, authored weight with a
 stated sentence — strong enough to outweigh anchoring wants, weaker than arcs' stakes so
