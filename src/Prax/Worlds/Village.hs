@@ -37,7 +37,7 @@ import           Prax.Witness
 import           Prax.Rumor
 import           Prax.Repute
 import           Prax.Sight
-import           Prax.Drift (DriftRule (..), driftChar, driftP, driftSetup)
+import           Prax.Drift (DriftRule (..), driftChar, driftP, driftSetup, gathering)
 import           Prax.Deceit
 import           Prax.Persona
 import           Prax.Debt (owes)
@@ -119,6 +119,30 @@ hungerPulse = DriftRule "hunger" 3
 -- working, not drift noise.
 suffersHunger :: Desire
 suffersHunger = Desire "suffers-hunger" (Want [ Match "hungry.Owner" ] (-22))
+
+-- Market day (v37 spec @docs/specs/2026-07-14-v37-gatherings.md@): a
+-- recurring convening on the sight clock, formalizing the calendar probe.
+-- The market practice: an instance the calendar spawns and tears down; its
+-- presence IS the event (no market-only affordances — the draw is the
+-- valuation, the payoff is co-presence density feeding sight/witnessing).
+marketP :: Practice
+marketP = practice { practiceId = "market", roles = ["Fair"] }
+
+-- Market day every other round, for one round — a compressed town rhythm
+-- matching the compressed drives (a "day" here is one round; the golden's
+-- 21-turn window then witnesses the market's first opening).
+marketCalendar :: ([DriftRule], [Outcome])
+marketCalendar = gathering "market" 2 1
+  [ Insert "practice.market.fair", Insert "marketDay.square" ]
+  [ Delete "practice.market.fair", Delete "marketDay.square" ]
+
+-- Everyone likes a market day: +3 for being at the square while it's on —
+-- above the +1 loitering anchors (a market beats an idle preference), below
+-- the +5 event wants and every conduct stake (drama outranks festivity).
+drawnToMarket :: Desire
+drawnToMarket = Desire "drawn-to-market"
+  (Want [ Match "marketDay.square"
+        , Match "practice.world.world.at.Owner!square" ] 3)
 
 -- Temperament: honesty as conduct, not prohibition. The weight is authored
 -- meaning: a lie costs gale 6 per hearer per event — more than the +4 a
@@ -354,7 +378,8 @@ villageAxioms =
 
 villageWorld :: PraxState
 villageWorld =
-  (setDesires ([ earnBreadPursuit, spitesCarol, punishesWhisper, suffersHunger ]
+  (setDesires ([ earnBreadPursuit, spitesCarol, punishesWhisper, suffersHunger
+                 , drawnToMarket ]
                  ++ personaVocabulary [honest])
      (setAxioms villageAxioms (foldl (flip performOutcome) base (setup ++ personaFacts))))
   -- an epistemic prediction scope: you credit another's predicted move only
@@ -382,7 +407,7 @@ villageWorld =
                          , conceal "stole.bob.loaf" 12 ]
              -- his disposition to honest work: dormant until he
              -- takes it up (undertaking is a live planner choice)
-           , charDesires = ["pursues-earnBread", "suffers-hunger"] }, [])
+           , charDesires = ["pursues-earnBread", "suffers-hunger", "drawn-to-market"] }, [])
       , ((character "carol")
            { charWants = [ Want [ Match "confronted.carol.T" ] 5
                            -- keeps to the square unless something needs doing (the
@@ -403,7 +428,7 @@ villageWorld =
                            -- punitive desire is what motivates the threat;
                            -- this just makes the payoff concrete)
                          , Want [ owes "carol" "eve" "favor" ] 4 ]
-           , charDesires = ["punishes-whisper"] }, [])
+           , charDesires = ["punishes-whisper", "drawn-to-market"] }, [])
       , ((character "dana")
            { charWants = [ Want [ Match "confronted.dana.T" ] 5
                          , Want [ Match "eyed.dana.T" ] 5
@@ -412,7 +437,8 @@ villageWorld =
                                 , Absent [ Match "regards.dana.T.thief" ] ] (-5)
                            -- loiters near the mill: she keeps to her own place
                            -- rather than drifting on the wander/wait tie-break
-                         , Want [ Match "practice.world.world.at.dana!mill" ] 1 ] }, [])
+                         , Want [ Match "practice.world.world.at.dana!mill" ] 1 ]
+           , charDesires = ["drawn-to-market"] }, [])
         -- eve's authored malice, named vocabulary since v25 (spitesCarol
         -- above): the same +4/head spite gale carries, and — unheralded —
         -- exactly as unreadable as the unnamed want it replaces. Her own
@@ -421,18 +447,19 @@ villageWorld =
         -- brink (1-2 regards), catastrophic at it.
       , ((character "eve")
            { charWants = [ Want [ Match "notorious.eve.slanderer" ] (-15) ]
-           , charDesires = ["spites-carol"] }, [])
+           , charDesires = ["spites-carol", "drawn-to-market"] }, [])
         -- gale: eve's contrast pair. The same spite, plus a temperament —
         -- her conscience (-6/lie) outprices what any single whisper buys
         -- (+4/head), so eve whispers and gale never does
-      , ((character "gale") { charDesires = ["spites-carol"] }, [honest])
+      , ((character "gale") { charDesires = ["spites-carol", "drawn-to-market"] }, [honest])
       ]
     -- driftChar rides after sightChar (the clock advances before bodies feel
     -- it, stated): within a round, sight's tick has already bumped turn!N
     -- by the time the drifter's due-gate reads it.
     base = setCharacters (roster ++ [sightChar, driftChar])
-             (definePractices [coreLib, worldP, villageP, earnBreadP, sightP villageSighting
-                               , driftP [hungerPulse]] emptyState)
+             (definePractices [coreLib, worldP, villageP, earnBreadP, marketP
+                               , sightP villageSighting
+                               , driftP (hungerPulse : fst marketCalendar)] emptyState)
     setup =
       [ Insert "practice.village.here"
       , Insert "practice.world.world.connected.square.mill"
@@ -445,4 +472,4 @@ villageWorld =
       , Insert "practice.world.world.at.gale!mill"
       , Insert "stall.loaf"
       , Insert "appetite.bob"
-      ] ++ sightSetup ++ driftSetup [hungerPulse]
+      ] ++ sightSetup ++ driftSetup [hungerPulse] ++ snd marketCalendar

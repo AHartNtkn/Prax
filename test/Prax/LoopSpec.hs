@@ -4,14 +4,16 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, (@?=), assertBool)
 
 import           Data.List (isInfixOf)
+import qualified Data.Map.Strict as Map
 
-import           Prax.Db (dbToSentences)
+import           Prax.Db (dbToSentences, exists)
 import           Prax.Query
 import           Prax.Types
 import           Prax.Engine
-import           Prax.Loop (runNpcTicks, npcAct)
-import           Prax.Planner (pickAction)
+import           Prax.Loop (runNpcTicks, npcAct, advance)
+import           Prax.Planner (pickAction, motiveSignature)
 import           Prax.Worlds.Bar (barWorld)
+import           Prax.Worlds.Village (villageWorld)
 
 -- Deterministic narration from driving every character with the planner (depth
 -- 2) for 25 round-robin turns (idle turns, and the silent bodiless tickers'
@@ -293,4 +295,73 @@ tests = testGroup "Prax.Loop"
       fmap gaLabel g1 @?= Just "beth: amble over"
       let (g2, _) = npcAct 2 beth' gone
       fmap gaLabel g2 @?= Just "beth: idle about"
+
+  , testCase "the v37 wake, end to end: a standing intention holds through quiet rounds, the market's open flips the live-desire set and wakes fresh deliberation to the square, the close disperses it" $ do
+      -- gale, driven through villageWorld's own free play (v35+v37
+      -- integration -- the real village, not a fixture): her only wants are
+      -- 'spites-carol' (no locational content) and 'drawn-to-market', so her
+      -- location choices are read straight off the market's own clock. The
+      -- village's round is 8 turns (six villagers + the silent sight and
+      -- drift tickers); the market's due (period 2) opens at the drifter's
+      -- turn ending round 2 (turn 16) and its due (period+duration 3)
+      -- closes ending round 3 (turn 24) -- both observed against the live
+      -- trace, not assumed.
+      let idleStep idle st =
+            let (actor, st1) = advance st
+            in if charName actor == idle then st1 else snd (npcAct 2 actor st1)
+          freePlayTrace = iterate (idleStep "you") villageWorld
+          freePlayAt n = freePlayTrace !! n
+          gale = case [ c | c <- characters villageWorld, charName c == "gale" ] of
+                   (c : _) -> c
+                   []      -> error "no such villager: gale"
+          intentOf st = case Map.lookup "gale" (intentions st) of
+                          Just i  -> i
+                          Nothing -> error "gale holds no standing intention yet"
+
+      -- QUIET (turn 15, one turn short of the open): her standing intention
+      -- (stored at her own turn 14) still matches her current signature --
+      -- the quiescence holds, and drawn-to-market is not yet in her live set.
+      let stQuiet  = freePlayAt 15
+          sigQuiet = motiveSignature stQuiet gale
+      assertBool "the standing intention holds through the quiet turn"
+        (intentBasis (intentOf stQuiet) == sigQuiet)
+      assertBool "drawn-to-market is not yet live"
+        ("drawn-to-market" `notElem` msLiveDesires sigQuiet)
+
+      -- THE OPEN (turn 16, the drifter's own turn): the market's insert
+      -- flips drawn-to-market's gate live -- the live-desire SET component
+      -- of gale's signature changes, asserted directly as before/after/diff.
+      let stOpen  = freePlayAt 16
+          sigOpen = motiveSignature stOpen gale
+      assertBool "the market is open" (exists "marketDay.square" (db stOpen))
+      assertBool "drawn-to-market is now live"
+        ("drawn-to-market" `elem` msLiveDesires sigOpen)
+      assertBool "the live-desire component actually changed (before /= after)"
+        (msLiveDesires sigQuiet /= msLiveDesires sigOpen)
+      -- her turn-14 intention is still the one on file (she has not acted
+      -- since) -- and it no longer matches: the wake has fired.
+      assertBool "her standing intention's basis no longer matches: she is woken"
+        (intentBasis (intentOf stOpen) /= sigOpen)
+
+      -- her NEXT npcAct (her actual turn 22, round 3) re-deliberates and
+      -- picks the square -- the wake's consequence, not merely its trigger.
+      let stMarketTurn = freePlayAt 22
+      fmap gaLabel (intentAct (intentOf stMarketTurn)) @?= Just "gale: Go to square"
+
+      -- THE CLOSE (turn 24, the drifter's own turn): drawn-to-market's gate
+      -- shuts again -- the live-desire set flips back, and her turn-22
+      -- intention (stored woken and live) no longer matches.
+      let stClosed  = freePlayAt 24
+          sigClosed = motiveSignature stClosed gale
+      assertBool "the market is closed" (not (exists "marketDay.square" (db stClosed)))
+      assertBool "drawn-to-market is dead again"
+        ("drawn-to-market" `notElem` msLiveDesires sigClosed)
+      assertBool "the live-desire component changed back (open /= closed)"
+        (msLiveDesires sigOpen /= msLiveDesires sigClosed)
+      assertBool "her market-turn intention no longer matches: woken again, by the close"
+        (intentBasis (intentOf stClosed) /= sigClosed)
+
+      -- her next npcAct (turn 30, round 4) disperses her back to the mill.
+      let stDispersed = freePlayAt 30
+      fmap gaLabel (intentAct (intentOf stDispersed)) @?= Just "gale: Go to mill"
   ]

@@ -172,6 +172,14 @@ tests = testGroup "Prax.Relevance"
       -- unconditionally, same as the consciences above, so a sated bob's
       -- pair-skip against it fires between meals.
       tbl Map.! "suffers-hunger" @?= FloorCheck
+      -- v37: drawn-to-market's first conjunct (marketDay.square) is
+      -- clock-moved only -- no authored action ever inserts it, so it
+      -- qualifies as the sole gate; the second conjunct
+      -- (practice.world.world.at.Owner!square) is action-insertable ("Go to
+      -- [Place]" inserts exactly this shape) and so never qualifies --
+      -- confirmed, not assumed, against the actual computed table.
+      tbl Map.! "drawn-to-market"
+        @?= GateCheck [ [ cookCondition (Match "marketDay.square") ] ]
       assertBool "the field matches the module computation"
         (liveness villageWorld
            == livenessOf (practiceDefs villageWorld)
