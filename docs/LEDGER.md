@@ -612,6 +612,62 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   culprit-facing ones — see "Future ideas to investigate," below). Suite: 445 (Task 1) → 448
   (Task 2) → 449 (Task 2b + its own evidence-free-path fix), all green throughout; zero
   warnings; hlint clean; goldens byte-identical; ViewInvariant green throughout.
+- **v35** — **intentions: reconsideration semantics replace always-deliberate** (`Prax.Types`
+  `Intention` + an `intentions` runtime field on `PraxState`; `Prax.Planner.motiveSignature`;
+  `Prax.Loop.npcAct`; spec `docs/specs/2026-07-13-v35-intentions.md`). **The round's first
+  accepted semantics change since the exactness era began at v26** — user-directed: "agents
+  would not plan potentially whispering secrets every few seconds — always considering every
+  possibility every step is not realistic and very wasteful." Three probes grounded the
+  redesign before a line of implementation: a **91.5% pick-stability ceiling** over a 70-turn
+  village drive (379/414 turns unchanged; carol, one of the most expensive deliberators, never
+  changed her pick once); **the anchor family is structurally exhausted** — a chained cache
+  upgraded with the banked per-head-cone lever served **zero** picks, because the village's
+  axiom graph deliberately chains co-presence into reputation (movement → togetherness →
+  witnessing → belief → notoriety → regard), so every non-wait action's cone reaches all six
+  characters and no refinement of the v26–v34 proof family can see that gale walking to the
+  mill is irrelevant to carol in the square; and **motivational triggers caught all 35 real
+  pick changes while licensing 290/414 (70%) skips**, at near-zero cost.
+
+  **A mid-round reversal, stated plainly.** The first-cut signature grain (full
+  grounded-candidate equality) measured **INERT** at the real own-turn interval — 0 serves,
+  120/120 deliberated, 1.0× — because the per-turn probes above had measured the wrong
+  interval: villagers move every round, and movement churns co-presence groundings. The probe
+  ladder that found the working grain: unfiltered templates, 26% served/0 divergences;
+  templates dropped entirely (the "bold agent" variant, **rejected**), 50 served but 19
+  divergences — dana served "Wait" for the whole drive while a fresh pick wanted "shun carol"
+  every round, proving opportunity *appearance itself* carries dramatic signal; **want-bearing
+  templates**, 45 served (38%) with **zero divergences**, every one of the remaining
+  deliberations (the probe's 75/45 split) defensible — arrivals expiring a movement pick (55),
+  satisfaction changes (8), motive updates (2), first turns (6). The spec was amended in place
+  to this grain.
+
+  **The shipped semantics**: a character holds a standing intention plus the motive signature
+  it was chosen against, and re-deliberates only when the signature changes — commitment is
+  the default, reconsideration the exception, per Bratman. Four named components, none a tuned
+  number: (1) what I can do that I care about — my standing action is still offered (full
+  grounded equality; a stale grounding can never be acted) AND the want-bearing template set
+  changed (`Relevance.bearingTemplates`, a `caresAbout` table); (2) how I'm doing — the
+  per-want satisfaction count vector, kept as counts, not summed, so two profiles can't mask
+  each other; (3) what's driving me — the live-desire set (v33's floor/gate machinery, pointed
+  at oneself); (4) what motives I know of — the believed-motive facts I hold on others.
+  **Accepted gaps, pinned as INTENDED**: a one-beat lag when only another's *predicted* reply
+  to a fresh affordance would change my pick (invisible until a signature-visible consequence
+  lands), and the same one-beat lag on second-order opportunities generally — both dedicated
+  tests (the quiet pin, the non-bearing pin), not silently absent.
+
+  **Measured, honestly, with the variance called out.** Goldens are **byte-identical** — the
+  re-capture protocol the spec expected to need went unused, zero drift to itemize. Full
+  suite: 454 tests @ **153.22s**, down from the ~175–186s baseline (deliberation itself now
+  mostly skipped). The **paired drive bench is the primary performance evidence** (same
+  140-turn trajectory, both loops, one process, eliminating cross-run noise): **52.3s vs.
+  97.1s = 1.9× on sustained play**. The 31-test village A/B is reported but **not
+  attributed**: best-of-3 98.17s against v34's 120.10s epoch looks like a win, but the *inert*
+  v1 tree (0 serves, the mechanism doing nothing) measured 113.97s on pure run variance alone —
+  **below** the v34 epoch with zero mechanism engaged — so the suite A/B's noise band swamps
+  an effect this size; the paired bench is what the round actually stands on. Two mutations
+  confirm the pins bite: dropping the bearing filter fails the non-bearing pin; dropping the
+  `stillOffered` guard lets a vanished action get performed, and the standing-gone pin catches
+  it. Zero warnings; hlint clean; no mutation markers remain.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -789,7 +845,14 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   INTERSECTION back into REUSE — though the raw `recanted.<actor>` anchor dependency (not
   axiom-derived at all) would still defeat the pairs that read it directly, so this bounds the
   achievable gain, it doesn't eliminate the live-recompute floor. Unbuilt; located by profiling
-  attribution, not designed against a concrete implementation.
+  attribution, not designed against a concrete implementation. **Both levers, probe-tested
+  at the outer loop by v35's investigation and found insufficient there**: a chained cache
+  upgraded with the per-head-cone lever served **zero** picks, because the village's own
+  axiom graph chains co-presence into reputation regardless of cone precision — the outer
+  loop's cost was closed by v35's reconsideration semantics, not by sharpening this family
+  further; both levers stay banked, now scoped explicitly to within-pick precision only
+  (narrowing which nodes of a single already-triggered deliberation reuse a prediction —
+  never to skipping deliberation itself).
 
 ## Sandbox extension backlog (brainstormed 2026-07-10)
 
