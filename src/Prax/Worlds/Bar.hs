@@ -34,6 +34,7 @@ import           Prax.Beliefs
 import           Prax.Conversation
 import           Prax.Arc
 import           Prax.Sight
+import           Prax.Drift (DriftRule (..), driftChar, driftP, driftSetup)
 import           Prax.Witness (CoPresence)
 
 -- | The character the human player controls.
@@ -274,8 +275,21 @@ tendBarP = practice
           ]
       , Function "checkTipsy" ["P", "M"]
           [ FnCase [ Cmp Gte "M" "2" ] [ Insert "person.P.tipsy" ] ]
+      , Function "checkSober" ["P", "M"]
+          [ FnCase [ Cmp Lte "M" "1" ] [ Delete "person.P.tipsy" ] ]
       ]
   }
+
+-- A drink wears off in about two rounds: each pulse metabolizes one drink
+-- from every patron who has any, and sobriety returns when the count falls
+-- back under checkTipsy's own threshold (its mirror, one home).
+metabolism :: DriftRule
+metabolism = DriftRule "metabolism" 2
+  [ ( [ Match "practice.patron.P.drinks!N"
+      , Cmp Gte "N" "1"
+      , Calc "M" Sub "N" "1" ]
+    , [ Insert "practice.patron.P.drinks!M"
+      , Call "checkSober" ["P", "M"] ] ) ]
 
 -- Settling up after being served: the obligation "[Patron] should tip
 -- [Bartender]" (a first-class deontic □, raised on serve — see 'oblige' above) is
@@ -495,12 +509,15 @@ barWorld =
     -- takes to walk one room away and back."
     { predictionScope = [ Or [ together, sightedWithin 2 ] ] }
   where
+    -- driftChar rides after sightChar (the clock advances before bodies feel
+    -- it, stated): within a round, sight's tick has already bumped turn!N
+    -- by the time the drifter's due-gate reads it.
     withPractices =
-      (setCharacters [you, ada, bex, director, sightChar]
+      (setCharacters [you, ada, bex, director, sightChar, driftChar]
         (definePractices
            [ coreLib, disapprovalP
            , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
-           , arcP, sightP barSighting ]
+           , arcP, sightP barSighting, driftP [metabolism] ]
            emptyState))
         { sorts = barSorts }
     setup =
@@ -516,7 +533,7 @@ barWorld =
       , Insert "practice.dm.director"
       , Insert "practice.arc.you"
       , Insert "practice.arc.bex"
-      ] ++ sightSetup
+      ] ++ sightSetup ++ driftSetup [metabolism]
 
 -- | The same bar, but the human is the __drama manager__ (Versu §XI): the player
 -- controls 'directorPlayer', steering an autonomous cast (ada, bex, cai) with

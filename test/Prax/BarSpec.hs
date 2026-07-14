@@ -12,7 +12,24 @@ import           Prax.Planner (pickAction)
 import           Prax.Core (adjustScore, setMood, warmth, annoyed)
 import           Prax.Beliefs (believe)
 import           Prax.Conversation (beginConversation)
+import           Prax.Sight (sightName)
+import           Prax.Drift (driftName)
 import           Prax.Worlds.Bar (barWorld)
+
+-- Fire the sight ticker directly (advances turn!N by one; VillageSpec's own
+-- "out of sight, out of mind" idiom, mirrored here for the bar's clock).
+tick :: PraxState -> PraxState
+tick st = case possibleActions st sightName of
+  (ga : _) -> performAction st ga
+  []       -> error "no sight action available"
+
+-- Fire the drift pulse directly: the drifter's due-gated bundle only bites
+-- once turn!N has reached the rule's due, so most calls (before the due) are
+-- ordinary no-ops -- same silent idiom as 'tick'.
+pulse :: PraxState -> PraxState
+pulse st = case possibleActions st driftName of
+  (ga : _) -> performAction st ga
+  []       -> error "no drift action available"
 
 -- Perform the first action whose label contains `needle` for `actor`.
 act :: PraxState -> (String, String) -> IO PraxState
@@ -48,6 +65,72 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       let facts2 = dbToSentences (db afterTwo)
       assertBool "counter at 2" ("practice.patron.you.drinks.2" `elem` facts2)
       assertBool "now tipsy" ("person.you.tipsy" `elem` facts2)
+
+    --------------------------------------------------------------------------
+    -- v36: metabolism, the wear-off cargo (Prax.Drift) -- checkSober is
+    -- checkTipsy's mirror, one home for the tipsy threshold either way.
+    --------------------------------------------------------------------------
+
+  , testCase "a patron at 2 drinks is tipsy; one dry pulse (2 -> 1) clears it" $ do
+      twoDrinks <- runSteps barWorld
+        [ ("you", "Go to bar"), ("you", "Order beer"), ("ada", "Fulfill you")
+        , ("you", "Drink the beer"), ("you", "Order beer"), ("ada", "Fulfill you")
+        , ("you", "Drink the beer") ]
+      let factsBefore = dbToSentences (db twoDrinks)
+      assertBool "counter at 2 before the pulse" ("practice.patron.you.drinks.2" `elem` factsBefore)
+      assertBool "tipsy before the pulse" ("person.you.tipsy" `elem` factsBefore)
+      -- metabolism's period is 2: the due (seeded at turn 2) is reached after
+      -- two sight ticks.
+      let atDue  = tick (tick twoDrinks)
+          pulsed = pulse atDue
+          facts  = dbToSentences (db pulsed)
+      assertBool "counter decremented to 1" ("practice.patron.you.drinks.1" `elem` facts)
+      assertBool "the 2-drinks fact is gone" ("practice.patron.you.drinks.2" `notElem` facts)
+      assertBool "tipsy cleared once under the threshold" ("person.you.tipsy" `notElem` facts)
+
+  , testCase "drinking again before the pulse (3 -> 2) keeps you tipsy through it" $ do
+      twoDrinks <- runSteps barWorld
+        [ ("you", "Go to bar"), ("you", "Order beer"), ("ada", "Fulfill you")
+        , ("you", "Drink the beer"), ("you", "Order beer"), ("ada", "Fulfill you")
+        , ("you", "Drink the beer") ]
+      threeDrinks <- runSteps twoDrinks
+        [ ("you", "Order beer"), ("ada", "Fulfill you"), ("you", "Drink the beer") ]
+      let factsBefore = dbToSentences (db threeDrinks)
+      assertBool "counter at 3 before the pulse" ("practice.patron.you.drinks.3" `elem` factsBefore)
+      assertBool "tipsy before the pulse" ("person.you.tipsy" `elem` factsBefore)
+      let atDue  = tick (tick threeDrinks)
+          pulsed = pulse atDue
+          facts  = dbToSentences (db pulsed)
+      assertBool "counter decremented to 2, still at the threshold"
+        ("practice.patron.you.drinks.2" `elem` facts)
+      assertBool "still tipsy: 2 is still >= checkTipsy's own threshold"
+        ("person.you.tipsy" `elem` facts)
+
+  , testCase "a pulse at 0 drinks leaves 0 (the Gte 1 guard never goes negative)" $ do
+      let atDue  = tick (tick barWorld)
+          pulsed = pulse atDue
+          facts  = dbToSentences (db pulsed)
+      assertBool "you never drank: still at 0" ("practice.patron.you.drinks.0" `elem` facts)
+      assertBool "bex never drank: still at 0" ("practice.patron.bex.drinks.0" `elem` facts)
+      assertBool "no negative counter appears"
+        (not (any ("practice.patron.you.drinks.-" `isInfixOf`) facts))
+
+  , testCase "the metabolism due re-arms: the second pulse only fires a full period later" $ do
+      twoDrinks <- runSteps barWorld
+        [ ("you", "Go to bar"), ("you", "Order beer"), ("ada", "Fulfill you")
+        , ("you", "Drink the beer"), ("you", "Order beer"), ("ada", "Fulfill you")
+        , ("you", "Drink the beer") ]
+      -- first pulse at turn 2: 2 -> 1, due re-arms to 2 + 2 = 4.
+      let firstPulse = pulse (tick (tick twoDrinks))
+      assertBool "first pulse landed" ("practice.patron.you.drinks.1" `elem` dbToSentences (db firstPulse))
+      -- one more tick (turn 3): below the re-armed due (4) -- a no-op.
+      let tooSoon = pulse (tick firstPulse)
+      assertBool "not due yet: counter unchanged at 1"
+        ("practice.patron.you.drinks.1" `elem` dbToSentences (db tooSoon))
+      -- the due-reaching tick (turn 4): the second pulse fires.
+      let secondPulse = pulse (tick tooSoon)
+      assertBool "second pulse landed a full period (2 rounds) after the first"
+        ("practice.patron.you.drinks.0" `elem` dbToSentences (db secondPulse))
 
   , testCase "the bell requires two customers (Subquery/Count/Cmp)" $ do
       -- One customer (bex ordered): no bell.
