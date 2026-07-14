@@ -14,14 +14,22 @@ import           Prax.Planner (pickAction)
 import           Prax.Worlds.Bar (barWorld)
 
 -- Deterministic narration from driving every character with the planner (depth
--- 2) for 25 round-robin turns (idle turns, and the silent sight ticker's turns,
--- produce no line). 25, not 20: the bar's cast now includes the bodiless sight
--- ticker (Prax.Sight), so each round is 5 turns, not 4 — the same 5 rounds this
--- golden trace always covered (20 = 5x4) now take 25 (5x5). A golden replay of
--- the whole emergent arc: greet, serve, respond, take offense at a snub, buy a
--- friend a drink, and then — once the room is warm — the director steps in and
--- turns two friends against each other, after which they cool. ('you' has no
+-- 2) for 25 round-robin turns (idle turns, and the silent bodiless tickers'
+-- turns, produce no line). 25, not 20: the bar's cast includes the bodiless
+-- sight ticker (Prax.Sight), so each round is 5 turns, not 4 — the same 5
+-- rounds this golden trace always covered (20 = 5x4) now take 25 (5x5). A
+-- golden replay of the whole emergent arc: greet, serve, respond, take offense
+-- at a snub, buy a friend a drink, and then — once the room is warm — the
+-- director steps in and turns two friends against each other. ('you' has no
 -- wants, so it paces; in the CLI 'you' is the human.)
+--
+-- v36 drift: the bodiless drifter (Prax.Drift) rides after the sight ticker,
+-- so a round is 6 turns, not 5 (unchanged at 25 raw turns -- the golden's own
+-- name and window, not re-widened to keep pace). The window now closes one
+-- decision turn after the director's stir, mid-round-5, before ada's and
+-- bex's next turns -- so bex's arc-completing "settle in, feeling you belong
+-- here" (and ada's "Wait a moment" before it) no longer land inside the
+-- capture: the trace is two lines shorter, itemized below.
 expectedTrace :: [String]
 expectedTrace =
   [ "you: Go to bar"
@@ -38,8 +46,6 @@ expectedTrace =
   , "bex: Buy ada a drink"
   , "director: turn ada against bex to stir up the evening"
   , "you: Go to bar"
-  , "ada: Wait a moment"
-  , "bex: settle in, feeling you belong here"
   ]
 
 tests :: TestTree
@@ -57,9 +63,14 @@ tests = testGroup "Prax.Loop"
       -- the director intervened once, injecting a rivalry between the two friends
       has "dm.stirred"
       has "practice.greet.world.grievance.ada.bex"
-      -- bex's arc reaches belonging (its own warmth held even as the director
-      -- soured ada toward it); no NPC ever chose the against-desires transformation
-      has "bex.arc.belonging"
+      -- v36 drift: the drifter's extra silent turn each round closes the
+      -- 25-turn window one decision short of bex's arc-completing beat (its
+      -- own warmth held even as the director soured ada toward it), so bex
+      -- is still hopeful, not yet belonging, when the replay ends.
+      has "bex.arc.hopeful"
+      assertBool "bex has not yet reached belonging within the shortened window"
+        ("bex.arc.belonging" `notElem` facts)
+      -- no NPC ever chose the against-desires transformation
       assertBool "no NPC resigned to solitude"
         ("bex.arc.lonely" `notElem` facts && "you.arc.lonely" `notElem` facts)
 

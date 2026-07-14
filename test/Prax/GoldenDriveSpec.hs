@@ -61,13 +61,13 @@ barGolden =
   , "bex: bex: Go to bar"
   , "director: -"
   , "_sight: "
+  , "_drift: "
   , "you: you: Go to entrance"
   , "ada: ada: Greet bex"
   , "bex: bex: Order beer"
   , "director: -"
   , "_sight: "
-  , "you: you: Go to bar"
-  , "ada: ada: Fulfill bex's order"
+  , "_drift: "
   ]
 
 intrigueGolden :: [String]
