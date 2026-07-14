@@ -18,6 +18,7 @@ module Prax.Drift
   , driftSetup
   ) where
 
+import           Data.List (nub, (\\))
 import           Prax.Db (pathNames)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Types
@@ -45,7 +46,11 @@ driftChar = (character driftName) { charBoundTo = Just "drift" }
 -- motive signature never changes, so it serves its standing intention
 -- forever after the first turn.
 driftP :: [DriftRule] -> Practice
-driftP rules = practice
+driftP rules
+  | names /= nub names =
+      error ("Prax.Drift: duplicate rule names would share one due path: "
+             ++ show (names \\ nub names))
+  | otherwise = practice
   { practiceId = "drift"
   , practiceName = "time works on bodies and moods"
   , roles = ["S"]
@@ -56,6 +61,7 @@ driftP rules = practice
       ]
   }
   where
+    names = map driftRuleName rules
     compileRule r =
       [ ForEach (dueGate r ++ conds) outs | (conds, outs) <- driftBody r ]
       ++ [ ForEach (dueGate r)

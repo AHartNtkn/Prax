@@ -97,6 +97,11 @@ tests = testGroup "Prax.Drift"
       assertBool "markedA.a present" (exists "markedA.a" (db st6))
       assertBool "markedB.a present" (exists "markedB.a" (db st6))
 
+  , testCase "duplicate rule names are a loud construction-time error (one due path each)" $ do
+      r <- try (evaluate (length (show (driftP
+             [ DriftRule "same" 2 [], DriftRule "same" 3 [] ]))))
+      assertBool "duplicate rule names rejected" (isLeft (r :: Either ErrorCall Int))
+
   , testCase "a multi-segment rule name is a loud construction-time error" $ do
       r <- try (evaluate (length (show (driftP [DriftRule "a.b" 2 []]))))
       assertBool "multi-segment name rejected" (isLeft (r :: Either ErrorCall Int))
