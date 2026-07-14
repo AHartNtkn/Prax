@@ -124,4 +124,83 @@ tests = testGroup "Prax.Drift"
 
   , testCase "the drifty fixture world is well-formed" $
       assertBool "no type errors" (null (typeCheck (drifty [markR])))
+
+  , testCase "gathering: open fires at turn == period, not before" $ do
+      let (rules, seeds) = gathering "fair" 3 1
+            [Insert "marketDay.now"] [Delete "marketDay.now"]
+          base = foldl (flip performOutcome)
+                   (setCharacters [driftChar] (definePractices [driftP rules] emptyState))
+                   (driftSetup [] ++ seeds ++ [Insert "turn!0"])
+          st2 = pulse (atTurn 2 base)
+      assertBool "not open before period" (not (exists "marketDay.now" (db st2)))
+      let st3 = pulse (atTurn 3 base)
+      assertBool "opens exactly at period" (exists "marketDay.now" (db st3))
+
+  , testCase "gathering: close fires at period + duration" $ do
+      let (rules, seeds) = gathering "fair" 3 1
+            [Insert "marketDay.now"] [Delete "marketDay.now"]
+          base = foldl (flip performOutcome)
+                   (setCharacters [driftChar] (definePractices [driftP rules] emptyState))
+                   (driftSetup [] ++ seeds ++ [Insert "turn!0"])
+          st3 = pulse (atTurn 3 base)
+      assertBool "still open just before close due" (exists "marketDay.now" (db st3))
+      let st4 = pulse (atTurn 4 st3)
+      assertBool "closes exactly at period + duration" (not (exists "marketDay.now" (db st4)))
+
+  , testCase "gathering: recurs over two full cycles, due facts traced turn-by-turn" $ do
+      let (rules, seeds) = gathering "fair" 3 1
+            [Insert "marketDay.now"] [Delete "marketDay.now"]
+          base = foldl (flip performOutcome)
+                   (setCharacters [driftChar] (definePractices [driftP rules] emptyState))
+                   (driftSetup [] ++ seeds ++ [Insert "turn!0"])
+          drive st k = pulse (atTurn k st)
+
+      -- seeds: open due at period (3), close due at period + duration (4).
+      assertBool "open due seeded at period" (exists "due.fairOpen!3" (db base))
+      assertBool "close due seeded at period+duration" (exists "due.fairClose!4" (db base))
+
+      let st1 = drive base 1
+      assertBool "open due unchanged at turn 1" (exists "due.fairOpen!3" (db st1))
+      assertBool "not yet open at turn 1" (not (exists "marketDay.now" (db st1)))
+
+      let st2 = drive st1 2
+      assertBool "open due unchanged at turn 2" (exists "due.fairOpen!3" (db st2))
+
+      -- cycle 1 open: turn 3 (== period).
+      let st3 = drive st2 3
+      assertBool "cycle 1 opens at turn 3" (exists "marketDay.now" (db st3))
+      assertBool "open re-arms to 3 + period = 6" (exists "due.fairOpen!6" (db st3))
+      assertBool "close still due at 4" (exists "due.fairClose!4" (db st3))
+
+      -- cycle 1 close: turn 4 (== period + duration).
+      let st4 = drive st3 4
+      assertBool "cycle 1 closes at turn 4" (not (exists "marketDay.now" (db st4)))
+      assertBool "close re-arms to 4 + period = 7" (exists "due.fairClose!7" (db st4))
+      assertBool "open still due at 6" (exists "due.fairOpen!6" (db st4))
+
+      let st5 = drive st4 5
+      assertBool "open due unchanged at turn 5" (exists "due.fairOpen!6" (db st5))
+      assertBool "closed still at turn 5" (not (exists "marketDay.now" (db st5)))
+
+      -- cycle 2 open: turn 6 (== 2 x period).
+      let st6 = drive st5 6
+      assertBool "cycle 2 opens at turn 6 (2 x period)" (exists "marketDay.now" (db st6))
+      assertBool "open re-arms to 6 + period = 9" (exists "due.fairOpen!9" (db st6))
+      assertBool "close still due at 7" (exists "due.fairClose!7" (db st6))
+
+      -- cycle 2 close: turn 7 (== 2 x period + duration).
+      let st7 = drive st6 7
+      assertBool "cycle 2 closes at turn 7 (2 x period + duration)"
+        (not (exists "marketDay.now" (db st7)))
+      assertBool "close re-arms to 7 + period = 10" (exists "due.fairClose!10" (db st7))
+
+  , testCase "gathering: duration == period is a loud construction-time error" $ do
+      r <- try (evaluate (length
+             (snd (gathering "fair" 3 3 [Insert "x"] [Delete "x"]))))
+      assertBool "duration == period rejected" (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "gathering: duration == 0 is a loud construction-time error" $ do
+      r <- try (evaluate (length
+             (snd (gathering "fair" 3 0 [Insert "x"] [Delete "x"]))))
+      assertBool "duration == 0 rejected" (isLeft (r :: Either ErrorCall Int))
   ]

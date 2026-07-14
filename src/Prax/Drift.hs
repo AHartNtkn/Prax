@@ -17,6 +17,7 @@ module Prax.Drift
   , driftPracticeId
   , driftP
   , driftSetup
+  , gathering
   ) where
 
 import           Data.List (nub, (\\))
@@ -87,6 +88,33 @@ driftSetup rules =
   Insert "practice.drift.here"
     : [ Insert ("due." ++ driftRuleName r ++ "!" ++ show (driftPeriod r))
       | r <- rules ]
+
+-- | A recurring, self-closing convening: open effects fire every @period@
+-- rounds, close effects @duration@ rounds after each opening (both authored
+-- meanings; 0 < duration < period — a gathering that never closes, or never
+-- opens, is not a gathering). Returns the two pulse rules (give them to
+-- 'driftP' with the world's other rules) and their due seeds (append to the
+-- setup AFTER 'driftSetup'; the first convening lands one full period in,
+-- the v36 start-sated convention).
+--
+-- 'driftSetup' must NOT also receive the gathering's rules — it would seed
+-- both dues at @period@, opening and closing simultaneously. Worlds pass
+-- plain rules to 'driftSetup' and append the gathering's own seeds;
+-- 'driftP' gets ALL rules, including the gathering's.
+gathering :: String -> Int -> Int -> [Outcome] -> [Outcome]
+          -> ([DriftRule], [Outcome])
+gathering name period duration openOuts closeOuts
+  | duration < 1 || duration >= period =
+      error ("Prax.Drift: gathering " ++ name
+             ++ " needs 0 < duration < period")
+  | otherwise =
+      ( [ openR, closeR ]
+      , [ Insert ("due." ++ driftRuleName openR ++ "!" ++ show period)
+        , Insert ("due." ++ driftRuleName closeR
+                  ++ "!" ++ show (period + duration)) ] )
+  where
+    openR  = DriftRule (name ++ "Open")  period [ ([], openOuts) ]
+    closeR = DriftRule (name ++ "Close") period [ ([], closeOuts) ]
 
 -- Loud construction-time guards: a multi-segment rule name would corrupt the
 -- due path; a body using D/D2/Now would capture the gate's bindings.
