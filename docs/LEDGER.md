@@ -1024,11 +1024,14 @@ Tier 2 — agent interiority for long time-spans:
   state on the clock; the original "scores cool toward baseline" framing was REJECTED in review
   (dispositions never decay — they change through acts; games represent hours-to-weeks).
 - **Emotions** *(banked — user-proposed at the v36 spec review, deliberately after this round)*:
-  episodic feeling-states (`angry.<who>`, `afraid.<who>`) as gate facts plus vocabulary desires
-  reading them — an emotion prices the states certain actions produce, author-chosen per emotion
-  (temporary trait-shaped pricing). The existing stack serves it wholesale: v33 gates make unfelt
-  emotions planning-free, v35 signatures make onset a motivational change (re-deliberation on
-  feeling, quiet otherwise), v36 pulses are the wear-off. Trait-modulated susceptibility (short
+  episodic feeling-states (`angry.<who>`, `afraid.<who>`) as plain state facts that vocabulary
+  desires READ as conditions — an emotion changes the UTILITY of the world-states actions produce
+  (temporary trait-shaped pricing), author-chosen per emotion. Emotions NEVER touch action
+  availability: `candidateActions` is identical in every mood — they change decision-making, not
+  what decisions can be made (user's framing, load-bearing). The existing stack serves it
+  wholesale: v33's liveness skip makes unfelt emotions planning-FREE (a cost optimization only —
+  the skipped desires would have scored zero), v35 signatures make onset a motivational change
+  (re-deliberation on feeling, quiet otherwise), v36 pulses are the wear-off. Trait-modulated susceptibility (short
   temper ⇒ lower provocation bar / longer duration) is onset conditions reading trait facts — no
   new machinery. THE round-sized piece is stochastic onset: requires a seeded deterministic
   random stream carried in world state (reproducibility, goldens, replay, and persist all
