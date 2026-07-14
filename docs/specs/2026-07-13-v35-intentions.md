@@ -40,10 +40,23 @@ on. On their turn:
 **The motive signature** is the answer to "what are the inputs to *wanting to reconsider*?"
 — four components, each authored meaning, none a tuned number:
 
-1. **What I can do**: the grounded candidate labels (`candidateActions` — grounding only,
-   no scoring). New opportunities and vanished options both reconsider; a cached action
-   that is no longer available fires this trigger by construction, so a stale intention can
-   never be acted.
+1. **What I can do — refined by measurement to what I can do THAT I CARE ABOUT** (amended
+   mid-round: the original grain, full grounded-candidate equality, made the mechanism
+   inert — 120/120 real turns re-deliberated, because villagers move every round and
+   movement churns co-presence groundings; per-turn probes had measured the wrong
+   interval). Two sub-components, probed at the real own-turn interval (140 village
+   turns): **(a) my standing action is still offered** (membership by full grounded
+   equality — a stale grounding can never be acted); **(b) the set of want-bearing
+   affordance templates** — action identities whose authored outcome atoms may-unify some
+   pattern of my own wants or desires (the v26 improvability test, scoped per character
+   per template; an unresolvable `Call` conservatively bears). Opportunities that touch
+   what I care about interrupt me; irrelevant comings and goings do not. The probe ladder
+   that fixed this grain: full groundings = 0% served; templates unfiltered = 26% served,
+   0 divergences; templates dropped entirely ("bold agent") = catastrophic — dana served
+   "Wait" all drive while fresh deliberation wanted "shun carol" every round (opportunity
+   appearance carries real dramatic signal); want-bearing templates = **38% served, 0
+   divergences**, remaining deliberations all with defensible causes (arrivals expiring
+   movement picks, genuine satisfaction moves, first turns).
 2. **How I am doing**: the per-want satisfaction count vector over `selfWants` (counts, not
    their utility-weighted sum — two different profiles must not mask each other by summing
    equal).
@@ -58,8 +71,11 @@ Signatures are compared against the character's **last deliberation**, not the p
 turn: a change that appears and fully reverts between two of the character's turns leaves
 the signature equal and the intention standing — "nothing differs now from when I decided."
 
-**What this deliberately gives up:** a pick can in principle flip on a pure
-prediction-input change — another character's private state shifts what the mover would be
+**What this deliberately gives up:** reconsideration driven purely through predicted
+OTHERS' responses to newly-available actions lags one beat (the bearing test is
+first-order: my outcomes touching my wants — a payoff reachable only via another's
+predicted reply to a fresh affordance is invisible until a signature-visible consequence
+lands); and a pick can in principle flip on a pure prediction-input change — another character's private state shifts what the mover would be
 predicted to do, while all four signature components hold still. Under these semantics the
 character keeps their intention one beat longer, until a signature-visible consequence
 lands. That is the accepted trade (arguably the more realistic fiction: she had not
