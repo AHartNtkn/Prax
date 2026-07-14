@@ -29,6 +29,7 @@ import           Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, exists)
+import           Prax.Drift (driftPracticeId)
 import           Prax.Query (Condition (..))
 import           Prax.Types
 import           Prax.Derive (Axiom (..))
@@ -237,7 +238,7 @@ sortErrors st
 clocklessDriftErrors :: PraxState -> [TypeError]
 clocklessDriftErrors st =
   [ ClocklessDrift
-  | Map.member "drift" (practiceDefs st), not (exists "turn" (db st)) ]
+  | Map.member driftPracticeId (practiceDefs st), not (exists "turn" (db st)) ]
 
 -- A tiny union-find over position-key strings.
 find :: Map.Map String String -> String -> String

@@ -40,7 +40,7 @@ driftName :: String
 driftName = "_drift"
 
 driftChar :: Character
-driftChar = (character driftName) { charBoundTo = Just "drift" }
+driftChar = (character driftName) { charBoundTo = Just driftPracticeId }
 
 -- | The drift practice's id — exported for "Prax.Relevance", whose analyses
 -- treat this practice's outcomes as ENVIRONMENT dynamics, not authored
