@@ -1013,12 +1013,13 @@ Tier 2 — agent interiority for long time-spans:
   predictor its own simulable view of the world, the per-agent-world-view machinery Versu itself
   declined to build. Base facts leaking into predictions and template-fixed believed weights (no
   per-observer intensities) are the same residual: full per-agent world-views, deferred wholesale.
-- **Sighting recency-salience** *(banked — v23)*: `Prax.Sight` sightings are single-slot (a new
-  sighting overwrites the old) and `sightedWithin` gates prediction scope with a hard
-  ticks-since-sighted threshold — a sighting one tick old and one at the horizon's edge are
-  credited identically. A recency-weighted salience model (confidence decaying smoothly with
-  elapsed ticks rather than a boolean cutoff) is banked, not built; needs a principled decay
-  function before it's more than a heuristic.
+- **Sighting recency-salience** *(DECLINED by design — user decision, v35-era backlog review)*:
+  `Prax.Sight` sightings are single-slot and `sightedWithin` gates prediction scope with a hard
+  ticks-since-sighted window. A smooth recency-weighted confidence model was banked at v23 and is
+  now explicitly rejected, permanently: the hard window IS the intended model. The gradient would
+  add authoring surface and per-pair evaluation arithmetic inside the scope check — the hottest
+  gate in prediction — for no gameplay-visible behavior difference; complexity up, cost up,
+  utility nil-to-negative. Do not re-propose.
 - **Decay & drift**: scores cool toward baseline via a bodiless ticker (the v18 `_clock` pattern);
   rates must be authored world parameters with stated semantics, not tuned constants.
 - **Calendar & gatherings** *(partially seeded — v23: `Prax.Sight`'s ticker already advances a
