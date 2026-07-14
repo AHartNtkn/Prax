@@ -33,7 +33,9 @@ advance st =
 -- 2026-07-13-v35 — commitment is the default); otherwise deliberate in full
 -- ('pickAction', unchanged), act the result, and store the new intention.
 -- A standing action whose grounding is no longer offered cannot be acted:
--- the options component of the signature has necessarily changed.
+-- 'stillOffered' checks it against the current candidates directly (the
+-- signature's bearing component would miss a vanished NON-bearing action,
+-- movement above all).
 npcAct :: Int -> Character -> PraxState -> (Maybe GroundedAction, PraxState)
 npcAct depth actor st =
   case Map.lookup name (intentions st) of
