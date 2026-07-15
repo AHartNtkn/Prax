@@ -164,8 +164,11 @@ init, or function-case) outcomes contain a `ForEach` whose conditions read the
 
 **Files:**
 - Create: `src/Prax/Emotion.hs`; Test: `test/Prax/EmotionSpec.hs` (new)
-- Modify: `src/Prax/Core.hs` (mood section DELETED: `setMood`, `moodIs`, `setMoodFn`, the
-  Ekman list, priorMood/because machinery — coreLib's function list shrinks),
+- Modify: `src/Prax/Core.hs` — **amended mid-round (build-order dependency the plan
+  missed)**: the mood section's DELETION moves to Task 3, where its last consumer (the
+  Bar) dies with it; this task only STOPS exporting what the four migrated consumers no
+  longer import. Core and Emotion coexist for exactly one intra-round commit (never
+  pushed in that state; the no-dual-systems edict governs shipped trees),
   `src/Prax/Reactions.hs`, `src/Prax/Worlds/Play.hs`, `src/Prax/Worlds/Intrigue.hs`,
   `test/Prax/CoreSpec.hs` (mood pins move to EmotionSpec), `test/Prax/DirectorSpec.hs`
   (fixture path), `prax.cabal`
@@ -279,8 +282,11 @@ Any golden movement = BLOCK.
 
 ### Task 3: The bar migration (gates become pricing)
 
-**Files:** `src/Prax/Worlds/Bar.hs`, `test/Prax/BarSpec.hs`; bar goldens (GoldenDriveSpec
-bar + LoopSpec narration) re-captured in ONE own commit.
+**Files:** `src/Prax/Worlds/Bar.hs`, `test/Prax/BarSpec.hs`, **plus (amended, from Task
+2): `src/Prax/Core.hs` — the mood section's deletion lands HERE, with its last consumer**
+(setMood, moodIs, setMoodFn, priorMood/because, Core's Ekman exports all die in this
+task's code commit); bar goldens (GoldenDriveSpec bar + LoopSpec narration) re-captured in
+ONE own commit.
 
 **Design.** Audit every `mood` reference in Bar.hs against the invariant:
 - CONTENT preconditions stay, as feels conditions: complaining about Subject requires
