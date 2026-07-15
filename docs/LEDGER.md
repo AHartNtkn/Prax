@@ -1099,6 +1099,62 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   fragments beside interface variables with no fresh machinery variable, so correctly outside this
   round's scope — banked here as a future-hygiene note for the v43 bundle, since no v43 entry
   exists yet to carry it.
+- **v41** — **one analysis surface: the world-model analyses read the cooked form**
+  (`Prax.Derive`; `Prax.Relevance`; `Prax.Engine`; `Prax.Query`; spec
+  `docs/specs/2026-07-15-v41-one-analysis-surface.md`). Second of four user-directed
+  foundations passes. The defect: the static analyses were split across parallel walker
+  families that had to be kept mentally in sync — a string-side `wantPatterns`/
+  `outcomeAtoms`/`condPatterns`/`mayUnify` beside the cooked `mayUnifySyms`/
+  `cookedReadAnchors` (v34) — and the sides had already drifted once in a way only carried
+  in someone's head (`wantPatterns` doesn't extract subquery internals; `cookedReadAnchors`
+  does; both correct for their own consumers, invisible from either alone). The fix: cook
+  first, analyze only the cooked form. `Derive`'s four axiom analyses
+  (`axiomFootprint`/`axiomNegPatterns`/`axiomHeadPatterns`/`monotoneAxioms`) re-typed onto
+  `[CookedRule]`; `Relevance`'s three (`improvableDesires`/`livenessOf`/`bearingTemplates`)
+  re-typed onto `PraxState`, reading `cookedDefs`/`cookedRules`/`cookedDesires`/
+  `cookedWants`; `retable` became two-stage (cook, then analyze the cooked tables);
+  `cookedReadAnchors` moved to `Prax.Query` as the one home for the walk it shares with
+  Derive's own condition-anchor logic. The string walkers are DELETED, not wrapped —
+  `mayUnify`, `wantPatterns`, `outcomeAtoms`, `condPatterns`, and the string-side
+  `evictionShadows` are gone from the tree (grep-proof). `relevantDelta` rewritten over
+  `internTokens`/`evictionShadowNames` in place of the old `pathNames`/`evictionShadows`
+  round trip. A free win fell out of the switch: cooked rules already carry the □-lifted
+  forms `cookAxioms` produces, so three duplicate lift enumerations died with the string
+  walkers — `axiomFootprint`'s own, `axiomHeadPatterns`'s (via the shared rules list), and
+  `axiomDerivable`'s manual `obliged.W.` prefixing.
+
+  **The one-surface rule, now stated once in both sides' module docs:** the authoring
+  boundary is string (the v38/v40 splice guards run before cooking exists, and stay
+  string-side by design), the world model is cooked. Everything downstream of `retable`
+  reads one representation, not two kept in sync by convention.
+
+  **Two benign notes, not zero-diff claims.** (1) The analyses' Call-resolution pool bias
+  flipped last-wins→first-wins over duplicate `fnName`s, now matching the engine's own
+  `lookupCookedFn` — unobservable in every shipped world (only the Bar's `tendBar`
+  practice declares functions, three distinct names; a real collision is impossible until
+  v43 lands its guard). (2) `axiomDerivable`'s lifted-head set genuinely shrank, and the
+  plan first mischaracterized why: old code manufactured a spurious `obliged.W.<head>` for
+  EVERY axiom head unconditionally, but cooked rules carry □-lifted forms only for
+  liftable (all-`Match`-body) axioms via `liftObliged` — a rule with no □-form cannot
+  derive one, so the new set is strictly more correct, not a spelling swap. Caught by the
+  Task 2 review as a mischaracterized-evidence finding (Important, no code fix), amended
+  into the plan in place (`55a8078`); unobservable in-suite because no want or gate
+  candidate anywhere anchors on the literal `obliged` (grep-confirmed), not because the
+  two forms are equivalent.
+
+  **The equivalence net was laid BEFORE the switch, not after.** `test/Prax/
+  AnalysisTableSpec.hs` pins every derived analysis table — `contMonotone`/`improvables`/
+  `liveness`/`caresAbout`/`footprint`/`negFootprint`/`axiomHeads` — for all 7 shipped
+  worlds (village, bar, bar-director, intrigue, feud, audience, play), captured
+  observationally from the pre-switch code, order included (`ebd00f2`, suite 540→547).
+  The switch (`2b5919e`) then had to pass all 7 pins unchanged to land at all; it did, on
+  the first full run. Goldens byte-identical; ViewInvariant green.
+
+  Suite: 547/547, zero warnings, hlint clean, `prax check` well-formed on all 7 worlds.
+  Queue item closed: v41 is the second of the four foundations passes (v40 hygiene vars →
+  **v41 analysis unification** → v42 dead-condition lint → v43 the hygiene bundle);
+  **v42 is next**, and it is the first NEW analysis written against the unified surface —
+  the reason this round came before it rather than after.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
