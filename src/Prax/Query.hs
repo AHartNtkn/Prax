@@ -24,6 +24,7 @@ module Prax.Query
   , forAll
   , implies
   , groundCondition
+  , conditionVars
   , query
   , satisfies
   , countSatisfying
@@ -45,9 +46,12 @@ import           Prax.Sym (Sym, intern, symIsVar, symName)
 data CmpOp = Lt | Lte | Gt | Gte
   deriving (Eq, Show)
 
--- | Binary integer operators for 'Calc' (@add@, @sub@, @mul@; Praxish omits
--- division deliberately to keep the DB integer-valued).
-data CalcOp = Add | Sub | Mul
+-- | Binary integer operators for 'Calc' (@add@, @sub@, @mul@, @mod@; Praxish
+-- omits division deliberately to keep the DB integer-valued — 'Mod'
+-- preserves that rationale, since modulo is itself integral. 'Mod' uses
+-- Haskell's @mod@: the result carries the divisor's sign, so it is
+-- non-negative for a positive modulus (e.g. @(-3) \`mod\` 5 == 2@).
+data CalcOp = Add | Sub | Mul | Mod
   deriving (Eq, Show)
 
 -- | A single condition in a query.
@@ -115,6 +119,26 @@ groundCondition b c = case c of
   Or clauses       -> Or (map (map (groundCondition b)) clauses)
   Absent cs        -> Absent (map (groundCondition b) cs)
   Exists cs        -> Exists (map (groundCondition b) cs)
+
+-- | Every name a condition /mentions/ — a total walk over every constructor,
+-- including subquery internals (an over-approximation of what it binds: e.g.
+-- 'Eq'\/'Neq'\/'Cmp'\/'Calc'\/'Count' operands are listed whether they are
+-- variables or literal constants). The shared home for reserved-variable
+-- guards ('Prax.Drift.guardRule', 'Prax.Rng.draw') and similar checks that
+-- need every name a condition could touch, not just its free variables.
+conditionVars :: Condition -> [String]
+conditionVars c = case c of
+  Match s          -> pathNames s
+  Not s            -> pathNames s
+  Absent cs        -> concatMap conditionVars cs
+  Exists cs        -> concatMap conditionVars cs
+  Or cls           -> concatMap (concatMap conditionVars) cls
+  Subquery v f w   -> v : f ++ concatMap conditionVars w
+  Eq a b           -> [a, b]
+  Neq a b          -> [a, b]
+  Cmp _ a b        -> [a, b]
+  Calc v _ a b     -> [v, a, b]
+  Count v s        -> [v, s]
 
 -- | The cooked mirror of 'Condition': every operand is pre-interned to a
 -- 'Sym' at cook time — 'Match'\/'Not''s sentence is pre-split
@@ -343,3 +367,4 @@ applyCalc :: CalcOp -> Integer -> Integer -> Integer
 applyCalc Add = (+)
 applyCalc Sub = (-)
 applyCalc Mul = (*)
+applyCalc Mod = mod

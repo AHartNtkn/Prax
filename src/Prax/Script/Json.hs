@@ -65,10 +65,11 @@ parseCmp "gt" = pure Gt; parseCmp "gte" = pure Gte
 parseCmp s    = fail ("unknown comparison operator " ++ show s)
 
 calcTag :: CalcOp -> String
-calcTag Add = "add"; calcTag Sub = "sub"; calcTag Mul = "mul"
+calcTag Add = "add"; calcTag Sub = "sub"; calcTag Mul = "mul"; calcTag Mod = "mod"
 
 parseCalc :: String -> Parser CalcOp
 parseCalc "add" = pure Add; parseCalc "sub" = pure Sub; parseCalc "mul" = pure Mul
+parseCalc "mod" = pure Mod
 parseCalc s     = fail ("unknown calc operator " ++ show s)
 
 -- Conditions ------------------------------------------------------------------

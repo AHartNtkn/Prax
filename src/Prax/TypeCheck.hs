@@ -31,6 +31,7 @@ import qualified Data.Map.Strict as Map
 import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, exists)
 import           Prax.Drift (driftPracticeId)
 import           Prax.Query (Condition (..))
+import           Prax.Rng (seedPath)
 import           Prax.Types
 import           Prax.Derive (Axiom (..))
 
@@ -47,6 +48,10 @@ data TypeError
   | ClocklessDrift
     -- ^ a world registers the drift practice ('Prax.Drift.driftP') but has
     -- no sight clock (@turn@): its pulses would silently never fire.
+  | SeedlessDraw
+    -- ^ a world registers a practice whose outcomes compile a
+    -- 'Prax.Rng.draw' (a @ForEach@ guarded on the @seed@ family) but has no
+    -- @seed@ fact: every draw would silently fail to ever fire.
   deriving (Eq, Show)
 
 -- | Every well-formedness problem in a world (empty ⇒ the world is well-formed).
@@ -58,6 +63,7 @@ typeCheck st =
   ++ refErrors st
   ++ sortErrors st
   ++ clocklessDriftErrors st
+  ++ seedlessDrawErrors st
   where ps = Map.elems (practiceDefs st)
 
 -- Variables mentioned in a sentence / condition -------------------------------
@@ -239,6 +245,30 @@ clocklessDriftErrors :: PraxState -> [TypeError]
 clocklessDriftErrors st =
   [ ClocklessDrift
   | Map.member driftPracticeId (practiceDefs st), not (exists "turn" (db st)) ]
+
+-- Check 6: draws need a seeded die ------------------------------------------
+
+-- A world whose outcomes compile a 'Prax.Rng.draw' — a @ForEach@ whose
+-- guard's first condition is a @Match@ on the @seed@ family (the shape
+-- 'Prax.Rng.draw' always compiles to) — but has no @seed@ fact: the die was
+-- never seeded, so every draw's guard can never hold.
+seedlessDrawErrors :: PraxState -> [TypeError]
+seedlessDrawErrors st =
+  [ SeedlessDraw
+  | any (any outcomeUsesSeed) allOutcomeLists, not (exists seedPath (db st)) ]
+  where
+    ps = Map.elems (practiceDefs st)
+    allOutcomeLists =
+      [ initOutcomes p | p <- ps ]
+      ++ [ actionOutcomes a | p <- ps, a <- actions p ]
+      ++ [ caseOutcomes c | p <- ps, f <- functions p, c <- fnCases f ]
+    outcomeUsesSeed (ForEach conds outs) =
+      any guardReadsSeed conds || any outcomeUsesSeed outs
+    outcomeUsesSeed _ = False
+    guardReadsSeed (Match s) = case pathNames s of
+      (h : _) -> h == seedPath
+      []      -> False
+    guardReadsSeed _ = False
 
 -- A tiny union-find over position-key strings.
 find :: Map.Map String String -> String -> String

@@ -52,6 +52,7 @@ library
                       Prax.Project
                       Prax.Sight
                       Prax.Drift
+                      Prax.Rng
                       Prax.Conversation
                       Prax.Arc
                       Prax.Loop
@@ -123,6 +124,7 @@ test-suite prax-test
                       Prax.ProjectSpec
                       Prax.SightSpec
                       Prax.DriftSpec
+                      Prax.RngSpec
                       Prax.ConversationSpec
                       Prax.ArcSpec
                       Prax.IntrigueSpec

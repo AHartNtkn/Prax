@@ -22,7 +22,7 @@ module Prax.Drift
 
 import           Data.List (nub, (\\))
 import           Prax.Db (pathNames)
-import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
+import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..), conditionVars)
 import           Prax.Types
 
 -- | One authored pulse: every 'driftPeriod' rounds, apply each body clause
@@ -144,22 +144,5 @@ guardRule r
   where
     reserved = ["D", "D2", "Now"]
     bodyVars rl = concat
-      [ concatMap condNames cs ++ concatMap outNames os
+      [ concatMap conditionVars cs ++ concatMap outcomeVars os
       | (cs, os) <- driftBody rl ]
-    condNames c = case c of
-      Match s          -> pathNames s
-      Not s            -> pathNames s
-      Absent cs        -> concatMap condNames cs
-      Exists cs        -> concatMap condNames cs
-      Or cls           -> concatMap (concatMap condNames) cls
-      Subquery v f w   -> v : f ++ concatMap condNames w
-      Eq a b           -> [a, b]
-      Neq a b          -> [a, b]
-      Cmp _ a b        -> [a, b]
-      Calc v _ a b     -> [v, a, b]
-      Count v s        -> [v, s]
-    outNames o = case o of
-      Insert s       -> pathNames s
-      Delete s       -> pathNames s
-      Call _ as      -> as
-      ForEach cs os  -> concatMap condNames cs ++ concatMap outNames os

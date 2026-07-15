@@ -69,6 +69,14 @@ tests = testGroup "Prax.Query"
              [b] -> do look "BigVal" b @?= Just (VNum 25)
                        look "TinyVal" b @?= Just (VNum (-20))
              bs  -> assertFailure ("expected exactly one binding, got " ++ show (length bs))
+    , testCase "mod binds 17 mod 5 = 2" $
+        case query emptyDb [Calc "R" Mod "17" "5"] Map.empty of
+          [b] -> look "R" b @?= Just (VNum 2)
+          bs  -> assertFailure ("expected exactly one binding, got " ++ show (length bs))
+    , testCase "mod on a negative left operand follows Haskell semantics: -3 mod 5 = 2" $
+        case query emptyDb [Calc "R" Mod "-3" "5"] Map.empty of
+          [b] -> look "R" b @?= Just (VNum 2)
+          bs  -> assertFailure ("expected exactly one binding, got " ++ show (length bs))
     ]
 
   , testGroup "subquery / count  (port of tests.js subquery block)"

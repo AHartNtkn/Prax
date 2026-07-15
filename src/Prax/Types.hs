@@ -16,6 +16,7 @@ module Prax.Types
   , Action(..)
   , action
   , Outcome(..)
+  , outcomeVars
   , Function(..)
   , FnCase(..)
   , CookedOutcome(..)
@@ -38,8 +39,8 @@ module Prax.Types
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Bindings, Db, emptyDb, exists)
-import           Prax.Query (Condition, CookedCondition)
+import           Prax.Db (Bindings, Db, emptyDb, exists, pathNames)
+import           Prax.Query (Condition, CookedCondition, conditionVars)
 import           Prax.Derive (Axiom, CookedRule)
 import           Prax.Sym (Sym, intern)
 
@@ -83,6 +84,21 @@ data Outcome
     -- ^ Quantified effect: for /every/ binding of the conditions (evaluated
     -- against the closed view, snapshot at entry), apply the sub-outcomes.
   deriving (Eq, Show)
+
+-- | Every name an outcome /mentions/ — a total walk over every constructor,
+-- 'ForEach' recursing through both its guard conditions ('conditionVars')
+-- and its nested outcomes. Declared here (not alongside 'conditionVars' in
+-- "Prax.Query") because 'Outcome' lives here and "Prax.Types" already
+-- depends on "Prax.Query" — the reverse dependency would cycle. The shared
+-- home for reserved-variable guards ('Prax.Drift.guardRule',
+-- 'Prax.Rng.draw') and similar checks that need every name an outcome could
+-- touch.
+outcomeVars :: Outcome -> [String]
+outcomeVars o = case o of
+  Insert s       -> pathNames s
+  Delete s       -> pathNames s
+  Call _ as      -> as
+  ForEach cs os  -> concatMap conditionVars cs ++ concatMap outcomeVars os
 
 -- | A named function: guarded conditional effects (used for e.g. win-condition
 -- checks). The first case whose conditions hold runs; the rest are skipped.
