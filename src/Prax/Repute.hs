@@ -20,9 +20,13 @@
 --
 -- Conventions (as in "Prax.Rumor"): the deed pattern's __first__ variable is
 -- the subject (who the standing attaches to), and the variable @Regarder@ is
--- reserved — deed patterns must not use it. The deed pattern's namespace must
--- not overlap any valued-belief issue path in the same world (the same
--- invariant 'Prax.Rumor.gossip' documents).
+-- reserved — deed patterns must not use it (enforced, v40: 'standingWith'
+-- runs the deed pattern through the shared 'Prax.Types.authoredPatClash'
+-- guard before splicing it beside the axiom's own @Regarder@ join variable —
+-- previously a documented-but-unchecked convention, the same latent-capture
+-- shape 'Prax.Sight.sightP' had before its own v40 guard). The deed
+-- pattern's namespace must not overlap any valued-belief issue path in the
+-- same world (the same invariant 'Prax.Rumor.gossip' documents).
 module Prax.Repute
   ( standing
   , standingUnless
@@ -33,6 +37,7 @@ module Prax.Repute
 import           Prax.Db (isVariable, pathNames)
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Derive (Axiom, axiom)
+import           Prax.Types (authoredPatClash)
 
 -- | Every observer with evidence of the deed regards its subject under @label@.
 standing :: String -> String -> Axiom
@@ -58,8 +63,12 @@ checkedDefeater pat defeater
     defVars = filter isVariable (pathNames defeater)
 
 standingWith :: String -> [Condition] -> String -> Axiom
-standingWith pat extra label =
-  axiom (Match ("Regarder.believes." ++ pat) : extra)
+standingWith pat extra label
+  | (v : _) <- authoredPatClash ["Regarder"] (pathNames pat) =
+      error ("standing: deed pattern " ++ show pat ++ " reserves variable " ++ show v
+             ++ " -- the Prax namespace and Regarder (the axiom's own observer"
+             ++ " join variable) are both reserved")
+  | otherwise = axiom (Match ("Regarder.believes." ++ pat) : extra)
         [ "regards.Regarder." ++ subjectOf pat ++ "." ++ label ]
 
 -- | Condition: @observer@ regards @subject@ under @label@ (a derived fact —

@@ -130,8 +130,9 @@ gathering name period duration openOuts closeOuts
 
 -- Loud construction-time guards: a multi-segment rule name would corrupt the
 -- due path; a body authoring the Prax namespace would capture the gate's
--- own machinery (no interface splices here — drift bodies are whole-condition
--- author fragments, so the shared guard's interface list is empty).
+-- own machinery (no other forbidden names here — drift bodies are
+-- whole-condition author fragments, so the shared guard's forbiddenSplices
+-- list is empty).
 guardRule :: DriftRule -> DriftRule
 guardRule r
   | length (pathNames (driftRuleName r)) /= 1 =

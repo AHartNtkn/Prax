@@ -80,4 +80,20 @@ tests = testGroup "Prax.Repute"
              (standingUnless "stole.Culprit.loaf" "atoned.Someone" "thief"))))
       assertBool "mis-scoped defeater is an error, not a silent global amnesty"
         (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "standing: a deed pattern authoring Regarder (the axiom's own observer variable) errors loudly" $ do
+      r <- try (evaluate (length (show (standing "kicked.Regarder.dog" "brute"))))
+      assertBool "Regarder is reserved -- the axiom's own observer join variable"
+        (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "standing: a deed pattern authoring the Prax namespace errors loudly" $ do
+      r <- try (evaluate (length (show (standing "kicked.PraxX.dog" "brute"))))
+      assertBool "the Prax namespace is reserved"
+        (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "standingUnless: Regarder is reserved through the same guard (both entry points funnel through it)" $ do
+      r <- try (evaluate (length (show
+             (standingUnless "stole.Regarder.loaf" "atoned.Regarder" "thief"))))
+      assertBool "Regarder is reserved for standingUnless too"
+        (isLeft (r :: Either ErrorCall Int))
   ]

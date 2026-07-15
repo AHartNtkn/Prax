@@ -102,31 +102,38 @@ outcomeVars o = case o of
   Call _ as      -> as
   ForEach cs os  -> concatMap conditionVars cs ++ concatMap outcomeVars os
 
--- | The v40 hygiene boundary: variables an author-supplied fragment may not
--- use when a combinator splices it into generated conditions. Two sources of
+-- | Names an author-supplied fragment MUST NOT use when a combinator splices
+-- it into generated conditions (the v40 hygiene boundary). Two sources of
 -- capture, one check: the @Prax@ namespace (ALL machinery variables live
 -- there — see the spec; authors can never collide with them by accident) and
--- the combinator's own interface bindings (e.g. 'Prax.Confession.confess'
--- grounds @Actor@\/@H@ — an authored mark pattern using them would capture).
--- Returns the offenders; each combinator raises its own contextual error.
-authoredVarClash :: [String]      -- ^ the combinator's spliced interface vars
+-- @forbiddenSplices@, names the combinator ITSELF also binds in the SAME
+-- generated query (e.g. 'Prax.Confession.confess' grounds @Actor@\/@H@ — an
+-- authored mark pattern reusing either would capture, so both are listed
+-- here). @forbiddenSplices@ is a BLOCKLIST, not an allowlist: a name that is
+-- neither Prax-prefixed nor in it is unrestricted — do not pass a
+-- combinator's legitimate CONTRACT variables (e.g. 'Prax.Sight.sightP'\'s
+-- @Seer@\/@Seen@\/@Spot@) expecting them to be exempted; the empty list @[]@
+-- is how "nothing extra is forbidden" is spelled. Returns the offenders;
+-- each combinator raises its own contextual error.
+authoredVarClash :: [String]      -- ^ forbiddenSplices: the combinator's OTHER bound names in this splice
                  -> [Condition] -> [Outcome] -> [String]
-authoredVarClash interface conds outs =
-  [ v | v <- vars, isPraxVar v || v `elem` interface ]
+authoredVarClash forbiddenSplices conds outs =
+  [ v | v <- vars, isPraxVar v || v `elem` forbiddenSplices ]
   where
     vars = filter isVariable (concatMap conditionVars conds
                               ++ concatMap outcomeVars outs)
 
 -- | 'authoredVarClash' for string-pattern arguments that are not
 -- 'Condition's (e.g. 'Prax.Confession.confess'\'s mark\/deposit patterns,
--- 'Prax.Faction.factionStanding'\'s and 'Prax.Blackmail.shakedown'\'s
--- evidence patterns): same two-source check, over already-split
+-- 'Prax.Faction.factionStanding'\'s, 'Prax.Blackmail.shakedown'\'s, and
+-- 'Prax.Repute.standing'\'s evidence\/deed patterns): same two-source,
+-- @forbiddenSplices@-is-a-blocklist check, over already-split
 -- 'Prax.Db.pathNames' instead of 'conditionVars'\/'outcomeVars' — callers
 -- extract the names themselves (and drop any they mean to exempt, e.g.
 -- 'Prax.Blackmail.shakedown'\'s own victim variable) before calling.
 authoredPatClash :: [String] -> [String] -> [String]
-authoredPatClash interface names =
-  [ v | v <- filter isVariable names, isPraxVar v || v `elem` interface ]
+authoredPatClash forbiddenSplices names =
+  [ v | v <- filter isVariable names, isPraxVar v || v `elem` forbiddenSplices ]
 
 isPraxVar :: String -> Bool
 isPraxVar ('P':'r':'a':'x':_:_) = True
