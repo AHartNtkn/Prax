@@ -32,6 +32,15 @@ import           Prax.Worlds.Village (villageWorld)
 -- bex's next turns -- so bex's arc-completing "settle in, feeling you belong
 -- here" (and ada's "Wait a moment" before it) no longer land inside the
 -- capture: the trace is two lines shorter, itemized below.
+--
+-- v38: ada's line 11 changed from "Take offense that you ignored your
+-- greeting" to "Wait a moment". Cause: ada already greeted you at line 2
+-- (practice.greet.world.greeted.ada.you), so taking offense now — which
+-- makes her feel annoyed toward you — also prices her OWN grudging-courtesy
+-- want (Bar.hs, -3: cross with someone she's been outwardly warm to grates)
+-- against that standing greeted-fact. That -3, not present before feelings
+-- were priced, is enough to tip her narrow preference for taking offense
+-- over waiting; she no longer bears the grievance at all in this run.
 expectedTrace :: [String]
 expectedTrace =
   [ "you: Go to bar"
@@ -44,7 +53,7 @@ expectedTrace =
   , "ada: Fulfill bex's order"
   , "bex: Greet ada back"
   , "you: Go to entrance"
-  , "ada: Take offense that you ignored your greeting"
+  , "ada: Wait a moment"
   , "bex: Buy ada a drink"
   , "director: turn ada against bex to stir up the evening"
   , "you: Go to bar"
@@ -60,8 +69,11 @@ tests = testGroup "Prax.Loop"
           has f = assertBool f (f `elem` facts)
       -- bex responded to ada's greeting via the reaction
       has "practice.greet.world.greeted.bex.ada"
-      -- the player's ignored greeting left ada with a grievance
-      has "practice.greet.world.grievance.ada.you"
+      -- v38: ada no longer takes offense at line 11 (grudging courtesy now
+      -- prices that choice down — see expectedTrace's comment above), so
+      -- the ignored-greeting grievance never arises in this run.
+      assertBool "ada never bears the ignored-greeting grievance"
+        ("practice.greet.world.grievance.ada.you" `notElem` facts)
       -- the director intervened once, injecting a rivalry between the two friends
       has "dm.stirred"
       has "practice.greet.world.grievance.ada.bex"
