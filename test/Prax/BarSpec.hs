@@ -5,11 +5,12 @@ import           Data.List (isInfixOf)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, assertFailure)
 
-import           Prax.Db (dbToSentences)
+import           Prax.Db (dbToSentences, exists)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, performOutcome)
-import           Prax.Planner (pickAction)
-import           Prax.Core (adjustScore, setMood, warmth, annoyed)
+import           Prax.Planner (candidateActions, pickAction)
+import           Prax.Core (adjustScore, warmth)
+import           Prax.Emotion (feelToward, unfeelToward, annoyed)
 import           Prax.Beliefs (believe)
 import           Prax.Conversation (beginConversation)
 import           Prax.Sight (sightName)
@@ -154,15 +155,55 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       let warm = performOutcome (adjustScore "bex" "ada" warmth 20 "fondness") atBar
       assertBool "buy option appears once warm enough" (bexCanBuy warm)
 
-  , testCase "an annoyed mood withholds the friendly buy action" $ do
-      let atBar = performOutcome (Insert "practice.world.world.at.bex!bar") barWorld
-          bexCanBuy s = any (("Buy ada a drink" `isInfixOf`) . gaLabel) (possibleActions s "bex")
-      -- Warm enough to buy…
-      let warm = performOutcome (adjustScore "bex" "ada" warmth 20 "fondness") atBar
-      assertBool "warm bex can buy" (bexCanBuy warm)
-      -- …but once annoyed at ada, bex withholds the gesture.
-      let sulky = performOutcome (setMood "bex" annoyed "ada" "wasRude") warm
-      assertBool "annoyed bex will not buy" (not (bexCanBuy sulky))
+  , testCase "cross bartenders may pour, and won't: the gate is gone, the reluctance is priced (both halves)" $ do
+      -- Warm bex past the buy threshold and let her settle in (so buying,
+      -- not the arc's "settle in" beat, is her best remaining move — this
+      -- isolates the buy decision from the unrelated +25 arc want).
+      let atBar   = performOutcome (Insert "practice.world.world.at.bex!bar") barWorld
+          warm    = performOutcome (adjustScore "bex" "ada" warmth 20 "fondness") atBar
+          bexOf s = case [ c | c <- characters s, charName c == "bex" ] of
+                      (c : _) -> c
+                      []      -> error "bex not found in given state"
+          settleGa = case [ ga | ga <- candidateActions warm (bexOf warm)
+                                , "settle in" `isInfixOf` gaLabel ga ] of
+                       (ga : _) -> ga
+                       []       -> error "no settle-in action offered to warm bex"
+          settled  = performAction warm settleGa
+          buys ga    = "Buy ada a drink" `isInfixOf` gaLabel ga
+          canBuy s   = any buys (candidateActions s (bexOf s))
+          picksBuy s = maybe False buys (pickAction 2 s (bexOf s))
+      assertBool "warm, untroubled bex both can and does buy"
+        (canBuy settled && picksBuy settled)
+
+      -- Annoyed at ada: the buy grounding is STILL offered — THE INVARIANT:
+      -- a feeling gates no decision (availability half).
+      let sulky = performOutcome (feelToward "bex" annoyed "ada") settled
+      assertBool "annoyed bex can still buy (no availability gate)" (canBuy sulky)
+      -- …but the planner prices the grudge out: she won't choose it
+      -- (pricing half — Bar.hs's grudging-round want, -8, outweighs the
+      -- round's +6 ordinary appeal).
+      assertBool "annoyed bex does not pick buying" (not (picksBuy sulky))
+
+      -- Unfeel it (venting, or the fade pulse below): she buys again,
+      -- exactly as before — the third state the pin asserts.
+      let mollified = performOutcome (unfeelToward "bex" annoyed "ada") sulky
+      assertBool "un-annoyed again, she can buy"  (canBuy mollified)
+      assertBool "un-annoyed again, she picks it" (picksBuy mollified)
+
+  , testCase "an onlooker's disapproval-annoyance fades on the pulse" $ do
+      served  <- runSteps barWorld
+        [ ("bex", "Go to bar"), ("bex", "Order beer"), ("ada", "Fulfill bex") ]
+      stiffed <- runSteps served  [ ("bex", "Leave ada") ]
+      judged  <- runSteps stiffed [ ("ada", "Disapprove of bex") ]
+      assertBool "ada is annoyed at bex right after disapproving"
+        (exists "ada.feels.annoyed.toward.bex" (db judged))
+      -- feelingsFade's period is 4 (Bar.hs, test-compressed): the same
+      -- hand-clock idiom as the metabolism pulse pins above, four ticks to
+      -- reach its own due.
+      let atDue  = tick (tick (tick (tick judged)))
+          pulsed = pulse atDue
+      assertBool "the annoyance has faded"
+        ("ada.feels.annoyed.toward.bex" `notElem` dbToSentences (db pulsed))
 
   , testCase "greeting spawns a response reaction the greeted party can take" $ do
       -- you go to the bar and greet ada; that spawns a respondGreet reaction.
@@ -224,7 +265,7 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
                  [ Insert "practice.world.world.at.ada!entrance"  -- ada steps out
                  , Insert "practice.world.world.at.you!bar"
                  , Insert "practice.world.world.at.bex!bar"
-                 , setMood "you" annoyed "ada" "wasRude" ]        -- you're cross with ada
+                 , feelToward "you" annoyed "ada" ]                -- you're cross with ada
       assertBool "the rumour is available behind ada's back"
         (any (("Warn bex that ada resents" `isInfixOf`) . gaLabel) (possibleActions s0 "you"))
       s1 <- runSteps s0 [ ("you", "Warn bex that ada resents") ]
@@ -266,7 +307,7 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
   , testCase "a gossip quip transmits a (possibly-false) belief in conversation" $ do
       -- bex, cross with you, is chatting with ada on the gossip topic.
       let g0 = foldl (flip performOutcome) barWorld
-                 (setMood "bex" annoyed "you" "grudge"
+                 (feelToward "bex" annoyed "you"
                    : beginConversation "bex" "ada" "gossip")
       assertBool "the gossip quip is available to the speaker"
         (any (("Confide to ada that you resents them" `isInfixOf`) . gaLabel)

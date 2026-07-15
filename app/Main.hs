@@ -367,7 +367,7 @@ renderScene st =
 
     moods =
       [ who ++ " feels " ++ feeling ++ " toward " ++ target
-      | b <- rows "Who.mood!Feeling.toward!Target"
+      | b <- rows "Who.feels.Feeling.toward.Target"
       , Just who <- [val "Who" b], Just feeling <- [val "Feeling" b]
       , Just target <- [val "Target" b] ]
 

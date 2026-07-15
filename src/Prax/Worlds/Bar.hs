@@ -27,7 +27,9 @@ module Prax.Worlds.Bar
 import           Prax.Query
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome, setCharacters)
-import           Prax.Core
+import           Prax.Core (coreLib, adjustScore, warmth, scoreAtLeast)
+import           Prax.Emotion (feelToward, feelingToward, happy, sad, annoyed, pleased,
+                               feelingsFade)
 import           Prax.Reactions
 import           Prax.Deontic
 import           Prax.Beliefs
@@ -88,20 +90,19 @@ greetP = practice
           , Match "practice.world.world.at.Other!Place"
           , Neq "Actor" "Other"
           , Not "practice.greet.World.greeted.Actor.Other"
-          , Not "Actor.mood!annoyed.toward!Other"
           , Not (beliefSentence "Actor" "resentedBy.Other" "yes")  -- wary of those you think dislike you
             -- if they've greeted you and you owe a response, use that, not a new greeting
           , Not (reactionPath "respondGreet" ["Other", "Actor"]) ]
           [ Insert "practice.greet.World.greeted.Actor.Other"
           , adjustScore "Actor" "Other" warmth 10 "greeting"
-          , setMood "Actor" pleased "Other" "greeting"
+          , feelToward "Actor" pleased "Other"
           , spawnReaction "respondGreet" ["Actor", "Other"] ]
 
       , action "[Actor]: Warn [Hearer] that [Subject] resents them"
           [ Match "practice.world.world.at.Actor!Place"
           , Match "practice.world.world.at.Hearer!Place"
           , Neq "Actor" "Hearer"
-          , Match "Actor.mood!annoyed.toward!Subject"     -- you must actually be cross with Subject
+          , feelingToward "Actor" annoyed "Subject"     -- you must actually be cross with Subject
           , Neq "Actor" "Subject"
           , Neq "Hearer" "Subject"
           , Not "practice.world.world.at.Subject!Place"    -- behind Subject's back
@@ -112,13 +113,12 @@ greetP = practice
           [ Match (beliefSentence "Actor" "resentedBy.Subject" "yes")
           , Match "practice.greet.world.greeted.Subject.Actor" ]  -- they greeted you: evidence
           [ forget "Actor" "resentedBy.Subject"
-          , setMood "Actor" pleased "Subject" "reassured" ]
+          , feelToward "Actor" pleased "Subject" ]
 
       , action "[Actor]: Strike up a conversation with [Other]"
           ( [ Match "practice.world.world.at.Actor!Place"
             , Match "practice.world.world.at.Other!Place"
             , Neq "Actor" "Other"
-            , Not "Actor.mood!annoyed.toward!Other"
             , Not (beliefSentence "Actor" "resentedBy.Other" "yes")
             , Not (talkPath "Actor" "Other")           -- not already talking (either order)
             , Not (talkPath "Other" "Actor")
@@ -131,15 +131,14 @@ greetP = practice
             , Match "practice.world.world.at.Other!Place"
             , Neq "Actor" "Other"
             , Not "practice.greet.World.grievance.Actor.Other"
-            , Not "Actor.mood!annoyed.toward!Other"
             , Not (beliefSentence "Actor" "resentedBy.Other" "yes")
             , Not "practice.greet.World.bought.Actor.Other" ]
             ++ scoreAtLeast "Actor" "Other" warmth buyThreshold )
           [ Insert "practice.greet.World.bought.Actor.Other"
           , adjustScore "Other" "Actor" warmth 15 "boughtMeADrink"
           , adjustScore "Actor" "Other" warmth 5 "feelingGenerous"
-          , setMood "Actor" pleased "Other" "generosity"
-          , setMood "Other" pleased "Actor" "aFreeDrink" ]
+          , feelToward "Actor" pleased "Other"
+          , feelToward "Other" pleased "Actor" ]
       ]
   }
 
@@ -154,18 +153,17 @@ respondGreetP = practice
   , actions =
       [ action "[Actor]: Greet [Greeter] back"
           [ Eq "Actor" "Greeted"
-          , Not "Greeted.mood!annoyed.toward!Greeter"
           , Not (beliefSentence "Greeted" "resentedBy.Greeter" "yes") ]
           [ Insert "practice.greet.world.greeted.Greeted.Greeter"
           , adjustScore "Greeted" "Greeter" warmth 10 "greetedBack"
-          , setMood "Greeted" pleased "Greeter" "greetedBack"
+          , feelToward "Greeted" pleased "Greeter"
           , endReaction "respondGreet" ["Greeter", "Greeted"] ]
 
       , action "[Actor]: Rebuff [Greeter]"
           [ Eq "Actor" "Greeted" ]
-          [ setMood "Greeted" annoyed "Greeter" "notInTheMood"
+          [ feelToward "Greeted" annoyed "Greeter"
           , adjustScore "Greeted" "Greeter" warmth (-5) "rebuffed"
-          , setMood "Greeter" sad "Greeted" "wasRebuffed"
+          , feelToward "Greeter" sad "Greeted"
           , adjustScore "Greeter" "Greeted" warmth (-10) "rebuffedMe"
           , endReaction "respondGreet" ["Greeter", "Greeted"] ]
 
@@ -174,7 +172,7 @@ respondGreetP = practice
           , Not "practice.greet.world.greeted.Greeted.Greeter"
           , Not "practice.greet.world.grievance.Greeter.Greeted" ]
           [ Insert "practice.greet.world.grievance.Greeter.Greeted"
-          , setMood "Greeter" annoyed "Greeted" "ignoredMyGreeting"
+          , feelToward "Greeter" annoyed "Greeted"
           , adjustScore "Greeter" "Greeted" warmth (-15) "snubbedMe"
           , endReaction "respondGreet" ["Greeter", "Greeted"] ]
       ]
@@ -207,7 +205,7 @@ arcP = practice
           ( [ Eq "Actor" "Self", arcIs "Actor" "hopeful" ]
             ++ scoreAtLeast "Actor" "Friend" warmth 20 )   -- you've warmed to someone
           [ enterArc "Actor" "belonging"
-          , setMood "Actor" happy "here" "foundMyPeople" ]
+          , feelToward "Actor" happy "here" ]
 
         -- A transformation *against* one's desires: sliding into loneliness
         -- forecloses the belonging you crave (+25) and is itself dreaded (-25),
@@ -218,7 +216,7 @@ arcP = practice
           [ Eq "Actor" "Self"
           , arcIs "Actor" "hopeful" ]
           [ enterArc "Actor" "lonely"
-          , setMood "Actor" sad "here" "whatsThePoint" ]
+          , feelToward "Actor" sad "here" ]
       ]
   }
 
@@ -247,7 +245,7 @@ tendBarP = practice
           [ Delete "practice.tendBar.Place.Bartender.customer.Customer!order"
           , Insert "practice.tendBar.Place.Bartender.customer.Customer!beverage!Beverage"
           , adjustScore "Customer" "Bartender" warmth 8 "servedMeWell"
-          , setMood "Customer" pleased "Bartender" "gotMyDrink"
+          , feelToward "Customer" pleased "Bartender"
           , spawnReaction "settleUp" ["Customer", "Bartender"]
             -- being served creates a real obligation to settle (a first-class □)
           , oblige "Customer" "Customer.tipped.Bartender" ]
@@ -292,6 +290,14 @@ metabolism = DriftRule "metabolism" 2
     , [ Insert "practice.patron.P.drinks!M"
       , Call "checkSober" ["P", "M"] ] ) ]
 
+-- TEST-COMPRESSED cadence (see Prax.Drift's authoring note; real authoring:
+-- hours, ~24-48 rounds): every standing feeling, an onlooker's
+-- disapproval-annoyance chief among them, fades on this pulse if never
+-- vented ('Prax.Emotion.feelingsFade'; coarse by design, the whole feels.*
+-- family swept at once regardless of onset time).
+barFade :: DriftRule
+barFade = feelingsFade 4
+
 -- Settling up after being served: the obligation "[Patron] should tip
 -- [Bartender]" (a first-class deontic □, raised on serve — see 'oblige' above) is
 -- discharged by tipping, or breached by leaving the tab unpaid — a norm violation
@@ -309,7 +315,7 @@ settleUpP = practice
           , discharge "Patron" "Patron.tipped.Bartender" -- …so the obligation is met and closed
           , adjustScore "Bartender" "Patron" warmth 8 "aGoodTipper"
           , adjustScore "Patron" "Bartender" warmth 3 "friendlyService"
-          , setMood "Bartender" pleased "Patron" "aGoodTip"
+          , feelToward "Bartender" pleased "Patron"
           , endReaction "settleUp" ["Patron", "Bartender"] ]
       , action "[Actor]: Leave [Bartender]'s tab unpaid"
           [ Eq "Actor" "Patron" ]
@@ -335,9 +341,9 @@ converseP = practice
           , adjustScore "Partner" "Actor" warmth 2 "pleasantChat" ]
       , quip "compliment" "[Actor]: Compliment [Partner]" "rapport" []
           [ adjustScore "Partner" "Actor" warmth 8 "kindWords"
-          , setMood "Partner" pleased "Actor" "flattered" ]
+          , feelToward "Partner" pleased "Actor" ]
       , quip "gossip" "[Actor]: Confide to [Partner] that [Subject] resents them" "gossip"
-          [ Match "Actor.mood!annoyed.toward!Subject"
+          [ feelingToward "Actor" annoyed "Subject"
           , Neq "Actor" "Subject", Neq "Partner" "Subject" ]
           [ believe "Partner" "resentedBy.Subject" "yes" ]
       , changeSubject "[Actor]: Warm the talk toward rapport" "rapport"
@@ -363,7 +369,7 @@ dmPractice = practice
             ++ scoreAtLeast "X" "Y" warmth 20     -- bind two who currently like each other…
             ++ [ Neq "X" "Y", Neq "X" "Actor", Neq "Y" "Actor" ] )  -- …then require them distinct
           [ Insert "dm.stirred"
-          , setMood "X" annoyed "Y" "aBitterMisunderstanding"
+          , feelToward "X" annoyed "Y"
           , adjustScore "X" "Y" warmth (-30) "aSuddenFallingOut"
           , Insert "practice.greet.world.grievance.X.Y" ]
       ]
@@ -390,7 +396,7 @@ directP = practice
           , Neq "X" "Y", Neq "X" "Director", Neq "Y" "Director"
           , Not "direct.stirred.X.Y" ]
           [ Insert "direct.stirred.X.Y"
-          , setMood "X" annoyed "Y" "aSuddenCoolness"
+          , feelToward "X" annoyed "Y"
           , adjustScore "X" "Y" warmth (-30) "aFallingOut"
           , Insert "practice.greet.world.grievance.X.Y" ]
 
@@ -403,8 +409,8 @@ directP = practice
           [ Insert "direct.kindled.X.Y"
           , adjustScore "X" "Y" warmth 15 "aWarmFeeling"
           , adjustScore "Y" "X" warmth 15 "aWarmFeeling"
-          , setMood "X" pleased "Y" "aSuddenFondness"
-          , setMood "Y" pleased "X" "aSuddenFondness" ]
+          , feelToward "X" pleased "Y"
+          , feelToward "Y" pleased "X" ]
 
       , action "[Actor]: cast a pall over [X]'s evening"
           [ Eq "Actor" "Director"
@@ -412,7 +418,7 @@ directP = practice
           , Neq "X" "Director"
           , Not "direct.unsettled.X" ]
           [ Insert "direct.unsettled.X"
-          , setMood "X" sad "here" "aCreepingUnease" ]
+          , feelToward "X" sad "here" ]
       ]
   }
 
@@ -431,6 +437,16 @@ ada = (character "ada")
       , Want [ Match "practice.greet.world.greeted.ada.Other" ] 2
       , Want [ Match "practice.greet.world.grievance.ada.Other" ] 2
       , Want [ Match "ada.disapprovedOf.Offender" ] 3          -- disapproves of tab-skippers
+        -- Grudging courtesy (v38): the gate that once withheld greeting (or
+        -- chatting with) a cross target is gone; the reluctance is priced
+        -- instead. -3 outweighs the +2 ordinary appeal of greeting (this
+        -- same want, just above — greeting and greeting-back write the
+        -- identical fact); it dominates trivially for striking up a
+        -- conversation too, which carries no self-want of its own to
+        -- outweigh.
+      , Want [ Match "ada.feels.annoyed.toward.T"
+             , Or [ [ Match "practice.greet.world.greeted.ada.T" ]
+                  , [ Match "ada.chattedWith.T" ] ] ] (-3)
       ] }
 
 -- A patron who wants a beer, greets people, tips (and strongly avoids stiffing
@@ -452,6 +468,19 @@ bex = (character "bex")
       , Want [ arcIs "bex" "lonely" ] (-25)
       , Want [ arcIs "bex" "belonging", Match "practice.world.world.at.bex!bar" ] 3
       , Want [ arcIs "bex" "lonely", Match "practice.world.world.at.bex!entrance" ] 8
+        -- Grudging courtesy (v38): as ada's, above — -3 outweighs the +2
+        -- greeting/greeting-back appeal (this same want, just above), and
+        -- dominates trivially for conversation, which has no self-want to
+        -- outweigh.
+      , Want [ Match "bex.feels.annoyed.toward.T"
+             , Or [ [ Match "practice.greet.world.greeted.bex.T" ]
+                  , [ Match "bex.chattedWith.T" ] ] ] (-3)
+        -- Grudging courtesy, the round (v38): buying T a drink while cross
+        -- with T grates strongly enough to outweigh the round's own +6
+        -- appeal (the bought.bex.Friend want, just above) — the v38
+        -- invariant: the gate is gone, the reluctance is priced.
+      , Want [ Match "bex.feels.annoyed.toward.T"
+             , Match "practice.greet.world.bought.bex.T" ] (-8)
       ] }
 
 -- The director: no physical presence, only metalevel desires; bound to its own
@@ -474,6 +503,13 @@ cai = (character "cai")
       , Want [ Match "practice.greet.world.bought.cai.Friend" ] 6
       , Want [ arcIs "cai" "belonging" ] 25
       , Want [ arcIs "cai" "lonely" ] (-25)
+        -- Grudging courtesy (v38): as ada's/bex's, above.
+      , Want [ Match "cai.feels.annoyed.toward.T"
+             , Or [ [ Match "practice.greet.world.greeted.cai.T" ]
+                  , [ Match "cai.chattedWith.T" ] ] ] (-3)
+        -- Grudging courtesy, the round (v38): as bex's, above.
+      , Want [ Match "cai.feels.annoyed.toward.T"
+             , Match "practice.greet.world.bought.cai.T" ] (-8)
       ] }
 
 -- | The name of the drama-manager the player controls in 'barDirectorWorld'.
@@ -518,7 +554,7 @@ barWorld =
         (definePractices
            [ coreLib, disapprovalP
            , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
-           , arcP, sightP barSighting, driftP [metabolism] ]
+           , arcP, sightP barSighting, driftP [metabolism, barFade] ]
            emptyState))
         { sorts = barSorts }
     setup =
@@ -534,7 +570,7 @@ barWorld =
       , Insert "practice.dm.director"
       , Insert "practice.arc.you"
       , Insert "practice.arc.bex"
-      ] ++ sightSetup ++ driftSetup [metabolism]
+      ] ++ sightSetup ++ driftSetup [metabolism, barFade]
 
 -- | The same bar, but the human is the __drama manager__ (Versu §XI): the player
 -- controls 'directorPlayer', steering an autonomous cast (ada, bex, cai) with

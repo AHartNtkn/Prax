@@ -48,11 +48,10 @@ tests = testGroup "Prax.Worlds.Bar (player-as-DM)"
   , testCase "a DM nudge reshapes the world without the DM embodying anyone" $ do
       -- stirring bex against cai plants the annoyance + grievance in the world…
       let st = direct "stir up a rivalry between bex and cai" barDirectorWorld
-      -- Bar.hs is untouched this task (its migration is Task 3's), so its
-      -- directP still writes through Prax.Core's (kept-live-this-commit)
-      -- setMood, into the mood! family — not Prax.Emotion's feels.
+      -- v38: directP now writes through Prax.Emotion's feelToward, into the
+      -- coexisting feels.* family — not the deleted single-slot mood!.
       assertBool "bex is now annoyed at cai"
-        (exists "bex.mood!annoyed.toward!cai" (db st))
+        (exists "bex.feels.annoyed.toward.cai" (db st))
       assertBool "a grievance is recorded"
         (exists "practice.greet.world.grievance.bex.cai" (db st))
       -- …and it is one dramatic beat: the same nudge is not offered again
