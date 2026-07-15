@@ -6,7 +6,7 @@ import           Data.Either (isLeft)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
-import           Prax.Query (Condition (..))
+import           Prax.Query (CalcOp (..), Condition (..))
 import           Prax.Types (Outcome (..))
 import           Prax.Script (compile, currentSceneOf)
 import           Prax.Script.Json (encodeScript, decodeScript)
@@ -26,6 +26,10 @@ tests = testGroup "Prax.Script.Json"
 
   , testCase "malformed JSON reports an error rather than failing silently" $
       assertBool "expected a Left" (isLeft (decodeScript "{ \"start\": 3 }"))
+
+  , testCase "every CalcOp round-trips through JSON, Mod included" $ do
+      let cs = [ Calc "R" op "17" "5" | op <- [Add, Sub, Mul, Mod] ]
+      decode (encode cs) @?= Just cs
 
   , testCase "a ForEach outcome round-trips through JSON" $ do
       let o = ForEach [ Match "at.Witness!P", Neq "Witness" "Actor" ]
