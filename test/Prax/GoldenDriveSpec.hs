@@ -48,7 +48,7 @@ villageGolden =
   , "_sight: "
   , "_drift: "
   , "you: -"
-  , "bob: bob: Wait a moment"
+  , "bob: bob: Go to mill"
   , "carol: carol: Wait a moment"
   , "dana: dana: Go to square"
   , "eve: eve: Go to mill"
