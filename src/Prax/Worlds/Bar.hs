@@ -280,7 +280,8 @@ tendBarP = practice
       ]
   }
 
--- A drink wears off in about two rounds: each pulse metabolizes one drink
+-- TEST-COMPRESSED cadence (see Prax.Drift's authoring note; real
+-- authoring: ~12 rounds, an hour a drink): each pulse metabolizes one drink
 -- from every patron who has any, and sobriety returns when the count falls
 -- back under checkTipsy's own threshold (its mirror, one home).
 metabolism :: DriftRule

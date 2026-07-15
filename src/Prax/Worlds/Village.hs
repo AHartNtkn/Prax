@@ -102,9 +102,11 @@ earnBreadPursuit :: Desire
 
 -- Hunger, the build-up cargo (v36 spec @docs/specs/2026-07-14-v36-drift.md@):
 -- an episodic pulse that closes bob's bread economy into a cycle instead of
--- a one-shot want. One village mealtime ~ three rounds: hunger returns
--- three rounds after eating; the due re-arms from the pulse, so a fed bob
--- stays fed for a full period regardless of when he ate.
+-- a one-shot want. TEST-COMPRESSED cadence (see Prax.Drift's authoring
+-- note): hunger every three rounds keeps the cycle inside short test
+-- drives; real authoring is ~72 rounds — two meals a waking day at ~5
+-- minutes a round. The due re-arms from the pulse, so a fed bob stays fed
+-- for a full period regardless of when he ate.
 hungerPulse :: DriftRule
 hungerPulse = DriftRule "hunger" 3
   [ ( [ Match "appetite.X", Not "hungry.X" ], [ Insert "hungry.X" ] ) ]
@@ -128,7 +130,9 @@ suffersHunger = Desire "suffers-hunger" (Want [ Match "hungry.Owner" ] (-22))
 marketP :: Practice
 marketP = practice { practiceId = "market", roles = ["Fair"] }
 
--- Market day comes every sixth round and lasts one — most days are quiet.
+-- Market day: TEST-COMPRESSED cadence (see Prax.Drift's authoring note —
+-- real authoring: a daily morning market is ~150-round period, ~24-round
+-- duration). Every sixth round, lasting one — most days are quiet.
 -- (The original every-other-round cadence, chosen so the golden window
 -- would witness a cycle, was measured leaving NO quiet rounds: the gate
 -- toggled town-wide every round and 140-turn drives tripled. The cycle is

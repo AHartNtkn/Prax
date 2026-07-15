@@ -28,6 +28,17 @@ import           Prax.Types
 -- | One authored pulse: every 'driftPeriod' rounds, apply each body clause
 -- as a 'ForEach' (conditions may bind freely — every satisfying binding
 -- fires). Variables @D@\/@D2@\/@Now@ are reserved by the due gate.
+--
+-- __Authoring periods for real games__: a round (everyone acts once) is a
+-- few MINUTES of fiction — roughly 12 rounds an hour, ~150 to a waking day
+-- — and games run hundreds to thousands of rounds, so author periods at
+-- fiction scale: hunger ~72 rounds (two meals a day), a drink wearing off
+-- ~12 (an hour), a daily market ~150. The SHIPPED worlds compress these
+-- (hunger 3, metabolism 2, market 6) so the test suite's short drives can
+-- reach the pulses — a deliberate, NON-STANDARD truncation for testing,
+-- not a model for real authoring. Tests wanting a distant pulse should
+-- clock-jump (@Insert "turn!N"@, the DriftSpec idiom) rather than inherit
+-- compressed periods.
 data DriftRule = DriftRule
   { driftRuleName :: String   -- ^ single segment (loud error otherwise)
   , driftPeriod   :: Int      -- ^ rounds between pulses; authored meaning
