@@ -20,8 +20,10 @@
 --
 -- Conventions (as in "Prax.Rumor"): the deed pattern's __first__ variable is
 -- the subject (who the standing attaches to), and the variable @Regarder@ is
--- reserved — deed patterns must not use it (enforced, v40: 'standingWith'
--- runs the deed pattern through the shared 'Prax.Types.authoredPatClash'
+-- an INTERFACE variable in the v40 two-tier sense: worlds read it first-class
+-- (the village's fear wants), and it is forbidden only inside spliced deed
+-- patterns, where it would capture the axiom's own join (enforced, v40:
+-- 'standingWith' runs the deed pattern through the shared 'Prax.Types.authoredPatClash'
 -- guard before splicing it beside the axiom's own @Regarder@ join variable —
 -- previously a documented-but-unchecked convention, the same latent-capture
 -- shape 'Prax.Sight.sightP' had before its own v40 guard). The deed

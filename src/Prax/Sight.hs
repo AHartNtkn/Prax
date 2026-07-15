@@ -1,7 +1,8 @@
 -- | Sightings: knowing where people are is itself information.
 --
 -- A bodiless per-round ticker (the v18 clock idiom — zero engine surface)
--- advances a global turn counter @turn!N@ and, via 'ForEach' over the world's
+-- advances a global turn counter (@turn!\<n\>@, bound internally by the
+-- machinery variable @PraxN@) and, via 'ForEach' over the world's
 -- sighting template (reserved variables @Seer@\/@Seen@\/@Spot@), refreshes
 -- location-beliefs for every co-present pair:
 --
