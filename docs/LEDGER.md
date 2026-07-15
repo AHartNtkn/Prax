@@ -864,6 +864,125 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   Full suite: 485 tests, green throughout the round (zero warnings; hlint clean; goldens
   byte-identical save the one adjudicated-then-reverted village line; bar/intrigue/feud
   untouched; ViewInvariant green).
+- **v38** — **chance & feelings: a die for the drama, and the moods that use it** (`Prax.Rng`;
+  `Prax.Emotion`; `CalcOp`'s `Mod`; spec `docs/specs/2026-07-15-v38-chance-feelings.md`).
+  User-directed, reframed by the user at design review: emotions mostly reuse existing machinery
+  (episodic facts + desires for pricing, v36 pulses for wear-off, Reactions for event context), so
+  **this is an infrastructure round** — the missing primitives built as general facilities — **with
+  emotions as the example application**. The user's two design calls: feelings COEXIST (not the
+  Versu single-slot mood the engine shipped with since v2), and stochastic onset ships now rather
+  than staying banked. THE INVARIANT, restated and pinned at both scales: **emotions change
+  decision-making, never what decisions can be made** — `candidateActions` is identical in every
+  mood, asserted both at fixture scale (`Prax.EmotionSpec`'s full grounded-candidate equality with
+  and without every vocabulary feeling) and at world scale (carol's `candidateActions` unchanged
+  angry or calm, `Prax.Worlds.VillageSpec`).
+
+  **`Mod`, one operator, on rationale-consistency.** `CalcOp` gains `Mod` (Haskell semantics: the
+  result carries the divisor's sign) — closing a gap in the project's own stated reason for
+  omitting division ("keep the DB integer-valued"): modulo IS integral, so refusing it was
+  inconsistent with the rationale that justified refusing division. Pinned both directions
+  (`17 \`mod\` 5 = 2`, `(-3) \`mod\` 5 = 2`) and round-tripped through the JSON play-script format —
+  a gap the brief's own transcription missed (`Json.hs`'s `calcTag`/`parseCalc` were non-exhaustive
+  over the new constructor until a Task 1 fix closed it): an untested tag was the reviewer's one
+  Medium finding, closed same-round, mutation-verified.
+
+  **`Prax.Rng` — a die with provenance.** A deterministic random stream lives as an ordinary
+  `seed!N` fact, so reproducibility, goldens, replay, and persistence all survive it for free. The
+  generator is Park–Miller MINSTD (`seed' = seed × 16807 mod 2147483647`), checked against its own
+  canonical stream (1→16807→282475249) with its domain guard confirmed to exclude both fixed points
+  — mechanism with published provenance, fixed in the module, never tuned; the AUTHORED numbers are
+  the odds, stated in the haddock as a drama die, not a statistics library. The `draw` combinator
+  compiles "with probability num/den, further conds, apply outs" to an unconditional seed advance
+  followed by a guarded `ForEach` — **the frozen-die law**: every draw spends exactly one stream
+  step whether or not it hits, pinned directly (two consecutive draws with an unsatisfiable extra
+  guard still advance the seed to exactly lehmer²(s₀), the guarded outs never fire), because a
+  provocation that failed once must not fail identically forever. `SeedlessDraw` flags a
+  `draw`-using world with no `rngSetup` (the `ClocklessDrift` precedent); the initial seed is an
+  authored world parameter, not a mechanism constant — it selects the playthrough's fate, and
+  goldens pin it (the village ships `villageSeed = 1988`, a nod to the generator's own publication
+  year). The brief's transcribed module placement for the shared AST walkers
+  (`conditionVars`/`outcomeVars`) did not compile as written — `outcomeVars` needs `Outcome`
+  (`Prax.Types`), and `Prax.Types` already depends on `Prax.Query`, so putting it in `Prax.Query`
+  would be a module cycle GHC can't take without `.hs-boot` files this project doesn't use;
+  `outcomeVars` relocated to `Prax.Types` instead (`conditionVars` stayed in `Prax.Query` as
+  specified) — a placement fix forced by the module graph, not a design disagreement, flagged and
+  reviewer-confirmed legitimate.
+
+  **The mood system dies — coexistence makes `setMood`'s remembered-prior machinery meaningless.**
+  `feels.<who>.<emotion>[.toward.<target>]` replaces the Versu-inherited single-slot
+  `mood!<feeling>.toward!<target>` wholesale: multi-valued, so angry at two people while afraid of
+  a third coexist, each fact independent; a want reading the untargeted path sees targeted
+  instances too (`Match` sees subtrees). `Prax.Emotion` is the new home for the Ekman vocabulary,
+  wear-off (`feelingsFade`, one drift rule per world at an authored period, shipped
+  test-compressed per the now-standard label), and the authoring guidance (prefer negative pricing
+  — a feeling as discomfort driving its own discharge — both for the psychology and because v33's
+  FloorCheck keeps unfelt negative desires planning-free; positive emotion-desires are
+  action-insertable and thus AlwaysLive, allowed with the cost named).
+
+  **The migration's own sequencing bug, caught honestly, not routed around.** The round plan
+  ordered `Prax.Core`'s mood-section deletion one task before its last real consumer (`Bar.hs`)
+  died — Task 2 hit exactly the condition its own brief named as a legitimate BLOCK trigger (a
+  consumer reads moods in a way that changes decisions) and reported rather than improvised past
+  it; the plan was amended in place (`4d7d579`) to move the deletion into Task 3, landing in the
+  same commit that migrates the Bar. Task 2 shipped `Prax.Emotion` plus the four consumers whose
+  migration didn't depend on the ordering (Reactions, Play, Intrigue, DirectorSpec's fixture);
+  `Prax.Core` and `Prax.Emotion` coexisted for one intra-round commit, never pushed standalone —
+  the plan amendment is the edict-compliance record for that.
+
+  **The Bar: every mood reference classified, not assumed.** A full grep audit of `Bar.hs`'s 24
+  mood references sorted into three piles: 2 content preconditions kept as `feelingToward` (the
+  act — warning, gossiping — literally expresses the feeling); 4 pure availability gates
+  (greeting, greeting-back, starting a conversation, buying a round — the brief's prose names only
+  two of these as illustrative examples, the audit found two more structurally identical) REMOVED
+  per the invariant and replaced with authored pricing, weights verified against the live planner
+  before being pinned (grudging courtesy −3 against the existing +2 greeted-want; grudging round −8
+  against the +6 bought-want, confirmed at depth-2 lookahead to actually flip the buy decision); 18
+  `setMood` write sites converted to `feelToward`, dropping the now-meaningless `cause` argument.
+  The bar golden (12 turns) was unaffected; the longer `LoopSpec` golden (25 turns) moved exactly
+  one line — ada's earlier greeting now prices an ongoing discomfort against her own later choice
+  to take offense over it, tipping a previously-narrow preference from taking offense to waiting —
+  an intentional consequence of the standing-discomfort pricing model, not a bug, flagged for
+  reviewer judgment and confirmed as such. A CLI narration reader (`app/Main.hs`) that queried the
+  deleted `mood!` family directly — not in any task's assigned file list — was caught by the same
+  grep audit and fixed to read `feels`, live-verified in play; left unfixed it would have gone
+  silently, permanently blank.
+
+  **Carol's temper: the odds sentences, and a golden unmoved of necessity.** The village cargo
+  wires a `shortTempered.carol` disposition (never fading — a trait, not an episodic fact) into a
+  double-armed `draw` on being shunned: a 1-in-4 base arm for anyone, a 2-in-4 second arm gated on
+  the trait — both odds sentences authored, not tuned. `smoulders` prices standing anger at −8,
+  discharged by carol's existing confrontation affordance. At the shipped seed (1988), the golden's
+  own dramatic beat genuinely does make carol angry at dana mid-trace (computed and verified
+  against the live state, not assumed) — yet the 21-turn golden window is byte-identical, BY
+  NECESSITY: carol has no confront outlet inside that window, so the −8 sits as a uniform offset
+  across every option and never changes her argmax. The uniform-offset claim was re-verified under
+  both the broken and the fixed price shape below and holds identically either way — reviewer-
+  confirmed.
+
+  **The round's hard lesson, stated plainly: the discharge was initially INERT.** `unfeelToward`'s
+  leaf-only delete left a drained-but-present `toward` ancestor standing, and `smoulders`'s bare
+  subtree price (`Match "Owner.feels.angry"`) kept reading it after the "discharge" — the v32
+  drained-ancestor ambiguity's first shipped-mechanic bite (`Prax.Db.retract`'s documented
+  imprecision, banked at v32 as **asserted-endpoint marking**, amended below with this round as its
+  first real casualty). The shipped pin was a cheater: it asserted the leaf's own absence, which is
+  true, while the price it was meant to demonstrate never actually lifted. Caught by review (2
+  HIGH — the inert discharge and its cheater pin; 1 MODERATE — a false Lehmer arithmetic comment),
+  fixed by binding a real target leaf instead of testing bare existence — a new `feelingSomeone who
+  emotion targetVar` helper — and re-pinned on `evaluateCooked`'s exact values (−7 angry → 6
+  discharged, a +13 swing: the smoulder's own +8 relief plus the confront act's own +5 want firing
+  simultaneously, computed not assumed), MUTATION-VERIFIED: reverting to the broken subtree shape
+  reproduces the exact failure (`expected: 6 but got: −2`) before the fix restores green.
+  `feelingSomeone`'s safety is by convention, not enforced — it holds only until the banked engine
+  fix lands; the per-target pricing shape it enables (−8 per grudge, not per feeling) is the
+  deliberate design going forward for any future multi-target emotion pricing. The Bar was audited
+  empirically under the same risk (probed with a planted-then-drained feeling on both shapes) and
+  found already residue-safe by construction — no fix needed there.
+
+  Suite: 514 tests, 227.74s, zero failures throughout the round; zero warnings; hlint clean; `prax
+  check` well-formed on all 7 worlds; ViewInvariant green; goldens byte-identical in the bar
+  (12-turn) and every world untouched by the migration (village, intrigue, feud), with the one
+  adjudicated `LoopSpec` line itemized above and the village golden confirmed unmoved of necessity,
+  not by omission.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -985,20 +1104,32 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   tiers with N-ply lookahead (prune forbidden branches, propagate required) is the non-trivial part.
   A "beyond Versu" enhancement, not a parity gap.
 - **Asserted-endpoint marking for `Prax.Db`** *(banked — v32, found while investigating the
-  known ghost-ancestor imprecision)*. `retract` never prunes an ancestor left childless by a
-  deletion, so `dbToSentences`/`exists` can emit a drained ancestor path as if it were its own
-  fact — a real imprecision. Pruning on emptiness was tried, RED/GREEN-pinned, and then
-  **reverted** on evidence: `Prax.Worlds.Bar`'s `tendBarP` practice asserts a bartender's
-  instance fact at a path that *also* anchors transient per-customer state nested beneath it, and
-  draining that transient state to zero (an ordinary order→fulfill→drink cycle) pruned the
-  instance fact itself, permanently destroying the affordance — `Prax.Engine.possibleActions`
-  discovers instances by trie presence alone, with no separate registry. The trie cannot tell "an
-  asserted fact that happens to be childless" from "an ordinary ancestor, now childless because
-  its only occupant was retracted" — both are represented identically, and pruning is correct for
-  the first case and wrong for the second. The principled fix is a `Db`-type change: mark a node
-  as an asserted endpoint independently of whether it currently has children, so retraction can
-  prune the second case without touching the first. Out of scope as a `retract`-only patch;
-  `src/Prax/Db.hs`'s `retract`/`dbToSentences` haddocks name this entry directly.
+  known ghost-ancestor imprecision; now with a shipped casualty, v38 — see below)*. `retract`
+  never prunes an ancestor left childless by a deletion, so `dbToSentences`/`exists` can emit a
+  drained ancestor path as if it were its own fact — a real imprecision. Pruning on emptiness was
+  tried, RED/GREEN-pinned, and then **reverted** on evidence: `Prax.Worlds.Bar`'s `tendBarP`
+  practice asserts a bartender's instance fact at a path that *also* anchors transient
+  per-customer state nested beneath it, and draining that transient state to zero (an ordinary
+  order→fulfill→drink cycle) pruned the instance fact itself, permanently destroying the
+  affordance — `Prax.Engine.possibleActions` discovers instances by trie presence alone, with no
+  separate registry. The trie cannot tell "an asserted fact that happens to be childless" from "an
+  ordinary ancestor, now childless because its only occupant was retracted" — both are represented
+  identically, and pruning is correct for the first case and wrong for the second. The principled
+  fix is a `Db`-type change: mark a node as an asserted endpoint independently of whether it
+  currently has children, so retraction can prune the second case without touching the first. Out
+  of scope as a `retract`-only patch; `src/Prax/Db.hs`'s `retract`/`dbToSentences` haddocks name
+  this entry directly. **v38 gave this ambiguity its first shipped-mechanic bite**: `Prax.Emotion`'s
+  `unfeelToward` deletes only the targeted `.toward.<target>` leaf, leaving the `.toward` ancestor
+  standing childless-but-present exactly as this entry describes; a pricing want reading that
+  ancestor with a bare `Match` (`smoulders` in `Prax.Worlds.Village`) kept charging for a
+  discharged feeling, and the pin meant to catch it asserted the leaf's own absence rather than the
+  price, so it passed while the bug shipped — caught only by review, not by the pin (see the v38
+  legend row above). The workaround shipped alongside the fix (`Prax.Emotion.feelingSomeone`, which
+  binds a real target leaf instead of testing bare existence) is safe **by convention only**, not
+  by construction — every future pricing want over a discharge-able feeling depends on its author
+  reaching for `feelingSomeone` instead of `feeling`/`feelingToward`. This entry's priority is
+  raised accordingly: it is no longer a theoretical imprecision, it is a mechanism that has already
+  produced one inert discharge in shipped content.
 - **Footprint discrimination indexing** *(banked — v33, found while profiling the residual gap
   the round's A/B left after the state-aware relevance filter shipped)*. The controller's
   profile at HEAD attributes ≈11% of the profiled round to `mayUnifySyms` inside
@@ -1220,31 +1351,19 @@ Tier 2 — agent interiority for long time-spans:
   `docs/specs/2026-07-14-v36-drift.md`)*: episodic state on the clock; the original "scores cool
   toward baseline" framing was REJECTED in review (dispositions never decay — they change through
   acts; games represent hours-to-weeks).
-- **Emotions** *(banked — user-proposed at the v36 spec review, deliberately after this round)*:
-  episodic feeling-states (`angry.<who>`, `afraid.<who>`) as plain state facts that vocabulary
-  desires READ as conditions — an emotion changes the UTILITY of the world-states actions produce
-  (temporary trait-shaped pricing), author-chosen per emotion. Emotions NEVER touch action
-  availability: `candidateActions` is identical in every mood — they change decision-making, not
-  what decisions can be made (user's framing, load-bearing). The existing stack serves it
-  wholesale: v33's liveness skip makes unfelt emotions planning-FREE (a cost optimization only —
-  the skipped desires would have scored zero), v35 signatures make onset a motivational change
-  (re-deliberation on feeling, quiet otherwise), v36 pulses are the wear-off — and that half now
-  actually exists, not just as a description of the stack: `Prax.Drift`'s due-gated pulses are the
-  literal mechanism an emotion's wear-off rule would ride, proven twice over by the round's own
-  cargo (hunger builds up, tipsy wears off) before any emotion fact is authored. Trait-modulated
-  susceptibility (short
-  temper ⇒ lower provocation bar / longer duration) is onset conditions reading trait facts — no
-  new machinery. THE round-sized piece is stochastic onset: requires a seeded deterministic
-  random stream carried in world state (reproducibility, goldens, replay, and persist all
-  survive a `seed!N` fact; ambient nondeterminism is banned), with probabilities as authored
-  meaning, never tuned constants. Decide the draw primitive when built. v37 completes the
-  other half of the wear-off claim from the other direction: its reclassification means an
-  onset gate can key on a clock-moved fact directly, not only on an authored action's
-  outcome — a gathering opening (or any drift pulse) is now a legitimate emotion trigger in
-  its own right (`drawn-to-market`'s own `GateCheck` is the existence proof: onset gates can
-  now flip on clock events), so "a gathering can trigger a feeling" is no longer a
-  description of a possible design, it is what the live machinery already does for one
-  desire.
+- **Emotions** *(DONE — v38, see the legend row above; spec
+  `docs/specs/2026-07-15-v38-chance-feelings.md`)*: episodic, coexisting feeling-states, priced by
+  ordinary author-chosen desires, with stochastic onset and a drift-pulse wear-off — shipped
+  exactly along the lines this entry anticipated (v33's liveness skip, v35 signatures, and v36
+  pulses served as the existing stack the entry predicted they would; the stochastic-onset piece
+  it flagged as round-sized became `Prax.Rng`). Residue, banked: per-feeling fade stamps
+  (`feelingsFade` sweeps every standing feeling on one shared pulse per world regardless of onset
+  time — coarse by design, until a world needs per-instance timing, per its own haddock);
+  per-emotion periods (one period per world today, not per emotion); emotion visibility to other
+  minds (believed feelings, deterrence-by-anger — v38 ships own-planning pricing only); intensity
+  levels (a feeling is present or absent, no magnitude). The **asserted-endpoint marking** item
+  (above, banked at v32) is elevated, not closed by this round — see its own entry for the v38
+  casualty that raised its priority.
 - **Calendar & gatherings** *(DONE — v37, see the legend row above; spec
   `docs/specs/2026-07-14-v37-gatherings.md`)*: recurring clock-gated scene spawns (market
   day) ship, formalized as the `gathering` combinator over `Prax.Drift`'s pulse rules — the

@@ -25,10 +25,11 @@ utility. See the design writeups:
 - `Prax.Planner` — utility-based reactive selection: per-character wants, apply-and-evaluate,
   discounted lookahead.
 - `Prax.Loop` / `Prax.Worlds.Bar` / CLI — round-robin turns and a menu-driven bar demo.
-- `Prax.Core` (v2) — the Versu core model: emotions (single-slot moods with target/cause and a
-  remembered prior) and relationships (numeric, asymmetric role evaluations). Wired into the bar
-  so interaction changes feelings and feelings change behaviour (a warmth-gated "buy a drink"
-  affordance; a snub breeds an `annoyed` mood that withholds it).
+- `Prax.Core` (v2) — the Versu core model: relationships (numeric, asymmetric role evaluations).
+  Feelings (`Prax.Emotion`, v38) coexist as multi-valued episodic facts and fade on a clock,
+  replacing the original single-slot mood. Wired into the bar so interaction changes feelings and
+  feelings change behaviour through pricing, not gating (a warmth-gated "buy a drink" affordance;
+  a snub prices annoyance that makes a cross bartender reluctant to pour, not unable to).
 - `Prax.Reactions` (v3) — reactions-as-practices and norms: an action spawns a reaction practice
   offering responses (greet back / rebuff / take offense), and a norm violation (stiffing the
   bartender) spawns disapproval. NPCs avoid violations because the planner scores the
