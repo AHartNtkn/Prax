@@ -44,7 +44,7 @@ import           Prax.Debt (owes)
 import           Prax.Blackmail (shakedown)
 import           Prax.Confession (confess, absolve, incorrigible)
 import           Prax.Rng (rngSetup, draw)
-import           Prax.Emotion (feelToward, unfeelToward, angry, feelingsFade)
+import           Prax.Emotion (feelToward, unfeelToward, angry, feelingsFade, feelingSomeone)
 
 -- | You are a villager — one agent among many.
 playerName :: String
@@ -204,8 +204,14 @@ honest = Trait "honest"
 -- shunned.carol.T-and-regards) so she acts to relieve it when she can, but
 -- there is no conduct stake of hers in this world for it to outweigh; v33's
 -- FloorCheck keeps the unfelt state planning-free (verified in the pins).
+-- Bound to a real target ('feelingSomeone', not the bare subtree 'feeling'
+-- Match): confront's own discharge ('unfeelToward', below) deletes only the
+-- targeted @.toward.\<thief\>@ leaf, leaving its parent present-but-childless
+-- ('Prax.Db.retract's documented ambiguity, banked as "asserted-endpoint
+-- marking" in the LEDGER) — a subtree Match would keep reading that drained
+-- residue as if she were still angry, and the price would never lift.
 smoulders :: Desire
-smoulders = Desire "smoulders" (Want [ Match "Owner.feels.angry" ] (-8))
+smoulders = Desire "smoulders" (Want [ feelingSomeone "Owner" angry "T" ] (-8))
 
 -- Malice with a name: wanting carol ill-regarded, per head. Naming it makes
 -- it believable (a told-about spite enters prediction) but it stays

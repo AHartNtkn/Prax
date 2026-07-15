@@ -19,7 +19,7 @@ module Prax.Emotion
     -- * Feeling and unfeeling (Outcomes)
   , feel, feelToward, unfeel, unfeelToward
     -- * Reading feelings (Conditions)
-  , feeling, feelingToward
+  , feeling, feelingToward, feelingSomeone
     -- * Wear-off
   , feelingsFade
   ) where
@@ -55,14 +55,36 @@ unfeelToward :: String -> String -> String -> Outcome
 unfeelToward who emotion target =
   Delete (feelsPath who emotion ++ ".toward." ++ target)
 
--- | @who@ currently feels @emotion@ (matches targeted instances too —
--- 'Match' sees subtrees).
+-- | @who@ currently feels @emotion@ — true the instant onset writes ANY
+-- instance, targeted or not ('Match' sees subtrees). __Not safe for
+-- pricing once discharge is possible.__ 'unfeelToward' (any partial
+-- discharge) deletes only the targeted @.toward.\<target\>@ leaf, never the
+-- @.toward@ ancestor it leaves behind, childless — 'Prax.Db.retract's
+-- documented ambiguity (an asserted fact and a drained interior node are
+-- indistinguishable in the trie until the banked "asserted-endpoint
+-- marking" fix, tracked in the LEDGER, lands). This subtree 'Match' reads
+-- that drained ancestor exactly as it would a live feeling, so after the
+-- LAST targeted instance is discharged it still (wrongly) matches. Safe for
+-- a content precondition read once, right after onset, before any
+-- discharge is possible; for PRICING (any want that must actually fall to
+-- zero on discharge) use 'feelingSomeone' instead.
 feeling :: String -> String -> Condition
 feeling who emotion = Match (feelsPath who emotion)
 
+-- | @who@ feels @emotion@ toward the specific, already-known @target@.
 feelingToward :: String -> String -> String -> Condition
 feelingToward who emotion target =
   Match (feelsPath who emotion ++ ".toward." ++ target)
+
+-- | Like 'feeling', but residue-safe: binds @targetVar@ (a fresh variable
+-- the caller names) to an ACTUAL remaining target, rather than testing the
+-- emotion node's own bare existence. Unifying a free variable requires a
+-- real child to bind against, so a fully-drained @.toward@ ancestor (the
+-- same trie ambiguity 'feeling's haddock documents) yields no binding here
+-- where 'feeling' would still match. The shape any PRICING want over
+-- "still feels this, toward whoever" must use.
+feelingSomeone :: String -> String -> String -> Condition
+feelingSomeone = feelingToward
 
 -- | Feelings fade: one pulse sweeping every feeling at an authored period.
 -- TEST-COMPRESSED in shipped worlds (see Prax.Drift's authoring note; real

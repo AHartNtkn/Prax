@@ -12,7 +12,8 @@ import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, performOutcome, setDesires, groundOutcome)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Core (adjustScore)
-import           Prax.Planner (predictMove, pickAction, candidateActions, motiveSignature)
+import           Prax.Planner (predictMove, pickAction, candidateActions, motiveSignature, evaluateCooked)
+import           Prax.Minds (cookedSelfWants)
 import           Prax.Sight (sightName)
 import           Prax.Witness (witnessed)
 import           Prax.Drift (driftChar)
@@ -817,10 +818,9 @@ tests = testGroup "Prax.Worlds.Village"
       -- bob (not short-tempered) is shunned by 'you' -- isolates the BASE
       -- arm (1 in 4) alone, since the trait arm's own guard can never pass
       -- for him. Seeds computed directly against the Lehmer stream
-      -- (Prax.Rng's own constants): lehmerNext 4 = 33614 -> mod 4 == 0 (a
-      -- hit); lehmerNext 2 = 33614/2... = 16807*2 mod (2^31-1) = 33614 ->
-      -- mod 4 == 2 (a miss). Computed and cross-checked against the probe
-      -- run, not assumed.
+      -- (Prax.Rng's own constants): lehmerNext 4 = 4*16807 = 67228 ->
+      -- mod 4 == 0 (a hit); lehmerNext 2 = 2*16807 = 33614 -> mod 4 == 2 (a
+      -- miss). Computed and cross-checked against the probe run, not assumed.
       let stTheft   = doAct "bob" "steal the loaf" villageWorld
           seeded n  = foldl (flip performOutcome) stTheft (rngSetup n)
           stHitPre  = seeded 4
@@ -871,7 +871,18 @@ tests = testGroup "Prax.Worlds.Village"
       -- carol already picks "confront bob" the moment she witnesses his
       -- theft (her own +5 want dominates regardless of temper -- verified:
       -- her calm pick is identical); what v38 adds is that PERFORMING it,
-      -- while angry, also vents the feeling -- both halves asserted.
+      -- while angry, also vents the feeling -- both halves asserted. The
+      -- leaf checks alone are NOT sufficient (a review finding): 'confront'
+      -- deletes only the targeted 'carol.feels.angry.toward.bob' leaf, and
+      -- a childless '.toward' ancestor can survive that deletion
+      -- ('Prax.Db.retract's documented ambiguity) -- 'smoulders' was fixed
+      -- to bind a real target ('feelingSomeone', not the bare subtree
+      -- 'feeling') specifically so this pin can tell the difference; assert
+      -- the PRICE itself (evaluateCooked over carol's own selfWants), not
+      -- just the leaf. -7 while angry -> 6 after confronting (a +13 swing:
+      -- the smoulder's +8 relief plus the confront act's own +5
+      -- 'confronted.carol.T' want firing) -- computed directly against the
+      -- real PraxState, not assumed.
       let stTheft = doAct "bob" "steal the loaf" villageWorld
           stAngry = performOutcome (feelToward "carol" angry "bob") stTheft
       fmap gaLabel (pickAction 2 stTheft (villager "carol"))
@@ -879,9 +890,11 @@ tests = testGroup "Prax.Worlds.Village"
       fmap gaLabel (pickAction 2 stAngry (villager "carol"))
         @?= Just "carol: confront bob about the theft"
       assertBool "angry before confronting" (exists "carol.feels.angry.toward.bob" (db stAngry))
+      evaluateCooked stAngry (cookedSelfWants stAngry (villager "carol")) @?= (-7)
       let stConfront = doAct "carol" "confront bob" stAngry
-      assertBool "the smoulder is discharged: not angry after confronting"
+      assertBool "the leaf is gone after confronting"
         (not (exists "carol.feels.angry.toward.bob" (db stConfront)))
+      evaluateCooked stConfront (cookedSelfWants stConfront (villager "carol")) @?= 6
 
   , testCase "fade catches the unvented (hand clock)" $ do
       -- No outlet offered here (no theft, no witness) -- the anger just
