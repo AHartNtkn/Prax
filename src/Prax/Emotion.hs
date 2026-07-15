@@ -56,18 +56,15 @@ unfeelToward who emotion target =
   Delete (feelsPath who emotion ++ ".toward." ++ target)
 
 -- | @who@ currently feels @emotion@ — true the instant onset writes ANY
--- instance, targeted or not ('Match' sees subtrees). __Not safe for
--- pricing once discharge is possible.__ 'unfeelToward' (any partial
--- discharge) deletes only the targeted @.toward.\<target\>@ leaf, never the
--- @.toward@ ancestor it leaves behind, childless — 'Prax.Db.retract's
--- documented ambiguity (an asserted fact and a drained interior node are
--- indistinguishable in the trie until the banked "asserted-endpoint
--- marking" fix, tracked in the LEDGER, lands). This subtree 'Match' reads
--- that drained ancestor exactly as it would a live feeling, so after the
--- LAST targeted instance is discharged it still (wrongly) matches. Safe for
--- a content precondition read once, right after onset, before any
--- discharge is possible; for PRICING (any want that must actually fall to
--- zero on discharge) use 'feelingSomeone' instead.
+-- instance, targeted or not ('Match' sees subtrees). Since v39
+-- ('Prax.Db.retract' prunes unasserted childless nodes; spec
+-- @docs/specs/2026-07-15-v39-asserted-endpoints.md@) this correctly falls
+-- back to 'False' the moment the last instance is discharged: 'unfeelToward'
+-- deletes the targeted @.toward.\<target\>@ leaf, and the now-childless,
+-- never-asserted @.toward@ scaffold is pruned rather than left standing, so
+-- there is no residue for a subtree 'Match' to read. For PRICING that should
+-- scale with how many targets remain, prefer 'feelingSomeone' — not for
+-- safety (the residue trap is gone) but for its per-target semantics.
 feeling :: String -> String -> Condition
 feeling who emotion = Match (feelsPath who emotion)
 
@@ -76,13 +73,14 @@ feelingToward :: String -> String -> String -> Condition
 feelingToward who emotion target =
   Match (feelsPath who emotion ++ ".toward." ++ target)
 
--- | Like 'feeling', but residue-safe: binds @targetVar@ (a fresh variable
--- the caller names) to an ACTUAL remaining target, rather than testing the
--- emotion node's own bare existence. Unifying a free variable requires a
--- real child to bind against, so a fully-drained @.toward@ ancestor (the
--- same trie ambiguity 'feeling's haddock documents) yields no binding here
--- where 'feeling' would still match. The shape any PRICING want over
--- "still feels this, toward whoever" must use.
+-- | Like 'feeling', but binds @targetVar@ (a fresh variable the caller
+-- names) to an ACTUAL remaining target, so a want priced over it counts once
+-- per standing grudge (v38's reviewer note: −8 per target is the better
+-- semantics). Since v39 both this and 'feeling' correctly stop matching once
+-- every instance is discharged (the drained scaffold is pruned), so the
+-- choice between them is now about SEMANTICS — per-target pricing versus a
+-- single presence test — not about avoiding a residue trap. The recommended
+-- shape for any PRICING want over "still feels this, toward whoever".
 feelingSomeone :: String -> String -> String -> Condition
 feelingSomeone = feelingToward
 

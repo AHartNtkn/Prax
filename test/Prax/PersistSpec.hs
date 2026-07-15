@@ -4,7 +4,7 @@ import           Data.List (isInfixOf)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, assertFailure, (@?=))
 
-import           Prax.Db (dbToSentences)
+import           Prax.Db (dbToSentences, insertAll)
 import           Prax.Types (PraxState, Character (..), characters, cursor,
                               db, gaLabel, intentions)
 import           Prax.Engine (possibleActions, performAction)
@@ -31,6 +31,20 @@ tests = testGroup "Prax.Persist"
   [ testCase "save/load round-trips the fact database and cursor exactly" $ do
       db reloaded     @?= db mid
       cursor reloaded @?= cursor mid
+
+  , testCase "save/load round-trips an asserted interior node with transient children (marks included)" $ do
+      -- A spawned practice instance is an asserted fact that ALSO parents
+      -- transient per-customer children; the assertedness mark must survive
+      -- serialization or the instance reloads as mere scaffolding. Inject one
+      -- into a live state, round-trip, and assert full db equality (marks
+      -- included) plus that the instance re-emits as its own fact.
+      let withInstance = mid { db = insertAll
+            [ "practice.tendBar.bar.ada"
+            , "practice.tendBar.bar.ada.customer.you" ] (db mid) }
+          reloadedInst = deserializeState (serializeState withInstance) intrigueWorld
+      db reloadedInst @?= db withInstance
+      assertBool "the asserted instance re-emits as its own fact after reload"
+        ("practice.tendBar.bar.ada" `elem` dbToSentences (db reloadedInst))
 
   , testCase "save/load round-trips standing intentions exactly" $ do
       intentions reloaded @?= intentions mid

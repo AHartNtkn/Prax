@@ -50,4 +50,29 @@ tests = testGroup "Prax.EL (exclusion-logic lattice)"
     , testCase "everything entails the empty model" $
         assertBool "a.b ≤ ⊤" (leq (mk ["a.b"]) emptyDb)
     ]
+
+  , testGroup "assertedness in the lattice (v39): the mark extends pointwise"
+    [ testCase "meet preserves an assertion (a ⊓ scaffold ≤ a): forces OR, not AND" $ do
+        -- `mk ["a", "a.b"]` asserts node a AND gives it child b; `mk ["a.b"]`
+        -- leaves a an unasserted scaffold. meet conjoins facts, so a is
+        -- asserted in the meet iff asserted in EITHER operand (disjunction) —
+        -- which is what keeps the meet a lower bound of the asserted operand.
+        -- Under the wrong choice (conjunction) the meet drops a's mark and
+        -- `meet ≤ asserted` fails.
+        let asserted = mk ["a", "a.b"]
+            scaffold = mk ["a.b"]
+        case meet asserted scaffold of
+          Nothing -> assertBool "meet must exist" False
+          Just m  -> do
+            assertBool "meet ≤ asserted operand" (leq m asserted)
+            assertBool "meet ≤ scaffold operand" (leq m scaffold)
+            dbToSentences m @?= ["a", "a.b"]
+
+    , testCase "≤ consults the mark: an asserted fact entails its scaffold, not conversely" $ do
+        -- The information order must see the mark: asserting a as a fact is
+        -- strictly more information than merely scaffolding it (mirrors
+        -- Excl ≤ Multi). Ignoring the mark makes the second `leq` wrongly True.
+        assertBool "asserted ≤ scaffold" (leq (mk ["a", "a.b"]) (mk ["a.b"]))
+        assertBool "scaffold ⋠ asserted" (not (leq (mk ["a.b"]) (mk ["a", "a.b"])))
+    ]
   ]

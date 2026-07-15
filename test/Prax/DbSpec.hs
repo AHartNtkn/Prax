@@ -50,28 +50,31 @@ tests = testGroup "Prax.Db"
         dbToSentences (retract "nope.nothere" (build ["foo.bar"]))
           @?= ["foo.bar"]
 
-    , testCase "INSTANCE PERSISTENCE: draining transient state nested under an asserted path leaves the path intact" $
+    , testCase "INSTANCE PERSISTENCE: an asserted instance survives its transient children draining to nothing" $
         -- Distills Prax.Worlds.Bar's `tendBarP` pattern to the Db level: an
-        -- instance fact (e.g. "practice.tendBar.bar.ada") doubles as the
-        -- parent namespace for fully-drainable, transient per-customer state
-        -- nested underneath the SAME path (order -> fulfill deletes order,
-        -- inserts beverage -> drink deletes beverage, nothing reinserted).
-        -- `Prax.Engine.possibleActions` discovers practice instances by trie
-        -- presence alone (no separate registry), so retracting the last
-        -- transient child down to nothing must NOT take the instance path
-        -- down with it, or the bartender's own instance is gone forever with
-        -- no way to ever reinsert it.
+        -- instance fact (e.g. "practice.tendBar.bar.ada") is asserted at spawn
+        -- and doubles as the parent namespace for fully-drainable, transient
+        -- per-customer state nested underneath the SAME path (order -> fulfill
+        -- deletes order, inserts beverage -> drink deletes beverage, nothing
+        -- reinserted). `Prax.Engine.possibleActions` discovers practice
+        -- instances by trie presence alone (no separate registry), so
+        -- retracting the last transient child down to nothing must NOT take
+        -- the instance path down with it, or the bartender's own instance is
+        -- gone forever with no way to ever reinsert it.
         --
-        -- This is the regression net for a real bug found (and reverted) in
-        -- this task: pruning ancestors left childless by retract broke
-        -- exactly this pattern (`BarSpec`'s "drinking two beers" test failed
-        -- on the second order after that fix). See
-        -- `.superpowers/sdd/task-2b-report.md` for the full trace. The trie
-        -- currently cannot distinguish "asserted instance fact that happens
-        -- to have children" from "ordinary ancestor, now childless" — see
-        -- `retract`'s haddock — so this drained ancestor is (unavoidably,
-        -- for now) ALSO what `dbToSentences` emits as a phantom fact; that
-        -- emission is the documented cost of keeping the instance alive.
+        -- This is v39's completion of a story open since v32. v32 tried naive
+        -- pruning (delete every childless ancestor) and REVERTED it: it
+        -- destroyed exactly this instance the moment its transient children
+        -- drained (`BarSpec`'s "drinking two beers" failed on the second
+        -- order; see `.superpowers/sdd/task-2b-report.md`). v38 then bit on
+        -- the OTHER horn — the un-pruned residue let a fully-drained scaffold
+        -- keep answering `Match` as a phantom fact (`unfeelToward` left
+        -- `feels.angry.toward` standing). Both are real requirements; the
+        -- representation was deficient. v39 marks assertedness: the instance
+        -- is ASSERTED (a fact independent of its children) so it survives the
+        -- drain, while the transient `customer.you` scaffold is NEVER asserted
+        -- so its last-child retract eagerly prunes it — no phantom remains.
+        -- See docs/specs/2026-07-15-v39-asserted-endpoints.md.
         let instanceFact = "practice.tendBar.bar.ada"
             db0 = build [instanceFact]
             db1 = insert (instanceFact ++ ".customer.you!order!beer") db0
@@ -79,9 +82,13 @@ tests = testGroup "Prax.Db"
             db3 = insert (instanceFact ++ ".customer.you!beverage!beer") db2
             db4 = retract (instanceFact ++ ".customer.you!beverage") db3
         in do
+          -- The asserted instance survives the drain (the v32 requirement,
+          -- now met BY MARKING rather than by refusing to prune).
           exists instanceFact db4 @?= True
-          exists (instanceFact ++ ".customer.you") db4 @?= True
-          dbToSentences db4 @?= [instanceFact ++ ".customer.you"]
+          -- The drained transient scaffold is gone (the v38 residue, pruned
+          -- because `customer.you` was never asserted as its own fact).
+          exists (instanceFact ++ ".customer.you") db4 @?= False
+          dbToSentences db4 @?= [instanceFact]
 
     , testCase "sibling and shared ancestors survive retracting the other sibling" $
         -- Two facts sharing a prefix (two children under `carol`): retracting
@@ -98,6 +105,50 @@ tests = testGroup "Prax.Db"
           exists "eve.lied" db' @?= True
           exists "eve" db' @?= True
           dbToSentences db' @?= ["eve.lied.dana.stole.carol.purse"]
+
+    , testCase "v38 repro: retracting the last targeted leaf prunes the drained `toward` ancestor" $
+        -- The v38 bug at the Db level: `unfeelToward` deletes only the
+        -- `.toward.<target>` leaf; before v39 the childless `.toward` ancestor
+        -- survived and a prefix `Match` kept reading it as a live feeling.
+        -- Under the invariant (no unasserted childless node survives), the
+        -- last targeted retract prunes the whole spine and absence is total.
+        let db  = build ["carol.feels.angry.toward.bob"]
+            db' = retract "carol.feels.angry.toward.bob" db
+        in do
+          exists "carol.feels.angry.toward" db' @?= False
+          exists "carol.feels.angry"        db' @?= False
+          dbToSentences db'                 @?= []
+
+    , testCase "re-asserted scaffold: an explicitly asserted prefix survives its deep leaf retract" $
+        -- Insert a deep path, THEN assert the prefix as its own fact, THEN
+        -- delete the deep leaf: the prefix is now asserted, so eager pruning
+        -- stops at it — it survives and serializes, while nothing deeper
+        -- remains. This is the discriminator between "scaffold" and "fact".
+        let db  = insertAll ["carol.feels.angry.toward.bob", "carol.feels.angry"] emptyDb
+            db' = retract "carol.feels.angry.toward.bob" db
+        in do
+          exists "carol.feels.angry"        db' @?= True
+          exists "carol.feels.angry.toward" db' @?= False
+          dbToSentences db'                 @?= ["carol.feels.angry"]
+    ]
+
+  , testGroup "serialization round-trips assertedness"
+    [ testCase "labeled: an asserted interior node with children round-trips exactly (marks included)" $
+        -- dbToLabeledSentences must emit an asserted interior node as its own
+        -- sentence AND its descendants' paths; insertAll re-asserts each, so
+        -- the marks survive the flatten/rebuild with full Db equality.
+        let db = insertAll [ "practice.tendBar.bar.ada"
+                           , "practice.tendBar.bar.ada.customer.you"
+                           , "note!seen" ] emptyDb
+        in insertAll (dbToLabeledSentences db) emptyDb @?= db
+
+    , testCase "plain: a mark-bearing db rebuilds identically from its flattened sentences" $
+        -- The same round-trip through dbToSentences (no exclusion, so the
+        -- `.`-flattening is lossless), asserting the asserted-interior mark
+        -- survives with full Db equality.
+        let db = insertAll [ "practice.tendBar.bar.ada"
+                           , "practice.tendBar.bar.ada.customer.you" ] emptyDb
+        in insertAll (dbToSentences db) emptyDb @?= db
     ]
 
   , testGroup "unify"

@@ -1,8 +1,10 @@
 -- | The exclusion-logic database underlying Praxis/Versu.
 --
--- The world state is a trie: @data Db = Db Bool (IntMap Db)@, where the
--- 'Bool' records whether the node's outgoing edges are __exclusive__, and
--- the 'IntMap' keys are interned segment ids ('Prax.Sym.symId'; spec
+-- The world state is a trie: @data Db = Db Bool Bool (IntMap Db)@, where the
+-- first 'Bool' records whether the node's outgoing edges are __exclusive__,
+-- the second whether the node was itself __asserted__ as a fact (as opposed
+-- to existing only as scaffolding beneath deeper facts), and the
+-- 'IntMap' keys are interned segment ids ('Prax.Sym.symId'; spec
 -- @docs/specs/2026-07-12-v29-interning.md@). Every fact is a path built from
 -- two operators — @.@ (ordinary, multi-valued descent) and @!@ (exclusion:
 -- the parent has exactly one child). Queries treat @.@ and @!@ identically,
@@ -36,6 +38,7 @@ module Prax.Db
   ( Db(..)
   , emptyDb
   , dbExcl
+  , dbAsserted
   , Val(..)
   , Bindings
   , valToString
@@ -72,19 +75,30 @@ import qualified Data.Map.Strict as Map
 
 import           Prax.Sym (Sym, intern, symId, symIsVar, symName, symOfId)
 
--- | The world state: a trie whose edges are interned segments. The 'Bool' is
--- the node's __exclusion flag__ — 'True' when its edges are single-valued
--- (@!@); a valid exclusive node has one child. A leaf is a node with an
--- empty child map.
-data Db = Db Bool (IntMap Db)
+-- | The world state: a trie whose edges are interned segments. The first
+-- 'Bool' is the node's __exclusion flag__ — 'True' when its edges are
+-- single-valued (@!@); a valid exclusive node has one child. The second is
+-- the node's __asserted flag__ — 'True' when the path to this node was itself
+-- inserted as a fact, independent of whether it also has children (spec
+-- @docs/specs/2026-07-15-v39-asserted-endpoints.md@). __The invariant__
+-- ('retractNames' establishes and maintains it): the trie never contains an
+-- unasserted childless node — so "a node is present" is equivalent to
+-- "asserted, or has living descendants", and the queries read presence
+-- directly without consulting the flag.
+data Db = Db !Bool !Bool (IntMap Db)
   deriving (Eq, Show)
 
 -- | Whether a node's outgoing edges are exclusive (@!@).
 dbExcl :: Db -> Bool
-dbExcl (Db e _) = e
+dbExcl (Db e _ _) = e
+
+-- | Whether the path to a node was itself asserted as a fact (as opposed to
+-- existing only as an interior step toward deeper facts).
+dbAsserted :: Db -> Bool
+dbAsserted (Db _ a _) = a
 
 emptyDb :: Db
-emptyDb = Db False IntMap.empty
+emptyDb = Db False False IntMap.empty
 
 -- | A value a logic variable can be bound to. 'unify' only ever produces
 -- 'VSym' (trie keys are symbols); 'VNum' and 'VSet' arise from query
@@ -174,10 +188,10 @@ insert = insertToks . internTokens
 -- its tokens once (at cook time or via 'internTokens' at the delta site) and
 -- calls this directly, never re-parsing or re-interning a sentence.
 insertToks :: [(Sym, Maybe Char)] -> Db -> Db
-insertToks [] db = db
-insertToks ((n, op) : rest) (Db e m) =
+insertToks [] (Db e _ m) = Db e True m           -- the endpoint IS a fact: mark it asserted
+insertToks ((n, op) : rest) (Db e a m) =
   let i = symId n
-      Db _ existing = IntMap.findWithDefault emptyDb i m
+      Db _ aOld existing = IntMap.findWithDefault emptyDb i m
       -- @n@'s node is exclusive iff this insert reaches it via a @!@ operator.
       childExcl = op == Just '!'
       cleared = case (op, rest) of
@@ -185,39 +199,40 @@ insertToks ((n, op) : rest) (Db e m) =
           -- Exclusion: n keeps only the next child, with its subtree intact.
           IntMap.filterWithKey (\k _ -> k == symId nextSym) existing
         _ -> existing
-      child' = insertToks rest (Db childExcl cleared)
-  in Db e (IntMap.insert i child' m)
+      -- The exclusion flag is overwritten per insert (label-faithful, as
+      -- before); the child's asserted mark @aOld@ is carried through the
+      -- traversal untouched, so inserting a deeper fact through an asserted
+      -- ancestor never unmarks it.
+      child' = insertToks rest (Db childExcl aOld cleared)
+  in Db e a (IntMap.insert i child' m)
 
 -- | Insert many sentences left to right.
 insertAll :: [String] -> Db -> Db
 insertAll ss db = foldl (flip insert) db ss
 
--- | Retract: delete the leaf named by the final segment of the path. Missing
--- intermediate nodes make this a no-op (nothing to remove).
+-- | Retract: delete the subtree named by the path, then eagerly prune every
+-- ancestor the deletion leaves unasserted and childless.
 --
--- __Ambiguity, not yet resolved:__ this does /not/ prune ancestors left
--- childless by the deletion, and that is deliberate for now, not an
--- oversight. The trie has no way to distinguish "a node that is itself an
--- asserted fact, which happens to also have children" from "a node that is
--- merely an interior step toward some deeper fact, now childless because its
--- only occupant was retracted" — both look identical: present in the map,
--- empty child set. Pruning on emptiness (tried and reverted; see git
--- history and @.superpowers/sdd/task-2b-report.md@) is correct for the
--- second case and actively wrong for the first: several authored practices
--- (e.g. @Prax.Worlds.Bar@'s @tendBarP@) assert an instance fact at a path
--- (@practice.tendBar.\<Place\>.\<Bartender\>@) and then nest transient,
--- fully-drainable state (per-customer orders) /underneath/ that same path —
--- 'possibleActions' discovers the instance by its presence in the trie, not
--- from any separate registry, so pruning it away the moment its transient
--- children happen to reach zero permanently destroys the instance. Until
--- the trie can mark a node as an asserted endpoint independently of whether
--- it has children (the banked fix — see the LEDGER's "asserted-endpoint
--- marking" entry), retract leaves ancestors exactly as this dual use
--- requires: present, but indistinguishable from a fact. The consequence is
--- 'dbToSentences'\/'exists' can read a drained-but-never-independently-
--- asserted ancestor as if it were its own fact (the phantom-emission limit
--- documented in 'dbToSentences' below) — a real but currently unavoidable
--- imprecision, not a bug to be silently patched around at this layer.
+-- __The invariant__ (spec @docs/specs/2026-07-15-v39-asserted-endpoints.md@):
+-- the trie never contains an unasserted childless node. The asserted flag is
+-- what makes eager pruning correct where it was once wrong. Two authored
+-- shapes forced the dual requirement:
+--
+--   * Some interior nodes ARE facts. @Prax.Worlds.Bar@'s @tendBarP@ asserts
+--     an instance at @practice.tendBar.\<Place\>.\<Bartender\>@ and nests
+--     transient, fully-drainable per-customer state /underneath/ that same
+--     path; 'possibleActions' discovers the instance by its trie presence
+--     alone. The instance is asserted at spawn, so it survives its children
+--     draining to nothing — pruning stops at it.
+--   * Some interior nodes are NOT facts. @unfeelToward@ deletes a single
+--     @feels.\<e\>.toward.\<target\>@ leaf; the @toward@ node above it was
+--     never asserted, so once its last child goes it is pruned and a prefix
+--     'Match' stops reading a drained scaffold as a live feeling.
+--
+-- Naive emptiness-pruning (tried and reverted at v32; see git history and
+-- @.superpowers/sdd/task-2b-report.md@) could not tell these apart and broke
+-- the first case. The asserted flag distinguishes them, so 'exists' and
+-- 'dbToSentences' now read presence exactly — no phantom facts.
 retract :: String -> Db -> Db
 retract = retractNames . map intern . parseNames
 
@@ -226,11 +241,16 @@ retract = retractNames . map intern . parseNames
 -- re-parse\/re-intern.
 retractNames :: [Sym] -> Db -> Db
 retractNames [] db = db
-retractNames [n] (Db e m) = Db e (IntMap.delete (symId n) m)
-retractNames (n : ns) (Db e m) =
+retractNames [n] (Db e a m) = Db e a (IntMap.delete (symId n) m)
+retractNames (n : ns) (Db e a m) =
   case IntMap.lookup (symId n) m of
-    Nothing    -> Db e m
-    Just child -> Db e (IntMap.insert (symId n) (retractNames ns child) m)
+    Nothing    -> Db e a m
+    Just child ->
+      let child' = retractNames ns child
+      in if prunable child'
+           then Db e a (IntMap.delete (symId n) m)
+           else Db e a (IntMap.insert (symId n) child' m)
+  where prunable (Db _ asserted cm) = not asserted && IntMap.null cm
 
 -- | 'unify' with the sentence already split into names — for callers that
 -- evaluate one pattern against many binding sets ('Prax.Query' hoists the
@@ -256,7 +276,7 @@ unifySyms syms db0 bindings =
   map snd (foldl step [(db0, bindings)] syms)
   where
     step worlds sym = concatMap (descend sym) worlds
-    descend sym (Db _ m, b)
+    descend sym (Db _ _ m, b)
       | symIsVar sym =
           case Map.lookup sym b of
             Just v  -> case IntMap.lookup (symId (valToSym v)) m of
@@ -322,55 +342,53 @@ ground sentence b = tokensToSentence (groundTokens (internTokens sentence) b)
 -- callers (e.g. 'Prax.Engine.possibleActions') fold into candidate order.
 childKeys :: String -> Db -> [String]
 childKeys path db = case walk (map intern (parseNames path)) db of
-  Just (Db _ m) -> sort (map (symName . symOfId) (IntMap.keys m))
-  Nothing       -> []
+  Just (Db _ _ m) -> sort (map (symName . symOfId) (IntMap.keys m))
+  Nothing         -> []
   where
     walk [] d = Just d
-    walk (n : ns) (Db _ m) = IntMap.lookup (symId n) m >>= walk ns
+    walk (n : ns) (Db _ _ m) = IntMap.lookup (symId n) m >>= walk ns
 
 -- | Whether any node exists at the given constant path.
 exists :: String -> Db -> Bool
 exists path db = not (null (unify path db Map.empty))
 
--- | Enumerate all leaf paths (facts) in the database, sorted, joined by
--- @.@. Flattens the @.@/@!@ distinction; intended for display, matching and
--- tests. The final 'sort' operates on fully rendered strings, so it is safe
--- regardless of the (run-dependent) 'IntMap' traversal order feeding it.
+-- | Enumerate the facts in the database, sorted, joined by @.@. Flattens the
+-- @.@/@!@ distinction; intended for display, matching and tests. The final
+-- 'sort' operates on fully rendered strings, so it is safe regardless of the
+-- (run-dependent) 'IntMap' traversal order feeding it.
 --
--- __Phantom-emission limit:__ "childless node" is the only signal this
--- function has for "this is a fact" ('expand' below treats any node with an
--- empty child map as terminal). The trie does not separately record
--- /whether a path was ever asserted/ versus /merely present as an ancestor
--- that currently has nothing under it/ — see 'retract''s haddock for why
--- that ambiguity is currently load-bearing, not just an oversight. A path
--- that was never itself inserted, but is an ancestor of something that was
--- and has since been fully retracted, is indistinguishable here from a
--- genuine fact and will be emitted as one. Resolving this requires marking
--- asserted endpoints in the trie independently of child-emptiness (banked,
--- not yet implemented — see the LEDGER's "asserted-endpoint marking"
--- entry).
+-- A fact is a childless node (necessarily asserted, by the invariant) OR an
+-- asserted node that also has children — the latter emits both its own path
+-- and its descendants' paths. Under the invariant there are no unasserted
+-- childless nodes, so this reads presence exactly: every emitted path was
+-- asserted, and every asserted path is emitted.
 dbToSentences :: Db -> [String]
 dbToSentences = sort . go
   where
-    go (Db _ m)
+    go (Db _ _ m)
       | IntMap.null m = []
       | otherwise     = concatMap expand (IntMap.toList m)
-    expand (k, child@(Db _ cm))
+    expand (k, child@(Db _ a cm))
       | IntMap.null cm = [name]
+      | a              = name : map ((name ++ ".") ++) (go child)
       | otherwise      = map ((name ++ ".") ++) (go child)
       where name = symName (symOfId k)
 
 -- | Like 'dbToSentences' but __label-faithful__: each edge is re-emitted
 -- with @!@ when its parent node is exclusive, else @.@. Inverse of
--- 'insertAll' — the basis for exact serialization ('Prax.Persist'). As with
--- 'dbToSentences', the final 'sort' operates on rendered strings, so it is
--- unaffected by 'IntMap' traversal order.
+-- 'insertAll' — the basis for exact serialization ('Prax.Persist'): an
+-- asserted interior node emits its own bare labeled path alongside its
+-- descendants', so @insertAll@ re-asserts every mark and the assertedness
+-- round-trips with no format change. As with 'dbToSentences', the final
+-- 'sort' operates on rendered strings, so it is unaffected by 'IntMap'
+-- traversal order.
 dbToLabeledSentences :: Db -> [String]
 dbToLabeledSentences = sort . go
   where
-    go (Db _ m) = concat
+    go (Db _ _ m) = concat
       [ case go child of
           []   -> [name]
           subs -> [ name ++ sep (dbExcl child) ++ s | s <- subs ]
+                  ++ [ name | dbAsserted child ]
       | (k, child) <- IntMap.toList m, let name = symName (symOfId k) ]
     sep e = if e then "!" else "."

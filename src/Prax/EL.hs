@@ -33,13 +33,21 @@ import           Prax.Db (Db (..))
 -- the child (Def 7 incompatibility). Otherwise children are merged (recursively
 -- meeting shared subtrees) and a node is exclusive if either operand marks it so
 -- (the more specific label wins, @Excl ≤ Multi@).
+--
+-- Assertedness (spec @docs/specs/2026-07-15-v39-asserted-endpoints.md@) extends
+-- pointwise as __disjunction__: a node is asserted in the meet iff asserted in
+-- /either/ operand, because meet conjoins the facts of both models and a path
+-- asserted in either is a fact of the conjunction. This is the choice that keeps
+-- the meet a lower bound — @meet a b `leq` a@ — of an asserted operand (see
+-- 'leq'); conjunction here would drop the mark and break that law.
 meet :: Db -> Db -> Maybe Db
-meet (Db e1 k1) (Db e2 k2) = do
+meet (Db e1 a1 k1) (Db e2 a2 k2) = do
   merged <- foldM ins k1 (IntMap.toList k2)
   let e = e1 || e2
+      a = a1 || a2
   if e && IntMap.size merged > 1
     then Nothing                          -- exclusive node forced to two children ⇒ ⊥
-    else Just (Db e merged)
+    else Just (Db e a merged)
   where
     ins acc (k, v2) = case IntMap.lookup k acc of
       Nothing -> Just (IntMap.insert k v2 acc)
@@ -48,9 +56,15 @@ meet (Db e1 k1) (Db e2 k2) = do
 -- | The information order @≤@ (Def 6): @a `leq` b@ iff @a@ has every edge of @b@,
 -- with labels at least as specific (@Excl ≤ Multi@), recursively — i.e. @a@
 -- entails @b@.
+--
+-- Assertedness enters exactly as the exclusion label does: if @b@ asserts a node
+-- as a fact, @a@ must assert it too (@aa || not ab@) — asserting a path is
+-- strictly more information than merely scaffolding it, so an asserted fact
+-- entails its unasserted scaffold but not conversely (mirroring @Excl ≤ Multi@,
+-- @Multi ⋠ Excl@).
 leq :: Db -> Db -> Bool
-leq (Db ea ka) (Db eb kb) =
-  (ea || not eb) && all present (IntMap.toList kb)   -- Excl ≤ Multi, Multi ⋠ Excl
+leq (Db ea aa ka) (Db eb ab kb) =
+  (ea || not eb) && (aa || not ab) && all present (IntMap.toList kb)
   where
     present (k, bChild) = case IntMap.lookup k ka of
       Nothing     -> False
