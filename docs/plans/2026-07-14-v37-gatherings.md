@@ -173,6 +173,11 @@ itself needs no pin, the haddock warns).
 
 ### Task 3: Village market day
 
+> **Amended mid-round:** the cadence below (`gathering "market" 2 1`, "every other round")
+> shipped as **period 6, duration 1** after Task 4's bench measured 2/1 leaving no quiet
+> rounds — see spec §Cargo as amended (0bcf2a3) and the LEDGER v37 row; the code below is
+> the baseline it replaced.
+
 **Files:** `src/Prax/Worlds/Village.hs`, `test/Prax/VillageSpec.hs`,
 `test/Prax/LoopSpec.hs` (the wake pin), then the village golden re-capture in
 `test/Prax/GoldenDriveSpec.hs` as its OWN commit.
