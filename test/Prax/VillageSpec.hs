@@ -356,15 +356,11 @@ tests = testGroup "Prax.Worlds.Village"
       -- from t=0 free play, with the whole square watching, bob undertakes
       -- honest work and completes it: he ends holding a loaf he BAKED —
       -- the stall's loaf untouched, no theft beliefs about him anywhere.
-      -- v37 re-index (traced against the live trace, not assumed): market
-      -- round 3 draws bob to "Wait a moment" at the square instead of
-      -- setting off for the mill (the market's +3, stacked on his own +1
-      -- square anchor, outweighs progressing the errand that turn) -- his
-      -- whole remaining errand (go to mill, fetch flour, return, bake)
-      -- shifts a full round later than before the market existed. He now
-      -- finishes at turn 50 (not 42); 8 rounds (not 7) reaches the same
-      -- "completed, not yet eaten" moment the original 49 pinned.
-      let st = freePlayAt 57
+      -- 49 turns: 7 rounds. Unaffected by v37's market (period 6): the
+      -- market's first opening (round 6) falls after his errand already
+      -- completes, so this moment is unchanged from the pre-market world
+      -- (re-verified against the live trace, not assumed).
+      let st = freePlayAt 49
       assertBool "bob undertook the endeavor" (exists "practice.earnBread.bob" (db st))
       assertBool "and finished it" (exists "practice.earnBread.bob.done.s3" (db st))
       assertBool "he holds a loaf" (exists "holding.bob.loaf" (db st))
@@ -450,31 +446,39 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "gale never hungers"  (not (exists "hungry.gale" (db st)))
 
     --------------------------------------------------------------------------
-    -- v37: market day (Prax.Drift's 'gathering' combinator, period 2,
+    -- v37: market day (Prax.Drift's 'gathering' combinator, period 6,
     -- duration 1) -- the calendar convenes the town in the square and
-    -- disperses it again. Turn counts below are observed, not assumed
-    -- (probed against the live trace): the market's due seed (period=2)
-    -- fires at the drifter's turn ending round 2 (turn 16), so round 3
-    -- (turns 17-23) is the market's one open round; its close due
-    -- (period+duration=3) fires ending round 3 (turn 24).
+    -- disperses it again. Period 6 (not the original 2) is the shipped
+    -- cadence: the 2/1 pairing left NO quiet rounds -- the attendance gate
+    -- toggled every single round, every attendee re-deliberated every turn,
+    -- and a 140-turn paired drive tripled (68.3s -> 193.2s, 33 -> 90
+    -- deliberations, measured in Task 4's bench). The mechanism was exact
+    -- throughout; the cadence was the defect. Turn counts below are
+    -- observed, not assumed (probed against the live trace): the market's
+    -- due seed (period=6) first fires at the drifter's turn opening round 6
+    -- (turn 48), so round 6 (turns 48-55) is the market's first open round;
+    -- its close due (period+duration=7) fires opening round 7 (turn 56).
+    -- The golden's own free-play window no longer witnesses a market (the
+    -- v36 hunger precedent: the cycle is pinned here, at real turn counts,
+    -- not required to be golden-visible).
     --------------------------------------------------------------------------
 
   , testCase "convergence: attendees with no stronger stake converge on the square while the market holds" $ do
-      -- pre-market (round 2, quiet): both dana and gale are at the mill --
+      -- pre-market (round 5, quiet): both dana and gale are at the mill --
       -- their own anchors (dana's +1 mill-want; gale has no location want
       -- at all) hold, unperturbed by any market pull that does not yet exist.
-      let stQuiet = freePlayAt 15
+      let stQuiet = freePlayAt 47
       assertBool "dana still at the mill, market not yet open"
         (exists "practice.world.world.at.dana!mill" (db stQuiet))
       assertBool "gale still at the mill, market not yet open"
         (exists "practice.world.world.at.gale!mill" (db stQuiet))
-      assertBool "market genuinely not yet open at turn 15"
+      assertBool "market genuinely not yet open at turn 47"
         (not (exists "marketDay.square" (db stQuiet)))
 
-      -- market round (round 3, turns 17-22 all taken): both have moved to
-      -- the square -- dana's own turn (20) and gale's (22) each traded a
+      -- market round (round 6, turns 48-55 all taken): both have moved to
+      -- the square -- dana's own turn (52) and gale's (54) each traded a
       -- one-point anchor (or no anchor at all) for the market's +3 draw.
-      let stMarket = freePlayAt 22
+      let stMarket = freePlayAt 55
       assertBool "the market is open" (exists "marketDay.square" (db stMarket))
       assertBool "dana converged on the square"
         (exists "practice.world.world.at.dana!square" (db stMarket))
@@ -489,40 +493,36 @@ tests = testGroup "Prax.Worlds.Village"
         (not (exists "practice.world.world.at.gale!square" (db stQuiet))
          && exists "practice.world.world.at.gale!square" (db stMarket))
 
-  , testCase "dispersal: a villager with no stronger stake leaves once the market closes; one with a stronger stake stays" $ do
-      -- turn 24: the drifter's close pulse has just fired -- both are still
+  , testCase "dispersal: a villager with no stronger stake leaves once the market closes; the cycle recurs" $ do
+      -- turn 56: the drifter's close pulse has just fired -- both are still
       -- physically at the square (closing removes the marketDay fact, not
       -- anyone's position; dispersal is a DECISION, made at the villager's
       -- own next turn, not an instantaneous teleport).
-      let stClosed = freePlayAt 24
+      let stClosed = freePlayAt 56
       assertBool "the market is now closed" (not (exists "marketDay.square" (db stClosed)))
       assertBool "dana has not yet moved (closing is not teleportation)"
         (exists "practice.world.world.at.dana!square" (db stClosed))
       assertBool "gale has not yet moved either"
         (exists "practice.world.world.at.gale!square" (db stClosed))
 
-      -- gale's next turn (30, round 4): no stronger stake ever attached to
-      -- her at the square (spites-carol reads no location), so she disperses
-      -- straight back to the mill -- the close's own wake, symmetric with
-      -- the open's.
-      let stDispersed = freePlayAt 30
+      -- gale's next turn (62): no stronger stake ever attached to her at the
+      -- square (spites-carol reads no location), so she disperses straight
+      -- back to the mill -- the close's own wake, symmetric with the open's.
+      -- (dana's own eyeing of carol, the pin the period-2 cadence once used
+      -- to demonstrate "a stronger stake stays," resolved at turn 28 --
+      -- long before this cadence's first market close reaches her -- so it
+      -- no longer functions as a competing stake at the relevant moment;
+      -- traced, not assumed, and dana in fact disperses too, at turn 60,
+      -- before gale does. Not reproduced here rather than weakened.)
+      let stDispersed = freePlayAt 62
       assertBool "gale disperses: back to the mill once the market's pull is gone"
         (exists "practice.world.world.at.gale!mill" (db stDispersed))
 
-      -- dana, by contrast, has by now been drawn into the hearsay arc
-      -- (eve's whisper reached her at turn 5) and her round-4 turn is spent
-      -- eyeing carol with suspicion -- a stronger stake than the vanished
-      -- market, so she does NOT disperse: drama outranks festivity, exactly
-      -- as authored.
-      assertBool "dana's round-4 turn is the suspicion arc, not a departure"
-        (exists "eyed.dana.carol" (db stDispersed))
-      assertBool "dana stays at the square -- a stronger stake held her, not the market"
-        (exists "practice.world.world.at.dana!square" (db stDispersed))
-
-      -- the market recurs (period 2): round 5 (turn 38) reopens it, and
-      -- gale -- once again with no stronger stake -- converges a second
-      -- time, confirming the cycle is genuinely periodic, not a one-off.
-      let stReopened = freePlayAt 38
+      -- the market recurs (period 6): round 12 (turn 96) reopens it, and by
+      -- its close (turn 103) gale -- once again with no stronger stake --
+      -- has converged a second time, confirming the cycle is genuinely
+      -- periodic, not a one-off.
+      let stReopened = freePlayAt 103
       assertBool "the market has reopened" (exists "marketDay.square" (db stReopened))
       assertBool "gale converges again on the second opening"
         (exists "practice.world.world.at.gale!square" (db stReopened))
@@ -540,14 +540,16 @@ tests = testGroup "Prax.Worlds.Village"
 
           -- quiet day (turn 14, reset straight from villageWorld's own
           -- trace -- no market has ever opened): gale is at the mill with
-          -- only dana for company.
+          -- only dana for company. Unaffected by the period-6 recadence
+          -- (the market's first due doesn't fire until turn 48, so turn 14
+          -- is identical to a marketless world either way).
           stQuiet  = performOutcome spatByGale (freePlayAt 14)
           quietWitnesses = believers stQuiet
 
-          -- market day (turn 22, reset independently from villageWorld's own
-          -- trace -- the market's first opening, round 3): gale is at the
+          -- market day (turn 55, reset independently from villageWorld's own
+          -- trace -- the market's first opening, round 6): gale is at the
           -- square with you, bob, carol, and dana all gathered around her.
-          stMarket = performOutcome spatByGale (freePlayAt 22)
+          stMarket = performOutcome spatByGale (freePlayAt 55)
           marketWitnesses = believers stMarket
 
       quietWitnesses  @?= ["dana"]
@@ -586,70 +588,53 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "no conscience is presumed of eve (she bears no trait)"
         (not (exists "carol.believes.desires.eve.clean-conscience" v))
 
-  , testCase "same spite, different temperaments: eve whispers (twice, now, safely); gale never lies" $ do
-      -- v37 re-index (traced, not assumed -- market-cascaded movement, not a
-      -- new mechanism): round 1's whisper to dana is witnessed DIRECTLY by
-      -- gale too (all three start at the mill together), so BOTH already
-      -- regard eve a slanderer from turn 5 on -- unchanged since v25. What
-      -- changed is bob's own schedule: his round-3 market "Wait a moment"
-      -- (he stays at the square rather than heading straight for the mill)
-      -- pushes his whole errand one full round later, and that shift
-      -- reshuffles eve's and gale's own crossing paths -- by turn 53 they
-      -- are BOTH at the mill together (they missed each other at the
-      -- analogous pre-v37 moment). Telling gale a SECOND, distinct instance
-      -- now costs eve nothing (gale is already a regarder from witnessing
-      -- the first one directly, so no THIRD head crosses the threshold) and
-      -- still earns the +4 spite -- so free play now takes the once-forced
-      -- second whisper on its own, and the v25 laundering mechanism (an
-      -- honest believer relays a lie she was honestly told) needs no hand at
-      -- all: gale finds her own listener.
+  , testCase "same spite, different temperaments: eve whispers, gale never does" $ do
+      -- 56 turns: 7 rounds (v36: the round grew an eighth member, the
+      -- drifter, so 7 rounds is now 56 turns, not 49 -- the same moment in
+      -- the story, re-measured against the longer round). Unaffected by
+      -- v37's market (period 6): its first opening (round 6, turn 48)
+      -- falls inside this window but never draws eve and gale into a
+      -- private moment before it -- re-verified against the live trace
+      -- (the period-2 cadence once produced a market-cascaded second
+      -- whisper here; at period 6 it does not recur within reasonable free
+      -- play, so this pin reverts to its pre-v37 form rather than being
+      -- forced).
       let vs = ["you", "bob", "carol", "dana", "eve", "gale"]
-
-      -- the threshold itself, verified at its source (turn 5, eve's own
-      -- first move): both dana and gale regard her a slanderer immediately,
-      -- from direct witness -- neither told, both there.
-      let stFirst = freePlayAt 5
-      assertBool "dana witnessed the first whisper directly"
-        (exists "dana.believes.whispered.eve.dana.seen" (db stFirst))
-      assertBool "gale witnessed it too -- she was there, not told"
-        (exists "gale.believes.whispered.eve.dana.seen" (db stFirst))
-      assertBool "two regarders already -- one whisper, one head under the brink"
-        (exists "regards.dana.eve.slanderer" (readView stFirst)
-         && exists "regards.gale.eve.slanderer" (readView stFirst))
-
-      -- turn 56 (7 rounds): eve's frame-up stands, and -- the re-indexed
-      -- fact -- she has now ALSO whispered directly to gale (turn 53),
-      -- entirely within free play.
-      let st = freePlayAt 56
-      assertBool "eve's original frame-up went ahead"
+          st = freePlayAt 56
+      assertBool "eve's frame-up went ahead"
         (exists "dana.believes.stole.carol.loaf.heard.eve" (db st))
       assertBool "and eve carries the mark of it"
         (exists "eve.lied.dana.stole.carol.loaf" (db st))
-      assertBool "gale, bearing the same spite, never lies (her psyche is unmarked)"
+      assertBool "gale, bearing the same spite, never lied (her psyche is unmarked)"
         (not (exists "gale.lied" (db st)))
-      assertBool "eve has now ALSO whispered to gale directly -- market-cascaded proximity, not forced"
-        (exists "gale.believes.stole.carol.loaf.heard.eve" (db st))
-      assertBool "two marks now, dana and gale -- both before and after this fact stated together"
+      -- v30's threshold fear (spec §3/§4, the v22 retelling precedent):
+      -- once carol and dana regard her a slanderer (round 1's whisper), any
+      -- FURTHER whisper to someone new would land the third regarder and
+      -- trip notoriety -- so eve, now prudent, never risks a second
+      -- frame-up in free play. The pre-v30 world had her whisper three
+      -- times by t=33 (dana, then you, then gale); the crispest fact for
+      -- "exactly once, ever" is her own mark count.
+      assertBool "exactly one whisper, ever -- the brink made her prudent"
         ([ s | s <- dbToSentences (db st), "eve.lied." `isPrefixOf` s ]
-           == ["eve.lied.dana.stole.carol.loaf", "eve.lied.gale.stole.carol.loaf"])
-      -- the threshold fear STILL holds, even with two whispers: gale was
-      -- already a regarder (turn 5's direct witness), so the second
-      -- whisper adds no NEW head -- still two regarders, never notorious.
-      assertBool "still only two regarders -- the second whisper crossed no new threshold"
-        (exists "regards.dana.eve.slanderer" (readView st)
-         && exists "regards.gale.eve.slanderer" (readView st))
-      assertBool "not notorious -- eve's prudence was about a THIRD head, and none arrived"
-        (not (exists "notorious.eve.slanderer" (readView st)))
+           == ["eve.lied.dana.stole.carol.loaf"])
 
-      -- the v25 mechanism, now unforced: gale, honestly told, relays it
-      -- onward on her own account -- observed at turn 70, where she tells
-      -- "you" directly (no scripted hand, no forced action).
-      let stLaundered = freePlayAt 70
+      -- The v25 mechanism (an honest believer launders a lie she's been
+      -- honestly deceived by) still holds -- it just needs a hand now that
+      -- eve's own prudence stops her from ever handing gale the lie
+      -- herself in free play. Force exactly the whisper her prudence
+      -- declines (one-shot-per-hearer still permits it: gale has never
+      -- heard this specific claim from anyone); drive a few turns first to
+      -- reach a moment they're actually co-present (free play has them
+      -- pass in and out of sync), then let gale relay it honestly, exactly
+      -- as the v25 mechanism always has.
+      let stCoPresent = driveIdle "you" 5 st
+          stWhisper = doAct "eve" "whisper to gale that carol stole the loaf" stCoPresent
+          stLaundered = driveIdle "you" 20 stWhisper
           heardFromGale =
             [ (w, c) | w <- vs, c <- vs
                      , exists (w ++ ".believes.stole." ++ c
                                  ++ ".loaf.heard.gale") (db stLaundered) ]
-      assertBool "the lie traveled through the honest villager, unprompted"
+      assertBool "the lie traveled through the honest villager"
         (not (null heardFromGale))
       assertBool "whatever gale passed on, she honestly believes"
         (all (\(_, c) -> exists ("gale.believes.stole." ++ c ++ ".loaf") (db stLaundered))

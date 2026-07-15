@@ -302,10 +302,11 @@ tests = testGroup "Prax.Loop"
       -- 'spites-carol' (no locational content) and 'drawn-to-market', so her
       -- location choices are read straight off the market's own clock. The
       -- village's round is 8 turns (six villagers + the silent sight and
-      -- drift tickers); the market's due (period 2) opens at the drifter's
-      -- turn ending round 2 (turn 16) and its due (period+duration 3)
-      -- closes ending round 3 (turn 24) -- both observed against the live
-      -- trace, not assumed.
+      -- drift tickers); the market's due (period 6, the shipped cadence --
+      -- Task 4's bench found the original period 2 left no quiet rounds)
+      -- opens at the drifter's turn beginning round 6 (turn 48) and its due
+      -- (period+duration 7) closes beginning round 7 (turn 56) -- both
+      -- observed against the live trace, not assumed.
       let idleStep idle st =
             let (actor, st1) = advance st
             in if charName actor == idle then st1 else snd (npcAct 2 actor st1)
@@ -318,40 +319,41 @@ tests = testGroup "Prax.Loop"
                           Just i  -> i
                           Nothing -> error "gale holds no standing intention yet"
 
-      -- QUIET (turn 15, one turn short of the open): her standing intention
-      -- (stored at her own turn 14) still matches her current signature --
-      -- the quiescence holds, and drawn-to-market is not yet in her live set.
-      let stQuiet  = freePlayAt 15
+      -- QUIET (turn 47, one turn short of the open): her standing intention
+      -- still matches her current signature -- the quiescence holds, and
+      -- drawn-to-market is not yet in her live set.
+      let stQuiet  = freePlayAt 47
           sigQuiet = motiveSignature stQuiet gale
       assertBool "the standing intention holds through the quiet turn"
         (intentBasis (intentOf stQuiet) == sigQuiet)
       assertBool "drawn-to-market is not yet live"
         ("drawn-to-market" `notElem` msLiveDesires sigQuiet)
 
-      -- THE OPEN (turn 16, the drifter's own turn): the market's insert
+      -- THE OPEN (turn 48, the drifter's own turn): the market's insert
       -- flips drawn-to-market's gate live -- the live-desire SET component
       -- of gale's signature changes, asserted directly as before/after/diff.
-      let stOpen  = freePlayAt 16
+      let stOpen  = freePlayAt 48
           sigOpen = motiveSignature stOpen gale
       assertBool "the market is open" (exists "marketDay.square" (db stOpen))
       assertBool "drawn-to-market is now live"
         ("drawn-to-market" `elem` msLiveDesires sigOpen)
       assertBool "the live-desire component actually changed (before /= after)"
         (msLiveDesires sigQuiet /= msLiveDesires sigOpen)
-      -- her turn-14 intention is still the one on file (she has not acted
+      -- her prior intention is still the one on file (she has not acted
       -- since) -- and it no longer matches: the wake has fired.
       assertBool "her standing intention's basis no longer matches: she is woken"
         (intentBasis (intentOf stOpen) /= sigOpen)
 
-      -- her NEXT npcAct (her actual turn 22, round 3) re-deliberates and
-      -- picks the square -- the wake's consequence, not merely its trigger.
-      let stMarketTurn = freePlayAt 22
+      -- her NEXT npcAct (her actual turn 54, within the open round) re-
+      -- deliberates and picks the square -- the wake's consequence, not
+      -- merely its trigger.
+      let stMarketTurn = freePlayAt 54
       fmap gaLabel (intentAct (intentOf stMarketTurn)) @?= Just "gale: Go to square"
 
-      -- THE CLOSE (turn 24, the drifter's own turn): drawn-to-market's gate
-      -- shuts again -- the live-desire set flips back, and her turn-22
+      -- THE CLOSE (turn 56, the drifter's own turn): drawn-to-market's gate
+      -- shuts again -- the live-desire set flips back, and her turn-54
       -- intention (stored woken and live) no longer matches.
-      let stClosed  = freePlayAt 24
+      let stClosed  = freePlayAt 56
           sigClosed = motiveSignature stClosed gale
       assertBool "the market is closed" (not (exists "marketDay.square" (db stClosed)))
       assertBool "drawn-to-market is dead again"
@@ -361,7 +363,7 @@ tests = testGroup "Prax.Loop"
       assertBool "her market-turn intention no longer matches: woken again, by the close"
         (intentBasis (intentOf stClosed) /= sigClosed)
 
-      -- her next npcAct (turn 30, round 4) disperses her back to the mill.
-      let stDispersed = freePlayAt 30
+      -- her next npcAct (turn 62) disperses her back to the mill.
+      let stDispersed = freePlayAt 62
       fmap gaLabel (intentAct (intentOf stDispersed)) @?= Just "gale: Go to mill"
   ]

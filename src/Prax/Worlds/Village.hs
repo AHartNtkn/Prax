@@ -128,11 +128,14 @@ suffersHunger = Desire "suffers-hunger" (Want [ Match "hungry.Owner" ] (-22))
 marketP :: Practice
 marketP = practice { practiceId = "market", roles = ["Fair"] }
 
--- Market day every other round, for one round — a compressed town rhythm
--- matching the compressed drives (a "day" here is one round; the golden's
--- 21-turn window then witnesses the market's first opening).
+-- Market day comes every sixth round and lasts one — most days are quiet.
+-- (The original every-other-round cadence, chosen so the golden window
+-- would witness a cycle, was measured leaving NO quiet rounds: the gate
+-- toggled town-wide every round and 140-turn drives tripled. The cycle is
+-- pinned at real turn counts instead of being golden-visible — the v36
+-- hunger precedent.)
 marketCalendar :: ([DriftRule], [Outcome])
-marketCalendar = gathering "market" 2 1
+marketCalendar = gathering "market" 6 1
   [ Insert "practice.market.fair", Insert "marketDay.square" ]
   [ Delete "practice.market.fair", Delete "marketDay.square" ]
 
