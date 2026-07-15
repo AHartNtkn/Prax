@@ -138,3 +138,4 @@ test-suite prax-test
                       Prax.Script.JsonSpec
                       Prax.DirectorSpec
                       Prax.VillageSpec
+                      Prax.AnalysisTableSpec
