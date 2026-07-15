@@ -1040,6 +1040,65 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   Suite: 521 tests (514 + 7 new pins: 4 `DbSpec`, 2 `ELSpec`, 1 `PersistSpec`; INSTANCE PERSISTENCE
   flipped in place, not added), zero failures; zero warnings; hlint clean; `prax check`
   well-formed on all 7 worlds; ViewInvariant green; goldens byte-identical throughout.
+- **v40** — **hygienic machinery variables: one namespace, one guard** (`Prax.Types`;
+  `Prax.Drift`; `Prax.Rng`; `Prax.Sight`; `Prax.Faction`; `Prax.Confession`; `Prax.Blackmail`;
+  `Prax.Relevance`; `Prax.Repute`; spec `docs/specs/2026-07-15-v40-hygienic-variables.md`). First
+  of four user-directed **foundations passes** — strict improvements (elegance/usability up,
+  complexity flat or down) over new content, queued in order: v40 hygiene vars → v41 analysis
+  unification on the cooked form → v42 dead-condition lint → v43 the hygiene bundle (fn/action-
+  name collision guards, clock extraction from Sight, Persist version header, excl-bit trivia).
+  This entry closes the queue's first item; **v41 is next**.
+
+  **The two-tier finding.** Interface variables — `Actor`/`Owner`/`Witness`/`Hearer`/
+  `Seer`/`Seen`/`Spot`/`Anyone` — are the authoring contract, not the defect: worlds write them
+  deliberately to mean what the engine grounds them to, and they keep their names unchanged.
+  The actual defect is machinery variables: combinator-internal names spliced into the SAME
+  condition/outcome list as an author-supplied fragment (THE RULE). Wholly-generated bodies with
+  no author splice — `Emotion.feelingsFade`'s own `W`/`E`, `Kin.succession`'s `H`, every
+  `Function` body's call-scoped params — are out of scope by the same rule, not overlooked: the
+  brief's own inventory had listed `feelingsFade` for rename, which turned out to self-contradict
+  (renaming it into the Prax namespace made `driftP`'s blanket guard reject the library's own
+  shipped rule at construction), caught by observed RED and correctly reverted rather than shipped.
+
+  **The consolidation.** Five bespoke reserved-name lists and their private walkers — `Drift`
+  (D/D2/Now), `Rng` (S/S2/S3/R), `Faction` (`reservedClash`), `Confession` (`reservedIn`),
+  `Blackmail` — collapse into one shared pair, `Prax.Types.authoredVarClash`/`authoredPatClash`
+  (~20 lines total), every call site now a single guard clause. The forbid-polarity earned its
+  own parameter rename mid-round: a first `Sight.hs` draft read the list as an ALLOW set and
+  passed it the sighting's own contract variables, rejecting `sightP`'s own required inputs —
+  caught immediately (103 failures, every world exercising `sightP`), fixed, and the parameter
+  renamed `interface`→`forbiddenSplices` with the polarity stated first in its own haddock so the
+  same misreading can't recur silently. The lists themselves shrank to genuine interface splices:
+  `W`/`F` in `Faction.factionStanding`, `D`/`Ds`/`N` in `Confession.incorrigible`, the whole `Rng`
+  family, are now unremarkable author variable names — a usability win, positively pinned in each
+  combinator's spec (not just "no longer forbidden," each has a passing test that says so).
+
+  **Two latent gaps, found and closed, neither in the original inventory.** `Sight.sightP`
+  spliced the authored sighting template into the same `ForEach` as the ticker's own machinery
+  with zero guard before this round — closed by the same shared guard. `Prax.Repute.standing`'s
+  own haddock claimed "`Regarder` is reserved" without enforcing it; verified genuinely spliced
+  (`standingWith` builds `Match ("Regarder.believes." ++ pat)`, a direct concatenation with the
+  author's own deed pattern) before acting, then enforced through the single `standingWith` entry
+  point both `standing` and `standingUnless` share — 3 RED-observed pins, each confirmed
+  non-vacuous (the axiom builds a valid-but-corrupt result absent the guard, not an unrelated
+  failure).
+
+  **Alpha-invariance held.** Pure renaming of generated query variables never reaches a fact, a
+  label, or serialized state — goldens were byte-identical on the FIRST full-suite run, before
+  any test file was touched, confirming the claim by direct observation rather than by absence of
+  a diff. The world-source gate is now durable rather than a remembered discipline: `GateSpec`
+  scans every `src/Prax/Worlds/*.hs` literal for a `Prax`-namespaced token, replacing what had
+  been manual grep-checking, its own scanner mutation-evidenced (four discrimination cases) before
+  being trusted as the gate.
+
+  Suite: 540/540 (531 original + GateSpec's 10 − 4 old fixtures folded into usability-win
+  companions = 537, + 3 Repute follow-up pins), zero warnings, hlint clean, `prax check`
+  well-formed on all 7 worlds, ViewInvariant green. Lows, non-blocking: `isPraxVar` reserves the
+  whole `Prax` prefix rather than tracking the spec's exact `Prax<Uppercase>` shape (sound — never
+  lets real machinery through, just conservative); `Rumor.gossip`/`Deceit.lie` splice author
+  fragments beside interface variables with no fresh machinery variable, so correctly outside this
+  round's scope — banked here as a future-hygiene note for the v43 bundle, since no v43 entry
+  exists yet to carry it.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
