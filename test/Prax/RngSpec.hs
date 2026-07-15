@@ -107,13 +107,18 @@ tests = testGroup "Prax.Rng"
         r <- try (evaluate (length (draw 3 2 [] [])))
         assertBool "num > den rejected" (isLeft (r :: Either ErrorCall Int))
 
-    , testCase "a reserved variable in the caller's conditions is rejected" $ do
-        r <- try (evaluate (length (draw 1 2 [Match "flag.S"] [])))
-        assertBool "reserved var S in conds rejected" (isLeft (r :: Either ErrorCall Int))
+    , testCase "the Prax namespace in the caller's conditions is rejected" $ do
+        r <- try (evaluate (length (draw 1 2 [Match "flag.PraxS"] [])))
+        assertBool "PraxS in conds rejected" (isLeft (r :: Either ErrorCall Int))
 
-    , testCase "a reserved variable in the caller's outcomes is rejected" $ do
-        r <- try (evaluate (length (draw 1 2 [] [Insert "marked.R"])))
-        assertBool "reserved var R in outs rejected" (isLeft (r :: Either ErrorCall Int))
+    , testCase "the Prax namespace in the caller's outcomes is rejected" $ do
+        r <- try (evaluate (length (draw 1 2 [] [Insert "marked.PraxR"])))
+        assertBool "PraxR in outs rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "the usability win: S/S2/S3/R are ordinary variables now, no longer reserved" $ do
+        r <- try (evaluate (length (draw 1 2 [Match "flag.S"] [Insert "marked.R"])))
+        assertBool "S and R are unremarkable author variables post-v40"
+          (not (isLeft (r :: Either ErrorCall Int)))
 
     , testCase "rngSetup rejects a seed of 0" $ do
         r <- try (evaluate (length (rngSetup 0)))

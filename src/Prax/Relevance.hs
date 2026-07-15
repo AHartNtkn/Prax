@@ -114,14 +114,15 @@ outcomeAtoms fns visited o = case o of
 -- 'evictionShadows' below and 'Prax.Engine.performCooked'\'s cooked hot path
 -- go through this, so there is one name-shape, one implementation). One
 -- shadow per @!@ operator: the names up to and including that point,
--- followed by a fresh @"Evicted"@ segment (interns as a variable — uppercase
--- initial — so 'mayUnifySyms' treats it as the wildcard it denotes). Each
+-- followed by a fresh @"PraxEvicted"@ segment (interns as a variable —
+-- uppercase initial, Prax-namespaced machinery — so 'mayUnifySyms' treats it
+-- as the wildcard it denotes and no authored name can collide with it). Each
 -- exclusion clears the displaced sibling's entire subtree — arbitrary depth
 -- and shape — and 'mayUnifySyms' compares only up to the shorter path, so
 -- the truncated shadow covers every want under it.
 evictionShadowNames :: [(Sym, Maybe Char)] -> [[Sym]]
 evictionShadowNames toks =
-  [ map fst (take i toks) ++ [intern "Evicted"]
+  [ map fst (take i toks) ++ [intern "PraxEvicted"]
   | (i, (_, op)) <- zip [1 ..] toks, op == Just '!' ]
 
 -- | The eviction shadows of an exclusion insert, as sentences — 'mayUnify'
@@ -297,7 +298,7 @@ moverReadAnchors st actor m =
     readsOf b conds = cookedReadAnchors (map (groundCookedCondition b) conds)
     scopeReads   = readsOf scopeB (map cookCondition (predictionScope st))
     believesRead = [ intern (charName actor), intern "believes"
-                   , intern "desires", mSym, intern "D" ]
+                   , intern "desires", mSym, intern "PraxD" ]
     deadRead     = map intern (pathNames (deadSentence (charName m)))
     affordanceReads = concat
       [ groundNames actorB (cpInstanceNames cp)

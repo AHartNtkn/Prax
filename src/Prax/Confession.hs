@@ -12,16 +12,13 @@ module Prax.Confession
 import           Prax.Db (isVariable, pathNames, tokens, tokensToSentence)
 import           Prax.Sym (intern)
 import           Prax.Query (Condition (..), CmpOp (..))
-import           Prax.Types (Action, Outcome (..), action)
+import           Prax.Types (Action, Outcome (..), action, authoredPatClash)
 import           Prax.Derive (Axiom, axiom)
 import           Prax.Beliefs (beliefAbout)
 import           Prax.Witness (CoPresence, asRole)
 
 segOk :: String -> Bool
 segOk n = not (null n) && all (`notElem` (".!" :: String)) n
-
-reservedIn :: String -> [String] -> [String]
-reservedIn pat vs = [ v | v <- filter isVariable (pathNames pat), v `elem` vs ]
 
 -- | Confess ONE deed (one mark binding) to a co-present hearer. The lied-mark
 -- is the precondition and it CONVERTS — a deed can be confessed once; further
@@ -43,12 +40,13 @@ confess :: String -> CoPresence -> String -> String -> String -> Action
 confess kind copresence markPat depositPat label
   | not (segOk kind) =
       error ("confess: mark kind " ++ show kind ++ " must be a single path segment")
-  | (v : _) <- reservedIn markPat ["H", "Hearer", "Actor"] =
+  | (v : _) <- authoredPatClash ["H", "Hearer", "Actor"] (pathNames markPat) =
       error ("confess: mark pattern " ++ show markPat ++ " reserves variable " ++ show v
-             ++ " (the mark's hearer slot / the action's own roles)")
-  | (v : _) <- reservedIn depositPat ["Hearer"] =
+             ++ " (the mark's hearer slot / the action's own roles, or the Prax"
+             ++ " namespace)")
+  | (v : _) <- authoredPatClash ["Hearer"] (pathNames depositPat) =
       error ("confess: deposit pattern " ++ show depositPat ++ " reserves variable "
-             ++ show v ++ " (the confession's own audience role)")
+             ++ show v ++ " (the confession's own audience role, or the Prax namespace)")
   | (v : _) <- ungroundable =
       error ("confess: deposit pattern " ++ show depositPat ++ " variable " ++ show v
              ++ " is not grounded by the mark (only Actor, H, and " ++ show markPat
@@ -76,7 +74,7 @@ absolve defeater pat incLabel label
   | not (segOk defeater) || not (segOk incLabel) =
       error ("absolve: defeater/label must be single path segments: "
              ++ show (defeater, incLabel))
-  | (v : _) <- reservedIn pat ["Actor"] =
+  | (v : _) <- authoredPatClash ["Actor"] (pathNames pat) =
       error ("absolve: event pattern " ++ show pat ++ " reserves variable " ++ show v)
   | otherwise = case filter isVariable (pathNames pat) of
       [] -> error ("absolve: event pattern " ++ show pat
@@ -88,8 +86,9 @@ absolve defeater pat incLabel label
         , Not (defeater ++ "." ++ confessor) ]
         [ Insert (defeater ++ "." ++ confessor) ]
 
--- | Patience as knowledge: W regards the offender @label@ once W believes at
--- least @k@ distinct instances of the deed — however W learned them.
+-- | Patience as knowledge: the believer regards the offender @label@ once
+-- they believe at least @k@ distinct instances of the deed — however they
+-- learned them.
 --
 -- Mirrors 'Prax.Repute.notoriety''s Count idiom pointed inward, with one
 -- correction the mirroring forces: 'notoriety' keeps its outer existence
@@ -107,13 +106,15 @@ absolve defeater pat incLabel label
 -- non-offender variables, each suffixed @0@ — 'notoriety''s own @W@\/@W0@
 -- convention generalized to every deed variable) so they stay free entering
 -- the 'Subquery', which alone does the real per-instance counting under
--- their true names.
+-- their true names. The axiom's own believer\/subquery-set\/count variables
+-- live in the @Prax@ namespace (v40).
 incorrigible :: String -> Int -> String -> Axiom
 incorrigible pat k label
   | not (segOk label) =
       error ("incorrigible: label " ++ show label ++ " must be a single path segment")
-  | (v : _) <- reservedIn pat ["W", "Ds", "N"] =
-      error ("incorrigible: pattern " ++ show pat ++ " reserves variable " ++ show v)
+  | (v : _) <- authoredPatClash [] (pathNames pat) =
+      error ("incorrigible: pattern " ++ show pat ++ " reserves variable " ++ show v
+             ++ " -- the Prax namespace is reserved for the axiom's own machinery")
   | otherwise = case filter isVariable (pathNames pat) of
       [] -> error ("incorrigible: pattern " ++ show pat ++ " names no offender")
       [_] -> error ("incorrigible: pattern " ++ show pat
@@ -127,11 +128,11 @@ incorrigible pat k label
                    ++ " (a deed variable named <name>0 shadowing another"
                    ++ " variable named <name>)")
         | otherwise -> axiom
-            [ Match ("W.believes." ++ witnessPat)
-            , Subquery "Ds" rest [ Match ("W.believes." ++ pat) ]
-            , Count "N" "Ds"
-            , Cmp Gte "N" (show k) ]
-            [ "regards.W." ++ offender ++ "." ++ label ]
+            [ Match ("PraxW.believes." ++ witnessPat)
+            , Subquery "PraxDs" rest [ Match ("PraxW.believes." ++ pat) ]
+            , Count "PraxN" "PraxDs"
+            , Cmp Gte "PraxN" (show k) ]
+            [ "regards.PraxW." ++ offender ++ "." ++ label ]
         where
           witnessNames = map (++ "0") rest
           witnessPat = tokensToSentence

@@ -27,24 +27,35 @@ import           Prax.Types
 sightName :: String
 sightName = "_sight"
 
--- | The perception clock: one tick per round.
+-- | The perception clock: one tick per round. @sighting@ is spliced beside
+-- the clock's own tick machinery inside the same 'ForEach', so it may not use
+-- the @Prax@ namespace; @Seer@\/@Seen@\/@Spot@ are its CONTRACT variables —
+-- the sighting template is expected and required to bind them (the ticker's
+-- own outcomes read them straight back out), so they are NOT forbidden —
+-- only the namespace is.
 sightP :: [Condition] -> Practice
-sightP sighting = practice
-  { practiceId = "sight"
-  , practiceName = "time passes and people see each other"
-  , roles = ["S"]
-  , actions =
-      [ action ""
-          [ Eq "Actor" sightName
-          , Match "turn!N"
-          , Calc "M" Add "N" "1" ]
-          [ Insert "turn!M"
-          , ForEach (sighting ++ [ Neq "Seer" "Seen" ])
-              [ Insert "Seer.believes.at.Seen!Spot"
-              , Insert "Seer.believes.atSince.Seen!M" ]
+sightP sighting
+  | (v : _) <- offenders =
+      error ("Prax.Sight: sighting template authors " ++ show v
+             ++ " -- the Prax namespace is reserved for the ticker's own machinery")
+  | otherwise = practice
+      { practiceId = "sight"
+      , practiceName = "time passes and people see each other"
+      , roles = ["S"]
+      , actions =
+          [ action ""
+              [ Eq "Actor" sightName
+              , Match "turn!PraxN"
+              , Calc "PraxM" Add "PraxN" "1" ]
+              [ Insert "turn!PraxM"
+              , ForEach (sighting ++ [ Neq "Seer" "Seen" ])
+                  [ Insert "Seer.believes.at.Seen!Spot"
+                  , Insert "Seer.believes.atSince.Seen!PraxM" ]
+              ]
           ]
-      ]
-  }
+      }
+  where
+    offenders = authoredVarClash [] sighting []
 
 sightChar :: Character
 sightChar = (character sightName) { charBoundTo = Just "sight" }

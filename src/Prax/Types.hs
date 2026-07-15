@@ -17,6 +17,8 @@ module Prax.Types
   , action
   , Outcome(..)
   , outcomeVars
+  , authoredVarClash
+  , authoredPatClash
   , Function(..)
   , FnCase(..)
   , CookedOutcome(..)
@@ -39,7 +41,7 @@ module Prax.Types
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Bindings, Db, emptyDb, exists, pathNames)
+import           Prax.Db (Bindings, Db, emptyDb, exists, isVariable, pathNames)
 import           Prax.Query (Condition, CookedCondition, conditionVars)
 import           Prax.Derive (Axiom, CookedRule)
 import           Prax.Sym (Sym, intern)
@@ -99,6 +101,36 @@ outcomeVars o = case o of
   Delete s       -> pathNames s
   Call _ as      -> as
   ForEach cs os  -> concatMap conditionVars cs ++ concatMap outcomeVars os
+
+-- | The v40 hygiene boundary: variables an author-supplied fragment may not
+-- use when a combinator splices it into generated conditions. Two sources of
+-- capture, one check: the @Prax@ namespace (ALL machinery variables live
+-- there — see the spec; authors can never collide with them by accident) and
+-- the combinator's own interface bindings (e.g. 'Prax.Confession.confess'
+-- grounds @Actor@\/@H@ — an authored mark pattern using them would capture).
+-- Returns the offenders; each combinator raises its own contextual error.
+authoredVarClash :: [String]      -- ^ the combinator's spliced interface vars
+                 -> [Condition] -> [Outcome] -> [String]
+authoredVarClash interface conds outs =
+  [ v | v <- vars, isPraxVar v || v `elem` interface ]
+  where
+    vars = filter isVariable (concatMap conditionVars conds
+                              ++ concatMap outcomeVars outs)
+
+-- | 'authoredVarClash' for string-pattern arguments that are not
+-- 'Condition's (e.g. 'Prax.Confession.confess'\'s mark\/deposit patterns,
+-- 'Prax.Faction.factionStanding'\'s and 'Prax.Blackmail.shakedown'\'s
+-- evidence patterns): same two-source check, over already-split
+-- 'Prax.Db.pathNames' instead of 'conditionVars'\/'outcomeVars' — callers
+-- extract the names themselves (and drop any they mean to exempt, e.g.
+-- 'Prax.Blackmail.shakedown'\'s own victim variable) before calling.
+authoredPatClash :: [String] -> [String] -> [String]
+authoredPatClash interface names =
+  [ v | v <- filter isVariable names, isPraxVar v || v `elem` interface ]
+
+isPraxVar :: String -> Bool
+isPraxVar ('P':'r':'a':'x':_:_) = True
+isPraxVar _                     = False
 
 -- | A named function: guarded conditional effects (used for e.g. win-condition
 -- checks). The first case whose conditions hold runs; the rest are skipped.

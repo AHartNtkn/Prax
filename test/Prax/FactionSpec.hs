@@ -105,13 +105,18 @@ tests = testGroup "Prax.Faction"
       assertBool "an offender-only pattern is an error, not a silent single-variable guard"
         (isLeft (r :: Either ErrorCall Int))
 
-  , testCase "factionStanding: a pattern reusing W or F (the axiom's own join variables) errors loudly" $ do
+  , testCase "factionStanding: the usability win -- W and F are ordinary variables now (v40 moved the axiom's own join variables to the Prax namespace)" $ do
       r1 <- try (evaluate (length (show (factionStanding "struck.W.V" "brutal"))))
-      assertBool "an offender named W collides with the believer variable — must error, not silently no-op"
-        (isLeft (r1 :: Either ErrorCall Int))
+      assertBool "an offender named W no longer collides with anything"
+        (not (isLeft (r1 :: Either ErrorCall Int)))
       r2 <- try (evaluate (length (show (factionStanding "struck.A.F" "brutal"))))
-      assertBool "a victim named F collides with the shared-faction variable — must error, not silently no-op"
-        (isLeft (r2 :: Either ErrorCall Int))
+      assertBool "a victim named F no longer collides with anything"
+        (not (isLeft (r2 :: Either ErrorCall Int)))
+
+  , testCase "factionStanding: a pattern authoring the Prax namespace errors loudly" $ do
+      r <- try (evaluate (length (show (factionStanding "struck.PraxW.V" "brutal"))))
+      assertBool "an offender named PraxW collides with the axiom's own (now-namespaced) believer variable"
+        (isLeft (r :: Either ErrorCall Int))
 
   , testCase "factionStanding: the victim's own belief of the offense against them derives their regard too" $ do
       let world = setAxioms [factionStanding "struck.A.V" "brutal"]

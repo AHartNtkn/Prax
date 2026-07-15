@@ -137,14 +137,20 @@ tests = testGroup "Prax.Blackmail"
     , testCase "an evidence pattern naming no one errors loudly" $ do
         r <- try (evaluate (length (show (shakedown "defiance" together "somethinghappened" "favor" 6))))
         assertBool "a threat must be about someone" (isLeft (r :: Either ErrorCall Int))
-    , testCase "a secondary evidence variable named D collides with the punitive desire's D" $ do
-        r <- try (evaluate (length (show (shakedown "x" [] "took.V.from.D" "favor" 1))))
-        assertBool "D is reserved for the punitive desire's own victim variable"
-          (isLeft (r :: Either ErrorCall Int))
-    , testCase "a secondary evidence variable named W collides with the punitive desire's believer" $ do
-        r <- try (evaluate (length (show (shakedown "x" [] "took.V.by.W" "favor" 1))))
-        assertBool "W is reserved for the punitive desire's own believer variable"
-          (isLeft (r :: Either ErrorCall Int))
+    , testCase "the usability win: a secondary evidence variable named D or W no longer collides (v40 moved the punitive desire's own machinery to the Prax namespace)" $ do
+        r1 <- try (evaluate (length (show (shakedown "x" [] "took.V.from.D" "favor" 1))))
+        assertBool "D is an unremarkable secondary variable post-v40"
+          (not (isLeft (r1 :: Either ErrorCall Int)))
+        r2 <- try (evaluate (length (show (shakedown "x" [] "took.V.by.W" "favor" 1))))
+        assertBool "W is an unremarkable secondary variable post-v40"
+          (not (isLeft (r2 :: Either ErrorCall Int)))
+    , testCase "a secondary evidence variable authoring the Prax namespace collides with the punitive desire's own machinery" $ do
+        r1 <- try (evaluate (length (show (shakedown "x" [] "took.V.from.PraxD" "favor" 1))))
+        assertBool "PraxD is reserved for the punitive desire's own victim variable"
+          (isLeft (r1 :: Either ErrorCall Int))
+        r2 <- try (evaluate (length (show (shakedown "x" [] "took.V.by.PraxW" "favor" 1))))
+        assertBool "PraxW is reserved for the punitive desire's own believer variable"
+          (isLeft (r2 :: Either ErrorCall Int))
     , testCase "a secondary evidence variable named Owner collides with the desire's Owner" $ do
         r <- try (evaluate (length (show (shakedown "x" [] "took.V.for.Owner" "favor" 1))))
         assertBool "Owner is reserved for the desire's own Owner-templated variable"

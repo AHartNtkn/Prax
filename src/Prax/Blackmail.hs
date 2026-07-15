@@ -38,7 +38,8 @@ module Prax.Blackmail
 import           Prax.Db (isVariable, pathNames, tokens, tokensToSentence)
 import           Prax.Sym (intern)
 import           Prax.Query (Condition (..))
-import           Prax.Types (Action, Desire (..), Outcome (..), Want (..), action)
+import           Prax.Types (Action, Desire (..), Outcome (..), Want (..), action,
+                             authoredPatClash)
 import           Prax.Beliefs (beliefAbout)
 import           Prax.Witness (CoPresence, asRole)
 import           Prax.Debt (debtPath, owe)
@@ -67,13 +68,14 @@ shakedown sid copresence pat price w
   | any (`elem` (".!" :: String)) sid =
       error ("shakedown: id " ++ show sid
              ++ " must be a single path segment (no '.' or '!')")
-  | (bad : _) <- reservedClash =
+  | (bad : _) <- offenders =
       error ("shakedown: evidence pattern " ++ show pat
              ++ " names a secondary variable " ++ show bad
-             ++ ", but D (the punitive desire's victim), W (its believer),"
-             ++ " Owner (its extorter), Actor and Hearer (the generated"
-             ++ " actions' own actor/hearer) are all reserved — pick a"
-             ++ " different variable name for anyone besides the victim")
+             ++ ", but Owner (the punitive desire's extorter), Actor and"
+             ++ " Hearer (the generated actions' own actor/hearer), and the"
+             ++ " Prax namespace (the punitive desire's own machinery) are"
+             ++ " all reserved — pick a different variable name for anyone"
+             ++ " besides the victim")
   | otherwise = (punitive, [threaten, comply, defy, expose])
   where
     victim = case filter isVariable (pathNames pat) of
@@ -81,16 +83,15 @@ shakedown sid copresence pat price w
       []      -> error ("shakedown: evidence pattern " ++ show pat
                         ++ " names no one (a threat needs a victim)")
 
-    -- Beyond the victim, 'patD' reuses D/W/Owner as the punitive desire's own
-    -- variables (below), and the generated actions bind Actor/Hearer as
-    -- their own local roles ('threaten'/'comply'/'defy' via the actor, plus
-    -- 'expose' and any world-supplied 'gossip' over the same pattern via
-    -- their own Hearer); a secondary evidence variable bearing any of those
-    -- five names would silently merge with them under 'renameVictim',
-    -- grounding, or the shared query scope.
-    reservedClash =
-      [ v | v <- pathNames pat, isVariable v, v /= victim
-          , v `elem` ["D", "W", "Owner", "Actor", "Hearer"] ]
+    -- Beyond the victim, 'patD' reuses the Prax namespace/Owner as the
+    -- punitive desire's own variables (below), and the generated actions
+    -- bind Actor/Hearer as their own local roles ('threaten'/'comply'/'defy'
+    -- via the actor, plus 'expose' and any world-supplied 'gossip' over the
+    -- same pattern via their own Hearer); a secondary evidence variable
+    -- bearing any of those names would silently merge with them under
+    -- 'renameVictim', grounding, or the shared query scope.
+    offenders = authoredPatClash ["Owner", "Actor", "Hearer"]
+                  (filter (/= victim) (pathNames pat))
 
     -- Fact conventions, id-scoped so multiple shakedowns coexist.
     threatPath extorter v = "threatened." ++ sid ++ "." ++ extorter ++ "." ++ v
@@ -135,14 +136,14 @@ shakedown sid copresence pat price w
       [ Insert (beliefAbout "Hearer" pat ++ ".heard.Actor") ]
 
     -- The punitive desire's evidence clause quantifies over a fresh victim
-    -- (D, distinct from any one shakedown's grounded victim); patD is pat
-    -- with its victim variable renamed to D, op-preservingly.
-    patD = renameVictim victim "D" pat
+    -- (PraxD, distinct from any one shakedown's grounded victim); patD is
+    -- pat with its victim variable renamed to PraxD, op-preservingly.
+    patD = renameVictim victim "PraxD" pat
 
     punitive = Desire punitiveName
-      (Want [ Or [ [ Match (defiedPath "D" "Owner") ]
-                 , [ Match (threatPath "Owner" "D") ] ]
-            , Match (beliefAbout "W" patD) ]
+      (Want [ Or [ [ Match (defiedPath "PraxD" "Owner") ]
+                 , [ Match (threatPath "Owner" "PraxD") ] ]
+            , Match (beliefAbout "PraxW" patD) ]
             w)
 
 -- | Substitute @victim@ for @newName@ throughout @pat@, preserving each

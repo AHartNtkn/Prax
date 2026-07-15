@@ -46,6 +46,7 @@ import qualified Prax.ScriptSpec
 import qualified Prax.Script.JsonSpec
 import qualified Prax.DirectorSpec
 import qualified Prax.VillageSpec
+import qualified Prax.GateSpec
 
 main :: IO ()
 main = defaultMain $ testGroup "prax"
@@ -93,4 +94,5 @@ main = defaultMain $ testGroup "prax"
   , Prax.Script.JsonSpec.tests
   , Prax.DirectorSpec.tests
   , Prax.VillageSpec.tests
+  , Prax.GateSpec.tests
   ]

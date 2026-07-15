@@ -22,12 +22,13 @@ module Prax.Drift
 
 import           Data.List (nub, (\\))
 import           Prax.Db (pathNames)
-import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..), conditionVars)
+import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Types
 
 -- | One authored pulse: every 'driftPeriod' rounds, apply each body clause
 -- as a 'ForEach' (conditions may bind freely — every satisfying binding
--- fires). Variables @D@\/@D2@\/@Now@ are reserved by the due gate.
+-- fires). The due gate's own machinery lives in the @Prax@ namespace
+-- ('authoredVarClash') and may not appear in an authored body.
 --
 -- __Authoring periods for real games__: a round (everyone acts once) is a
 -- few MINUTES of fiction — roughly 12 rounds an hour, ~150 to a waking day
@@ -85,12 +86,12 @@ driftP rules
     compileRule r =
       [ ForEach (dueGate r ++ conds) outs | (conds, outs) <- driftBody r ]
       ++ [ ForEach (dueGate r)
-             [ Insert ("due." ++ driftRuleName r ++ "!D2") ] ]
+             [ Insert ("due." ++ driftRuleName r ++ "!PraxD2") ] ]
     dueGate r =
-      [ Match ("due." ++ driftRuleName r ++ "!D")
-      , Match "turn!Now"
-      , Cmp Gte "Now" "D"
-      , Calc "D2" Add "Now" (show (driftPeriod r)) ]
+      [ Match ("due." ++ driftRuleName r ++ "!PraxD")
+      , Match "turn!PraxNow"
+      , Cmp Gte "PraxNow" "PraxD"
+      , Calc "PraxD2" Add "PraxNow" (show (driftPeriod r)) ]
 
 -- | Instance + one seeded due per rule, a full period out: the world starts
 -- sated\/sober and the first pulse lands after one period (stated semantics).
@@ -128,21 +129,21 @@ gathering name period duration openOuts closeOuts
     closeR = DriftRule (name ++ "Close") period [ ([], closeOuts) ]
 
 -- Loud construction-time guards: a multi-segment rule name would corrupt the
--- due path; a body using D/D2/Now would capture the gate's bindings.
+-- due path; a body authoring the Prax namespace would capture the gate's
+-- own machinery (no interface splices here — drift bodies are whole-condition
+-- author fragments, so the shared guard's interface list is empty).
 guardRule :: DriftRule -> DriftRule
 guardRule r
   | length (pathNames (driftRuleName r)) /= 1 =
       error ("Prax.Drift: rule name must be a single segment: "
              ++ driftRuleName r)
-  | any (`elem` reserved) (bodyVars r) =
+  | (v : _) <- offenders =
       error ("Prax.Drift: rule " ++ driftRuleName r
-             ++ " uses a reserved variable (D/D2/Now)")
+             ++ " authors " ++ show v
+             ++ " -- the Prax namespace is reserved for the due gate's own machinery")
   | driftPeriod r < 1 =
       error ("Prax.Drift: rule " ++ driftRuleName r
              ++ " needs a positive period")
   | otherwise = r
   where
-    reserved = ["D", "D2", "Now"]
-    bodyVars rl = concat
-      [ concatMap conditionVars cs ++ concatMap outcomeVars os
-      | (cs, os) <- driftBody rl ]
+    offenders = concat [ authoredVarClash [] cs os | (cs, os) <- driftBody r ]

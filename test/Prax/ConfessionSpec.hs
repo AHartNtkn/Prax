@@ -503,9 +503,15 @@ guardTests = testGroup "guards"
       r <- try (evaluate (length (show (axiomThen (incorrigible pat 2 "fed.up")))))
       assertBool "a dotted label is an error" (isLeft (r :: Either ErrorCall Int))
 
-  , testCase "incorrigible rejects a pattern reserving W/Ds/N" $ do
-      r <- try (evaluate (length (show (axiomThen (incorrigible "wronged.Doer.Ds" 2 "fedUp")))))
-      assertBool "Ds is reserved (the subquery's own set variable)" (isLeft (r :: Either ErrorCall Int))
+  , testCase "incorrigible rejects a pattern authoring the Prax namespace" $ do
+      r <- try (evaluate (length (show (axiomThen (incorrigible "wronged.Doer.PraxDs" 2 "fedUp")))))
+      assertBool "PraxDs is reserved (the axiom's own subquery set variable)"
+        (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "incorrigible: the usability win -- W/Ds/N are ordinary variables now (v40 moved the axiom's own machinery to the Prax namespace)" $ do
+      r <- try (evaluate (length (show (axiomThen (incorrigible "wronged.Doer.Ds.W.N" 2 "fedUp")))))
+      assertBool "W, Ds, and N no longer collide with anything"
+        (not (isLeft (r :: Either ErrorCall Int)))
 
   , testCase "incorrigible rejects a pattern naming no offender" $ do
       r <- try (evaluate (length (show (axiomThen (incorrigible "somethinghappened" 2 "fedUp")))))

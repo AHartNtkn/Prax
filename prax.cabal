@@ -89,10 +89,12 @@ test-suite prax-test
                     , containers
                     , bytestring
                     , aeson
+                    , directory
                     , prax
                     , tasty
                     , tasty-hunit
     other-modules:    Prax.SymSpec
+                      Prax.GateSpec
                       Prax.DbSpec
                       Prax.QuerySpec
                       Prax.CookedSpec

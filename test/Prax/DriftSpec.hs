@@ -106,10 +106,16 @@ tests = testGroup "Prax.Drift"
       r <- try (evaluate (length (show (driftP [DriftRule "a.b" 2 []]))))
       assertBool "multi-segment name rejected" (isLeft (r :: Either ErrorCall Int))
 
-  , testCase "a body mentioning the reserved Now variable is a loud error" $ do
+  , testCase "a body authoring the Prax namespace is a loud error" $ do
       r <- try (evaluate (length (show
-             (driftP [DriftRule "x" 2 [([Match "flag.Now"], [])]]))))
-      assertBool "reserved variable Now rejected" (isLeft (r :: Either ErrorCall Int))
+             (driftP [DriftRule "x" 2 [([Match "flag.PraxNow"], [])]]))))
+      assertBool "the Prax namespace (PraxNow) is rejected" (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "the usability win: D/D2/Now are ordinary variables now, no longer reserved" $ do
+      r <- try (evaluate (length (show
+             (driftP [DriftRule "x" 2 [([Match "flag.Now"], [Insert "marked.D"])]]))))
+      assertBool "D and Now are unremarkable author variables post-v40"
+        (not (isLeft (r :: Either ErrorCall Int)))
 
   , testCase "a zero period is a loud error" $ do
       r <- try (evaluate (length (show

@@ -263,7 +263,7 @@ tests = testGroup "Prax.Engine"
         Nothing -> assertFailure "trade must be bounded"
         Just as -> do
           assertBool "grounded insert path" (has "coin.ada.spent" as)
-          assertBool "eviction shadow"      (has "coin.ada.Evicted" as)
+          assertBool "eviction shadow"      (has "coin.ada.PraxEvicted" as)
           assertBool "grounded delete path" (has "stock.ada" as)
       anchorsOf "ada: enroll" @?= Nothing           -- spawn opacity
       case anchorsOf "ada: ritual" of

@@ -223,7 +223,7 @@ tests = testGroup "Prax.Relevance"
           anchors = moverReadAnchors st priya beth'
           has s = map intern (pathNames s) `elem` anchors
       assertBool "believes family, actor+mover grounded"
-        (has "priya.believes.desires.beth.D")
+        (has "priya.believes.desires.beth.PraxD")
       assertBool "death mark" (has "dead.beth")
       assertBool "affordance condition, Actor:=beth" (has "hungry.beth")
       assertBool "ForEach guard read" (has "crumb.C")

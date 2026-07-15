@@ -13,8 +13,7 @@ module Prax.Rng
   , seedPath
   ) where
 
-import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..),
-                             conditionVars)
+import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Types
 
 -- | The die's fact family. One slot: the stream position.
@@ -51,18 +50,18 @@ draw num den conds outs
   | num <= 0 || num >= den =
       error ("Prax.Rng: draw odds " ++ show num ++ "/" ++ show den
              ++ " must satisfy 0 < num < den")
-  | any (`elem` reserved) callerVars =
-      error "Prax.Rng: draw bodies may not use the reserved variables S/S2/S3/R"
+  | (v : _) <- offenders =
+      error ("Prax.Rng: draw body authors " ++ show v
+             ++ " -- the Prax namespace is reserved for the die's own machinery")
   | otherwise =
-      [ ForEach [ Match (seedPath ++ "!S")
-                , Calc "S2" Mul "S" (show lehmerA)
-                , Calc "S3" Mod "S2" (show lehmerM) ]
-                [ Insert (seedPath ++ "!S3") ]
-      , ForEach ([ Match (seedPath ++ "!S")
-                 , Calc "R" Mod "S" (show den)
-                 , Cmp Lt "R" (show num) ] ++ conds)
+      [ ForEach [ Match (seedPath ++ "!PraxS")
+                , Calc "PraxS2" Mul "PraxS" (show lehmerA)
+                , Calc "PraxS3" Mod "PraxS2" (show lehmerM) ]
+                [ Insert (seedPath ++ "!PraxS3") ]
+      , ForEach ([ Match (seedPath ++ "!PraxS")
+                 , Calc "PraxR" Mod "PraxS" (show den)
+                 , Cmp Lt "PraxR" (show num) ] ++ conds)
                 outs
       ]
   where
-    reserved = ["S", "S2", "S3", "R"]
-    callerVars = concatMap conditionVars conds ++ concatMap outcomeVars outs
+    offenders = authoredVarClash [] conds outs

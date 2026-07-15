@@ -1,5 +1,7 @@
 module Prax.SightSpec (tests) where
 
+import           Control.Exception (ErrorCall, evaluate, try)
+import           Data.Either (isLeft)
 import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
@@ -78,4 +80,15 @@ tests = testGroup "Prax.Sight"
 
   , testCase "the fixture world is well-formed" $
       typeCheck world @?= []
+
+  , testGroup "the v40 guard (previously latent: an authored sighting template had no guard at all)"
+    [ testCase "a sighting template authoring the Prax namespace is a loud construction-time error" $ do
+        r <- try (evaluate (length (roles (sightP [Match "at.PraxN!Spot", Match "at.Seen!Spot"]))))
+        assertBool "PraxN in the sighting template is rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "Seer/Seen/Spot remain legal -- they are the contract, not forbidden" $ do
+        r <- try (evaluate (length (roles (sightP sighting))))
+        assertBool "the ordinary Seer/Seen/Spot fixture is NOT rejected"
+          (not (isLeft (r :: Either ErrorCall Int)))
+    ]
   ]
