@@ -12,9 +12,12 @@ import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, performOutcome, setDesires, groundOutcome)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Core (adjustScore)
-import           Prax.Planner (predictMove, pickAction)
+import           Prax.Planner (predictMove, pickAction, candidateActions, motiveSignature)
 import           Prax.Sight (sightName)
 import           Prax.Witness (witnessed)
+import           Prax.Drift (driftChar)
+import           Prax.Rng (rngSetup)
+import           Prax.Emotion (feelToward, angry)
 import           Prax.Worlds.Village
 
 -- Perform the named actor's action whose label mentions @needle@.
@@ -781,6 +784,138 @@ tests = testGroup "Prax.Worlds.Village"
         (exists "eve.lied.dana.stole.carol.loaf" (db st))
       assertBool "no confession, ever" (not (exists "eve.confessed.dana.stole.carol.loaf" (db st)))
       assertBool "no absolution, ever" (not (exists "recanted.eve" (db st)))
+
+    --------------------------------------------------------------------------
+    -- v38: carol's temper (Prax.Rng's die + Prax.Emotion's feelings, cargo
+    -- @docs/specs/2026-07-15-v38-chance-feelings.md@) -- onset at the shun
+    -- action, priced as discomfort, discharged by confronting, faded if
+    -- never vented. The shipped seed (1988) makes the golden's OWN dramatic
+    -- beat -- dana's shun of carol, round 2 of 'Prax.GoldenDriveSpec' --
+    -- draw a hit (verified directly below); free play's VISIBLE decisions
+    -- are unaffected (the golden itself is unchanged, confirmed by its own
+    -- passing test) because carol never gains a confront outlet inside that
+    -- 21-turn window -- the anger simply sits, discomfort with nowhere to
+    -- discharge, exactly what 'feelingsFade' is for.
+    --------------------------------------------------------------------------
+
+  , testCase "the golden's own beat: dana's shun of carol draws a hit at the shipped seed" $ do
+      -- Replays 'Prax.GoldenDriveSpec.villageGolden' up to and including
+      -- index 11 ("dana: dana: shun carol"), then checks the die's
+      -- consequence directly -- the golden pins the LABELS only, never the
+      -- feeling facts, so this is the one place that beat's actual draw
+      -- outcome is asserted.
+      let trace = iterate (idleStep playerName) villageWorld
+          beforeShun = trace !! 11
+          afterShun  = trace !! 12
+      assertBool "dana has not yet shunned carol" (not (exists "shunned.dana.carol" (db beforeShun)))
+      assertBool "carol not yet angry" (not (exists "carol.feels.angry.toward.dana" (db beforeShun)))
+      assertBool "dana's turn was the shun" (exists "shunned.dana.carol" (db afterShun))
+      assertBool "the die hit: carol is angry at dana"
+        (exists "carol.feels.angry.toward.dana" (db afterShun))
+
+  , testCase "onset arms across seeds: the same shun hits under one seed, misses under another" $ do
+      -- bob (not short-tempered) is shunned by 'you' -- isolates the BASE
+      -- arm (1 in 4) alone, since the trait arm's own guard can never pass
+      -- for him. Seeds computed directly against the Lehmer stream
+      -- (Prax.Rng's own constants): lehmerNext 4 = 33614 -> mod 4 == 0 (a
+      -- hit); lehmerNext 2 = 33614/2... = 16807*2 mod (2^31-1) = 33614 ->
+      -- mod 4 == 2 (a miss). Computed and cross-checked against the probe
+      -- run, not assumed.
+      let stTheft   = doAct "bob" "steal the loaf" villageWorld
+          seeded n  = foldl (flip performOutcome) stTheft (rngSetup n)
+          stHitPre  = seeded 4
+          stMissPre = seeded 2
+          stHit     = doAct "you" "shun bob" stHitPre
+          stMiss    = doAct "you" "shun bob" stMissPre
+      assertBool "before (hit branch): bob calm" (not (exists "bob.feels.angry.toward.you" (db stHitPre)))
+      assertBool "after (seed 4): the base arm hits -- bob is angry"
+        (exists "bob.feels.angry.toward.you" (db stHit))
+      assertBool "the shun itself always lands regardless of the die"
+        (exists "shunned.you.bob" (db stHit))
+      assertBool "before (miss branch): bob calm" (not (exists "bob.feels.angry.toward.you" (db stMissPre)))
+      assertBool "after (seed 2): the base arm misses -- bob stays calm"
+        (not (exists "bob.feels.angry.toward.you" (db stMiss)))
+      assertBool "the shun still lands on a miss (odds price the FEELING, not the act)"
+        (exists "shunned.you.bob" (db stMiss))
+
+  , testCase "the trait arm: short-tempered carol reaches where an un-tempered control does not" $ do
+      -- Same seed (1), same two-draw arithmetic, two different shunned
+      -- parties: carol bears 'shortTempered.carol' (seeded from t=0), bob
+      -- does not. At seed 1: the base arm misses (lehmerNext 1 mod 4 == 3)
+      -- but the trait arm's own roll hits (lehmerNext (lehmerNext 1) mod 4
+      -- == 1 < 2) -- so ONLY the bearer flares; the control, gated off by
+      -- 'shortTempered.T', does not, even though the arithmetic is
+      -- identical for both (verified: both branches share the same seed).
+      let stFramed        = performOutcome (Insert "you.believes.stole.carol.loaf.seen") villageWorld
+          stFramedSeeded  = foldl (flip performOutcome) stFramed (rngSetup 1)
+          stCarolShunned  = doAct "you" "shun carol" stFramedSeeded
+          stTheftSeeded   = foldl (flip performOutcome) (doAct "bob" "steal the loaf" villageWorld) (rngSetup 1)
+          stBobShunned    = doAct "you" "shun bob" stTheftSeeded
+      assertBool "carol bears the trait" (exists "shortTempered.carol" (db villageWorld))
+      assertBool "bob does not" (not (exists "shortTempered.bob" (db villageWorld)))
+      assertBool "before: carol calm" (not (exists "carol.feels.angry.toward.you" (db stFramedSeeded)))
+      assertBool "after (seed 1, trait arm): carol is angry"
+        (exists "carol.feels.angry.toward.you" (db stCarolShunned))
+      assertBool "before: bob calm" (not (exists "bob.feels.angry.toward.you" (db stTheftSeeded)))
+      assertBool "after (seed 1, same arithmetic, no trait): bob stays calm"
+        (not (exists "bob.feels.angry.toward.you" (db stBobShunned)))
+      -- v35 note: onset flips carol's satisfaction vector -- she wakes
+      -- (a fresh deliberation, not a stale standing intention, is what the
+      -- signature mismatch forces on her next turn).
+      let sigBefore = motiveSignature stFramedSeeded (villager "carol")
+          sigAfter  = motiveSignature stCarolShunned (villager "carol")
+      assertBool "before/after differ: onset wakes her (v35 signature mismatch)"
+        (sigBefore /= sigAfter)
+
+  , testCase "anger drives the confrontation: the smoulder discharged, feeling gone" $ do
+      -- carol already picks "confront bob" the moment she witnesses his
+      -- theft (her own +5 want dominates regardless of temper -- verified:
+      -- her calm pick is identical); what v38 adds is that PERFORMING it,
+      -- while angry, also vents the feeling -- both halves asserted.
+      let stTheft = doAct "bob" "steal the loaf" villageWorld
+          stAngry = performOutcome (feelToward "carol" angry "bob") stTheft
+      fmap gaLabel (pickAction 2 stTheft (villager "carol"))
+        @?= Just "carol: confront bob about the theft"
+      fmap gaLabel (pickAction 2 stAngry (villager "carol"))
+        @?= Just "carol: confront bob about the theft"
+      assertBool "angry before confronting" (exists "carol.feels.angry.toward.bob" (db stAngry))
+      let stConfront = doAct "carol" "confront bob" stAngry
+      assertBool "the smoulder is discharged: not angry after confronting"
+        (not (exists "carol.feels.angry.toward.bob" (db stConfront)))
+
+  , testCase "fade catches the unvented (hand clock)" $ do
+      -- No outlet offered here (no theft, no witness) -- the anger just
+      -- sits until 'villageFade' (period 4) sweeps it. Absent one turn
+      -- short of due, gone exactly at it -- the DriftSpec hand-clock idiom
+      -- ('Insert "turn!N"'), matching 'Prax.Emotion.feelingsFade's own test.
+      let atTurn k = performOutcome (Insert ("turn!" ++ show (k :: Int)))
+          pulse st = snd (npcAct 2 driftChar st)
+          stAngry  = performOutcome (feelToward "carol" angry "dana") villageWorld
+      assertBool "angry from the outset" (exists "carol.feels.angry.toward.dana" (db stAngry))
+      let st3 = pulse (atTurn 3 stAngry)
+      assertBool "still angry, one turn short of the due (4)"
+        (exists "carol.feels.angry.toward.dana" (db st3))
+      let st4 = pulse (atTurn 4 st3)
+      assertBool "faded exactly at the due pulse"
+        (not (exists "carol.feels.angry.toward.dana" (db st4)))
+      -- v35 note: fade flips the vector back -- she wakes again on the way out.
+      let sigAngry = motiveSignature stAngry (villager "carol")
+          sigFaded = motiveSignature st4 (villager "carol")
+      assertBool "before/after differ: fade wakes her too (v35 signature mismatch)"
+        (sigAngry /= sigFaded)
+
+  , testCase "the liveness pin: smoulders is FloorCheck" $ do
+      let tbl = liveness villageWorld
+      tbl Map.! "smoulders" @?= FloorCheck
+
+  , testCase "THE INVARIANT at world scale: carol's candidateActions is identical angry or calm" $ do
+      let calmActs   = candidateActions villageWorld (villager "carol")
+          angryWorld = performOutcome (feelToward "carol" angry "dana") villageWorld
+          angryActs  = candidateActions angryWorld (villager "carol")
+      assertBool "the angry world really does differ (the feeling is present)"
+        (exists "carol.feels.angry.toward.dana" (db angryWorld)
+         && not (exists "carol.feels.angry.toward.dana" (db villageWorld)))
+      calmActs @?= angryActs
   ]
   where
     -- The fallback arc's own forced trajectory (whisperArcSetup's idiom):

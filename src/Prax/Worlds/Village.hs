@@ -43,6 +43,8 @@ import           Prax.Persona
 import           Prax.Debt (owes)
 import           Prax.Blackmail (shakedown)
 import           Prax.Confession (confess, absolve, incorrigible)
+import           Prax.Rng (rngSetup, draw)
+import           Prax.Emotion (feelToward, unfeelToward, angry, feelingsFade)
 
 -- | You are a villager — one agent among many.
 playerName :: String
@@ -111,6 +113,25 @@ hungerPulse :: DriftRule
 hungerPulse = DriftRule "hunger" 3
   [ ( [ Match "appetite.X", Not "hungry.X" ], [ Insert "hungry.X" ] ) ]
 
+-- Feelings fade (v38 spec @docs/specs/2026-07-15-v38-chance-feelings.md@,
+-- Task 3's own wiring pattern): the village gets its own pulse, independent
+-- of the bar's. TEST-COMPRESSED cadence (see Prax.Drift's authoring note;
+-- real authoring: hours, ~24-48 rounds) — period 4, the same shipped
+-- cadence as 'Prax.Worlds.Bar.barFade'.
+villageFade :: DriftRule
+villageFade = feelingsFade 4
+
+-- The drama die's seed (Prax.Rng): an authored world parameter that selects
+-- THIS playthrough's fate — every draw below reads off this one stream, and
+-- the goldens pin its consequences. Picked as a nod to Park & Miller's own
+-- 1988 publication (the die's mechanism, per 'Prax.Rng's haddock). At this
+-- seed, the golden's own dramatic beat — dana's shun of carol — draws a hit
+-- on both arms (computed: lehmerNext(1988) mod 4 == 0, so the base 1-in-4
+-- arm alone already lands; lehmerNext(lehmerNext(1988)) mod 4 == 1 < 2, so
+-- the trait arm would have too).
+villageSeed :: Integer
+villageSeed = 1988
+
 -- Hunger, when it arrives, outranks pride and larder both: eating spends
 -- the +10 loaf AND forfeits the finished endeavor's +9 stage credit (3
 -- stages x 3, torn down by the eat), so the relief must beat 19 -- at -22,
@@ -177,6 +198,14 @@ honest = Trait "honest"
       (Want [ Match "Owner.lied.H.stole.C.loaf" ] (-6))
   , Desire "conscience-remembers"
       (Want [ Match "Owner.confessed.H.stole.C.loaf" ] (-6)) ]
+
+-- Pricing the smoulder (v38 spec): anger as discomfort, driving its own
+-- discharge. -8 outweighs carol's own +5 event wants (confronted.carol.T;
+-- shunned.carol.T-and-regards) so she acts to relieve it when she can, but
+-- there is no conduct stake of hers in this world for it to outweigh; v33's
+-- FloorCheck keeps the unfelt state planning-free (verified in the pins).
+smoulders :: Desire
+smoulders = Desire "smoulders" (Want [ Match "Owner.feels.angry" ] (-8))
 
 -- Malice with a name: wanting carol ill-regarded, per head. Naming it makes
 -- it believable (a told-about spite enters prediction) but it stays
@@ -267,13 +296,17 @@ villageP = practice
 
         -- Only someone who SAW the theft can call it out; it cools them toward
         -- the thief. dana, who was elsewhere, never gets this affordance.
+        -- Discharge (v38 spec): confronting vents any anger held toward the
+        -- very person confronted — the smoulder's own outlet, reusing this
+        -- affordance rather than authoring a new one this round.
       , action "[Actor]: confront [Thief] about the theft"
           [ saw "Actor" "stole.Thief.loaf"
           , Match "practice.world.world.at.Actor!P"
           , Match "practice.world.world.at.Thief!P"
           , Not "confronted.Actor.Thief" ]
           [ Insert "confronted.Actor.Thief"
-          , adjustScore "Actor" "Thief" "trust" (-10) "sawTheft" ]
+          , adjustScore "Actor" "Thief" "trust" (-10) "sawTheft"
+          , unfeelToward "Actor" angry "Thief" ]
 
         -- Word travels: anyone with evidence can pass it on. Never told: bob
         -- (the subject), an eyewitness (no news value), or the same hearer
@@ -298,12 +331,20 @@ villageP = practice
           , adjustScore "Actor" "Thief" "trust" (-5) "heardOfTheft" ]
 
         -- Standing has teeth: anyone who has come to regard [T] a thief may
-        -- shun them — reputation (a derived fact) gating behaviour.
+        -- shun them — reputation (a derived fact) gating behaviour. Being
+        -- shunned stings (v38 spec): anyone might flare (1 in 4 — the
+        -- direct, victim-present provocation); a short temper flares on
+        -- most slights too (a further 2 in 4, so 3 in 4 overall for the
+        -- short-tempered — each arm's odds an authored sentence; the trait
+        -- makes the feeling LIKELIER, never longer). Two draws, two stream
+        -- steps, by design; a double hit's insert is idempotent.
       , action "[Actor]: shun [T]"
           [ regardedAs "Actor" "T" "thief"
           , Neq "T" "Actor"
           , Not "shunned.Actor.T" ]
-          [ Insert "shunned.Actor.T" ]
+          ( [ Insert "shunned.Actor.T" ]
+            ++ draw 1 4 [] [ feelToward "T" angry "Actor" ]
+            ++ draw 2 4 [ Match "shortTempered.T" ] [ feelToward "T" angry "Actor" ] )
 
         -- Atonement, not amnesia: returning the loaf defeats the standing --
         -- every regard dissolves on the next read -- while every belief (the
@@ -386,7 +427,7 @@ villageAxioms =
 villageWorld :: PraxState
 villageWorld =
   (setDesires ([ earnBreadPursuit, spitesCarol, punishesWhisper, suffersHunger
-                 , drawnToMarket ]
+                 , drawnToMarket, smoulders ]
                  ++ personaVocabulary [honest])
      (setAxioms villageAxioms (foldl (flip performOutcome) base (setup ++ personaFacts))))
   -- an epistemic prediction scope: you credit another's predicted move only
@@ -435,7 +476,7 @@ villageWorld =
                            -- punitive desire is what motivates the threat;
                            -- this just makes the payoff concrete)
                          , Want [ owes "carol" "eve" "favor" ] 4 ]
-           , charDesires = ["punishes-whisper", "drawn-to-market"] }, [])
+           , charDesires = ["punishes-whisper", "drawn-to-market", "smoulders"] }, [])
       , ((character "dana")
            { charWants = [ Want [ Match "confronted.dana.T" ] 5
                          , Want [ Match "eyed.dana.T" ] 5
@@ -466,7 +507,7 @@ villageWorld =
     base = setCharacters (roster ++ [sightChar, driftChar])
              (definePractices [coreLib, worldP, villageP, earnBreadP, marketP
                                , sightP villageSighting
-                               , driftP (hungerPulse : fst marketCalendar)] emptyState)
+                               , driftP (hungerPulse : villageFade : fst marketCalendar)] emptyState)
     setup =
       [ Insert "practice.village.here"
       , Insert "practice.world.world.connected.square.mill"
@@ -479,4 +520,10 @@ villageWorld =
       , Insert "practice.world.world.at.gale!mill"
       , Insert "stall.loaf"
       , Insert "appetite.bob"
-      ] ++ sightSetup ++ driftSetup [hungerPulse] ++ snd marketCalendar
+        -- Temperament, the round's stochastic cargo (v38 spec): a plain
+        -- disposition fact, not a Trait bundle (it gates a draw's odds, not
+        -- a conduct-desire) — like every disposition it never fades, unlike
+        -- the episodic feeling it primes.
+      , Insert "shortTempered.carol"
+      ] ++ sightSetup ++ driftSetup [hungerPulse, villageFade] ++ snd marketCalendar
+        ++ rngSetup villageSeed
