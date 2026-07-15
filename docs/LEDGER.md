@@ -972,9 +972,10 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   discharged, a +13 swing: the smoulder's own +8 relief plus the confront act's own +5 want firing
   simultaneously, computed not assumed), MUTATION-VERIFIED: reverting to the broken subtree shape
   reproduces the exact failure (`expected: 6 but got: −2`) before the fix restores green.
-  `feelingSomeone`'s safety is by convention, not enforced — it holds only until the banked engine
-  fix lands; the per-target pricing shape it enables (−8 per grudge, not per feeling) is the
-  deliberate design going forward for any future multi-target emotion pricing. The Bar was audited
+  `feelingSomeone`'s safety was by convention, not enforced, until the banked engine fix landed
+  (v39: retract now prunes drained scaffolding by construction); the per-target pricing shape it
+  enables (−8 per grudge, not per feeling) is the deliberate design going forward for any future
+  multi-target emotion pricing, kept for that reason now, not for safety. The Bar was audited
   empirically under the same risk (probed with a planted-then-drained feeling on both shapes) and
   found already residue-safe by construction — no fix needed there.
 
@@ -983,6 +984,62 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   (12-turn) and every world untouched by the migration (village, intrigue, feud), with the one
   adjudicated `LoopSpec` line itemized above and the village golden confirmed unmoved of necessity,
   not by omission.
+- **v39** — **asserted endpoints: the trie learns which nodes are facts** (`Prax.Db`; `Prax.EL`;
+  `Prax.Persist`; spec `docs/specs/2026-07-15-v39-asserted-endpoints.md`). User-directed,
+  prioritized as a BUG CLASS over new content: `Db`'s trie could not distinguish an interior node
+  ASSERTED as a fact from one standing only as scaffolding beneath deeper facts, and the two-sided
+  evidence already on the books forced the shape of the fix rather than leaving it a judgment call.
+  v32's reverted pruning had shown some interior nodes ARE facts (the Bar's practice instances must
+  survive their sub-facts draining); v38's inert discharge had shown some interior nodes are NOT
+  facts, and reading them as such is a lie the query layer tells (`unfeelToward`'s leaf delete left
+  `feels.angry.toward` standing, and the subtree-matching price never lifted). Both requirements
+  were correct; the representation was deficient. The fix: one bit, one invariant. `Db` gains a
+  strict `asserted` flag beside its exclusion flag (`Db !Bool !Bool (IntMap Db)`), established
+  entirely in the two mutators — `insertToks`' terminal case marks its endpoint (mid-path traversal
+  and exclusion-eviction both preserve existing marks), `retractNames`' recursion prunes an
+  unasserted childless child at the level it returns through instead of reinserting it — which
+  establishes THE INVARIANT: the trie never contains an unasserted childless node. Queries are
+  UNTOUCHED BY DESIGN: under the invariant, "node exists" is exactly "asserted, or has living
+  descendants," which is what `unifySyms`/`exists`/`childKeys`/`Match` already read, so the diff to
+  every query path is the mechanical 2→3-field pattern widening, no logic change. `Prax.EL`'s
+  lattice extends pointwise, with the choice forced by its own laws, not picked: `meet`'s assertion
+  is `a1 || a2` (disjunction) — the lower-bound law `meet a b \`leq\` a` fails under conjunction
+  (pinned, ELSpec:69, the observable `["a","a.b"]` collapsing to `["a.b"]`); `leq` gains the
+  conjunct `(aa || not ab)` (asserting is strictly more information than scaffolding, mirroring
+  `Excl ≤ Multi`, pinned both ways, ELSpec:76). Serialization becomes MORE principled, not just
+  patched: `dbToSentences`/`dbToLabeledSentences` now emit an asserted interior node as its own
+  sentence alongside its descendants', and `insertAll` re-asserts each on reload — assertedness
+  round-trips through plain sentences with no format change, pinned in both `DbSpec` and
+  `PersistSpec` (including the asserted-interior-with-children case).
+
+  **The RED story: two pins that had been honestly documenting their own wrong expectations,
+  flipped to expect the fix.** `DbSpec`'s INSTANCE PERSISTENCE pin and its `dbToSentences`
+  companion had been asserting the GHOST behavior all along — a drained ancestor reading as a live
+  fact — because that was what the un-marked trie actually did; flipped to expect the post-fix
+  truth, both failed against the old engine (recorded verbatim: `expected: False but got: True`),
+  then passed against the new one. Six RED assertions total across `DbSpec`/`ELSpec`/`PersistSpec`,
+  each failing exactly because the old trie conflated the two node kinds.
+
+  **The adjudication, traced not assumed: zero golden movement.** The bar bell's flagged
+  phantom-customer risk (`Subquery` over `customer.C`, the one site that could count a
+  drained-but-present customer toward its ≥2 threshold) traced EMPTY — no shipped trajectory
+  evaluates the bell against a drained customer, so the prune changes nothing observable,
+  confirming v38's own sweep rather than re-litigating it. Every world transcript (bar, village,
+  intrigue, feud) and every prior unit pin passed byte-identical; no threshold weakened, nothing
+  re-captured.
+
+  **The comment-truth wave.** The engine commit (`cf8ee8e`) left three shipped comments false —
+  `Village.hs`'s `smoulders` haddock still describing the drained residue as live, and two test
+  comments in `VillageSpec`/`EmotionSpec` still citing the retired ambiguity — caught by review as
+  an internal contradiction the same commit had created (its own `Emotion.hs` haddock rewrite said
+  the residue trap was gone while `Village.hs` said the opposite); fixed same-round, pure-comment
+  (`d7d84b6`), re-verified clean. `feelingSomeone` is KEPT — not for safety, which is now the
+  engine's job, but for the per-target pricing shape (−8 per grudge, not per feeling) v38's
+  reviewer judged the better semantics.
+
+  Suite: 521 tests (514 + 7 new pins: 4 `DbSpec`, 2 `ELSpec`, 1 `PersistSpec`; INSTANCE PERSISTENCE
+  flipped in place, not added), zero failures; zero warnings; hlint clean; `prax check`
+  well-formed on all 7 worlds; ViewInvariant green; goldens byte-identical throughout.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -1103,33 +1160,20 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
   Praxish's alt selector, whereas we (faithfully) use Versu's utility planner — and combining hard
   tiers with N-ply lookahead (prune forbidden branches, propagate required) is the non-trivial part.
   A "beyond Versu" enhancement, not a parity gap.
-- **Asserted-endpoint marking for `Prax.Db`** *(banked — v32, found while investigating the
-  known ghost-ancestor imprecision; now with a shipped casualty, v38 — see below)*. `retract`
-  never prunes an ancestor left childless by a deletion, so `dbToSentences`/`exists` can emit a
-  drained ancestor path as if it were its own fact — a real imprecision. Pruning on emptiness was
-  tried, RED/GREEN-pinned, and then **reverted** on evidence: `Prax.Worlds.Bar`'s `tendBarP`
-  practice asserts a bartender's instance fact at a path that *also* anchors transient
-  per-customer state nested beneath it, and draining that transient state to zero (an ordinary
-  order→fulfill→drink cycle) pruned the instance fact itself, permanently destroying the
-  affordance — `Prax.Engine.possibleActions` discovers instances by trie presence alone, with no
-  separate registry. The trie cannot tell "an asserted fact that happens to be childless" from "an
-  ordinary ancestor, now childless because its only occupant was retracted" — both are represented
-  identically, and pruning is correct for the first case and wrong for the second. The principled
-  fix is a `Db`-type change: mark a node as an asserted endpoint independently of whether it
-  currently has children, so retraction can prune the second case without touching the first. Out
-  of scope as a `retract`-only patch; `src/Prax/Db.hs`'s `retract`/`dbToSentences` haddocks name
-  this entry directly. **v38 gave this ambiguity its first shipped-mechanic bite**: `Prax.Emotion`'s
-  `unfeelToward` deletes only the targeted `.toward.<target>` leaf, leaving the `.toward` ancestor
-  standing childless-but-present exactly as this entry describes; a pricing want reading that
-  ancestor with a bare `Match` (`smoulders` in `Prax.Worlds.Village`) kept charging for a
-  discharged feeling, and the pin meant to catch it asserted the leaf's own absence rather than the
-  price, so it passed while the bug shipped — caught only by review, not by the pin (see the v38
-  legend row above). The workaround shipped alongside the fix (`Prax.Emotion.feelingSomeone`, which
-  binds a real target leaf instead of testing bare existence) is safe **by convention only**, not
-  by construction — every future pricing want over a discharge-able feeling depends on its author
-  reaching for `feelingSomeone` instead of `feeling`/`feelingToward`. This entry's priority is
-  raised accordingly: it is no longer a theoretical imprecision, it is a mechanism that has already
-  produced one inert discharge in shipped content.
+- **Asserted-endpoint marking for `Prax.Db`** *(DONE — v39, banked v32, evidenced v38; see the v39
+  legend row above; spec `docs/specs/2026-07-15-v39-asserted-endpoints.md`)*. Banked at v32 when
+  naive ancestor-pruning on retraction was tried, RED/GREEN-pinned, and reverted: `Prax.Worlds.Bar`'s
+  `tendBarP` instance fact anchors transient per-customer state beneath it, and pruning drained
+  that instance away with its last customer — the trie could not tell "an asserted fact that
+  happens to be childless" from "an ordinary ancestor, now childless because its only occupant was
+  retracted," both represented identically. Evidenced at v38, which gave the ambiguity its first
+  shipped-mechanic bite: `Prax.Emotion.unfeelToward` left a drained `.toward` ancestor standing,
+  and `smoulders`'s subtree price kept charging for a discharged feeling, safe only by the
+  `feelingSomeone` convention, not by construction. Landed at v39: `Db` gained a strict `asserted`
+  bit beside its exclusion flag, `insertToks` marks it, `retractNames` prunes an unasserted
+  childless node eagerly at the level it returns through, establishing the invariant this entry
+  was written to close — the trie never holds an unasserted childless node — with queries
+  untouched by design and `feelingSomeone`'s safety now enforced by construction, not convention.
 - **Footprint discrimination indexing** *(banked — v33, found while profiling the residual gap
   the round's A/B left after the state-aware relevance filter shipped)*. The controller's
   profile at HEAD attributes ≈11% of the profiled round to `mayUnifySyms` inside
