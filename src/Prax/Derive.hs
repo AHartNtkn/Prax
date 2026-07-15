@@ -46,9 +46,9 @@ import           Data.Maybe (mapMaybe)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Db, insertToks, insertAll, emptyDb, internTokens, groundTokens, tokensToSentence, dbToSentences)
-import           Prax.Query (Condition (..), CmpOp (..), query, CookedCondition (..), cookCondition, queryCooked)
+import           Prax.Query (Condition (..), CmpOp (..), query, CookedCondition (..), cookCondition, cookedReadAnchors, queryCooked)
 import           Prax.EL (meet, leq)
-import           Prax.Sym (Sym)
+import           Prax.Sym (Sym, symName)
 
 -- | An implication rule @axiomWhen → axiomThen@: when the body holds for some
 -- binding of its variables, assert each (grounded) head sentence. Heads are
@@ -211,97 +211,82 @@ contradiction axs db = case closure axs db of
   Right _                -> Nothing
 
 -- | Every path pattern the axioms can read or write: body atoms at any
--- polarity (including inside Absent\/Exists\/Or\/Subquery), head templates,
--- and the □-lifted forms of both. A ground delta that may-unify none of
--- these commutes with 'closure' (v27 spec theorem) — the basis of the
--- engine's delta-irrelevance fast path.
-axiomFootprint :: [Axiom] -> [String]
-axiomFootprint axs =
-  concat [ concatMap condPatterns body ++ hs
-         | Axiom body hs <- axs ++ mapMaybe liftObliged axs ]
-
--- All path patterns a condition mentions, any polarity.
-condPatterns :: Condition -> [String]
-condPatterns c = case c of
-  Match s        -> [s]
-  Not s          -> [s]
-  Absent cs      -> concatMap condPatterns cs
-  Exists cs      -> concatMap condPatterns cs
-  Or clauses     -> concatMap (concatMap condPatterns) clauses
-  Subquery _ _ w -> concatMap condPatterns w
-  Eq {}          -> []
-  Neq {}         -> []
-  Cmp {}         -> []
-  Calc {}        -> []
-  Count {}       -> []
+-- polarity (including inside Absent\/Exists\/Or\/Subquery — the
+-- 'Prax.Query.cookedReadAnchors' walk), and head templates. Cooked rules
+-- already carry the auto-□-lifted forms ('cookAxioms'), so lifting needs no
+-- second enumeration here. A ground delta that may-unify none of these
+-- commutes with 'closure' (v27 spec theorem) — the basis of the engine's
+-- delta-irrelevance fast path.
+axiomFootprint :: [CookedRule] -> [[Sym]]
+axiomFootprint rules =
+  concat [ cookedReadAnchors (crBody r) ++ map (map fst) (crHeads r) | r <- rules ]
 
 -- | Every pattern under a negation in any body: inserting a fact these
 -- patterns match can UN-fire a rule (retraction), so such facts never take
 -- the continuation tier.
-axiomNegPatterns :: [Axiom] -> [String]
-axiomNegPatterns axs = concat
-  [ concatMap negOf body | Axiom body _ <- axs ++ mapMaybe liftObliged axs ]
+axiomNegPatterns :: [CookedRule] -> [[Sym]]
+axiomNegPatterns rules = concat [ concatMap negOf (crBody r) | r <- rules ]
   where
     negOf c = case c of
-      Not s          -> [s]
-      Absent cs      -> concatMap condPatterns cs   -- everything inside a ¬∃
-      Exists cs      -> concatMap negOf cs
-      Or clauses     -> concatMap (concatMap negOf) clauses
-      Subquery _ _ w -> concatMap negOf w
-      _              -> []
+      CNot p          -> [p]
+      CAbsent cs      -> cookedReadAnchors cs   -- everything inside a ¬∃
+      CExists cs      -> concatMap negOf cs
+      COr clauses     -> concatMap (concatMap negOf) clauses
+      CSubquery _ _ w -> concatMap negOf w
+      _               -> []
 
--- | Every head template the axioms can write — 'axiomThen' plus the □-lifted
--- forms of liftable rules ('liftObliged', the same notion 'axiomFootprint'
--- uses: heads of rules that can actually fire). A delta that feeds some
--- axiom can change derived facts only in these families.
-axiomHeadPatterns :: [Axiom] -> [String]
-axiomHeadPatterns axs = concat [ hs | Axiom _ hs <- axs ++ mapMaybe liftObliged axs ]
+-- | Every head template the axioms can write — □-lifted forms included, for
+-- free, since 'cookAxioms' already emitted them as rules of their own. A
+-- delta that feeds some axiom can change derived facts only in these
+-- families.
+axiomHeadPatterns :: [CookedRule] -> [[Sym]]
+axiomHeadPatterns rules = concat [ map (map fst) (crHeads r) | r <- rules ]
 
 -- | Is the axiom set continuation-safe: does adding base facts only ever ADD
 -- derived facts (given the caller also avoids negated patterns)? Conditions
--- must be monotone-up: Match/Not/Absent (negations are handled via
--- 'axiomNegPatterns'), recursion through Exists/Or/Subquery, Count freely,
--- Cmp only in the grows-only direction — the count side growing past a
--- numeric literal (Gt/Gte with the literal right, Lt/Lte with it left) — and
--- Eq/Neq only over pattern-bound variables. An Eq/Neq over an
--- aggregate-bound variable (a 'Count' result or a 'Subquery' set variable)
+-- must be monotone-up: CMatch/CNot/CAbsent (negations are handled via
+-- 'axiomNegPatterns'), recursion through CExists/COr/CSubquery, CCount
+-- freely, CCmp only in the grows-only direction — the count side growing
+-- past a numeric literal (Gt/Gte with the literal right, Lt/Lte with it
+-- left) — and CEq/CNeq only over pattern-bound variables. An Eq/Neq over an
+-- aggregate-bound variable (a 'CCount' result or a 'CSubquery' set variable)
 -- expresses exactly-k/not-k, which UN-fires as the aggregate grows past k —
--- anti-monotone despite Eq/Neq otherwise being a safe equality test. Calc
--- (and any other Cmp shape) disables the tier for the world; the fallback is
--- today's full reclose, correct just slower.
-monotoneAxioms :: [Axiom] -> Bool
-monotoneAxioms axs =
-  all bodyOk [ body | Axiom body _ <- axs ++ mapMaybe liftObliged axs ]
+-- anti-monotone despite Eq/Neq otherwise being a safe equality test. CCalc
+-- (and any other CCmp shape) disables the tier for the world; the fallback
+-- is today's full reclose, correct just slower.
+monotoneAxioms :: [CookedRule] -> Bool
+monotoneAxioms = all (bodyOk . crBody)
   where
     bodyOk body = all (condOk (aggVars body)) body
 
     -- Every variable bound by an aggregate anywhere in the body (a body
-    -- shares one binding environment, so a 'Count'/'Subquery' result nested
-    -- under 'Exists'/'Or'/'Subquery' is still visible to an Eq/Neq
-    -- elsewhere in the body).
+    -- shares one binding environment, so a CCount/CSubquery result nested
+    -- under CExists/COr/CSubquery is still visible to an Eq/Neq elsewhere
+    -- in the body).
     aggVars = concatMap collect
       where
         collect c = case c of
-          Count r _      -> [r]
-          Subquery s _ w -> s : aggVars w
-          Exists cs      -> aggVars cs
-          Or clauses     -> concatMap aggVars clauses
-          _              -> []
+          CCount r _      -> [r]
+          CSubquery s _ w -> s : aggVars w
+          CExists cs      -> aggVars cs
+          COr clauses     -> concatMap aggVars clauses
+          _               -> []
 
     condOk aggs c = case c of
-      Match _        -> True
-      Not _          -> True
-      Absent _       -> True
-      Eq l r         -> l `notElem` aggs && r `notElem` aggs
-      Neq l r        -> l `notElem` aggs && r `notElem` aggs
-      Count _ _      -> True
-      Exists cs      -> all (condOk aggs) cs
-      Or clauses     -> all (all (condOk aggs)) clauses
-      Subquery _ _ w -> all (condOk aggs) w
-      Cmp op l r     -> case op of
+      CMatch _        -> True
+      CNot _          -> True
+      CAbsent _       -> True
+      CEq l r         -> l `notElem` aggs && r `notElem` aggs
+      CNeq l r        -> l `notElem` aggs && r `notElem` aggs
+      CCount _ _      -> True
+      CExists cs      -> all (condOk aggs) cs
+      COr clauses     -> all (all (condOk aggs)) clauses
+      CSubquery _ _ w -> all (condOk aggs) w
+      CCmp op l r     -> case op of
         Gt  -> numeric r
         Gte -> numeric r
         Lt  -> numeric l
         Lte -> numeric l
-      Calc {}        -> False
-    numeric x = not (null x) && all (`elem` ("0123456789" :: String)) x
+      CCalc {}        -> False
+    numeric x = let s = symName x
+                in not (null s) && all (`elem` ("0123456789" :: String)) s

@@ -7,8 +7,9 @@ import           Data.Either (isRight)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
-import           Prax.Db (Db, emptyDb, insert, insertAll, retract, dbToSentences, dbToLabeledSentences)
+import           Prax.Db (Db, emptyDb, insert, insertAll, retract, dbToSentences, dbToLabeledSentences, pathNames)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
+import           Prax.Sym (intern)
 import           Prax.Derive
 
 build :: [String] -> Db
@@ -84,15 +85,16 @@ tests = testGroup "Prax.Derive (m(X) closure)"
 
   , testCase "axiomFootprint collects bodies (any polarity), heads, and lifted forms" $ do
       let ax = axiom [ Match "parent.X.Y", Absent [ Match "dead.X" ] ] [ "elder.X" ]
-          fp = axiomFootprint [ax]
-      assertBool "body atom"          ("parent.X.Y" `elem` fp)
-      assertBool "negated body atom"  ("dead.X" `elem` fp)
-      assertBool "head"               ("elder.X" `elem` fp)
+          fp = axiomFootprint (cookAxioms [ax])
+          hasPath ps s = map intern (pathNames s) `elem` ps
+      assertBool "body atom"          (hasPath fp "parent.X.Y")
+      assertBool "negated body atom"  (hasPath fp "dead.X")
+      assertBool "head"               (hasPath fp "elder.X")
       -- an Absent body blocks □-lifting; an all-Match rule contributes both
       -- lifted body and lifted head:
-      let fp2 = axiomFootprint [ axiom [ Match "a.X" ] [ "b.X" ] ]
-      assertBool "lifted body" ("obliged.Obligor.a.X" `elem` fp2)
-      assertBool "lifted head" ("obliged.Obligor.b.X" `elem` fp2)
+      let fp2 = axiomFootprint (cookAxioms [ axiom [ Match "a.X" ] [ "b.X" ] ])
+      assertBool "lifted body" (hasPath fp2 "obliged.Obligor.a.X")
+      assertBool "lifted head" (hasPath fp2 "obliged.Obligor.b.X")
 
   , testCase "closureFrom continues a closed model exactly as a from-scratch closure" $ do
       let axs = [ axiom [ Match "parent.X.Y" ] [ "elder.X" ]
@@ -106,24 +108,26 @@ tests = testGroup "Prax.Derive (m(X) closure)"
 
   , testCase "axiomNegPatterns collects exactly the negated interiors" $ do
       let axs = [ axiom [ Match "a.X", Absent [ Match "b.X", Not "c.X" ] ] [ "d.X" ] ]
-      assertBool "Absent interior" ("b.X" `elem` axiomNegPatterns axs)
-      assertBool "Not inside Absent" ("c.X" `elem` axiomNegPatterns axs)
-      assertBool "positive atom is NOT negated" ("a.X" `notElem` axiomNegPatterns axs)
+          np = axiomNegPatterns (cookAxioms axs)
+          hasPath ps s = map intern (pathNames s) `elem` ps
+      assertBool "Absent interior" (hasPath np "b.X")
+      assertBool "Not inside Absent" (hasPath np "c.X")
+      assertBool "positive atom is NOT negated" (not (hasPath np "a.X"))
 
   , testCase "monotoneAxioms accepts the count-threshold shape and rejects anti-monotone" $ do
-      assertBool "Match-only is safe" (monotoneAxioms [ axiom [ Match "a.X" ] [ "b.X" ] ])
+      assertBool "Match-only is safe" (monotoneAxioms (cookAxioms [ axiom [ Match "a.X" ] [ "b.X" ] ]))
       assertBool "the notoriety shape (Subquery+Count+Cmp Gte literal) is safe"
-        (monotoneAxioms [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
-                                , Count "N" "Rs", Cmp Gte "N" "3" ] [ "n.T" ] ])
+        (monotoneAxioms (cookAxioms [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
+                                , Count "N" "Rs", Cmp Gte "N" "3" ] [ "n.T" ] ]))
       assertBool "Cmp Lt with the literal on the right is anti-monotone"
-        (not (monotoneAxioms [ axiom [ Count "N" "Rs", Cmp Lt "N" "3" ] [ "q.T" ] ]))
+        (not (monotoneAxioms (cookAxioms [ axiom [ Count "N" "Rs", Cmp Lt "N" "3" ] [ "q.T" ] ])))
       assertBool "Calc disables the tier"
-        (not (monotoneAxioms [ axiom [ Calc "M" Add "N" "1" ] [ "q.M" ] ]))
+        (not (monotoneAxioms (cookAxioms [ axiom [ Calc "M" Add "N" "1" ] [ "q.M" ] ])))
       assertBool "Eq over a count-bound variable is anti-monotone (exactly-k)"
-        (not (monotoneAxioms [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
-                                     , Count "N" "Rs", Eq "N" "3" ] [ "n.T" ] ]))
+        (not (monotoneAxioms (cookAxioms [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
+                                     , Count "N" "Rs", Eq "N" "3" ] [ "n.T" ] ])))
       assertBool "Neq over a count-bound variable is anti-monotone too"
-        (not (monotoneAxioms [ axiom [ Count "N" "Rs", Neq "N" "3" ] [ "q.T" ] ]))
+        (not (monotoneAxioms (cookAxioms [ axiom [ Count "N" "Rs", Neq "N" "3" ] [ "q.T" ] ])))
       assertBool "Eq over Match-bound names stays monotone"
-        (monotoneAxioms [ axiom [ Match "a.X", Match "b.Y", Eq "X" "Y" ] [ "c.X" ] ])
+        (monotoneAxioms (cookAxioms [ axiom [ Match "a.X", Match "b.Y", Eq "X" "Y" ] [ "c.X" ] ]))
   ]

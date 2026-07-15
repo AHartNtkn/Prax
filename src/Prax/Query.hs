@@ -30,6 +30,7 @@ module Prax.Query
   , countSatisfying
   , CookedCondition(..)
   , cookCondition
+  , cookedReadAnchors
   , groundNames
   , groundCookedCondition
   , queryCooked
@@ -200,6 +201,27 @@ groundCookedCondition b c = case c of
   COr clauses      -> COr (map (map (groundCookedCondition b)) clauses)
   CAbsent cs       -> CAbsent (map (groundCookedCondition b) cs)
   CExists cs       -> CExists (map (groundCookedCondition b) cs)
+
+-- | Every DB path a cooked-condition query can consult, at any polarity —
+-- including inside Or\/Absent\/Exists\/Subquery. Complete by construction:
+-- CEq\/CNeq\/CCmp\/CCalc compare already-bound values and CCount measures a
+-- bound set (produced by a CSubquery, whose inner conditions ARE walked), so
+-- none of them reads a path this walk misses.
+cookedReadAnchors :: [CookedCondition] -> [[Sym]]
+cookedReadAnchors = concatMap go
+  where
+    go c = case c of
+      CMatch p         -> [p]
+      CNot p           -> [p]
+      COr clauses      -> concatMap cookedReadAnchors clauses
+      CAbsent cs       -> cookedReadAnchors cs
+      CExists cs       -> cookedReadAnchors cs
+      CSubquery _ _ ws -> cookedReadAnchors ws
+      CEq {}           -> []
+      CNeq {}          -> []
+      CCmp {}          -> []
+      CCalc {}         -> []
+      CCount {}        -> []
 
 -- | Evaluate a conjunctive list of conditions from a starting binding, yielding
 -- every consistent binding that satisfies them all.

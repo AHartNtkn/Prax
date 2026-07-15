@@ -2,10 +2,10 @@ module Prax.QuerySpec (tests) where
 
 import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
-import           Test.Tasty.HUnit (testCase, (@?=), assertFailure)
+import           Test.Tasty.HUnit (testCase, (@?=), assertBool, assertFailure)
 
 import           Prax.Db
-import           Prax.Query (CmpOp(..), CalcOp(..), Condition(..), forAll, implies, groundCondition, query)
+import           Prax.Query (CmpOp(..), CalcOp(..), Condition(..), forAll, implies, groundCondition, query, cookCondition, cookedReadAnchors)
 import           Prax.Sym (Sym, intern)
 
 build :: [String] -> Db
@@ -176,6 +176,24 @@ tests = testGroup "Prax.Query"
         q ["raining"]               @?= []            -- A ∧ ¬B
         q ["wet"]                   @?= [Map.empty]   -- ¬A (vacuously true)
         q []                        @?= [Map.empty]   -- ¬A
+    ]
+
+  , testGroup "cookedReadAnchors"
+    [ testCase "cookedReadAnchors walks every polarity, including subquery internals" $ do
+        let conds = map cookCondition
+              [ Match "a.X", Not "b.X"
+              , Subquery "S" ["W"] [ Match "c.W.deed", Cmp Gte "N" "2" ]
+              , Count "N" "S", Calc "M" Add "N" "1", Eq "X" "y"
+              , Or [ [ Match "d.X" ], [ Absent [ Match "e.X" ] ] ]
+              ]
+            anchors = cookedReadAnchors conds
+            want p = map intern (pathNames p) `elem` anchors
+        assertBool "a.X read"        (want "a.X")
+        assertBool "b.X (Not) read"  (want "b.X")
+        assertBool "subquery inner read" (want "c.W.deed")
+        assertBool "Or branch read"  (want "d.X")
+        assertBool "Absent-in-Or read" (want "e.X")
+        length anchors @?= 5
     ]
   ]
 

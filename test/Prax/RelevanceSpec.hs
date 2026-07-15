@@ -5,8 +5,8 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Drift (DriftRule (..), driftChar, driftP)
-import           Prax.Engine (setDesires, setCharacters, definePractices, relevantDelta, monotoneInsert)
-import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..), cookCondition)
+import           Prax.Engine (setDesires, setCharacters, setAxioms, definePractices, relevantDelta, monotoneInsert)
+import           Prax.Query (Condition (..), cookCondition)
 import           Prax.Derive (axiom)
 import           Prax.Db (pathNames)
 import           Prax.Sym (intern)
@@ -16,19 +16,18 @@ import           Prax.Relevance
 
 tests :: TestTree
 tests = testGroup "Prax.Relevance"
-  [ testCase "mayUnify: variables are wildcards, prefixes are compatible" $ do
-      assertBool "var vs concrete" (mayUnify "lied.Actor.H.stole.C.loaf"
-                                             "lied.eve.dana.stole.carol.loaf")
+  [ testCase "mayUnifySyms: variables are wildcards, prefixes are compatible" $ do
+      let u a b = mayUnifySyms (map intern (pathNames a)) (map intern (pathNames b))
+      assertBool "var vs concrete" (u "lied.Actor.H.stole.C.loaf"
+                                      "lied.eve.dana.stole.carol.loaf")
       assertBool "prefix compatibility (longer insert, shorter pattern)"
-        (mayUnify "Hearer.believes.took.Culprit.gem.heard.Actor"
-                  "oz.believes.took.kit.gem")
+        (u "Hearer.believes.took.Culprit.gem.heard.Actor"
+           "oz.believes.took.kit.gem")
       assertBool "distinct constants do not unify"
-        (not (mayUnify "regards.W.carol.thief" "practice.earnBread.Owner.done.S"))
+        (not (u "regards.W.carol.thief" "practice.earnBread.Owner.done.S"))
 
   , testCase "the village table: conscience live, spite and pursuit live" $ do
-      let tbl = improvableDesires (practiceDefs villageWorld)
-                                  (axioms villageWorld)
-                                  (desires villageWorld)
+      let tbl = improvableDesires villageWorld
       -- v32: confess's own outcome list Deletes exactly the "lied"-shaped
       -- mark clean-conscience's condition matches (villageP's confessWhisper
       -- now authors that delete) -- a conscience-only believed model CAN now
@@ -60,10 +59,7 @@ tests = testGroup "Prax.Relevance"
 
   , testCase "the state carries the table and setDesires rebuilds it" $ do
       assertBool "villageWorld's field matches the module computation"
-        (improvables villageWorld
-           == improvableDesires (practiceDefs villageWorld)
-                                (axioms villageWorld)
-                                (desires villageWorld))
+        (improvables villageWorld == improvableDesires villageWorld)
       let st = setDesires [ d | d <- desires villageWorld
                               , desireName d == "spites-carol" ] villageWorld
       assertBool "narrowed vocabulary narrows the table"
@@ -80,8 +76,8 @@ tests = testGroup "Prax.Relevance"
                             [ Match "slot.stone" ]
                             [ Insert "slot!gem" ] ] }
           ds = [ Desire "hates-the-stone" (Want [ Match "slot.stone" ] (-2)) ]
-      improvableDesires (Map.fromList [("shrine", shrine)]) [] ds
-        @?= ["hates-the-stone"]
+          st = setDesires ds (definePractices [shrine] emptyState)
+      improvableDesires st @?= ["hates-the-stone"]
 
   , testCase "eviction covers the WHOLE displaced subtree, not just the shadow's shape" $ do
       -- Two exclusion points: the first eviction clears everything under
@@ -94,8 +90,8 @@ tests = testGroup "Prax.Relevance"
                             [ Insert "altar!new.rite!dawn" ] ] }
           ds = [ Desire "mourns-the-relic"
                    (Want [ Match "altar.old.relic.jade" ] (-2)) ]
-      improvableDesires (Map.fromList [("temple", temple)]) [] ds
-        @?= ["mourns-the-relic"]
+          st = setDesires ds (definePractices [temple] emptyState)
+      improvableDesires st @?= ["mourns-the-relic"]
 
   , testCase "delta relevance against the village's axioms" $ do
       assertBool "movement commutes with closure (fast path)"
@@ -119,11 +115,13 @@ tests = testGroup "Prax.Relevance"
 
   , testCase "livenessOf: a negative desire is FloorCheck unconditionally" $ do
       let ds = [ Desire "hates-mud" (Want [ Match "muddy.Owner" ] (-3)) ]
-      livenessOf Map.empty [] ds @?= Map.fromList [ ("hates-mud", FloorCheck) ]
+          st = setDesires ds emptyState
+      livenessOf st @?= Map.fromList [ ("hates-mud", FloorCheck) ]
 
   , testCase "livenessOf: a weight-0 desire is AlwaysLive (defensive; screened statically first)" $ do
       let ds = [ Desire "indifferent" (Want [ Match "whatever.Owner" ] 0) ]
-      livenessOf Map.empty [] ds @?= Map.fromList [ ("indifferent", AlwaysLive) ]
+          st = setDesires ds emptyState
+      livenessOf st @?= Map.fromList [ ("indifferent", AlwaysLive) ]
 
   , testCase "livenessOf: a positive desire with a ticker-only conjunct gates on it alone" $ do
       -- The only action in this world inserts meal.*, never hungry.* -- so
@@ -136,7 +134,8 @@ tests = testGroup "Prax.Relevance"
                             [ Insert "meal.bread" ] ] }
           ds = [ Desire "pursues-lunch"
                    (Want [ Match "hungry.Owner", Match "meal.M" ] 5) ]
-          tbl = livenessOf (Map.fromList [("bakery", bakery)]) [] ds
+          st = setDesires ds (definePractices [bakery] emptyState)
+          tbl = livenessOf st
       tbl @?= Map.fromList
         [ ("pursues-lunch", GateCheck [ [ cookCondition (Match "hungry.Owner") ] ]) ]
 
@@ -146,12 +145,14 @@ tests = testGroup "Prax.Relevance"
       -- qualifies -- the whole want stays AlwaysLive.
       let ax = axiom [ Match "starving.Owner" ] [ "hungry.Owner" ]
           ds = [ Desire "pursues-food" (Want [ Match "hungry.Owner" ] 5) ]
-      livenessOf Map.empty [ax] ds @?= Map.fromList [ ("pursues-food", AlwaysLive) ]
+          st = setAxioms [ax] (setDesires ds emptyState)
+      livenessOf st @?= Map.fromList [ ("pursues-food", AlwaysLive) ]
 
   , testCase "livenessOf: a Subquery-bearing want is AlwaysLive (uncertainty always wins)" $ do
       let ds = [ Desire "counts-friends"
                    (Want [ Subquery "Fs" ["F"] [ Match "friend.Owner.F" ] ] 5) ]
-      livenessOf Map.empty [] ds @?= Map.fromList [ ("counts-friends", AlwaysLive) ]
+          st = setDesires ds emptyState
+      livenessOf st @?= Map.fromList [ ("counts-friends", AlwaysLive) ]
 
   , testCase "the village's liveness field: floors for consciences, classes for the rest" $ do
       let tbl = liveness villageWorld
@@ -181,26 +182,7 @@ tests = testGroup "Prax.Relevance"
       tbl Map.! "drawn-to-market"
         @?= GateCheck [ [ cookCondition (Match "marketDay.square") ] ]
       assertBool "the field matches the module computation"
-        (liveness villageWorld
-           == livenessOf (practiceDefs villageWorld)
-                         (axioms villageWorld)
-                         (desires villageWorld))
-
-  , testCase "cookedReadAnchors walks every polarity, including subquery internals" $ do
-      let conds = map cookCondition
-            [ Match "a.X", Not "b.X"
-            , Subquery "S" ["W"] [ Match "c.W.deed", Cmp Gte "N" "2" ]
-            , Count "N" "S", Calc "M" Add "N" "1", Eq "X" "y"
-            , Or [ [ Match "d.X" ], [ Absent [ Match "e.X" ] ] ]
-            ]
-          anchors = cookedReadAnchors conds
-          want p = map intern (pathNames p) `elem` anchors
-      assertBool "a.X read"        (want "a.X")
-      assertBool "b.X (Not) read"  (want "b.X")
-      assertBool "subquery inner read" (want "c.W.deed")
-      assertBool "Or branch read"  (want "d.X")
-      assertBool "Absent-in-Or read" (want "e.X")
-      length anchors @?= 5
+        (liveness villageWorld == livenessOf villageWorld)
 
   , testCase "moverReadAnchors: scope, believes, death, affordances, desires — grounded to the pair" $ do
       let p = practice

@@ -34,30 +34,35 @@ import           Prax.Db
 import           Prax.Query (queryCooked, groundCondition, groundNames, CookedCondition(..), cookCondition)
 import           Prax.Types
 import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, axiomHeadPatterns, monotoneAxioms, cookAxioms, runCooked)
-import           Prax.Relevance (improvableDesires, livenessOf, mayUnifySyms, evictionShadows, evictionShadowNames, bearingTemplates)
+import           Prax.Relevance (improvableDesires, livenessOf, mayUnifySyms, evictionShadowNames, bearingTemplates)
 import           Prax.Cooked (cookOutcome, cookPractice, groundCookedOutcome)
 import           Prax.Sym (Sym, intern, symIsVar, symName)
 
 -- | Rebuild the derived vocabulary tables. Internal: every helper that
 -- changes 'practiceDefs', 'desires', or 'characters' must end here.
--- ('axioms' is the one exception — 'cookedRules' is maintained directly by
--- 'setAxioms', which needs it set before its own 'reclose' call; see there.)
+-- ('axioms' is the one exception — the axiom-derived tables here READ
+-- 'cookedRules', which 'setAxioms' maintains directly and sets before its own
+-- 'reclose' call, so it is already current by the time any retable runs; see
+-- there.)
 retable :: PraxState -> PraxState
-retable st = st
-  { cookedDefs    = Map.map cookPractice (practiceDefs st)
-  , cookedWants   = Map.fromList
-      [ (charName c, [ map cookCondition (wantConditions w) | w <- charWants c ])
-      | c <- characters st ]
-  , cookedDesires = Map.fromList
-      [ (desireName d, map cookCondition (wantConditions (desireWant d))) | d <- desires st ]
-  , improvables  = improvableDesires (practiceDefs st) (axioms st) (desires st)
-  , caresAbout   = bearingTemplates (practiceDefs st) (desires st) (characters st)
-  , liveness     = livenessOf (practiceDefs st) (axioms st) (desires st)
-  , footprint    = map (map intern . pathNames) (axiomFootprint (axioms st))
-  , axiomHeads   = [ map intern (pathNames h) | h <- axiomHeadPatterns (axioms st) ]
-                   ++ [[intern "contradiction"]]
-  , negFootprint = map (map intern . pathNames) (axiomNegPatterns (axioms st))
-  , contMonotone = monotoneAxioms (axioms st) }
+retable st0 =
+  let st = st0
+        { cookedDefs    = Map.map cookPractice (practiceDefs st0)
+        , cookedWants   = Map.fromList
+            [ (charName c, [ map cookCondition (wantConditions w) | w <- charWants c ])
+            | c <- characters st0 ]
+        , cookedDesires = Map.fromList
+            [ (desireName d, map cookCondition (wantConditions (desireWant d)))
+            | d <- desires st0 ] }
+  in st
+     { improvables  = improvableDesires st
+     , caresAbout   = bearingTemplates st
+     , liveness     = livenessOf st
+     , footprint    = axiomFootprint (cookedRules st)
+     , axiomHeads   = axiomHeadPatterns (cookedRules st)
+                      ++ [[intern "contradiction"]]
+     , negFootprint = axiomNegPatterns (cookedRules st)
+     , contMonotone = monotoneAxioms (cookedRules st) }
 
 -- | 'relevantDelta' generalized to operate on already-split, interned names:
 -- the primary delta's names and its eviction shadows (each already a name
@@ -73,7 +78,8 @@ relevantNames names shadows st =
 -- may-unify nothing in the axioms' footprint (v27 spec theorem). False is
 -- the licence for 'performOutcome' to skip 'reclose'.
 relevantDelta :: String -> PraxState -> Bool
-relevantDelta s = relevantNames (map intern (pathNames s)) (map (map intern . pathNames) (evictionShadows s))
+relevantDelta s = relevantNames (map fst toks) (evictionShadowNames toks)
+  where toks = internTokens s
 
 -- | 'monotoneInsert' generalized to operate on already-split, interned
 -- tokens.
