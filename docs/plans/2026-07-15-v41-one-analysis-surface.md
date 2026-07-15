@@ -43,10 +43,15 @@ fields), with `retable` becoming two-stage (cook, then analyze the cooked state)
      operational semantics. Observable only under a cross-practice duplicate `fnName`;
      no shipped world has one (three functions total, all unique — the durable guard is
      v43's). The pins are the committed evidence of no behavior change.
-  2. **Lifted-head variable name.** Old `axiomDerivable` manually prefixed heads with
-     `obliged.W.`; the cooked rules carry `liftObliged`'s `obliged.Obligor.` forms. Both
-     segments are variables — `mayUnifySyms` wildcards — anchored by the literal
-     `obliged`, so the classification is identical.
+  2. **Lifted heads in `axiomDerivable`.** [AMENDED after Task 2 review — the original
+     note claimed a mere variable-spelling swap (`obliged.W.` → `obliged.Obligor.`);
+     that was wrong.] Old `axiomDerivable` manufactured `obliged.W.<head>` for EVERY
+     axiom head unconditionally; the cooked rules carry □-lifted forms only for liftable
+     (all-Match-body) axioms, per `liftObliged`. For a non-liftable axiom the old
+     derivable set held a spurious □-head the new set correctly lacks — a rule with no
+     □-form cannot derive one, so the shrink is strictly more correct. Unobservable in
+     shipped worlds: no want or gate candidate anywhere anchors on the `obliged`
+     literal (grep-confirmed at review), and the 7-world pins held byte-identical.
 - RED-first where behavior is new; Task 1's pins are observational (captured from the
   live current code, the goldens pattern) — their discriminating power is the switch
   itself. Zero warnings; hlint; `prax check` ×7 worlds.
@@ -486,7 +491,9 @@ returns nothing (deletion proof). Commit
   passes); the split-walker defect and the one-surface rule (authoring boundary =
   string, world model = cooked); the free lifting (cooked rules already carry □-forms —
   three duplicate lift enumerations deleted); the two benign notes (fn-pool bias now
-  matches `lookupCookedFn`; `obliged.W` → `obliged.Obligor`, both wildcards); the
+  matches `lookupCookedFn`; `axiomDerivable`'s spurious □-heads for non-liftable axioms
+  dropped — a strictly-more-correct shrink, not the spelling swap the plan first
+  claimed); the
   equivalence evidence (7-world analysis-table pins laid before the switch, unchanged
   across it; goldens byte-identical); suite count as measured. Mark the queue item done;
   queue pointer to v42 (dead-condition lint — the first new analysis on the unified
