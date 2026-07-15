@@ -751,6 +751,119 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   same-session pre-drift control already measured 82.1s/1.6×, so roughly half the drop from
   97.1s is ordinary cross-session variance (the v35 row's own documented pattern), the
   other half the roster-dilution effect above. Full suite: 472 @ 146.83s.
+
+  **Correction, made and cited here per the fix-don't-confess discipline (see the v37 row
+  below).** This round's own mechanism silently degraded gate precision for exactly the
+  fact family it exists to move: `_drift`'s pulses joined `Prax.Relevance.worldAtomPools`'s
+  scan without an exclusion, so the pool's wild/action-insertable fallback swallowed every
+  clock-moved fact — `hungry.*` here, and (found by v37's attendance probe) any future
+  clock-gated positive desire — reclassifying it from `GateCheck` to `AlwaysLive`.
+  Conservative direction, so nothing was ever unsound and no golden moved: this is a
+  precision loss (v33's liveness-skip optimization silently lost its intended target on
+  this fact family), not a correctness bug. v37 repaired it (`worldAtomPools` now excludes
+  the drift practice by id) and re-verified both ends: `suffers-hunger` (negative,
+  `FloorCheck`) was never touched by either the bug or the fix; any positive hunger-shaped
+  desire regains its gate under the repair. The measurements recorded above (bench numbers,
+  deliberation counts, golden protocol) are unaffected by this — they were never about gate
+  classification — and stand exactly as recorded.
+- **v37** — **calendar & gatherings: the clock convenes, the town shows up** (`Prax.Drift`
+  `gathering`; `Prax.Relevance` reclassification; spec
+  `docs/specs/2026-07-14-v37-gatherings.md`). User-directed (the banked item: recurring
+  clock-gated scene spawns — the mixing dynamic that makes gossip percolate), probed live
+  before speccing, with one clean success and one real discovery. **The calendar worked
+  first try**: a pair of v36-shaped pulse rules (open spawns a practice instance + event
+  fact, close tears both down) ran a 26-round probe, opening and recurring exactly on
+  schedule — spawning and closing a practice instance from a pulse body works today. **But
+  nobody attended**, and the diagnosis is a v36 regression, not a v37 gap: fresh
+  deliberation at the open market picked "Go to square" correctly, yet the characters'
+  motive signatures were byte-equal before and after the market opened — v36 had made the
+  ticker an ordinary practice action, polluting `worldAtomPools`, so every clock-moved fact
+  looked "action-insertable" and the v33 gate classifier refused to gate on any of them.
+
+  **The fix, and the semantics it encodes.** The user's position, adopted directly ("I
+  expected tickers to be able to change motives anyway"): tickers change motives — an NPC
+  must be able to make a different decision the instant something clock-moved becomes true.
+  Mechanically, `worldAtomPools` now excludes the drift practice's own outcomes by id
+  (`Prax.Drift` exports `driftPracticeId`; `Prax.Relevance` imports it — no cycle, `Drift`
+  only imports `Types`/`Query`/`Db`). Review hunted both exactness holes and found them
+  EMPTY: axiom-derivable wants are unconditionally improvable independent of the pools (the
+  exclusion can't create a false negative there), and the drift practice's own function
+  bodies (dynamic `Calls`) degrade to `poolWild`/`AlwaysLive` on their own account, not
+  through the exclusion. The v33 environment-gate concept regains its defining example: a
+  clock-moved fact family, no authored outcome inserts it and no axiom derives it — that is
+  what an environment does. Consequence, pinned both ways: `drawn-to-market` (event ∧
+  presence, positive) now classifies `GateCheck [event]` — dead between gatherings (zero
+  planning cost town-wide), LIVE the instant the market opens, so the live-desire component
+  of every attendee's v35 motive signature flips and they re-deliberate TO the gathering;
+  the close flips it back and they re-deliberate AWAY. v36's hunger-shaped positive desires
+  regain their gate too — the silent precision regression repaired, stated in the amended
+  row above; `suffers-hunger` itself, negative, was never affected (`FloorCheck` doesn't
+  consult the pools).
+
+  **The `gathering` combinator** (`Prax.Drift`, beside `driftSetup`): two period-cadenced
+  `DriftRule`s, `<name>Open`/`<name>Close`; seeds place the open due at `period`, the close
+  due at `period + duration` (v36's start-sated convention — the first gathering convenes
+  one full period in). Loud construction-time guards: `0 < duration < period` (no overlap,
+  no null event) and the inherited single-segment name guard. Review traced two hazards to
+  ground: phase-drift ruled out BY TRACE (one drifter, one action, one `turn!Now` match per
+  round, a +1/round monotone clock keeps the open→close interval exactly `duration` every
+  cycle, verified two full recurrences deep); the double-seeding hazard is real and
+  documented in the haddock itself — feeding the gathering's own rules to `driftSetup`
+  would seed both dues at `period`, opening and closing on the same pulse, a market that
+  never convenes.
+
+  **Cargo: village market day, and the cadence correction Task 4's own measurement forced.**
+  `marketCalendar = gathering "market" 6 1` opens a bare `market` practice instance and a
+  `marketDay.square` event fact in the square, for one round every sixth round.
+  `drawn-to-market` prices attendance at +3: strictly above the +1 loitering anchors (a
+  market beats an idle preference) and strictly below the +4 conduct stakes / +5 event
+  wants (drama still outranks festivity), wired onto all five villagers (bob, carol, dana,
+  eve, gale) — `you` excluded. The cargo first shipped at period 2/duration 1 — chosen so
+  the golden's 21-turn capture window would witness a full open→close cycle — and the
+  implementer's own golden re-capture and drama re-indexing (bob stays at the open fair,
+  round 2: 51.49 vs. 49.02) were correct FOR THAT CADENCE, reviewer-confirmed. **Task 4's
+  paired drive bench then measured its true cost at production scale**: at period 2 the
+  market toggles open/closed every single round, so `drawn-to-market`'s `GateCheck` flips
+  every round for every villager who holds it — there are no quiet rounds left, town-wide.
+  A 140-turn paired drive tripled (68.3s → 193.2s, 33 → 90 deliberations; every one of
+  bob/carol/dana/eve/gale deliberating on essentially every turn), and the reconsideration
+  discount collapsed (1.2×→1.1×) for a market-attending village. The gate itself was exact
+  throughout — every re-deliberation traced to a real motive-signature change, never a
+  stale or sub-threshold read — so this was never a correctness bug; the cadence was the
+  defect, chosen for golden-window visibility (a constraint v36's own hunger pulse had
+  already shown unnecessary — its cycle is pinned at real turn counts, not required to be
+  golden-visible). **Shipped, corrected: period 6, duration 1.** VillageSpec/LoopSpec pins
+  re-derived by observation against the live trace, not assumed: convergence and
+  percolation move to the market's actual first opening (round 6, turns 48–55); dispersal
+  keeps gale's confirmed departure and the cycle's recurrence, dropping the period-2
+  cadence's "a stronger stake stays" clause — dana's suspicion arc resolves at turn 28, long
+  before this cadence's first market close reaches her, so it no longer functions as a
+  competing stake at the relevant moment (traced, not assumed; not reproduced rather than
+  weakened, per the round's own discipline). "Same spite, different temperaments" and
+  "deterrence plus opportunity yields industry" both revert to their exact pre-v37 form —
+  the market's later first opening no longer reaches either moment. The golden re-capture
+  at the corrected cadence moves exactly one line back to its pre-v37 value (bob's round-3
+  turn, "Wait a moment" → "Go to mill"): the 21-turn window no longer witnesses a market at
+  all, own commit, itemized. Percolation — the mixing dynamic the item was banked for — is
+  still measured, not asserted, just at the corrected turns: `quietWitnesses` 1 (dana alone)
+  vs. `marketWitnesses` 4 (you/bob/carol/dana), pinned with exact counts in `VillageSpec`.
+
+  **The paired drive bench, corrected cadence.** Same 140-turn trajectory, both loops, one
+  process (this session's machine ran heavily loaded by other concurrent agents throughout;
+  the deliberation counts are scheduling-independent and hold regardless, the times are the
+  cleanest this session could produce). Pre-cargo control at `4b041d3` (post-v36-fix,
+  pre-Task-3): **68.3s / 78.9s = 1.2×** (33 deliberations: bob 18/18, dana 6/18, carol
+  2/18, eve 3/17, gale 2/17). Post-cargo at the corrected cadence: **93.0s / 113.3s = 1.2×**
+  (51 deliberations: bob 18/18 unchanged — his hunger cycle, not the market, drives that —
+  carol 6/18, dana 12/18, eve 7/17, gale 6/17, each a bounded 2–3× bump matching the two to
+  three open/close cycles a 140-turn drive now crosses at period 6). The reconsideration
+  discount is back to its full pre-cargo value (1.2×→1.2×, against 1.2×→1.1× at period 2):
+  re-deliberation is bounded and synchronized to the market's own open/close boundaries
+  exactly as the spec's acceptance describes, not a town permanently woken. Not BLOCKED.
+
+  Full suite: 485 tests, green throughout the round (zero warnings; hlint clean; goldens
+  byte-identical save the one adjudicated-then-reverted village line; bar/intrigue/feud
+  untouched; ViewInvariant green).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -1124,11 +1237,20 @@ Tier 2 — agent interiority for long time-spans:
   new machinery. THE round-sized piece is stochastic onset: requires a seeded deterministic
   random stream carried in world state (reproducibility, goldens, replay, and persist all
   survive a `seed!N` fact; ambient nondeterminism is banned), with probabilities as authored
-  meaning, never tuned constants. Decide the draw primitive when built.
-- **Calendar & gatherings** *(partially seeded — v23: `Prax.Sight`'s ticker already advances a
-  global `turn!N` every round, the first brick of the clock; what's missing is authored
-  clock-gated scene spawns keyed off it, not the clock itself)*: recurring clock-gated scene
-  spawns (market day, festival) — the mixing dynamic that makes gossip percolate.
+  meaning, never tuned constants. Decide the draw primitive when built. v37 completes the
+  other half of the wear-off claim from the other direction: its reclassification means an
+  onset gate can key on a clock-moved fact directly, not only on an authored action's
+  outcome — a gathering opening (or any drift pulse) is now a legitimate emotion trigger in
+  its own right (`drawn-to-market`'s own `GateCheck` is the existence proof: onset gates can
+  now flip on clock events), so "a gathering can trigger a feeling" is no longer a
+  description of a possible design, it is what the live machinery already does for one
+  desire.
+- **Calendar & gatherings** *(DONE — v37, see the legend row above; spec
+  `docs/specs/2026-07-14-v37-gatherings.md`)*: recurring clock-gated scene spawns (market
+  day) ship, formalized as the `gathering` combinator over `Prax.Drift`'s pulse rules — the
+  mixing dynamic banked for is now measured, not asserted (percolation pinned at 4
+  market-witnesses vs. 1 quiet-witness in `VillageSpec`). Festival content beyond the
+  market instance and multiple simultaneous gatherings stay out of scope, per the spec.
 
 Tier 3 — host-game boundary:
 - **⤷K Chronicler / salience queries** (`Prax.Chronicle`): derived summaries over the event stream
