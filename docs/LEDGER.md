@@ -1147,8 +1147,8 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   `liveness`/`caresAbout`/`footprint`/`negFootprint`/`axiomHeads` — for all 7 shipped
   worlds (village, bar, bar-director, intrigue, feud, audience, play), captured
   observationally from the pre-switch code, order included (`ebd00f2`, suite 540→547).
-  The switch (`2b5919e`) then had to pass all 7 pins unchanged to land at all; it did, on
-  the first full run. Goldens byte-identical; ViewInvariant green.
+  The switch (`2b5919e`) then had to pass all 7 pins unchanged to land at all; it did.
+  Goldens byte-identical; ViewInvariant green.
 
   Suite: 547/547, zero warnings, hlint clean, `prax check` well-formed on all 7 worlds.
   Queue item closed: v41 is the second of the four foundations passes (v40 hygiene vars →
