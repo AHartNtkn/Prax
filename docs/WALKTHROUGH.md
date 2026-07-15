@@ -184,15 +184,19 @@ changes what they do. Watch the scene's new lines (`… feels … toward …`, `
 
 - **Snub someone and watch them cool.** When an NPC greets you and you **don't greet back**, on a
   later turn they *"Take offense at you ignoring your greeting."* The scene then shows they
-  *"feel annoyed toward you"* and their warmth toward you goes **negative**. An `annoyed` mood (and
-  the cooled warmth) then **withholds** their friendly "buy you a drink" gesture.
-  → features: single-slot mood override (`setMood`, the `!` operator), a negative `adjustScore`,
-  and mood-/score-gated preconditions (`Not …mood!annoyed…`, `scoreAtLeast`).
+  *"feel annoyed toward you"* and their warmth toward you goes **negative**. The annoyance does
+  NOT withhold their friendly "buy you a drink" gesture — they still CAN buy the round; the
+  feeling makes them not WANT to (v38's invariant: emotions change decision-making, never what
+  decisions can be made — the reluctance is priced, not gated).
+  → features: coexisting feelings (`Prax.Emotion.feelToward`), a negative `adjustScore`, priced
+  reluctance (a negative `Want` reading `feelingSomeone`), and score-gated preconditions
+  (`scoreAtLeast`).
 
-- **Emotions are momentary; the record persists.** A mood is single-slot — a new feeling
-  overrides the old one, and the previous mood is kept as `priorMood`. So after a character is
-  cheered back up, the *mood* is no longer "annoyed", but the lasting **grievance** and the
-  lowered **warmth score** remain. That's how a fleeting feeling differs from a durable relationship.
+- **Feelings are momentary; the record persists.** Feelings coexist (angry at one patron while
+  pleased with another) and each FADES on the clock (`feelingsFade`) or is discharged by an act.
+  After a character cools off, the feeling is gone — but the lasting **grievance** and the
+  lowered **warmth score** remain. That's how a fleeting feeling differs from a durable
+  relationship.
 
 - **Feelings are asymmetric.** Because warmth is directional, you'll routinely see one character
   warmer than the other (e.g. `bex's warmth toward ada: 38` while `ada's warmth toward bex: 30`),
@@ -319,7 +323,7 @@ cast react.
 - **Watch for the beat.** Play (or press `m`) until the room has warmed up — two characters who
   genuinely like each other. Then, on one of its turns, the narration shows
   **`director: turn ada against bex to stir up the evening`**. The director has decided the evening
-  is too cosy and injected a **falling-out**: it sets one against the other (an `annoyed` mood, a
+  is too cosy and injected a **falling-out**: it sets one against the other (an annoyed feeling, a
   grievance, and a sharp drop in warmth).
   → features: a DM modeled as an ordinary agent — a metalevel `Want` plus a practice of metalevel
   actions — "the DM is just a particular type of practice." code: `dmPractice` + the `director`
@@ -327,7 +331,8 @@ cast react.
 
 - **The drama then plays itself out.** The director doesn't script what happens next. Its injected
   grievance flows through the *same* systems you've already seen: the wronged pair stop being
-  friendly (belief/mood/warmth gates), can take offense, gossip about each other, and so on. The
+  friendly (beliefs, priced feelings, warmth thresholds), can take offense, gossip about each
+  other, and so on. The
   director sets the spark; the autonomous characters supply the fire.
 
 - **It knows when to stop.** The intervention fires once (a metalevel want it can satisfy just one
@@ -1924,7 +1929,7 @@ bar, Part I); the second is Part II, one row per world/tool.
 | `dataFacts` | `Prax.Engine` | the four beverage choices |
 | Wants / utility / lookahead | `Prax.Planner` | bex walking in to order; ada serving |
 | Round-robin loop + CLI menu | `Prax.Loop` / `app/Main` | the whole session |
-| Emotions (mood, target/cause, prior) | `Prax.Core` `setMood` | "feels annoyed toward you" after a snub |
+| Emotions (coexisting, targeted, fading) | `Prax.Emotion` `feelToward` | "feels annoyed toward you" after a snub |
 | Relationship evaluation (numeric, asymmetric) | `Prax.Core` `adjustScore` | "warmth toward …" climbing/cooling |
 | Relationship-gated affordance | `Prax.Core` `scoreAtLeast` | "Buy … a drink" appearing once warm |
 | Reactions (spawned practices + response chains) | `Prax.Reactions` | greet → "Greet back"/"Rebuff"; take-offense |
