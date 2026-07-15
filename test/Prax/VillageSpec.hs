@@ -872,12 +872,11 @@ tests = testGroup "Prax.Worlds.Village"
       -- theft (her own +5 want dominates regardless of temper -- verified:
       -- her calm pick is identical); what v38 adds is that PERFORMING it,
       -- while angry, also vents the feeling -- both halves asserted. The
-      -- leaf checks alone are NOT sufficient (a review finding): 'confront'
-      -- deletes only the targeted 'carol.feels.angry.toward.bob' leaf, and
-      -- a childless '.toward' ancestor can survive that deletion
-      -- ('Prax.Db.retract's documented ambiguity) -- 'smoulders' was fixed
-      -- to bind a real target ('feelingSomeone', not the bare subtree
-      -- 'feeling') specifically so this pin can tell the difference; assert
+      -- leaf checks alone are NOT sufficient (a v38 review finding, from
+      -- when 'Prax.Db.retract' left drained '.toward' ancestors standing;
+      -- v39's asserted-endpoint marking now prunes them, but the price-level
+      -- assertion remains the honest one: it pins the BEHAVIOR — the price
+      -- lifting — not a representation detail); assert
       -- the PRICE itself (evaluateCooked over carol's own selfWants), not
       -- just the leaf. -7 while angry -> 6 after confronting (a +13 swing:
       -- the smoulder's +8 relief plus the confront act's own +5

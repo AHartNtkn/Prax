@@ -37,11 +37,11 @@ tests = testGroup "Prax.Emotion"
         assertBool "afraid of bob survives"    ("ada.feels.afraid.toward.bob" `elem` fs)
 
     , testCase "untargeted and targeted instances of the same emotion coexist" $ do
-        -- 'exists' (not 'dbToSentences'/'facts'): once the targeted instance
-        -- is inserted, the untargeted node gains a child and stops being a
-        -- trie LEAF (a documented 'Prax.Db.dbToSentences' ambiguity between
-        -- "asserted endpoint" and "ancestor of something asserted") — but it
-        -- still 'exists' (unifies), which is exactly what 'feeling' checks.
+        -- 'exists' is what 'feeling' checks; and since v39's asserted-
+        -- endpoint marking, the untargeted instance ALSO survives as its own
+        -- asserted fact ('dbToSentences' now emits it) even after gaining a
+        -- targeted sibling underneath — the old leaf-vs-ancestor ambiguity
+        -- is gone.
         let st0 = performOutcome (feel "ada" happy) emptyState
             st1 = performOutcome (feelToward "ada" happy "carol") st0
         assertBool "untargeted happy" (exists "ada.feels.happy" (db st1))

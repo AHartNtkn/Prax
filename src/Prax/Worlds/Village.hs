@@ -205,11 +205,12 @@ honest = Trait "honest"
 -- there is no conduct stake of hers in this world for it to outweigh; v33's
 -- FloorCheck keeps the unfelt state planning-free (verified in the pins).
 -- Bound to a real target ('feelingSomeone', not the bare subtree 'feeling'
--- Match): confront's own discharge ('unfeelToward', below) deletes only the
--- targeted @.toward.\<thief\>@ leaf, leaving its parent present-but-childless
--- ('Prax.Db.retract's documented ambiguity, banked as "asserted-endpoint
--- marking" in the LEDGER) — a subtree Match would keep reading that drained
--- residue as if she were still angry, and the price would never lift.
+-- Match) for its PER-TARGET semantics: two grudges smoulder twice as hot
+-- (-8 each), and confront's discharge ('unfeelToward', below) lifts exactly
+-- the vented grudge's price. (Historically this shape also dodged the
+-- drained-ancestor residue v39's asserted-endpoint marking has since
+-- removed — 'Prax.Db.retract' now prunes; the binding is kept for the
+-- semantics, not for safety.)
 smoulders :: Desire
 smoulders = Desire "smoulders" (Want [ feelingSomeone "Owner" angry "T" ] (-8))
 
