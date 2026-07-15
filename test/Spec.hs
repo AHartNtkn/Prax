@@ -11,6 +11,7 @@ import qualified Prax.PlannerSpec
 import qualified Prax.LoopSpec
 import qualified Prax.BarSpec
 import qualified Prax.CoreSpec
+import qualified Prax.EmotionSpec
 import qualified Prax.ReactionsSpec
 import qualified Prax.DeonticSpec
 import qualified Prax.DebtSpec
@@ -57,6 +58,7 @@ main = defaultMain $ testGroup "prax"
   , Prax.LoopSpec.tests
   , Prax.BarSpec.tests
   , Prax.CoreSpec.tests
+  , Prax.EmotionSpec.tests
   , Prax.ReactionsSpec.tests
   , Prax.DeonticSpec.tests
   , Prax.DebtSpec.tests

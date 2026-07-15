@@ -48,6 +48,9 @@ tests = testGroup "Prax.Worlds.Bar (player-as-DM)"
   , testCase "a DM nudge reshapes the world without the DM embodying anyone" $ do
       -- stirring bex against cai plants the annoyance + grievance in the world…
       let st = direct "stir up a rivalry between bex and cai" barDirectorWorld
+      -- Bar.hs is untouched this task (its migration is Task 3's), so its
+      -- directP still writes through Prax.Core's (kept-live-this-commit)
+      -- setMood, into the mood! family — not Prax.Emotion's feels.
       assertBool "bex is now annoyed at cai"
         (exists "bex.mood!annoyed.toward!cai" (db st))
       assertBool "a grievance is recorded"

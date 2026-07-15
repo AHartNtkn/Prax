@@ -68,7 +68,7 @@ tests = testGroup "Prax.Reactions"
         let st = performOutcome (spawnReaction "disapproval" ["bex", "ada"]) base
         st' <- perform st "ada" "Disapprove of bex"
         let fs = facts st'
-        assertBool "ada is annoyed at bex" ("ada.mood.annoyed.toward.bex" `elem` fs)
+        assertBool "ada is annoyed at bex" ("ada.feels.annoyed.toward.bex" `elem` fs)
         assertBool "warmth cooled" ("ada.relationship.bex.warmth.score.-20" `elem` fs)
         -- the instance is consumed: the reaction offers ada nothing further
         assertBool "reaction instance gone" ("practice.disapproval.bex.ada" `notElem` fs)

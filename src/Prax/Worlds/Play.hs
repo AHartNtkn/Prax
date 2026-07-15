@@ -22,7 +22,8 @@ module Prax.Worlds.Play
 
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Core (adjustScore, setMood, setBond, warmth, pleased)
+import           Prax.Core (adjustScore, setBond, warmth)
+import           Prax.Emotion (feelToward, pleased)
 import           Prax.Script
 
 -- | The player is Marcus, the poet.
@@ -70,7 +71,7 @@ banquet = (scene "banquet")
           [ Match "marcusKnows", Not (deadSentence "artus"), Absent [ Match "foiled" ] ]
           [ Insert "foiled"
           , adjustScore "artus" "marcus" warmth 30 "savedMyLife"
-          , setMood "artus" pleased "marcus" "gratitude" ]
+          , feelToward "artus" pleased "marcus" ]
 
       , quip "marcus" "[Actor]: poison artus with your own hand"
           [ Match "marcusKnows", Not (deadSentence "artus"), Absent [ Match "foiled" ] ]
@@ -83,7 +84,7 @@ banquet = (scene "banquet")
           [ Match "marcusKnows", Not "bond.marcus.cassia!lovers" ]
           [ setBond "marcus" "cassia" "lovers"
           , adjustScore "marcus" "cassia" warmth 15 "sweptUp"
-          , setMood "marcus" pleased "cassia" "smitten" ]
+          , feelToward "marcus" pleased "cassia" ]
       ]
   , sceneJunctions =
       [ ending "betrayal"   [ Match "poisoned.artus.byCassia" ]

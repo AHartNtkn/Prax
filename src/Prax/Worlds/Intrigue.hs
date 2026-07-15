@@ -20,7 +20,8 @@ module Prax.Worlds.Intrigue
 import           Prax.Query
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome, setDesires, setCharacters)
-import           Prax.Core
+import           Prax.Core (coreLib, adjustScore, setBond, warmth)
+import           Prax.Emotion (feelToward, pleased)
 import           Prax.Beliefs
 
 -- | The player is Marcus, the poet.
@@ -78,7 +79,7 @@ plotP = practice
           , Absent [ Match "ending.E" ] ]
           [ Insert "practice.plot.Schemer.Target.foiled"
           , adjustScore "Target" "Actor" warmth 30 "savedMyLife"
-          , setMood "Target" pleased "Actor" "gratitude"
+          , feelToward "Target" pleased "Actor"
           , Insert "ending!loyalty" ]
 
         -- Complicity: the ally does the deed themselves (a dark player choice).
@@ -98,7 +99,7 @@ plotP = practice
           , Not "bond.Actor.Schemer!lovers" ]
           [ setBond "Actor" "Schemer" "lovers"
           , adjustScore "Actor" "Schemer" warmth 15 "sweptUp"
-          , setMood "Actor" pleased "Schemer" "smitten" ]
+          , feelToward "Actor" pleased "Schemer" ]
       ]
   }
 
