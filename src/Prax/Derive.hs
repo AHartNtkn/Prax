@@ -21,8 +21,9 @@
 --     this coincides with @≤@; with variables it is the natural generalization.
 --
 -- __Auto-@□@-lifting__: every domain rule @A → B@ additionally contributes the
--- lifted rule @obliged.W.A → obliged.W.B@, so an obligation closes over the
--- consequences of its content (DEON property 1) with the rule written once.
+-- lifted rule @obliged.Obligor.A → obliged.Obligor.B@, so an obligation closes
+-- over the consequences of its content (DEON property 1) with the rule written
+-- once.
 module Prax.Derive
   ( Axiom(..)
   , axiom

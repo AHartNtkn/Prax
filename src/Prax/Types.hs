@@ -115,6 +115,11 @@ outcomeVars o = case o of
 -- @Seer@\/@Seen@\/@Spot@) expecting them to be exempted; the empty list @[]@
 -- is how "nothing extra is forbidden" is spelled. Returns the offenders;
 -- each combinator raises its own contextual error.
+--
+-- This walker and its siblings here are the AUTHORING-BOUNDARY side of the
+-- v41 one-surface rule: they run at combinator boundaries, before cooking
+-- exists, so they read the authored strings — authoring boundary = string;
+-- world model = cooked ("Prax.Relevance").
 authoredVarClash :: [String]      -- ^ forbiddenSplices: the combinator's OTHER bound names in this splice
                  -> [Condition] -> [Outcome] -> [String]
 authoredVarClash forbiddenSplices conds outs =
