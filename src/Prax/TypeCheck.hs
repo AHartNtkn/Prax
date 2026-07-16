@@ -3,10 +3,13 @@
 -- Versu ships a type checker to "find errors early" (Evans & Short 2014, §VII-E):
 -- it is strongly but /implicitly/ typed — the author declares nothing and the
 -- system complains when a consistent assignment cannot be found. This module is
--- the __sound, declaration-free subset__ of that: three static checks over every
+-- the __sound, declaration-free subset__ of that: static checks over every
 -- sentence a world authors ('practiceDefs' + 'axioms' + facts), each of which
 -- flags only unambiguous bugs (no false positives, so the report is trustworthy).
 -- It adds no logic engine — just a pass over the existing sentence structure.
+-- One 'TypeError' constructor per check, seven in all — the four below plus
+-- declared-sort conflicts ('SortConflict', the opt-in sort pass), a clockless
+-- drift practice ('ClocklessDrift'), and an unseeded die ('SeedlessDraw').
 --
 --   * __Unbound variables__ — a variable used in an outcome (or an axiom head) that
 --     no precondition, role, or @Actor@ can bind is ungroundable: it silently

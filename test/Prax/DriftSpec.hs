@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Prax.DriftSpec (tests) where
 
 import           Control.Exception (ErrorCall, evaluate, try)
@@ -125,8 +126,18 @@ tests = testGroup "Prax.Drift"
   , testCase "a drift world with no clock is flagged; adding turn!0 clears it" $ do
       let w = setCharacters [driftChar] (definePractices [driftP [markR]] emptyState)
       assertBool "ClocklessDrift flagged" (any isClocklessDrift (typeCheck w))
+      -- The composition with the v42 dead-condition lint, pinned so it is
+      -- documented behavior rather than latent: with no clock, the drift
+      -- practice's own due-gate (Match "turn!PraxNow") reads a family nothing
+      -- produces, so DeadCondition on turn.PraxNow accompanies ClocklessDrift
+      -- — literally true on this already-broken world, and it clears with the
+      -- same one fix (the clock), so no suppression coupling is warranted.
+      assertBool "DeadCondition on the due-gate accompanies it"
+        (any (\case DeadCondition _ "turn.PraxNow" -> True; _ -> False) (typeCheck w))
       let w' = performOutcome (Insert "turn!0") w
       assertBool "clear once clocked" (not (any isClocklessDrift (typeCheck w')))
+      assertBool "the due-gate noise clears with the same fix"
+        (not (any (\case DeadCondition _ "turn.PraxNow" -> True; _ -> False) (typeCheck w')))
 
   , testCase "the drifty fixture world is well-formed" $ do
       -- markR's guard reads flag.X, but nothing in 'drifty' ever produces
