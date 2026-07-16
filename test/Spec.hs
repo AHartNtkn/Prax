@@ -36,6 +36,7 @@ import qualified Prax.RelevanceSpec
 import qualified Prax.ProjectSpec
 import qualified Prax.SightSpec
 import qualified Prax.DriftSpec
+import qualified Prax.ClockSpec
 import qualified Prax.RngSpec
 import qualified Prax.ConversationSpec
 import qualified Prax.ArcSpec
@@ -85,6 +86,7 @@ main = defaultMain $ testGroup "prax"
   , Prax.ProjectSpec.tests
   , Prax.SightSpec.tests
   , Prax.DriftSpec.tests
+  , Prax.ClockSpec.tests
   , Prax.RngSpec.tests
   , Prax.ConversationSpec.tests
   , Prax.ArcSpec.tests

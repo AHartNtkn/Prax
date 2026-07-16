@@ -34,6 +34,7 @@ import           Data.List (intercalate, nub)
 import           Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 
+import           Prax.Clock (turnPath)
 import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, exists)
 import           Prax.Drift (driftPracticeId)
 import           Prax.Query (Condition (..), CookedCondition (..))
@@ -55,7 +56,8 @@ data TypeError
     -- ^ a position/variable (@teWhere@) is inferred to have two sorts (@teDetail@).
   | ClocklessDrift
     -- ^ a world registers the drift practice ('Prax.Drift.driftP') but has
-    -- no sight clock (@turn@): its pulses would silently never fire.
+    -- no clock (@turn@, from either 'Prax.Sight's composed ticker or the
+    -- standalone 'Prax.Clock.clockP'): its pulses would silently never fire.
   | SeedlessDraw
     -- ^ a world registers a practice whose outcomes compile a
     -- 'Prax.Rng.draw' (a @ForEach@ guarded on the @seed@ family) but has no
@@ -248,7 +250,7 @@ sortErrors st
       [] -> key
       ns -> intercalate "." ns
 
--- Check 5: the drift practice depends on the sight clock -----------------
+-- Check 5: the drift practice depends on the clock -----------------------
 
 -- A world registering "drift" (see 'Prax.Drift.driftP') without a @turn@
 -- fact would compile every pulse's due-gate against a clock that never
@@ -256,7 +258,7 @@ sortErrors st
 clocklessDriftErrors :: PraxState -> [TypeError]
 clocklessDriftErrors st =
   [ ClocklessDrift
-  | Map.member driftPracticeId (practiceDefs st), not (exists "turn" (db st)) ]
+  | Map.member driftPracticeId (practiceDefs st), not (exists turnPath (db st)) ]
 
 -- Check 6: draws need a seeded die ------------------------------------------
 

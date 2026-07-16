@@ -82,7 +82,8 @@ runCheck args = do
     describe (SortConflict w d) =
       "sort conflict at " ++ w ++ ": " ++ d
     describe ClocklessDrift =
-      "drift practice registered but no clock: add the sight ticker (turn!0) before driftSetup"
+      "drift practice registered but no clock: add a clock -- the sight ticker (sightSetup) "
+        ++ "or the standalone Prax.Clock ticker (clockSetup) -- before driftSetup"
     describe SeedlessDraw =
       "draw used but the die is unseeded: append Prax.Rng.rngSetup to the world's setup"
     describe (DeadCondition w s) =

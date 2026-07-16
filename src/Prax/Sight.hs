@@ -20,6 +20,7 @@ module Prax.Sight
   , sightedWithin
   ) where
 
+import           Prax.Clock (turnPath, tickConditions, tickOutcome, clockSeed)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Types
 
@@ -47,15 +48,12 @@ sightP sighting
       , practiceName = "time passes and people see each other"
       , roles = ["S"]
       , actions =
-          [ action ""
-              [ Eq "Actor" sightName
-              , Match "turn!PraxN"
-              , Calc "PraxM" Add "PraxN" "1" ]
-              [ Insert "turn!PraxM"
-              , ForEach (sighting ++ [ Neq "Seer" "Seen" ])
-                  [ Insert "Seer.believes.at.Seen!Spot"
-                  , Insert "Seer.believes.atSince.Seen!PraxM" ]
-              ]
+          [ action "" (Eq "Actor" sightName : tickConditions)
+              (tickOutcome
+              : [ ForEach (sighting ++ [ Neq "Seer" "Seen" ])
+                    [ Insert "Seer.believes.at.Seen!Spot"
+                    , Insert "Seer.believes.atSince.Seen!PraxM" ]
+                ])
           ]
       }
   where
@@ -65,7 +63,7 @@ sightChar :: Character
 sightChar = (character sightName) { charBoundTo = Just "sight" }
 
 sightSetup :: [Outcome]
-sightSetup = [ Insert "practice.sight.here", Insert "turn!0" ]
+sightSetup = [ Insert "practice.sight.here", clockSeed ]
 
 -- | Scope fragment over @Actor@\/@Witness@: the Witness was sighted within the
 -- last @h@ ticks. Worlds @Or@ this with co-presence-now in their
@@ -73,6 +71,6 @@ sightSetup = [ Insert "practice.sight.here", Insert "turn!0" ]
 sightedWithin :: Int -> [Condition]
 sightedWithin h =
   [ Match "Actor.believes.atSince.Witness!Since"
-  , Match "turn!Now"
+  , Match (turnPath ++ "!Now")
   , Calc "Expiry" Add "Since" (show h)
   , Cmp Gte "Expiry" "Now" ]

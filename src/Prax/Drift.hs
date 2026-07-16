@@ -2,13 +2,14 @@
 -- @docs/specs/2026-07-14-v36-drift.md@). A bodiless per-round drifter (the
 -- v18\/'Prax.Sight' ticker idiom — zero engine surface) applies authored
 -- __pulse rules__: each rule carries a @due.\<name\>!D@ fact and fires its
--- 'ForEach' body when the sight clock (@turn!N@) reaches the due, then
--- re-arms @period@ rounds from NOW (a stalled world does not rapid-fire on
--- resume; the period is an authored world parameter with stated meaning).
--- Time changes appetites and intoxication — never dispositions: grudges,
--- marks, trust, and standing change through ACTS, and no rule here may be
--- authored over them (the spec's principle; enforcement is review, the
--- mechanism is indifferent). The drifter depends on the sight clock;
+-- 'ForEach' body when 'Prax.Clock.turnPath' reaches the due, then re-arms
+-- @period@ rounds from NOW (a stalled world does not rapid-fire on resume;
+-- the period is an authored world parameter with stated meaning). Time
+-- changes appetites and intoxication — never dispositions: grudges, marks,
+-- trust, and standing change through ACTS, and no rule here may be authored
+-- over them (the spec's principle; enforcement is review, the mechanism is
+-- indifferent). The drifter depends on the clock (either 'Prax.Sight's
+-- composed ticker or the standalone 'Prax.Clock.clockP');
 -- 'Prax.TypeCheck.typeCheck' flags a drift practice in a clockless world.
 module Prax.Drift
   ( DriftRule (..)
@@ -21,6 +22,7 @@ module Prax.Drift
   ) where
 
 import           Data.List (nub, (\\))
+import           Prax.Clock (turnPath)
 import           Prax.Db (pathNames)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Types
@@ -38,8 +40,8 @@ import           Prax.Types
 -- (hunger 3, metabolism 2, market 6) so the test suite's short drives can
 -- reach the pulses — a deliberate, NON-STANDARD truncation for testing,
 -- not a model for real authoring. Tests wanting a distant pulse should
--- clock-jump (@Insert "turn!N"@, the DriftSpec idiom) rather than inherit
--- compressed periods.
+-- clock-jump (insert 'Prax.Clock.turnPath' directly at a chosen value, the
+-- DriftSpec idiom) rather than inherit compressed periods.
 data DriftRule = DriftRule
   { driftRuleName :: String   -- ^ single segment (loud error otherwise)
   , driftPeriod   :: Int      -- ^ rounds between pulses; authored meaning
@@ -89,7 +91,7 @@ driftP rules
              [ Insert ("due." ++ driftRuleName r ++ "!PraxD2") ] ]
     dueGate r =
       [ Match ("due." ++ driftRuleName r ++ "!PraxD")
-      , Match "turn!PraxNow"
+      , Match (turnPath ++ "!PraxNow")
       , Cmp Gte "PraxNow" "PraxD"
       , Calc "PraxD2" Add "PraxNow" (show (driftPeriod r)) ]
 
