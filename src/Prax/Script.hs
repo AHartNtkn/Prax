@@ -186,9 +186,20 @@ beat lbl = Beat lbl Nothing
 quip :: String -> String -> [Condition] -> [Outcome] -> Beat
 quip spk lbl = Beat lbl (Just spk)
 
--- | A transition junction: @goto name toScene when@.
+-- | A transition junction: @goto name toScene when@. Loud if @when@ authors a
+-- Prax-namespaced variable: the destination scene's entry-stamp machinery
+-- (@PraxNow@, spliced into the SAME generated action's outcomes — see
+-- 'setupOf') is grounded with the whole action's bindings by
+-- 'Prax.Engine.performAction' before it runs its own fresh clock query, so an
+-- authored condition that happened to bind @PraxNow@ for an unrelated reason
+-- would silently pre-substitute into it and corrupt the stamp (v40 hygiene
+-- boundary).
 goto :: String -> String -> [Condition] -> Junction
-goto name to = Junction name (Just to)
+goto name to conds
+  | (v : _) <- authoredVarClash [] conds [] =
+      error ("Prax.Script.goto: " ++ show v ++ " in an authored condition"
+             ++ " -- the Prax namespace is reserved for the entry-stamp machinery")
+  | otherwise = Junction name (Just to) conds
 
 -- | An ending junction: @ending name when@ (ending key = @name@).
 ending :: String -> [Condition] -> Junction
@@ -196,11 +207,13 @@ ending name = Junction name Nothing
 
 -- At least @n@ engine rounds have elapsed since the current scene was
 -- entered (spec v44 — the scene clock is a stamp against the live engine
--- clock, not a scene-local ticker). Used to build timed junctions.
+-- clock, not a scene-local ticker). Used to build timed junctions. Its bound
+-- names are Prax-namespaced (v40 hygiene): this splices into 'compileJunction'
+-- beside 'setupOf'\'s own machinery in the SAME generated action.
 clockReached :: Int -> [Condition]
 clockReached n =
-  [ Match "sceneEntered!E", Match (turnPath ++ "!Now")
-  , Calc "D" Sub "Now" "E", Cmp Gte "D" (show n) ]
+  [ Match "sceneEntered!PraxE", Match (turnPath ++ "!PraxNow")
+  , Calc "PraxD" Sub "PraxNow" "PraxE", Cmp Gte "PraxD" (show n) ]
 
 -- | A __timed transition__: @after name n toScene@ — hand off to @toScene@ once
 -- @n@ rounds have elapsed in the current scene (Prompter's timeout transition).
@@ -238,11 +251,21 @@ currentSceneOf st =
     (s : _) -> Just s
     []      -> Nothing
 
--- | Compile a 'Script' into a ready-to-run 'PraxState'.
+-- | Compile a 'Script' into a ready-to-run 'PraxState'. Loud if any scene's
+-- @sceneSetup@ authors a Prax-namespaced variable: it splices into the SAME
+-- generated action as the entry-stamp machinery (see 'setupOf'), so a v40
+-- hygiene guard applies here exactly as 'goto'\'s applies to junction
+-- conditions.
 compile :: Script -> PraxState
-compile scr = foldl (flip performOutcome) base setup
+compile scr
+  | (sid, v) : _ <- sceneSetupOffenders =
+      error ("Prax.Script.compile: scene " ++ show sid ++ "'s setup authors " ++ show v
+             ++ " -- the Prax namespace is reserved for the entry-stamp machinery")
+  | otherwise = foldl (flip performOutcome) base setup
   where
     scenes = scriptScenes scr
+    sceneSetupOffenders =
+      [ (sceneId s, v) | s <- scenes, v <- authoredVarClash [] [] (sceneSetup s) ]
 
     base = setCharacters (castChars ++ [narrator])
              (definePractices [coreLib, beatsP, junctionsP] emptyState)
@@ -316,7 +339,7 @@ compile scr = foldl (flip performOutcome) base setup
     -- binds it locally via ForEach — the single-slot "!" exclusion means a
     -- later scene's entry evicts the earlier stamp.
     setupOf sid =
-      [ ForEach [ Match (turnPath ++ "!Now") ] [ Insert "sceneEntered!Now" ]
+      [ ForEach [ Match (turnPath ++ "!PraxNow") ] [ Insert "sceneEntered!PraxNow" ]
       | stampsSceneEntry ]
       ++ maybe [] sceneSetup (find ((== sid) . sceneId) scenes)
 

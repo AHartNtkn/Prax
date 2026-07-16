@@ -1,5 +1,7 @@
 module Prax.ScriptSpec (tests) where
 
+import           Control.Exception (ErrorCall, evaluate, try)
+import           Data.Either (isLeft)
 import           Data.List (isInfixOf)
 import           Data.Maybe (isJust, listToMaybe)
 import qualified Data.Map.Strict as Map
@@ -10,7 +12,7 @@ import           Prax.Db (exists, unify, valToString)
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Sym (intern)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction)
+import           Prax.Engine (possibleActions, performAction, performOutcome)
 import           Prax.Core (adjustScore)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Script
@@ -128,6 +130,42 @@ tests = testGroup "Prax.Script"
             , scriptScenes = [ (scene "wait") { sceneJunctions = [ timeout "gaveUp" 3 ] } ] }
           driven = driveIdle Nothing "p" 30 (compile sc)   -- nobody acts; the clock runs out
       endingOf driven @?= Just "gaveUp"
+
+    -- v40 hygiene: the entry-stamp machinery's Prax-namespaced variables ------
+  , testCase "goto rejects an authored condition that reuses the entry-stamp's PraxNow" $ do
+      r <- try (evaluate (length (show (goto "go" "b" [ Match "chapter!PraxNow" ]))))
+      assertBool "the Prax namespace in a goto condition is rejected"
+        (isLeft (r :: Either ErrorCall Int))
+
+  , testCase "an author's own \"Now\" in a goto condition no longer collides with the stamp" $ do
+      -- The exact scenario that demonstrated the bug pre-fix: an author
+      -- condition binding "Now" for its own unrelated purpose (here,
+      -- "chapter!99") used to pre-substitute into the entry-stamp's ForEach
+      -- and silently leave the destination scene's sceneEntered stale. Now
+      -- that the machinery uses PraxNow, the author's own Now is unrestricted
+      -- and the stamp captures the live turn correctly.
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes =
+                [ (scene "a")
+                    { sceneJunctions =
+                        [ goto "go" "b" [ Match "chapter!Now" ]
+                        , timeout "gaveUp" 3 ] }
+                , (scene "b") { sceneJunctions = [ timeout "gaveUpB" 3 ] }
+                ]
+            }
+          base0 = compile sc
+          base1 = performOutcome (Insert "turn!7") base0
+          base  = performOutcome (Insert "chapter!99") base1
+          stampOf st = [ v | b <- unify "sceneEntered.E" (db st) Map.empty
+                            , Just v <- [valToString <$> Map.lookup (intern "E") b] ]
+      stampOf base @?= ["0"]      -- scene a's compile-time stamp: turn was 0 then
+      case [ ga | ga <- possibleActions base narratorName, gaLabel ga == "(story) go" ] of
+        (ga : _) -> do
+          let st2 = performAction base ga
+          currentSceneOf st2 @?= Just "b"
+          stampOf st2 @?= ["7"]   -- the live turn at goto time, not the stale 0
+        [] -> assertBool "goto action should be offered" False
 
   , testCase "a character sketch compiles concerns to wants and traits to facts" $ do
       let cm = member "vain" `concernedWith` [ ("beauty", 50) ] `withTraits` [ "proud" ]
