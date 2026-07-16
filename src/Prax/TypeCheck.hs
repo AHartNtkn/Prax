@@ -9,7 +9,9 @@
 -- It adds no logic engine — just a pass over the existing sentence structure.
 -- One 'TypeError' constructor per check, seven in all — the four below plus
 -- declared-sort conflicts ('SortConflict', the opt-in sort pass), an authored
--- write to the engine clock ('ClockWrite'), and an unseeded die ('SeedlessDraw').
+-- touch of an engine-owned fact family ('ReservedFamily', spec v45 — @turn@,
+-- @seed@, @sceneEntered@, @contradiction@), and an unseeded die
+-- ('SeedlessDraw').
 --
 --   * __Unbound variables__ — a variable used in an outcome (or an axiom head) that
 --     no precondition, role, or @Actor@ can bind is ungroundable: it silently
@@ -38,6 +40,7 @@ import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, e
 import           Prax.Query (Condition (..), CookedCondition (..))
 import           Prax.Relevance (mayUnifySyms, producibleAtoms)
 import           Prax.Rng (seedPath)
+import           Prax.Script (sceneEnteredPath)
 import           Prax.Sym (symName, symIsVar)
 import           Prax.Types
 import           Prax.Derive (Axiom (..))
@@ -52,12 +55,12 @@ data TypeError
     -- ^ a @Call@/spawn (at @teWhere@) names something never defined.
   | SortConflict { teWhere :: String, teDetail :: String }
     -- ^ a position/variable (@teWhere@) is inferred to have two sorts (@teDetail@).
-  | ClockWrite { teWhere :: String, teSentence :: String }
-    -- ^ an authored outcome or axiom head (at @teWhere@) asserts the engine
-    -- clock family (@turn@, 'Prax.Types.turnPath'): only the engine advances
-    -- the clock (spec v44), so any authored write would corrupt engine time.
-    -- Fixtures that jump the clock go through 'Prax.Engine.performOutcome'
-    -- directly, which scans no authored definition, so they are never flagged.
+  | ReservedFamily { teFamily :: String, teWhere :: String, teSentence :: String }
+    -- ^ an authored definition touches the engine-owned family @teFamily@
+    -- (spec v45): its facts are machinery — written (and for some families
+    -- read) only by compiled mechanism, whose accesses carry Prax-namespaced
+    -- value variables no author can write (the v40 namespace ban makes the
+    -- shape unforgeable).
   | SeedlessDraw
     -- ^ a world registers a practice whose outcomes compile a
     -- 'Prax.Rng.draw' (a @ForEach@ guarded on the @seed@ family) but has no
@@ -75,7 +78,7 @@ typeCheck st =
   ++ cardinalityErrors (assertedSentences st)
   ++ refErrors st
   ++ sortErrors st
-  ++ clockWriteErrors st
+  ++ reservedFamilyErrors st
   ++ seedlessDrawErrors st
   ++ deadConditionErrors st
   where ps = Map.elems (practiceDefs st)
@@ -255,37 +258,88 @@ sortErrors st
       [] -> key
       ns -> intercalate "." ns
 
--- Check 5: no authored write to the engine clock family -------------------
+-- Check 5 (generalized, v45): engine-owned fact families ---------------------
 
--- Only the engine advances the clock (spec v44 — 'Prax.Engine.roundBoundary').
--- Any authored outcome ('Insert'\/'InsertFor', 'ForEach'-nested) or axiom head
--- that ASSERTS the @turn@ family would corrupt engine time; flag it. A read
--- ('Match "turn!Now"') is fine (schedule rules stamp off the clock), and a
--- fixture jumping the clock does so through 'Prax.Engine.performOutcome', which
--- scans no authored definition, so neither is scanned here.
-clockWriteErrors :: PraxState -> [TypeError]
-clockWriteErrors st =
-     [ ClockWrite loc s | (loc, os) <- clockSites st, o <- os, s <- clockAsserts o ]
-  ++ [ ClockWrite "axiom" h | ax <- axioms st, h <- axiomThen ax, headIsClock h ]
+-- Only compiled mechanism may touch these families (spec v45). WritesForbidden
+-- families (@turn@, @contradiction@) have NO legitimate authored writer at
+-- all — reads stay free (turn is the documented time interface; a
+-- contradiction read cannot corrupt). MachineryShapeOnly families (@seed@,
+-- @sceneEntered@) are machinery in BOTH polarities: the only legal touch is
+-- the mechanism's own compiled shape — every name after the family head a
+-- Prax-namespaced variable. An authored literal, plain variable, or bare
+-- subtree pattern on the family is a loud error: each mechanism assumes it is
+-- its family's sole accessor, so an authored touch corrupts it silently
+-- otherwise.
+data FamilyLaw = WritesForbidden | MachineryShapeOnly
+
+reservedFamilies :: [(String, FamilyLaw)]
+reservedFamilies =
+  [ (turnPath,         WritesForbidden)
+  , (seedPath,         MachineryShapeOnly)
+  , (sceneEnteredPath, MachineryShapeOnly)
+  , ("contradiction",  WritesForbidden)
+  ]
+
+reservedFamilyErrors :: PraxState -> [TypeError]
+reservedFamilyErrors st =
+     [ ReservedFamily fam loc s
+     | (loc, os) <- writeSites st, o <- os, s <- writesOf o
+     , Just (fam, law) <- [familyOf s], violatesWrite law s ]
+  ++ [ ReservedFamily fam "axiom" h
+     | ax <- axioms st, h <- axiomThen ax
+     , Just (fam, law) <- [familyOf h], violatesWrite law h ]
+  ++ [ ReservedFamily fam loc s
+     | (loc, cs) <- readSites st, s <- condSents cs
+     , not (machineryShaped s), Just (fam, MachineryShapeOnly) <- [familyOf s] ]
   where
-    clockAsserts (Insert s)      = [ s | headIsClock s ]
-    clockAsserts (InsertFor _ s) = [ s | headIsClock s ]
-    clockAsserts (ForEach _ os)  = concatMap clockAsserts os
-    clockAsserts _               = []
-    headIsClock s = case pathNames s of
-      (h : _) -> h == turnPath
-      []      -> False
+    familyOf s = case pathNames s of
+      (h : _) -> (,) h <$> lookup h reservedFamilies
+      []      -> Nothing
+    violatesWrite WritesForbidden    _ = True
+    violatesWrite MachineryShapeOnly s = not (machineryShaped s)
+    -- The unforgeable signature: a non-empty tail, every name of which is a
+    -- Prax-namespaced VARIABLE (authors cannot write those — v40).
+    machineryShaped s = case pathNames s of
+      (_ : rest@(_ : _)) -> all isPraxMachineryVar rest
+      _                  -> False
+    isPraxMachineryVar n = isVariable n && isPraxVar n
+    writesOf o = case o of
+      Insert s      -> [s]
+      InsertFor _ s -> [s]
+      Delete s      -> [s]                    -- a delete is a write
+      ForEach _ os  -> concatMap writesOf os
+      Call _ _      -> []
 
--- The authored outcome sites, with labels: practice action/init/function-case
+-- The authored write sites, with labels: practice action/init/function-case
 -- outcomes and every schedule rule body's outcomes.
-clockSites :: PraxState -> [(String, [Outcome])]
-clockSites st =
+writeSites :: PraxState -> [(String, [Outcome])]
+writeSites st =
      [ (practiceId p ++ " (init)", initOutcomes p) | p <- ps ]
   ++ [ (practiceId p ++ " / " ++ actionName a, actionOutcomes a) | p <- ps, a <- actions p ]
   ++ [ (practiceId p ++ " / fn " ++ fnName f, caseOutcomes c)
      | p <- ps, f <- functions p, c <- fnCases f ]
   ++ [ ("schedule " ++ srName r, outs) | r <- schedule st, (_, outs) <- srBody r ]
   where ps = Map.elems (practiceDefs st)
+
+-- The authored read sites, with labels: action/fn-case conditions, ForEach
+-- guards nested anywhere in a write site's outcomes, axiom bodies, desires'
+-- and characters' want conditions, and schedule rule bodies' conditions.
+readSites :: PraxState -> [(String, [Condition])]
+readSites st =
+     [ (practiceId p ++ " / " ++ actionName a, actionConditions a) | p <- ps, a <- actions p ]
+  ++ [ (practiceId p ++ " / fn " ++ fnName f, caseConditions c)
+     | p <- ps, f <- functions p, c <- fnCases f ]
+  ++ [ (loc ++ " (effect guard)", gs) | (loc, os) <- writeSites st, gs <- outcomeGuards os ]
+  ++ [ ("axiom", axiomWhen ax) | ax <- axioms st ]
+  ++ [ ("desire " ++ desireName d, wantConditions (desireWant d)) | d <- desires st ]
+  ++ [ ("want of " ++ charName c, wantConditions w) | c <- characters st, w <- charWants c ]
+  ++ [ ("schedule " ++ srName r, conds) | r <- schedule st, (conds, _) <- srBody r ]
+  where ps = Map.elems (practiceDefs st)
+
+-- ForEach guards, recursively, in a list of outcomes (the write-effect side of
+-- the read scan — a draw's, or the scene stamp's, own guard is a read too).
+outcomeGuards :: [Outcome] -> [[Condition]]
+outcomeGuards outs = concat [ conds : outcomeGuards os | ForEach conds os <- outs ]
 
 -- Check 6: draws need a seeded die ------------------------------------------
 

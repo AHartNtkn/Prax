@@ -5,9 +5,11 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, setCharacters)
+import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, setCharacters, setSchedule)
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Derive (Axiom (..), axiom)
+import           Prax.Rng (rngSetup, draw)
+import           Prax.Script (sceneEnteredPath)
 import           Prax.TypeCheck
 import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
@@ -238,18 +240,18 @@ tests = testGroup "Prax.TypeCheck"
       let w = setAxioms [ axiom [ Match "parent.P.C" ] [ "kin.P.C" ] ] emptyState
       typeCheck w @?= []
 
-    -- Engine-clock write guard (v44) -----------------------------------------
+    -- Protected families (v45, generalized from the v44 clock-write guard) ---
   , testCase "an authored write to the engine clock is flagged" $ do
       let p = practice
             { practiceId = "clocksmith"
             , actions = [ action "[Actor]: forge time" [] [ Insert "turn!99" ] ] }
-      assertBool "ClockWrite on the authored turn insert"
-        (any (\case ClockWrite _ "turn!99" -> True; _ -> False) (typeCheck (world1 p)))
+      assertBool "ReservedFamily turn on the authored turn insert"
+        (any (\case ReservedFamily "turn" _ "turn!99" -> True; _ -> False) (typeCheck (world1 p)))
 
   , testCase "an axiom head deriving the clock family is flagged" $ do
       let w = setAxioms [ Axiom [ Match "ping.X" ] [ "turn!5" ] ] emptyState
-      assertBool "ClockWrite on the axiom head"
-        (any (\case ClockWrite "axiom" "turn!5" -> True; _ -> False) (typeCheck w))
+      assertBool "ReservedFamily turn on the axiom head"
+        (any (\case ReservedFamily "turn" "axiom" "turn!5" -> True; _ -> False) (typeCheck w))
 
   , testCase "a performOutcome clock-jump is NOT flagged (typeCheck sees no authored write)" $ do
       -- Fixtures jump the clock through performOutcome, which touches no
@@ -260,5 +262,104 @@ tests = testGroup "Prax.TypeCheck"
             , actions = [ action "[Actor]: wait" [] [] ] }
           jumped = performOutcome (Insert "turn!42") (world1 ok)
       typeCheck jumped @?= []
+
+  , testCase "an authored Delete of turn is flagged (the strengthening)" $ do
+      let p = practice
+            { practiceId = "clocksmith2"
+            , actions = [ action "[Actor]: erase time" [] [ Delete "turn" ] ] }
+      assertBool "ReservedFamily turn on the authored turn delete"
+        (any (\case ReservedFamily "turn" _ "turn" -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "an authored Delete of seed is flagged" $ do
+      let p = practice
+            { practiceId = "diesmith"
+            , actions = [ action "[Actor]: erase fate" [] [ Delete "seed" ] ] }
+      assertBool "ReservedFamily seed on the authored seed delete"
+        (any (\case ReservedFamily "seed" _ "seed" -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "an authored literal seed write is flagged" $ do
+      let p = practice
+            { practiceId = "rigger"
+            , actions = [ action "[Actor]: rig fate" [] [ Insert "seed!7" ] ] }
+      assertBool "ReservedFamily seed on the authored literal seed insert"
+        (any (\case ReservedFamily "seed" _ "seed!7" -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "an authored plain-variable seed write is flagged" $ do
+      let p = practice
+            { practiceId = "rigger2"
+            , actions = [ action "[Actor]: rig fate" [ Match "spark.X" ] [ Insert "seed!X" ] ] }
+      assertBool "ReservedFamily seed on the authored variable seed insert"
+        (any (\case ReservedFamily "seed" _ "seed!X" -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "an authored seed read (single-slot Match) is flagged" $ do
+      let p = practice
+            { practiceId = "diviner"
+            , actions = [ action "[Actor]: read fate" [ Match "seed!S" ] [] ] }
+      assertBool "ReservedFamily seed on the authored seed condition"
+        (any (\case ReservedFamily "seed" _ "seed!S" -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "a bare seed read (no slot at all) is flagged" $ do
+      let p = practice
+            { practiceId = "diviner2"
+            , actions = [ action "[Actor]: sense fate" [ Match "seed" ] [] ] }
+      assertBool "ReservedFamily seed on the bare seed condition"
+        (any (\case ReservedFamily "seed" _ "seed" -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "a schedule-rule body reading seed is flagged (read-site coverage)" $ do
+      let rule = ScheduleRule "peek" 1 [ ([ Match "seed!S" ], []) ]
+          w = setSchedule [rule] emptyState
+      assertBool "ReservedFamily seed from a schedule rule body condition"
+        (any (\case ReservedFamily "seed" _ "seed!S" -> True; _ -> False) (typeCheck w))
+
+  , testCase "the die's own compiled shapes typecheck clean (THE EXEMPTION PIN)" $ do
+      let p = practice
+            { practiceId = "gambler"
+            , actions = [ action "[Actor]: roll" [] (draw 1 2 [] [ Insert "hit.Actor" ]) ] }
+          w = runOutcomes (world1 p) (rngSetup 7)
+      typeCheck w @?= []
+
+  , testCase "an authored sceneEntered write is flagged" $ do
+      let p = practice
+            { practiceId = "epochsmith"
+            , actions = [ action "[Actor]: fake entry" [] [ Insert (sceneEnteredPath ++ "!5") ] ] }
+      assertBool "ReservedFamily sceneEntered on the authored write"
+        (any (\case ReservedFamily "sceneEntered" _ s -> s == sceneEnteredPath ++ "!5"; _ -> False)
+             (typeCheck (world1 p)))
+
+  , testCase "an authored sceneEntered read is flagged" $ do
+      let p = practice
+            { practiceId = "epochreader"
+            , actions = [ action "[Actor]: peek epoch" [ Match (sceneEnteredPath ++ "!E") ] [] ] }
+      assertBool "ReservedFamily sceneEntered on the authored read"
+        (any (\case ReservedFamily "sceneEntered" _ s -> s == sceneEnteredPath ++ "!E"; _ -> False)
+             (typeCheck (world1 p)))
+
+  , testCase "an authored Insert of contradiction is flagged" $ do
+      let p = practice
+            { practiceId = "sophist"
+            , actions = [ action "[Actor]: break logic" [] [ Insert "contradiction" ] ] }
+      assertBool "ReservedFamily contradiction on the authored insert"
+        (any (\case ReservedFamily "contradiction" _ "contradiction" -> True; _ -> False)
+             (typeCheck (world1 p)))
+
+  , testCase "an authored Match on contradiction is clean (reads free)" $ do
+      let p = practice
+            { practiceId = "sophist2"
+            , actions = [ action "[Actor]: check logic" [ Match "contradiction" ] [] ] }
+      typeCheck (world1 p) @?= []
+
+  , testCase "a sightedWithin-shaped authored condition is clean (turn reads free)" $ do
+      let p = practice
+            { practiceId = "watcher"
+              -- a producer for the believes.atSince family, so Check 7 (dead
+              -- conditions) does not itself flag the read below -- unrelated
+              -- to the family guard under test here.
+            , initOutcomes = [ Insert "carol.believes.atSince.bob!3" ]
+            , actions =
+                [ action "[Actor]: recall sighting"
+                    [ Match "Actor.believes.atSince.Witness!Since"
+                    , Match "turn!Now" ]
+                    [] ] }
+      typeCheck (world1 p) @?= []
   ]
   where words' = words . map (\c -> if c == ',' then ' ' else c)

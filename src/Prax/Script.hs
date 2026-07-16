@@ -60,6 +60,7 @@ module Prax.Script
   , currentSceneOf
   , compile
   , flowChart
+  , sceneEnteredPath
   ) where
 
 import           Data.Char (isAlphaNum)
@@ -213,6 +214,12 @@ goto name to conds = Junction name (Just to) conds Nothing
 ending :: String -> [Condition] -> Junction
 ending name conds = Junction name Nothing conds Nothing
 
+-- | The scene epoch family — engine-written; v45-reserved (the only legal
+-- touch is compiled mechanism's own Prax-namespaced shape; see
+-- @Prax.TypeCheck@'s @ReservedFamily@ check).
+sceneEnteredPath :: String
+sceneEnteredPath = "sceneEntered"
+
 -- At least @n@ engine rounds have elapsed since the current scene was
 -- entered (spec v44 — the scene clock is a stamp against the live engine
 -- clock, not a scene-local ticker). Expanded by 'compileJunction' (not by
@@ -223,7 +230,7 @@ ending name conds = Junction name Nothing conds Nothing
 -- hygiene).
 clockReached :: Int -> [Condition]
 clockReached n =
-  [ Match "sceneEntered!PraxE", Match (turnPath ++ "!PraxNow")
+  [ Match (sceneEnteredPath ++ "!PraxE"), Match (turnPath ++ "!PraxNow")
   , Calc "PraxD" Sub "PraxNow" "PraxE", Cmp Gte "PraxD" (show n) ]
 
 -- | A __timed transition__: @after name n toScene@ — hand off to @toScene@ once
@@ -359,7 +366,7 @@ compile scr
     -- binds it locally via ForEach — the single-slot "!" exclusion means a
     -- later scene's entry evicts the earlier stamp.
     setupOf sid =
-      [ ForEach [ Match (turnPath ++ "!PraxNow") ] [ Insert "sceneEntered!PraxNow" ]
+      [ ForEach [ Match (turnPath ++ "!PraxNow") ] [ Insert (sceneEnteredPath ++ "!PraxNow") ]
       | stampsSceneEntry ]
       ++ maybe [] sceneSetup (find ((== sid) . sceneId) scenes)
 

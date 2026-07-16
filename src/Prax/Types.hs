@@ -19,6 +19,7 @@ module Prax.Types
   , outcomeVars
   , authoredVarClash
   , authoredPatClash
+  , isPraxVar
   , Function(..)
   , FnCase(..)
   , ScheduleRule(..)

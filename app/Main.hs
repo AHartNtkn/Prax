@@ -81,9 +81,9 @@ runCheck args = do
       "undefined reference " ++ n ++ " (" ++ w ++ ")"
     describe (SortConflict w d) =
       "sort conflict at " ++ w ++ ": " ++ d
-    describe (ClockWrite w s) =
-      "authored write to the engine clock \"" ++ s ++ "\" (" ++ w
-        ++ "): only the engine advances the turn counter -- remove the write"
+    describe (ReservedFamily fam w s) =
+      "reserved family " ++ fam ++ ": " ++ show s ++ " (" ++ w
+        ++ ") -- engine-owned; authored code may not touch it"
     describe SeedlessDraw =
       "draw used but the die is unseeded: append Prax.Rng.rngSetup to the world's setup"
     describe (DeadCondition w s) =
