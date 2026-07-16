@@ -25,7 +25,13 @@ clause whose conditions hold fires, the rest are skipped). A script's junctions 
 memories compile to ONE `FirstMatch` period-1 rule, clauses in AUTHORED scene order:
 at most one story event per boundary, no cascade (a new scene's junctions evaluate at
 the NEXT boundary), and multi-binding memories fire once ([S-I4] resolved by
-first-match). THE TIEBREAK LAW CHANGES, deliberately and stated: today simultaneous
+first-match). Within a scene, MEMORIES precede junctions in the clause order (stated
+law: exposition fires before the story can leave the scene that holds it — a junction
+firing first would strand a reachable memory unfired); among themselves, each keeps
+authored order. The single rule carries ONE name (`story`); `scheduleDues` and
+Persist's `due` lines key globally by rule name across BOTH doors [C-I2], so
+registration gains a duplicate-rule-name guard spanning doors — an authored rule named
+`story` in a script world errors loudly at build. THE TIEBREAK LAW CHANGES, deliberately and stated: today simultaneous
 enabled junctions resolve by the planner's alphabetical-label sort — an accident of
 `sortOn (Down score, gaLabel)`; henceforth AUTHORED ORDER resolves — scenes in
 declaration order, a scene's junctions in declaration order, endings/transitions
@@ -57,7 +63,12 @@ one implementation for both modes]. `roundBoundary` returns `(PraxState, [String
 `runNpcTicks` threads boundary lines into the trace it already returns, the CLI
 prints them, `Stress` discards them explicitly. Blank labels are silent — stated as a
 NEW rule for this channel [D-2] (the action trace never filtered; nothing blank
-remains there since v44). Narration is presentation: no fact, no Persist impact.
+remains there since v44). Narration is presentation: no fact, no Persist impact from
+the channel itself. The FORMAT HEADER bumps to `prax-state v3` regardless [C-I3]: a
+v45-era script save carries `storyAdvanced.*`/`memoryFired` facts and
+`junctions`-practice instances but no `story` due — format-indistinguishable from v46
+under the v2 header, it would load as inert stale state with the story rule unseeded.
+The header machinery exists for exactly this; the bump makes the incompatibility loud.
 
 **4. The CLI save point moves past the boundary** [S-I5]: today `savePoint` is
 pre-advance, so a resume would replay the boundary and re-print narration the player
@@ -105,6 +116,11 @@ nothing else); real characters' decision content argued equivalent.
 - Memories: fire exactly once (latch), one binding (first-match), text in the trace.
 - storyAdvanced grep-proof; ScriptSpec/JsonSpec/DirectorSpec re-expressed with fiction
   preserved; time-free non-Script worlds byte-identical.
+- StressSpec's play-world coverage assertions [C-I4] are re-argued, not assumed: the
+  narrator leaves the random-mover pool and junction firing becomes deterministic at
+  boundaries, changing reach/dead-end dynamics — the scenes-and-endings coverage and
+  zero-dead-ends assertions must be re-verified against the new dynamics and any
+  change adjudicated (a coverage loss would be a real finding, not a re-pin).
 
 ## Out of scope
 
