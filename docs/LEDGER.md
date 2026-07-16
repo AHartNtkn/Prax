@@ -1155,6 +1155,71 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   **v41 analysis unification** → v42 dead-condition lint → v43 the hygiene bundle);
   **v42 is next**, and it is the first NEW analysis written against the unified surface —
   the reason this round came before it rather than after.
+- **v42** — **the dead-condition lint: flag what the world can never satisfy**
+  (`Prax.Relevance`; `Prax.TypeCheck`; spec
+  `docs/specs/2026-07-15-v42-dead-condition-lint.md`). Third of four user-directed
+  foundations passes (v40 hygiene vars → v41 analysis unification → **v42 dead-condition
+  lint** → v43 the hygiene bundle), and the first NEW analysis written against v41's
+  unified surface rather than a migration onto it. Check 7 in `Prax.TypeCheck`: a
+  positive `Match` conjunct — top level or inside `Exists` — that may-unifies nothing
+  the world can ever contain is flagged `DeadCondition` with an author-legible site
+  label. Scanned sites are affordances and motives only: action conditions,
+  function-case conditions, `ForEach` guards at all three outcome homes (action
+  outcomes, init outcomes, function-case outcomes), desires, character wants.
+
+  **The probe-decided scope.** A live pre-spec probe (scratch `V42DeadProbe.hs`) over
+  all 7 shipped worlds found every practice condition and want clean; the only hits were
+  feud's axiom bodies — machine-generated □-lifted rule bodies (`liftObliged`'s DEON
+  auto-lifting, speculative by design) and `Prax.Kin.kinAxioms` wired into feud
+  wholesale, with the fixture's own haddock documenting the inert remainder as
+  deliberate ("inclusion is free … harmless … no `parent.*` base fact exists until a
+  wedding inserts one"). Both hits draw the same line: axiom bodies are OUT of the
+  lint's scope — an unfireable rule is harmless, a dead affordance or motive is the
+  unambiguous-bug class.
+
+  **One surface, one pass.** `producibleAtoms`, new in `Prax.Relevance`, is the lint's
+  entire producer pool: `cookedOutcomeAtoms`'s insert half over every practice (the
+  drifter included — clock-moved facts exist, and village's drawn-to-market desire
+  depends on it), the initial db's own facts, every axiom head (`crHeads`, □-lifted
+  forms included) whether or not its rule can fire, and the engine's own
+  `contradiction` witness (`reclose` inserts it at ⊥). Written once against the cooked
+  tables — sharing `cookedFnPool`/`cookedOutcomeAtoms` for the pool and `mayUnifySyms`
+  as the matcher — no string-side walker returned; this is the v41 dividend the round
+  exists to spend.
+
+  **The conservativity ledger.** A wild world (an unresolvable `Call`) silences the
+  lint entirely (`producibleAtoms` returns `Nothing`); unanchored patterns (every
+  segment a variable) are exempt — they match everything, and `mayUnifySyms`'s
+  anchored-literal rule would otherwise flag exactly the undead; negations, `Or`
+  clauses, and `Subquery` interiors are unflagged, each a plausibly-intentional shape
+  (a vacuously-true negation, a half-dead disjunction, an always-empty subquery as a
+  `Count`-≤-0 comparison's intended meaning).
+
+  **Verification.** RED observed with the check implemented but unwired: exactly the 4
+  flag-asserting cases fail (typo'd action conjunct, dead positive inside `Exists`,
+  dead `ForEach` guard, dead desire + dead want), every negative case stays green. Two
+  mutations after GREEN, each killing exactly its named pin: dropping the `Exists`
+  recursion in `positives` fails only the Exists case; dropping the initial-db-facts
+  line from `producibleAtoms` fails only the all-worlds pin (shipped worlds lean on
+  setup facts as producers). No shipped world flags — the all-worlds pin (which gained
+  the missing `audienceWorld`) holds clean. Three minimal test fixtures (`DriftSpec`'s
+  drifty well-formedness pin, `TypeCheckSpec`'s "correct little practice" and "ForEach
+  binds" cases) gained honest producers rather than weakened pins — the lint biting a
+  synthetic fixture is the fix-the-prerequisite case, not evidence against the check.
+
+  **Round mechanics, one clause.** Task 1's implementer wedged mid-task (tree written,
+  nothing verified or committed); the controller completed verification and commit, and
+  the task review re-derived every claim independently — RED reconstructed from
+  scratch, both mutations re-run, the soundness ledger checked line-by-line against the
+  diff — rather than trusting the report, and approved.
+
+  Suite: 558/558 (547 + 11 new `TypeCheck` cases), zero warnings, hlint clean, `prax
+  check` well-formed on all 7 worlds, goldens byte-identical. Queue item closed: v42 is
+  the third of the four foundations passes (v40 hygiene vars → v41 analysis unification
+  → **v42 dead-condition lint** → v43 the hygiene bundle); **v43 is next** — fn/action-
+  name collision guards, clock extraction from `Sight`, `Persist` version header,
+  excl-bit trivia, plus the v40 Lows: Actor-capture in `driftP`/`sightP` author bodies,
+  `Rumor`/`Deceit` splice-point guards.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
