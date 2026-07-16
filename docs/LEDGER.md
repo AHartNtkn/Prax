@@ -1221,6 +1221,78 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   name collision guards, clock extraction from `Sight`, `Persist` version header,
   excl-bit trivia, plus the v40 Lows: Actor-capture in `driftP`/`sightP` author bodies,
   `Rumor`/`Deceit` splice-point guards.
+- **v43** — **the hygiene bundle: six small holes, closed loudly** (`Prax.Engine`;
+  `Prax.Db`; `Prax.Cooked`; `Prax.Persist`; `Prax.Drift`; `Prax.Sight`; `Prax.Rumor`;
+  `Prax.Deceit`; `Prax.Clock` (new); `Prax.TypeCheck`; spec
+  `docs/specs/2026-07-15-v43-hygiene-bundle.md`, `56c520a`; plan
+  `docs/plans/2026-07-15-v43-hygiene-bundle.md`, `322f18f`). Fourth and last of the four
+  user-directed foundations passes (v40 hygiene vars → v41 analysis unification → v42
+  dead-condition lint → **v43 the hygiene bundle**). Six previously-latent holes, each
+  closed with a loud construction-time guard (`5fcee52`), and one code-motion
+  extraction (`870273e`):
+
+  1. **Fn-name collision guard** in `Prax.Engine.definePractice` — `lookupCookedFn`'s
+     silent first-wins shadowing is now impossible (defect: silent shadowing). **The
+     v41 promise kept**: v41's Call-resolution bias note named this exact collision
+     "impossible until v43 lands its guard" — the guard now exists.
+  2. **Action-name collision guard**, same function — `caName` is a lookup key
+     (`groundedDeltaAnchors`, standing intentions), so a duplicate was silently wrong,
+     not silently harmless (defect: silent wrong lookup).
+  3. **`Prax.Persist`'s save-format version header**, `"prax-state v1"` — the round's
+     one deliberate format change. An unknown or missing header is now rejected loudly
+     instead of silently misparsed, and the round-trip pins moved in the same commit;
+     no saved files existed anywhere to migrate (defect: silent misparse).
+  4. **Trailing-operator rejection** in `Prax.Db.tokens` — the probed write-only
+     exclusion bit (two unequal `Db`s serializing identically, breaking round-trip
+     `Eq`) is now unconstructible from a string sentence (defect: write-only state
+     breaking `Eq`/round-trip).
+  5. **`Actor` forbidden** in `Prax.Drift`'s and `Prax.Sight`'s authored fragments
+     (drift bodies, sighting templates) — both run as the ticker character, so `Actor`
+     would bind the ticker, never a mover (defect: ticker capture).
+  6. **The missing namespace guards** on `Prax.Rumor.gossip` and `Prax.Deceit.lie` —
+     the same `Prax`-namespace boundary check `driftP`/`sightP` have had since v40,
+     absent here until now; the v40 Lows closed (defect: unguarded splice points).
+
+  **THE FIND of the round.** Landing guard 4 immediately exposed a latent caller bug:
+  `Prax.Cooked.cookPractice` built `cpInstanceNames` by joining
+  `"practice." ++ practiceId p ++ "." ++ intercalate "." (roles p)` and re-tokenizing
+  the joined string, which produces a trailing dot for every zero-role practice —
+  `Prax.Core.coreLib` among them, a practice used by every world. The old lenient
+  tokenizer silently absorbed the dangling operator and happened to still produce the
+  right two segments; guard 4 made that silence impossible. Fixed in the same commit
+  by building the segment list directly (`["practice", practiceId p] ++ roles p`),
+  which has no degenerate trailing-separator case to begin with; equivalence to the
+  old (accidentally correct) computation confirmed byte-for-byte over all 27 shipped
+  role lists, each a single-segment identifier — divergence is only possible for an
+  operator-bearing role name, and no such name exists or would even be well-formed. A
+  guard that catches a real bug on the day it lands is the argument for shipping the
+  bundle.
+
+  **The clock extraction.** `Prax.Clock` (new) owns the turn-counter family —
+  `turnPath`, the tick conditions/outcome, the seed fact — as one home instead of
+  logic folded into `Prax.Sight`. `Sight` recomposes its ticker from the same
+  fragments, byte-identical (the goldens and the `AnalysisTableSpec` pins gate it, and
+  neither moved); `Prax.Drift` and `Prax.TypeCheck` import the `turnPath` constant
+  instead of the literal. The extraction's new capability is the standalone `_time`
+  ticker (`clockP`/`clockChar`/`clockSetup`): a world can now drift without
+  perception. The v42 dead-condition lint independently certifies this — the new
+  `ClockSpec` fixture type-checks clean with no sight practice registered at all,
+  meaning the lint's producible-atoms pool already recognizes the standalone tick as
+  the due-gate's producer.
+
+  **Verification.** Every guard RED-first, with per-guard evidence; the Persist header
+  and the Clock extraction each got a compile-level RED, sanctioned because no prior
+  behavior existed to regress against. 21 new guard pins plus 3 new `Clock` tests.
+  Goldens and the `AnalysisTableSpec` pins byte-identical throughout both commits;
+  `prax check` well-formed on all 7 worlds; zero warnings; hlint clean.
+
+  Suite: 558 → 579 (the five guards, `5fcee52`) → 582 (+3 `Clock` tests, `870273e`).
+
+  **QUEUE COMPLETE.** All four user-directed foundations passes have shipped: v40
+  namespace hygiene → v41 one analysis surface → v42 dead-condition lint → **v43 the
+  bundle**. The backlog reverts to the bank — emotion visibility to other minds, a
+  chronicler, per-feeling fade stamps, intensity levels, a new fixture when a design
+  needs one — with no queue pointer; next steps are the user's call.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
