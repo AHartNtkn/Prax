@@ -194,18 +194,21 @@ goto name to = Junction name (Just to)
 ending :: String -> [Condition] -> Junction
 ending name = Junction name Nothing
 
--- The scene clock has ticked at least @n@ times (a scene-local turn counter,
--- reset on entry). Used to build timed junctions.
+-- At least @n@ engine rounds have elapsed since the current scene was
+-- entered (spec v44 — the scene clock is a stamp against the live engine
+-- clock, not a scene-local ticker). Used to build timed junctions.
 clockReached :: Int -> [Condition]
-clockReached n = [ Match "sceneClock!Clk", Cmp Gte "Clk" (show n) ]
+clockReached n =
+  [ Match "sceneEntered!E", Match (turnPath ++ "!Now")
+  , Calc "D" Sub "Now" "E", Cmp Gte "D" (show n) ]
 
 -- | A __timed transition__: @after name n toScene@ — hand off to @toScene@ once
--- @n@ turns have elapsed in the current scene (Prompter's timeout transition).
+-- @n@ rounds have elapsed in the current scene (Prompter's timeout transition).
 after :: String -> Int -> String -> Junction
 after name n to = Junction name (Just to) (clockReached n)
 
 -- | A __timeout ending__: @timeout name n@ — end the story with key @name@ after
--- @n@ turns in the scene (Prompter's @timeout_conclusion@).
+-- @n@ rounds in the scene (Prompter's @timeout_conclusion@).
 timeout :: String -> Int -> Junction
 timeout name n = Junction name Nothing (clockReached n)
 
@@ -241,8 +244,8 @@ compile scr = foldl (flip performOutcome) base setup
   where
     scenes = scriptScenes scr
 
-    base = setCharacters (castChars ++ [narrator] ++ [clockChar | usesClock])
-             (definePractices ([coreLib, beatsP, junctionsP] ++ [clockP | usesClock]) emptyState)
+    base = setCharacters (castChars ++ [narrator])
+             (definePractices [coreLib, beatsP, junctionsP] emptyState)
 
     beatsP = practice
       { practiceId = "beats", practiceName = "scene dialogue", roles = ["Stage"]
@@ -301,25 +304,21 @@ compile scr = foldl (flip performOutcome) base setup
              ++ memoryWhen m )
            [ Insert ("memoryFired." ++ key), Insert ("storyAdvanced." ++ key) ]
 
-    -- The scene clock (only when the script uses a timed junction): a bound,
-    -- silent character whose one affordance ticks @sceneClock@ each round, so
-    -- time passes passively. Reset to 0 on every scene entry.
-    usesClock = any (any timed . sceneJunctions) scenes
-      where timed j = any isClock (junctionWhen j)
-            isClock (Match s) = "sceneClock!" `isPrefixOf` s
-            isClock _         = False
-    clockName = "_clock"
-    clockChar = (character clockName) { charBoundTo = Just "clock" }
-    clockP = practice
-      { practiceId = "clock", practiceName = "time passes", roles = ["Stage"]
-      , actions =
-          [ action ""            -- empty label ⇒ silent in narration
-              [ Eq "Actor" clockName, Match "sceneClock!N"
-              , Absent [ Match "ending.E" ], Calc "M" Add "N" "1" ]
-              [ Insert "sceneClock!M" ] ] }
+    -- Only scripts with a timed junction need the entry stamp at all
+    -- (unchanged beyond the universal clock every world now carries).
+    stampsSceneEntry = any (any timed . sceneJunctions) scenes
+      where timed j = any isStamp (junctionWhen j)
+            isStamp (Match s) = "sceneEntered!" `isPrefixOf` s
+            isStamp _         = False
 
-    setupOf sid = [ Insert "sceneClock!0" | usesClock ]
-                  ++ maybe [] sceneSetup (find ((== sid) . sceneId) scenes)
+    -- Scene entry stamps the LIVE engine clock (spec v44): a plain Insert
+    -- can't capture a live value, so this queries the clock fact fresh and
+    -- binds it locally via ForEach — the single-slot "!" exclusion means a
+    -- later scene's entry evicts the earlier stamp.
+    setupOf sid =
+      [ ForEach [ Match (turnPath ++ "!Now") ] [ Insert "sceneEntered!Now" ]
+      | stampsSceneEntry ]
+      ++ maybe [] sceneSetup (find ((== sid) . sceneId) scenes)
 
     castChars = [ (character (castName c)) { charWants = castDesires c }
                 | c <- scriptCast scr ]
@@ -332,7 +331,6 @@ compile scr = foldl (flip performOutcome) base setup
 
     setup =
       [ Insert "practice.beats.stage", Insert "practice.junctions.stage" ]
-      ++ [ Insert "practice.clock.stage" | usesClock ]
       ++ [ Insert ("character." ++ castName c) | c <- scriptCast scr ]
       ++ [ Insert ("trait." ++ castName c ++ "." ++ t)
          | c <- scriptCast scr, t <- castTraits c ]

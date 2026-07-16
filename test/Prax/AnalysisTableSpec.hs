@@ -224,7 +224,6 @@ feudPin =
 audiencePin :: [String]
 audiencePin =
   [ "contMonotone: True"
-  , "caresAbout: _clock -> "
   , "caresAbout: _narrator -> (story) granted; (story) dismissed; (You recall the last envoy who displeased the king \8212 exiled by dawn.)"
   , "caresAbout: duke -> envoy: flatter the king; duke: flatter the king"
   , "caresAbout: envoy -> "
