@@ -47,12 +47,13 @@ module Prax.Relevance
   , bearingTemplates
   , evictionShadowNames
   , moverReadAnchors
+  , producibleAtoms
   ) where
 
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Bindings, Val (..), pathNames)
+import           Prax.Db (Bindings, Val (..), pathNames, dbToSentences)
 import           Prax.Derive (CookedRule (..))
 import           Prax.Drift (driftPracticeId)
 import           Prax.Query (CookedCondition (..), cookCondition, cookedReadAnchors, groundCookedCondition, groundNames)
@@ -330,3 +331,29 @@ bearingTemplates st =
           , case m of
               Nothing -> True
               Just as -> any (\atom -> any (mayUnifySyms atom) pats) as ]
+
+-- | Everything the registered world can ever contain, as pattern anchors:
+-- the initial db's facts, every practice's insert-side atoms
+-- ('cookedOutcomeAtoms'\'s insert half over ALL practices — the drifter
+-- INCLUDED, unlike 'worldAtomPools': the consumer asks "can this fact ever
+-- exist", and clock-moved facts exist), every axiom head ('cookedRules'\'
+-- 'crHeads', □-lifted forms included — heads count regardless of whether
+-- their rules can fire; conservative, which here only ever silences the
+-- consumer), and the engine's own @contradiction@ witness
+-- ('Prax.Engine.reclose' inserts it at ⊥). @Nothing@ = wild (an
+-- unresolvable 'CCall'): the caller must go silent. First consumer:
+-- "Prax.TypeCheck"'s dead-condition lint
+-- (spec @docs/specs/2026-07-15-v42-dead-condition-lint.md@).
+producibleAtoms :: PraxState -> Maybe [[Sym]]
+producibleAtoms st = do
+  pairs <- sequence ( [ cookedOutcomeAtoms fns [] o
+                      | cp <- practices, a <- cpActions cp, o <- caOuts a ]
+                   ++ [ cookedOutcomeAtoms fns [] o
+                      | cp <- practices, o <- cpInits cp ] )
+  pure ( concatMap fst pairs
+      ++ [ map intern (pathNames s) | s <- dbToSentences (db st) ]
+      ++ [ map fst h | r <- cookedRules st, h <- crHeads r ]
+      ++ [[intern "contradiction"]] )
+  where
+    practices = Map.elems (cookedDefs st)
+    fns = cookedFnPool (cookedDefs st)

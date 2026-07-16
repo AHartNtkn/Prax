@@ -16,6 +16,9 @@
 --     statically.
 --   * __Dangling references__ — a @Call@ to an undefined function, or a spawn of an
 --     undefined practice.
+--   * __Dead conditions__ (v41 cooked surface, first new check on it) — a positive
+--     conjunct that may-unifies nothing the world can ever produce, so its site
+--     (an action, function case, @ForEach@ guard, or want) can never fire.
 --
 -- Full ML-style /sort/ inference (agent-vs-gender) needs a declaration layer and
 -- is the documented next step; this checker does not attempt it.
@@ -30,8 +33,10 @@ import qualified Data.Map.Strict as Map
 
 import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, exists)
 import           Prax.Drift (driftPracticeId)
-import           Prax.Query (Condition (..))
+import           Prax.Query (Condition (..), CookedCondition (..))
+import           Prax.Relevance (mayUnifySyms, producibleAtoms)
 import           Prax.Rng (seedPath)
+import           Prax.Sym (symName, symIsVar)
 import           Prax.Types
 import           Prax.Derive (Axiom (..))
 
@@ -52,6 +57,9 @@ data TypeError
     -- ^ a world registers a practice whose outcomes compile a
     -- 'Prax.Rng.draw' (a @ForEach@ guarded on the @seed@ family) but has no
     -- @seed@ fact: every draw would silently fail to ever fire.
+  | DeadCondition { teWhere :: String, teSentence :: String }
+    -- ^ the positive pattern @teSentence@ (at @teWhere@) may-unifies nothing
+    -- the world can ever contain: the site can never fire.
   deriving (Eq, Show)
 
 -- | Every well-formedness problem in a world (empty ⇒ the world is well-formed).
@@ -64,6 +72,7 @@ typeCheck st =
   ++ sortErrors st
   ++ clocklessDriftErrors st
   ++ seedlessDrawErrors st
+  ++ deadConditionErrors st
   where ps = Map.elems (practiceDefs st)
 
 -- Variables mentioned in a sentence / condition -------------------------------
@@ -269,6 +278,65 @@ seedlessDrawErrors st =
       (h : _) -> h == seedPath
       []      -> False
     guardReadsSeed _ = False
+
+-- Check 7: dead conditions ----------------------------------------------------
+
+-- A positive Match conjunct whose pattern can never match anything the world
+-- can ever contain ('Prax.Relevance.producibleAtoms') makes its site
+-- unreachable: the action, function case, ForEach effect, or want silently
+-- never fires — the unambiguous-bug class. Scanned sites are affordances and
+-- motives only; axiom bodies are deliberately OUT of scope (a rule library
+-- included wholesale routinely leaves some rules inert — feud's kinAxioms,
+-- documented deliberate in the fixture — and an unfireable rule is
+-- harmless). Flagged positions are conjunctive positives only: top level and
+-- inside Exists (a dead positive there kills the Exists, killing the site).
+-- NOT flagged: negations (vacuously true is plausible defensive authoring),
+-- Or clauses (a dead clause doesn't kill the Or), Subquery interiors (an
+-- always-empty set can be a Count comparison's intended meaning), and
+-- unanchored patterns (every segment a variable: matches everything —
+-- 'mayUnifySyms' would discard the evidence-free overlap, so without this
+-- exemption the lint would flag exactly the patterns that can never be
+-- dead). A wild world (unresolvable Call) silences the lint entirely.
+deadConditionErrors :: PraxState -> [TypeError]
+deadConditionErrors st = case producibleAtoms st of
+  Nothing   -> []
+  Just pool ->
+    [ DeadCondition loc (intercalate "." (map symName p))
+    | (loc, conds) <- lintSites st
+    , p <- concatMap positives conds
+    , not (all symIsVar p)
+    , not (any (mayUnifySyms p) pool) ]
+  where
+    positives c = case c of
+      CMatch p   -> [p]
+      CExists cs -> concatMap positives cs
+      _          -> []
+
+-- The affordance/motive sites the lint scans, with author-legible labels:
+-- action conditions, ForEach guards (recursively — action outcomes, init
+-- outcomes, function-case outcomes), function-case conditions, desires,
+-- character wants.
+lintSites :: PraxState -> [(String, [CookedCondition])]
+lintSites st =
+     [ (pid ++ " / " ++ caName a, caConds a)
+     | (pid, cp) <- defs, a <- cpActions cp ]
+  ++ [ (pid ++ " / " ++ caName a ++ " (effect guard)", gs)
+     | (pid, cp) <- defs, a <- cpActions cp, gs <- forEachGuards (caOuts a) ]
+  ++ [ (pid ++ " (init guard)", gs)
+     | (pid, cp) <- defs, gs <- forEachGuards (cpInits cp) ]
+  ++ [ (pid ++ " / fn " ++ fn, cs)
+     | (pid, cp) <- defs, (fn, (_, cases)) <- Map.toList (cpFns cp)
+     , (cs, _) <- cases ]
+  ++ [ (pid ++ " / fn " ++ fn ++ " (effect guard)", gs)
+     | (pid, cp) <- defs, (fn, (_, cases)) <- Map.toList (cpFns cp)
+     , (_, os) <- cases, gs <- forEachGuards os ]
+  ++ [ ("desire " ++ n, cs) | (n, cs) <- Map.toList (cookedDesires st) ]
+  ++ [ ("want of " ++ n, cs)
+     | (n, css) <- Map.toList (cookedWants st), cs <- css ]
+  where defs = Map.toList (cookedDefs st)
+
+forEachGuards :: [CookedOutcome] -> [[CookedCondition]]
+forEachGuards outs = concat [ conds : forEachGuards os | CForEach conds os <- outs ]
 
 -- A tiny union-find over position-key strings.
 find :: Map.Map String String -> String -> String

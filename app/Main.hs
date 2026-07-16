@@ -85,6 +85,9 @@ runCheck args = do
       "drift practice registered but no clock: add the sight ticker (turn!0) before driftSetup"
     describe SeedlessDraw =
       "draw used but the die is unseeded: append Prax.Rng.rngSetup to the world's setup"
+    describe (DeadCondition w s) =
+      "dead condition \"" ++ s ++ "\" (" ++ w
+        ++ "): no action, initial fact, or axiom head can ever produce a match"
 
 main :: IO ()
 main = do

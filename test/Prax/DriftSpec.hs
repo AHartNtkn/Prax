@@ -128,8 +128,16 @@ tests = testGroup "Prax.Drift"
       let w' = performOutcome (Insert "turn!0") w
       assertBool "clear once clocked" (not (any isClocklessDrift (typeCheck w')))
 
-  , testCase "the drifty fixture world is well-formed" $
-      assertBool "no type errors" (null (typeCheck (drifty [markR])))
+  , testCase "the drifty fixture world is well-formed" $ do
+      -- markR's guard reads flag.X, but nothing in 'drifty' ever produces
+      -- it — every other test in this file supplies it itself, after
+      -- typeCheck-independent construction, via a raw 'performOutcome'
+      -- (Insert "flag.a"). Registering a producer here (dead-condition
+      -- lint, v42) keeps this a pure well-formedness pin on the practice
+      -- machinery, not a claim that 'drifty' alone ever seeds flag.*.
+      let flagSeed = practice { practiceId = "flagSeed", initOutcomes = [ Insert "flag.seed" ] }
+          st = definePractices [flagSeed] (drifty [markR])
+      assertBool "no type errors" (null (typeCheck st))
 
   , testCase "gathering: open fires at turn == period, not before" $ do
       let (rules, seeds) = gathering "fair" 3 1
