@@ -26,7 +26,8 @@
 -- 'standingWith' runs the deed pattern through the shared 'Prax.Types.authoredPatClash'
 -- guard before splicing it beside the axiom's own @Regarder@ join variable —
 -- previously a documented-but-unchecked convention, the same latent-capture
--- shape 'Prax.Sight.sightP' had before its own v40 guard). The deed
+-- shape the schedule's sighting rule ('Prax.Schedule.sightRule',
+-- guarded by 'Prax.Engine.setSchedule') carries). The deed
 -- pattern's namespace must not overlap any valued-belief issue path in the
 -- same world (the same invariant 'Prax.Rumor.gossip' documents).
 module Prax.Repute

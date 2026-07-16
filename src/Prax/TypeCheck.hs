@@ -8,8 +8,8 @@
 -- flags only unambiguous bugs (no false positives, so the report is trustworthy).
 -- It adds no logic engine — just a pass over the existing sentence structure.
 -- One 'TypeError' constructor per check, seven in all — the four below plus
--- declared-sort conflicts ('SortConflict', the opt-in sort pass), a clockless
--- drift practice ('ClocklessDrift'), and an unseeded die ('SeedlessDraw').
+-- declared-sort conflicts ('SortConflict', the opt-in sort pass), an authored
+-- write to the engine clock ('ClockWrite'), and an unseeded die ('SeedlessDraw').
 --
 --   * __Unbound variables__ — a variable used in an outcome (or an axiom head) that
 --     no precondition, role, or @Actor@ can bind is ungroundable: it silently
@@ -35,7 +35,6 @@ import           Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, exists)
-import           Prax.Drift (driftPracticeId)
 import           Prax.Query (Condition (..), CookedCondition (..))
 import           Prax.Relevance (mayUnifySyms, producibleAtoms)
 import           Prax.Rng (seedPath)
@@ -53,10 +52,12 @@ data TypeError
     -- ^ a @Call@/spawn (at @teWhere@) names something never defined.
   | SortConflict { teWhere :: String, teDetail :: String }
     -- ^ a position/variable (@teWhere@) is inferred to have two sorts (@teDetail@).
-  | ClocklessDrift
-    -- ^ a world registers the drift practice ('Prax.Drift.driftP') but has
-    -- no clock (@turn@, from either 'Prax.Sight's composed ticker or the
-    -- standalone 'Prax.Clock.clockP'): its pulses would silently never fire.
+  | ClockWrite { teWhere :: String, teSentence :: String }
+    -- ^ an authored outcome or axiom head (at @teWhere@) asserts the engine
+    -- clock family (@turn@, 'Prax.Types.turnPath'): only the engine advances
+    -- the clock (spec v44), so any authored write would corrupt engine time.
+    -- Fixtures that jump the clock go through 'Prax.Engine.performOutcome'
+    -- directly, which scans no authored definition, so they are never flagged.
   | SeedlessDraw
     -- ^ a world registers a practice whose outcomes compile a
     -- 'Prax.Rng.draw' (a @ForEach@ guarded on the @seed@ family) but has no
@@ -74,7 +75,7 @@ typeCheck st =
   ++ cardinalityErrors (assertedSentences st)
   ++ refErrors st
   ++ sortErrors st
-  ++ clocklessDriftErrors st
+  ++ clockWriteErrors st
   ++ seedlessDrawErrors st
   ++ deadConditionErrors st
   where ps = Map.elems (practiceDefs st)
@@ -254,15 +255,37 @@ sortErrors st
       [] -> key
       ns -> intercalate "." ns
 
--- Check 5: the drift practice depends on the clock -----------------------
+-- Check 5: no authored write to the engine clock family -------------------
 
--- A world registering "drift" (see 'Prax.Drift.driftP') without a @turn@
--- fact would compile every pulse's due-gate against a clock that never
--- exists: the gate can never hold, so the practice silently never fires.
-clocklessDriftErrors :: PraxState -> [TypeError]
-clocklessDriftErrors st =
-  [ ClocklessDrift
-  | Map.member driftPracticeId (practiceDefs st), not (exists turnPath (db st)) ]
+-- Only the engine advances the clock (spec v44 — 'Prax.Engine.roundBoundary').
+-- Any authored outcome ('Insert'\/'InsertFor', 'ForEach'-nested) or axiom head
+-- that ASSERTS the @turn@ family would corrupt engine time; flag it. A read
+-- ('Match "turn!Now"') is fine (schedule rules stamp off the clock), and a
+-- fixture jumping the clock does so through 'Prax.Engine.performOutcome', which
+-- scans no authored definition, so neither is scanned here.
+clockWriteErrors :: PraxState -> [TypeError]
+clockWriteErrors st =
+     [ ClockWrite loc s | (loc, os) <- clockSites st, o <- os, s <- clockAsserts o ]
+  ++ [ ClockWrite "axiom" h | ax <- axioms st, h <- axiomThen ax, headIsClock h ]
+  where
+    clockAsserts (Insert s)      = [ s | headIsClock s ]
+    clockAsserts (InsertFor _ s) = [ s | headIsClock s ]
+    clockAsserts (ForEach _ os)  = concatMap clockAsserts os
+    clockAsserts _               = []
+    headIsClock s = case pathNames s of
+      (h : _) -> h == turnPath
+      []      -> False
+
+-- The authored outcome sites, with labels: practice action/init/function-case
+-- outcomes and every schedule rule body's outcomes.
+clockSites :: PraxState -> [(String, [Outcome])]
+clockSites st =
+     [ (practiceId p ++ " (init)", initOutcomes p) | p <- ps ]
+  ++ [ (practiceId p ++ " / " ++ actionName a, actionOutcomes a) | p <- ps, a <- actions p ]
+  ++ [ (practiceId p ++ " / fn " ++ fnName f, caseOutcomes c)
+     | p <- ps, f <- functions p, c <- fnCases f ]
+  ++ [ ("schedule " ++ srName r, outs) | r <- schedule st, (_, outs) <- srBody r ]
+  where ps = Map.elems (practiceDefs st)
 
 -- Check 6: draws need a seeded die ------------------------------------------
 

@@ -14,6 +14,7 @@ module Prax.Engine
   , setAxioms
   , setDesires
   , setCharacters
+  , setSchedule
   , possibleActions
   , performAction
   , performOutcome
@@ -26,7 +27,7 @@ module Prax.Engine
   , roundBoundary
   ) where
 
-import           Data.List (intercalate, isPrefixOf)
+import           Data.List (intercalate, isPrefixOf, nub, (\\))
 import           Data.Maybe (listToMaybe)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -199,6 +200,41 @@ setDesires ds st = retable st { desires = ds }
 -- | The only sanctioned way to change the character roster of a built state.
 setCharacters :: [Character] -> PraxState -> PraxState
 setCharacters cs st = retable st { characters = cs }
+
+-- | The only sanctioned way to install a world's engine schedule (spec v44):
+-- store the authored declarations, cook their mirror ('retable'), and seed
+-- each rule's next-due one full period out (the start-sated convention —
+-- @currentTurn + srPeriod@, uniform across rules). This is the one choke point
+-- for schedule-rule hygiene, enforced as loud construction-time errors:
+-- single-segment rule names (a multi-segment name would
+-- corrupt the by-name due keying), positive periods, no duplicate names (the
+-- dues map is keyed by name), and — on every clause of every rule — the v40
+-- splice hygiene ('authoredVarClash' @["Actor"]@): the @Prax@ namespace is
+-- reserved for engine machinery and @Actor@ is reserved for movers (a
+-- schedule rule has no actor at all).
+setSchedule :: [ScheduleRule] -> PraxState -> PraxState
+setSchedule rules st
+  | (r : _) <- filter ((/= 1) . length . pathNames . srName) rules =
+      error ("Prax.Engine.setSchedule: rule name must be a single segment: "
+             ++ show (srName r))
+  | (r : _) <- filter ((< 1) . srPeriod) rules =
+      error ("Prax.Engine.setSchedule: rule " ++ show (srName r)
+             ++ " needs a positive period")
+  | names /= nub names =
+      error ("Prax.Engine.setSchedule: duplicate rule names would share one due key: "
+             ++ show (names \\ nub names))
+  | (v : _) <- offenders =
+      error ("Prax.Engine.setSchedule: a rule authors " ++ show v
+             ++ " -- the Prax namespace is reserved for engine machinery, and Actor"
+             ++ " is reserved for movers (a schedule rule has no actor at all)")
+  | otherwise =
+      retable st { schedule = rules
+                 , scheduleDues = Map.fromList
+                     [ (srName r, currentTurn st + srPeriod r) | r <- rules ] }
+  where
+    names = map srName rules
+    offenders = concat [ authoredVarClash ["Actor"] conds outs
+                       | r <- rules, (conds, outs) <- srBody r ]
 
 -- | All actions the named actor can currently perform, across every
 -- instantiated practice and every satisfying binding of each action. Conditions

@@ -9,16 +9,14 @@ import           Prax.Db (Val (..), exists, dbToSentences)
 import           Prax.Query (Condition (..), groundCondition, query)
 import           Prax.Sym (intern)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction, performOutcome, setDesires, groundOutcome)
+import           Prax.Engine (possibleActions, performAction, performOutcome, setDesires, groundOutcome, roundBoundary)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Core (adjustScore)
 import           Prax.Planner (predictMove, pickAction, candidateActions, motiveSignature, evaluateCooked)
 import           Prax.Minds (cookedSelfWants)
-import           Prax.Sight (sightName)
 import           Prax.Witness (witnessed)
-import           Prax.Drift (driftChar)
 import           Prax.Rng (rngSetup)
-import           Prax.Emotion (feelToward, angry)
+import           Prax.Emotion (feelToward, feelTowardFor, angry)
 import           Prax.Worlds.Village
 
 -- Perform the named actor's action whose label mentions @needle@.
@@ -51,13 +49,12 @@ postTheftAt :: Int -> PraxState
 postTheftAt = (trace !!)
   where trace = iterate (idleStep "you") (doAct "bob" "steal the loaf" villageWorld)
 
--- Fire the sight ticker directly (VillageSpec's own idiom, "out of sight,
--- out of mind"): makes a just-established co-presence concrete in each
--- character's own memory before the next decision is scored.
+-- One round boundary: the engine advances the clock and fires the period-1
+-- sighting rule (v44), making a just-established co-presence concrete in each
+-- character's own memory before the next decision is scored -- the successor
+-- to the retired on-demand sight-ticker idiom.
 tick :: PraxState -> PraxState
-tick st = case possibleActions st sightName of
-  (ga : _) -> performAction st ga
-  []       -> error "no sight action available"
+tick = roundBoundary
 
 -- The shakedown's forced trajectory (the theft tests' own convention: a
 -- scripted opening, then free play). gale steps out of the mill first --
@@ -210,11 +207,10 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "the stall is restocked" (exists "stall.loaf" (db st2))
 
   , testCase "the whole arc runs itself: notoriety tips bob; forgiveness follows" $ do
-      -- 96 turns: 12 rounds (v36: the round grew an eighth member, the
-      -- drifter -- bob, now hungry, eats the stolen loaf outright rather
-      -- than ever returning it, so atonement waits on a second, honestly
-      -- EARNED loaf; 10 rounds (70 turns under the old 7-member round) no
-      -- longer reaches it, measured to land at 12)
+      -- step 96: a hungry bob eats the stolen loaf outright rather than ever
+      -- returning it, so atonement waits on a second, honestly EARNED loaf --
+      -- reached by step 96 in the v44 6-turn round (observed against the live
+      -- post-theft trace).
       let st = postTheftAt 96
           v  = readView st
       assertBool "bob atoned on his own" (exists "atoned.bob" (db st))
@@ -261,11 +257,11 @@ tests = testGroup "Prax.Worlds.Village"
         (not (exists "notorious.bob.thief" (readView st)))
 
   , testCase "the village keeps a perception clock and sightings" $ do
-      -- after one full round of free play (all seven cast members -- you, bob,
-      -- carol, dana, eve, gale -- ending with the sight ticker), the perception
-      -- clock has advanced and the square-mates (you, bob, and carol) hold
-      -- sightings of each other; dana, at the mill the whole round, holds
-      -- none of bob (and bob none of her).
+      -- after one full round of free play (all six cast members -- you, bob,
+      -- carol, dana, eve, gale), the round-boundary fires the period-1 sighting
+      -- rule: the perception clock has advanced and the square-mates (you, bob,
+      -- and carol) hold sightings of each other; dana, at the mill the whole
+      -- round, holds none of bob (and bob none of her).
       let st = freePlayAt 7
       assertBool "the clock ticked once" (exists "turn!1" (db st))
       assertBool "you sighted bob in the square"
@@ -315,10 +311,8 @@ tests = testGroup "Prax.Worlds.Village"
       -- directly (co-presence, "together") and depositing a fresh sighting
       -- ("sightedWithin") that would outlast the moment.
       let st2 = performOutcome (Insert "practice.world.world.at.dana!square") st1
-          st3 = case possibleActions st2 sightName of
-                  (ga : _) -> performAction st2 ga
-                  []       -> error "the sight ticker has no action"
-      assertBool "co-present after the shared-room tick: dana is now in scope"
+          st3 = roundBoundary st2
+      assertBool "co-present after the shared-room boundary: dana is now in scope"
         (inScopeOf st3 "dana" "bob")
 
   , testCase "a secret keeps: bob will not steal while the square watches" $ do
@@ -360,11 +354,11 @@ tests = testGroup "Prax.Worlds.Village"
       -- from t=0 free play, with the whole square watching, bob undertakes
       -- honest work and completes it: he ends holding a loaf he BAKED —
       -- the stall's loaf untouched, no theft beliefs about him anywhere.
-      -- 49 turns: 7 rounds. Unaffected by v37's market (period 6): the
-      -- market's first opening (round 6) falls after his errand already
-      -- completes, so this moment is unchanged from the pre-market world
-      -- (re-verified against the live trace, not assumed).
-      let st = freePlayAt 49
+      -- step 34: bob has completed the endeavor and holds the baked loaf
+      -- (done at step 32, held through the pre-market window). Unaffected by
+      -- the market (period 6): its first opening (step 37) falls after his
+      -- errand completes -- re-verified against the live trace, not assumed.
+      let st = freePlayAt 34
       assertBool "bob undertook the endeavor" (exists "practice.earnBread.bob" (db st))
       assertBool "and finished it" (exists "practice.earnBread.bob.done.s3" (db st))
       assertBool "he holds a loaf" (exists "holding.bob.loaf" (db st))
@@ -384,21 +378,20 @@ tests = testGroup "Prax.Worlds.Village"
         @?= Just "bob: steal the loaf from the stall"
 
     --------------------------------------------------------------------------
-    -- v36: the hunger pulse (Prax.Drift's build-up cargo) closes bob's bread
-    -- economy into a cycle -- earn, eat, hunger again.
+    -- v44: the hunger schedule rule (period 3) closes bob's bread economy into
+    -- a cycle -- earn, eat, hunger again. The engine fires it at the round
+    -- boundary, so hunger lands exactly as the clock reaches turn 3 (step 19),
+    -- not one step after: the boundary advances the clock AND fires the rule
+    -- atomically.
     --------------------------------------------------------------------------
 
-  , testCase "the hunger pulse: absent before turn 3, present exactly at it; the next pulse re-hungers a fed bob" $ do
-      -- driftChar rides after sightChar, so within round 3 the clock has
-      -- already reached turn!3 (sight's own tick) one step before the
-      -- drifter reads it and fires -- "the clock advances before bodies
-      -- feel it," stated in the wiring comment.
-      let stBefore = freePlayAt 23
-          stAfter  = freePlayAt 24
-      assertBool "turn already reached 3" (exists "turn!3" (db stBefore))
-      assertBool "hungry.bob still absent, one step short of the pulse"
+  , testCase "the hunger rule: absent at turn 2, present exactly at turn 3; the next firing re-hungers a fed bob" $ do
+      let stBefore = freePlayAt 18   -- turn 2, one boundary short of the firing
+          stAfter  = freePlayAt 19   -- turn 3, the hunger rule fires at this boundary
+      assertBool "turn is still 2" (exists "turn!2" (db stBefore))
+      assertBool "hungry.bob still absent, one boundary short of the firing"
         (not (exists "hungry.bob" (db stBefore)))
-      assertBool "hungry.bob present once the drifter takes its turn"
+      assertBool "hungry.bob present once the turn-3 boundary fires the rule"
         (exists "hungry.bob" (db stAfter))
       -- force a loaf into his hand (the spec's own sanctioned shortcut:
       -- "force holding.bob.loaf (or drive until earned)") and let him eat.
@@ -450,28 +443,22 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "gale never hungers"  (not (exists "hungry.gale" (db st)))
 
     --------------------------------------------------------------------------
-    -- v37: market day (Prax.Drift's 'gathering' combinator, period 6,
-    -- duration 1) -- the calendar convenes the town in the square and
-    -- disperses it again. Period 6 (not the original 2) is the shipped
-    -- cadence: the 2/1 pairing left NO quiet rounds -- the attendance gate
-    -- toggled every single round, every attendee re-deliberated every turn,
-    -- and a 140-turn paired drive tripled (68.3s -> 193.2s, 33 -> 90
-    -- deliberations, measured in Task 4's bench). The mechanism was exact
-    -- throughout; the cadence was the defect. Turn counts below are
-    -- observed, not assumed (probed against the live trace): the market's
-    -- due seed (period=6) first fires at the drifter's turn opening round 6
-    -- (turn 48), so round 6 (turns 48-55) is the market's first open round;
-    -- its close due (period+duration=7) fires opening round 7 (turn 56).
-    -- The golden's own free-play window no longer witnesses a market (the
-    -- v36 hunger precedent: the cycle is pinned here, at real turn counts,
-    -- not required to be golden-visible).
+    -- v37/v44: market day (Prax.Schedule's 'gathering', period 6, duration 1)
+    -- -- the calendar convenes the town in the square and disperses it again.
+    -- The engine fires the schedule at each round boundary (v44), so with a
+    -- 6-turn round the market opens at the turn-6 boundary (step 37; steps
+    -- 37-42 are its first open round) and its open facts expire at the turn-7
+    -- boundary (step 43). Steps below are observed against the live trace, not
+    -- assumed. The golden's own free-play window does not witness a market (the
+    -- v36 hunger precedent: the cycle is pinned here, at real step counts, not
+    -- required to be golden-visible).
     --------------------------------------------------------------------------
 
   , testCase "convergence: attendees with no stronger stake converge on the square while the market holds" $ do
-      -- pre-market (round 5, quiet): both dana and gale are at the mill --
+      -- pre-market (step 36, quiet): both dana and gale are at the mill --
       -- their own anchors (dana's +1 mill-want; gale has no location want
       -- at all) hold, unperturbed by any market pull that does not yet exist.
-      let stQuiet = freePlayAt 47
+      let stQuiet = freePlayAt 36
       assertBool "dana still at the mill, market not yet open"
         (exists "practice.world.world.at.dana!mill" (db stQuiet))
       assertBool "gale still at the mill, market not yet open"
@@ -479,10 +466,10 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "market genuinely not yet open at turn 47"
         (not (exists "marketDay.square" (db stQuiet)))
 
-      -- market round (round 6, turns 48-55 all taken): both have moved to
-      -- the square -- dana's own turn (52) and gale's (54) each traded a
-      -- one-point anchor (or no anchor at all) for the market's +3 draw.
-      let stMarket = freePlayAt 55
+      -- market round (turn 6, steps 37-42 all taken): both have moved to the
+      -- square -- dana's own turn and gale's each traded a one-point anchor
+      -- (or no anchor at all) for the market's +3 draw.
+      let stMarket = freePlayAt 42
       assertBool "the market is open" (exists "marketDay.square" (db stMarket))
       assertBool "dana converged on the square"
         (exists "practice.world.world.at.dana!square" (db stMarket))
@@ -498,35 +485,28 @@ tests = testGroup "Prax.Worlds.Village"
          && exists "practice.world.world.at.gale!square" (db stMarket))
 
   , testCase "dispersal: a villager with no stronger stake leaves once the market closes; the cycle recurs" $ do
-      -- turn 56: the drifter's close pulse has just fired -- both are still
-      -- physically at the square (closing removes the marketDay fact, not
-      -- anyone's position; dispersal is a DECISION, made at the villager's
-      -- own next turn, not an instantaneous teleport).
-      let stClosed = freePlayAt 56
+      -- step 43 (turn-7 boundary): the market's close has just fired -- both
+      -- are still physically at the square (closing removes the marketDay
+      -- fact, not anyone's position; dispersal is a DECISION, made at the
+      -- villager's own next turn, not an instantaneous teleport).
+      let stClosed = freePlayAt 43
       assertBool "the market is now closed" (not (exists "marketDay.square" (db stClosed)))
       assertBool "dana has not yet moved (closing is not teleportation)"
         (exists "practice.world.world.at.dana!square" (db stClosed))
       assertBool "gale has not yet moved either"
         (exists "practice.world.world.at.gale!square" (db stClosed))
 
-      -- gale's next turn (62): no stronger stake ever attached to her at the
-      -- square (spites-carol reads no location), so she disperses straight
+      -- gale's next turn (step 48): no stronger stake ever attached to her at
+      -- the square (spites-carol reads no location), so she disperses straight
       -- back to the mill -- the close's own wake, symmetric with the open's.
-      -- (dana's own eyeing of carol, the pin the period-2 cadence once used
-      -- to demonstrate "a stronger stake stays," resolved at turn 28 --
-      -- long before this cadence's first market close reaches her -- so it
-      -- no longer functions as a competing stake at the relevant moment;
-      -- traced, not assumed, and dana in fact disperses too, at turn 60,
-      -- before gale does. Not reproduced here rather than weakened.)
-      let stDispersed = freePlayAt 62
+      let stDispersed = freePlayAt 48
       assertBool "gale disperses: back to the mill once the market's pull is gone"
         (exists "practice.world.world.at.gale!mill" (db stDispersed))
 
-      -- the market recurs (period 6): round 12 (turn 96) reopens it, and by
-      -- its close (turn 103) gale -- once again with no stronger stake --
-      -- has converged a second time, confirming the cycle is genuinely
-      -- periodic, not a one-off.
-      let stReopened = freePlayAt 103
+      -- the market recurs (period 6): the turn-12 boundary (step 73) reopens
+      -- it, and by step 78 gale -- once again with no stronger stake -- has
+      -- converged a second time, confirming the cycle is genuinely periodic.
+      let stReopened = freePlayAt 78
       assertBool "the market has reopened" (exists "marketDay.square" (db stReopened))
       assertBool "gale converges again on the second opening"
         (exists "practice.world.world.at.gale!square" (db stReopened))
@@ -542,18 +522,15 @@ tests = testGroup "Prax.Worlds.Village"
           believers st = [ w | w <- ["you", "bob", "carol", "dana", "eve", "gale"]
                               , exists (w ++ ".believes.spat.gale.carol.seen") (db st) ]
 
-          -- quiet day (turn 14, reset straight from villageWorld's own
-          -- trace -- no market has ever opened): gale is at the mill with
-          -- only dana for company. Unaffected by the period-6 recadence
-          -- (the market's first due doesn't fire until turn 48, so turn 14
-          -- is identical to a marketless world either way).
-          stQuiet  = performOutcome spatByGale (freePlayAt 14)
+          -- quiet day (step 36, the last quiet moment before the market's
+          -- first opening at step 37): gale is at the mill with only dana for
+          -- company.
+          stQuiet  = performOutcome spatByGale (freePlayAt 36)
           quietWitnesses = believers stQuiet
 
-          -- market day (turn 55, reset independently from villageWorld's own
-          -- trace -- the market's first opening, round 6): gale is at the
-          -- square with you, bob, carol, and dana all gathered around her.
-          stMarket = performOutcome spatByGale (freePlayAt 55)
+          -- market day (step 42, the market's first open round): gale is at
+          -- the square with you, bob, carol, and dana all gathered around her.
+          stMarket = performOutcome spatByGale (freePlayAt 42)
           marketWitnesses = believers stMarket
 
       quietWitnesses  @?= ["dana"]
@@ -593,16 +570,10 @@ tests = testGroup "Prax.Worlds.Village"
         (not (exists "carol.believes.desires.eve.clean-conscience" v))
 
   , testCase "same spite, different temperaments: eve whispers, gale never does" $ do
-      -- 56 turns: 7 rounds (v36: the round grew an eighth member, the
-      -- drifter, so 7 rounds is now 56 turns, not 49 -- the same moment in
-      -- the story, re-measured against the longer round). Unaffected by
-      -- v37's market (period 6): its first opening (round 6, turn 48)
-      -- falls inside this window but never draws eve and gale into a
-      -- private moment before it -- re-verified against the live trace
-      -- (the period-2 cadence once produced a market-cascaded second
-      -- whisper here; at period 6 it does not recur within reasonable free
-      -- play, so this pin reverts to its pre-v37 form rather than being
-      -- forced).
+      -- step 56 (v44: the 6-turn round, no tickers). The market (period 6)
+      -- opens within this window but never draws eve and gale into a private
+      -- moment before it -- re-verified against the live trace: eve whispers
+      -- exactly once, gale never does.
       let vs = ["you", "bob", "carol", "dana", "eve", "gale"]
           st = freePlayAt 56
       assertBool "eve's frame-up went ahead"
@@ -629,9 +600,10 @@ tests = testGroup "Prax.Worlds.Village"
       -- declines (one-shot-per-hearer still permits it: gale has never
       -- heard this specific claim from anyone); drive a few turns first to
       -- reach a moment they're actually co-present (free play has them
-      -- pass in and out of sync), then let gale relay it honestly, exactly
-      -- as the v25 mechanism always has.
-      let stCoPresent = driveIdle "you" 5 st
+      -- pass in and out of sync -- 3 steps lands them both at the square),
+      -- then let gale relay it honestly, exactly as the v25 mechanism always
+      -- has.
+      let stCoPresent = driveIdle "you" 3 st
           stWhisper = doAct "eve" "whisper to gale that carol stole the loaf" stCoPresent
           stLaundered = driveIdle "you" 20 stWhisper
           heardFromGale =
@@ -704,8 +676,14 @@ tests = testGroup "Prax.Worlds.Village"
         (not (any (\s -> ("threatened.whisper." `isInfixOf` s || "debt." `isInfixOf` s)
                          && "gale" `isInfixOf` s)
                   (dbToSentences (db st))))
-      assertBool "bob's own standing (thief/notoriety track) is untouched by any of this"
-        (not (exists "notorious.bob.thief" (readView st)))
+      -- bob is no party to the shakedown: the extortion machinery entangles
+      -- him nowhere (his own thief/notoriety arc, if it runs at all in this
+      -- scrambled trajectory, is a SEPARATE storyline the shakedown never
+      -- reaches -- so the pin isolates the shakedown's footprint, not bob's).
+      assertBool "bob holds no shakedown debt and owes no favor to anyone"
+        (not (any (\s -> ("threatened.whisper." `isInfixOf` s || "debt." `isInfixOf` s
+                          || "obliged.bob." `isInfixOf` s) && "bob" `isInfixOf` s)
+                  (dbToSentences (db st))))
 
     --------------------------------------------------------------------------
     -- v32: eve's road back -- confession, absolution, re-offense,
@@ -787,16 +765,15 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "no absolution, ever" (not (exists "recanted.eve" (db st)))
 
     --------------------------------------------------------------------------
-    -- v38: carol's temper (Prax.Rng's die + Prax.Emotion's feelings, cargo
+    -- v38/v44: carol's temper (Prax.Rng's die + Prax.Emotion's feelings, cargo
     -- @docs/specs/2026-07-15-v38-chance-feelings.md@) -- onset at the shun
-    -- action, priced as discomfort, discharged by confronting, faded if
-    -- never vented. The shipped seed (1988) makes the golden's OWN dramatic
-    -- beat -- dana's shun of carol, round 2 of 'Prax.GoldenDriveSpec' --
-    -- draw a hit (verified directly below); free play's VISIBLE decisions
-    -- are unaffected (the golden itself is unchanged, confirmed by its own
-    -- passing test) because carol never gains a confront outlet inside that
-    -- 21-turn window -- the anger simply sits, discomfort with nowhere to
-    -- discharge, exactly what 'feelingsFade' is for.
+    -- action, priced as discomfort, discharged by confronting, and (v44) fading
+    -- on its own authored lifetime (feelTowardFor 4) when never vented. The
+    -- shipped seed (1988) makes the golden's OWN dramatic beat -- dana's shun
+    -- of carol -- draw a hit (verified directly below); free play's VISIBLE
+    -- decisions are unaffected because carol never gains a confront outlet
+    -- inside that window -- the anger simply sits, discomfort with nowhere to
+    -- discharge, until its lifetime lapses.
     --------------------------------------------------------------------------
 
   , testCase "the golden's own beat: dana's shun of carol draws a hit at the shipped seed" $ do
@@ -806,8 +783,8 @@ tests = testGroup "Prax.Worlds.Village"
       -- feeling facts, so this is the one place that beat's actual draw
       -- outcome is asserted.
       let trace = iterate (idleStep playerName) villageWorld
-          beforeShun = trace !! 11
-          afterShun  = trace !! 12
+          beforeShun = trace !! 9
+          afterShun  = trace !! 10
       assertBool "dana has not yet shunned carol" (not (exists "shunned.dana.carol" (db beforeShun)))
       assertBool "carol not yet angry" (not (exists "carol.feels.angry.toward.dana" (db beforeShun)))
       assertBool "dana's turn was the shun" (exists "shunned.dana.carol" (db afterShun))
@@ -895,20 +872,18 @@ tests = testGroup "Prax.Worlds.Village"
         (not (exists "carol.feels.angry.toward.bob" (db stConfront)))
       evaluateCooked stConfront (cookedSelfWants stConfront (villager "carol")) @?= 6
 
-  , testCase "fade catches the unvented (hand clock)" $ do
-      -- No outlet offered here (no theft, no witness) -- the anger just
-      -- sits until 'villageFade' (period 4) sweeps it. Absent one turn
-      -- short of due, gone exactly at it -- the DriftSpec hand-clock idiom
-      -- ('Insert "turn!N"'), matching 'Prax.Emotion.feelingsFade's own test.
-      let atTurn k = performOutcome (Insert ("turn!" ++ show (k :: Int)))
-          pulse st = snd (npcAct 2 driftChar st)
-          stAngry  = performOutcome (feelToward "carol" angry "dana") villageWorld
+  , testCase "fade catches the unvented (lifetime expiry)" $ do
+      -- No outlet offered here (no theft, no witness) -- the anger just sits
+      -- until its own lifetime (4, the shun-onset span) lapses. The onset
+      -- fires at turn 0, so the engine's expiry queue retracts it at boundary
+      -- 4: present one boundary short, gone exactly at it.
+      let stAngry = performOutcome (feelTowardFor 4 "carol" angry "dana") villageWorld
       assertBool "angry from the outset" (exists "carol.feels.angry.toward.dana" (db stAngry))
-      let st3 = pulse (atTurn 3 stAngry)
-      assertBool "still angry, one turn short of the due (4)"
+      let st3 = iterate roundBoundary stAngry !! 3
+      assertBool "still angry, one boundary short of the lifetime (4)"
         (exists "carol.feels.angry.toward.dana" (db st3))
-      let st4 = pulse (atTurn 4 st3)
-      assertBool "faded exactly at the due pulse"
+      let st4 = roundBoundary st3
+      assertBool "faded exactly when the lifetime lapsed"
         (not (exists "carol.feels.angry.toward.dana" (db st4)))
       -- v35 note: fade flips the vector back -- she wakes again on the way out.
       let sigAngry = motiveSignature stAngry (villager "carol")

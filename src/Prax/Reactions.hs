@@ -29,7 +29,7 @@ import           Data.List (intercalate)
 import           Prax.Query (Condition (..))
 import           Prax.Types
 import           Prax.Core (adjustScore, warmth)
-import           Prax.Emotion (feelToward, annoyed, pleased)
+import           Prax.Emotion (feelTowardFor, annoyed, pleased)
 
 -- Reactions --------------------------------------------------------------------
 
@@ -79,12 +79,12 @@ disapprovalP = practice
       [ action "[Actor]: Disapprove of [Offender]"
           [ Eq "Actor" "Onlooker" ]
           [ Insert "Onlooker.disapprovedOf.Offender"
-          , feelToward "Onlooker" annoyed "Offender"
+          , feelTowardFor 4 "Onlooker" annoyed "Offender"
           , adjustScore "Onlooker" "Offender" warmth (-20) "brokeANorm"
           , endReaction "disapproval" ["Offender", "Onlooker"] ]
       , action "[Actor]: Let [Offender]'s lapse slide"
           [ Eq "Actor" "Onlooker" ]
-          [ feelToward "Onlooker" pleased "Offender"
+          [ feelTowardFor 4 "Onlooker" pleased "Offender"
           , endReaction "disapproval" ["Offender", "Onlooker"] ]
       ]
   }

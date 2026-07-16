@@ -16,31 +16,16 @@ import           Prax.Worlds.Bar (barWorld)
 import           Prax.Worlds.Village (villageWorld)
 
 -- Deterministic narration from driving every character with the planner (depth
--- 2) for 25 round-robin turns (idle turns, and the silent bodiless tickers'
--- turns, produce no line). 25, not 20: the bar's cast includes the bodiless
--- sight ticker (Prax.Sight), so each round is 5 turns, not 4 — the same 5
--- rounds this golden trace always covered (20 = 5x4) now take 25 (5x5). A
--- golden replay of the whole emergent arc: greet, serve, respond, take offense
--- at a snub, buy a friend a drink, and then — once the room is warm — the
--- director steps in and turns two friends against each other. ('you' has no
--- wants, so it paces; in the CLI 'you' is the human.)
---
--- v36 drift: the bodiless drifter (Prax.Drift) rides after the sight ticker,
--- so a round is 6 turns, not 5 (unchanged at 25 raw turns -- the golden's own
--- name and window, not re-widened to keep pace). The window now closes one
--- decision turn after the director's stir, mid-round-5, before ada's and
--- bex's next turns -- so bex's arc-completing "settle in, feeling you belong
--- here" (and ada's "Wait a moment" before it) no longer land inside the
--- capture: the trace is two lines shorter, itemized below.
---
--- v38: ada's line 11 changed from "Take offense that you ignored your
--- greeting" to "Wait a moment". Cause: ada already greeted you at line 2
--- (practice.greet.world.greeted.ada.you), so taking offense now — which
--- makes her feel annoyed toward you — also prices her OWN grudging-courtesy
--- want (Bar.hs, -3: cross with someone she's been outwardly warm to grates)
--- against that standing greeted-fact. That -3, not present before feelings
--- were priced, is enough to tip her narrow preference for taking offense
--- over waiting; she no longer bears the grievance at all in this run.
+-- 2) for 25 round-robin turns (idle turns produce no line). v44: the sight and
+-- drift ticker characters are gone from the roster (the engine fires the
+-- schedule at each round boundary, invisibly), so the bar's cast is 4 real
+-- members (you, ada, bex, director) and a round is 4 turns. Re-captured by
+-- observation: 25 turns now span ~6 rounds of real movers, so the whole
+-- emergent arc plays out and then some -- greet, serve, respond, buy a friend a
+-- drink, the director's stir, and bex's arc-completing "settle in, feeling you
+-- belong here" and tip all now land inside the capture (the shorter round
+-- reaches further in the same 25 turns). ('you' has no wants, so it paces; in
+-- the CLI 'you' is the human.)
 expectedTrace :: [String]
 expectedTrace =
   [ "you: Go to bar"
@@ -57,12 +42,64 @@ expectedTrace =
   , "bex: Buy ada a drink"
   , "director: turn ada against bex to stir up the evening"
   , "you: Go to bar"
+  , "ada: Wait a moment"
+  , "bex: settle in, feeling you belong here"
+  , "you: Go to entrance"
+  , "ada: Wait a moment"
+  , "bex: Tip ada"
+  , "you: Go to bar"
   ]
+
+-- A minimal cast over an empty practice set, with an optional engine schedule:
+-- just enough for 'advance' to exercise the round-boundary wiring (v44). No
+-- npcAct is involved -- these pins are about WHEN the boundary fires and who is
+-- re-selected after it, not about any decision.
+boundaryWorld :: [String] -> [ScheduleRule] -> PraxState
+boundaryWorld names rules =
+  setSchedule rules (setCharacters (map character names) (definePractices [] emptyState))
+
+-- A period-1 rule that stamps a fact every boundary (its firing is observable).
+beatRule :: ScheduleRule
+beatRule = ScheduleRule "beat" 1 [([], [Insert "tick.done"])]
 
 tests :: TestTree
 tests = testGroup "Prax.Loop"
   [ testCase "25-turn NPC replay matches the golden narration" $
       fst (runNpcTicks 2 25 barWorld) @?= expectedTrace
+
+  , testCase "no boundary fires before round 1 (cursor -1 selects index 0, no wrap)" $ do
+      let (actor, w1) = advance (boundaryWorld ["a", "b", "c"] [beatRule])
+      charName actor @?= "a"
+      cursor w1 @?= 0
+      assertBool "clock not advanced before round 1" (exists "turn!0" (db w1))
+      assertBool "no schedule rule fired before round 1" (not (exists "tick.done" (db w1)))
+
+  , testCase "a single-survivor cast wraps every turn (i == cursor), firing the boundary" $ do
+      let w0 = boundaryWorld ["solo"] [beatRule]
+          (_, w1)     = advance w0     -- selects solo, cursor 0, no wrap
+          (actor, w2) = advance w1     -- i == cursor 0: WRAP -> boundary
+      charName actor @?= "solo"
+      assertBool "the boundary advanced the clock" (exists "turn!1" (db w2))
+      assertBool "the period-1 rule fired at the wrap" (exists "tick.done" (db w2))
+
+  , testCase "the wrap skips a dead character and still fires the boundary" $ do
+      let w0 = performOutcome (Insert "dead.b") (boundaryWorld ["a", "b", "c"] [beatRule])
+          (a1, w1) = advance w0   -- a, cursor 0
+          (a2, w2) = advance w1   -- c (dead b skipped), cursor 2
+          (a3, w3) = advance w2   -- next living wraps to 0 <= cursor 2: boundary -> a
+      map charName [a1, a2, a3] @?= ["a", "c", "a"]
+      assertBool "the boundary fired at the wrap past the dead" (exists "turn!1" (db w3))
+      assertBool "beat fired at that boundary" (exists "tick.done" (db w3))
+
+  , testCase "a schedule rule killing a character mid-wrap: the dead take no turn" $ do
+      let reaper = ScheduleRule "reaper" 1 [([], [Insert "dead.a"])]
+          w0 = boundaryWorld ["a", "b", "c"] [reaper]
+          (_, w1) = advance w0   -- a, cursor 0
+          (_, w2) = advance w1   -- b, cursor 1
+          (_, w3) = advance w2   -- c, cursor 2
+          (a4, w4) = advance w3  -- wrap: boundary fires reaper (kills a); re-select skips a -> b
+      assertBool "the reaper killed a at the boundary" (exists "dead.a" (db w4))
+      charName a4 @?= "b"
 
   , testCase "the emergent + director-driven outcomes hold after the replay" $ do
       let facts = dbToSentences (db (snd (runNpcTicks 2 25 barWorld)))
@@ -77,13 +114,13 @@ tests = testGroup "Prax.Loop"
       -- the director intervened once, injecting a rivalry between the two friends
       has "dm.stirred"
       has "practice.greet.world.grievance.ada.bex"
-      -- v36 drift: the drifter's extra silent turn each round closes the
-      -- 25-turn window one decision short of bex's arc-completing beat (its
-      -- own warmth held even as the director soured ada toward it), so bex
-      -- is still hopeful, not yet belonging, when the replay ends.
-      has "bex.arc.hopeful"
-      assertBool "bex has not yet reached belonging within the shortened window"
-        ("bex.arc.belonging" `notElem` facts)
+      -- v44: with the ticker turns gone the 4-member round reaches further in
+      -- 25 turns, so bex's arc completes -- she settles in to belonging (its
+      -- own warmth held even as the director soured ada toward it), leaving
+      -- hopeful behind.
+      has "bex.arc.belonging"
+      assertBool "bex has moved on from hopeful once she belongs"
+        ("bex.arc.hopeful" `notElem` facts)
       -- no NPC ever chose the against-desires transformation
       assertBool "no NPC resigned to solitude"
         ("bex.arc.lonely" `notElem` facts && "you.arc.lonely" `notElem` facts)
@@ -309,16 +346,15 @@ tests = testGroup "Prax.Loop"
       fmap gaLabel g2 @?= Just "beth: idle about"
 
   , testCase "the v37 wake, end to end: a standing intention holds through quiet rounds, the market's open flips the live-desire set and wakes fresh deliberation to the square, the close disperses it" $ do
-      -- gale, driven through villageWorld's own free play (v35+v37
+      -- gale, driven through villageWorld's own free play (v35+v37+v44
       -- integration -- the real village, not a fixture): her only wants are
       -- 'spites-carol' (no locational content) and 'drawn-to-market', so her
-      -- location choices are read straight off the market's own clock. The
-      -- village's round is 8 turns (six villagers + the silent sight and
-      -- drift tickers); the market's due (period 6, the shipped cadence --
-      -- Task 4's bench found the original period 2 left no quiet rounds)
-      -- opens at the drifter's turn beginning round 6 (turn 48) and its due
-      -- (period+duration 7) closes beginning round 7 (turn 56) -- both
-      -- observed against the live trace, not assumed.
+      -- location choices are read straight off the market's own clock. v44:
+      -- the ticker characters are gone, so the village's round is 6 turns and
+      -- the engine fires the schedule at each round boundary (at the wrap). The
+      -- market (period 6) opens at the turn-6 boundary (step 37) and closes at
+      -- the turn-7 boundary (step 43) -- both observed against the live trace,
+      -- not assumed.
       let idleStep idle st =
             let (actor, st1) = advance st
             in if charName actor == idle then st1 else snd (npcAct 2 actor st1)
@@ -331,20 +367,20 @@ tests = testGroup "Prax.Loop"
                           Just i  -> i
                           Nothing -> error "gale holds no standing intention yet"
 
-      -- QUIET (turn 47, one turn short of the open): her standing intention
+      -- QUIET (step 36, one boundary short of the open): her standing intention
       -- still matches her current signature -- the quiescence holds, and
       -- drawn-to-market is not yet in her live set.
-      let stQuiet  = freePlayAt 47
+      let stQuiet  = freePlayAt 36
           sigQuiet = motiveSignature stQuiet gale
       assertBool "the standing intention holds through the quiet turn"
         (intentBasis (intentOf stQuiet) == sigQuiet)
       assertBool "drawn-to-market is not yet live"
         ("drawn-to-market" `notElem` msLiveDesires sigQuiet)
 
-      -- THE OPEN (turn 48, the drifter's own turn): the market's insert
-      -- flips drawn-to-market's gate live -- the live-desire SET component
-      -- of gale's signature changes, asserted directly as before/after/diff.
-      let stOpen  = freePlayAt 48
+      -- THE OPEN (step 37, the turn-6 boundary): the market's insert flips
+      -- drawn-to-market's gate live -- the live-desire SET component of gale's
+      -- signature changes, asserted directly as before/after/diff.
+      let stOpen  = freePlayAt 37
           sigOpen = motiveSignature stOpen gale
       assertBool "the market is open" (exists "marketDay.square" (db stOpen))
       assertBool "drawn-to-market is now live"
@@ -356,16 +392,16 @@ tests = testGroup "Prax.Loop"
       assertBool "her standing intention's basis no longer matches: she is woken"
         (intentBasis (intentOf stOpen) /= sigOpen)
 
-      -- her NEXT npcAct (her actual turn 54, within the open round) re-
+      -- her NEXT npcAct (her actual turn within the open round, step 42) re-
       -- deliberates and picks the square -- the wake's consequence, not
       -- merely its trigger.
-      let stMarketTurn = freePlayAt 54
+      let stMarketTurn = freePlayAt 42
       fmap gaLabel (intentAct (intentOf stMarketTurn)) @?= Just "gale: Go to square"
 
-      -- THE CLOSE (turn 56, the drifter's own turn): drawn-to-market's gate
-      -- shuts again -- the live-desire set flips back, and her turn-54
-      -- intention (stored woken and live) no longer matches.
-      let stClosed  = freePlayAt 56
+      -- THE CLOSE (step 43, the turn-7 boundary): drawn-to-market's gate shuts
+      -- again -- the live-desire set flips back, and her market-turn intention
+      -- (stored woken and live) no longer matches.
+      let stClosed  = freePlayAt 43
           sigClosed = motiveSignature stClosed gale
       assertBool "the market is closed" (not (exists "marketDay.square" (db stClosed)))
       assertBool "drawn-to-market is dead again"
@@ -375,7 +411,7 @@ tests = testGroup "Prax.Loop"
       assertBool "her market-turn intention no longer matches: woken again, by the close"
         (intentBasis (intentOf stClosed) /= sigClosed)
 
-      -- her next npcAct (turn 62) disperses her back to the mill.
-      let stDispersed = freePlayAt 62
+      -- her next npcAct (step 48) disperses her back to the mill.
+      let stDispersed = freePlayAt 48
       fmap gaLabel (intentAct (intentOf stDispersed)) @?= Just "gale: Go to mill"
   ]

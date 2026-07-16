@@ -14,9 +14,10 @@
 --     the bartender) or leave the tab (a norm violation that spawns the
 --     bartender's disapproval). Agents given a strong aversion to their own
 --     violation will tip rather than stiff;
---   * a silent 'Prax.Sight' ticker keeps everyone's sense of where everyone
---     else is (or was, recently) current, which is what the planner's
---     belief-relative lookahead needs to ever predict someone else's move.
+--   * the engine's period-1 sighting rule ('Prax.Schedule.sightRule') keeps
+--     everyone's sense of where everyone else is (or was, recently) current,
+--     which is what the planner's belief-relative lookahead needs to ever
+--     predict someone else's move.
 module Prax.Worlds.Bar
   ( barWorld
   , playerName
@@ -26,17 +27,16 @@ module Prax.Worlds.Bar
 
 import           Prax.Query
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setCharacters)
+import           Prax.Engine (definePractices, performOutcome, setCharacters, setSchedule)
 import           Prax.Core (coreLib, adjustScore, warmth, scoreAtLeast)
-import           Prax.Emotion (feelToward, feelingToward, happy, sad, annoyed, pleased,
-                               feelingsFade)
+import           Prax.Emotion (feelTowardFor, feelingToward, happy, sad, annoyed, pleased)
 import           Prax.Reactions
 import           Prax.Deontic
 import           Prax.Beliefs
 import           Prax.Conversation
 import           Prax.Arc
-import           Prax.Sight
-import           Prax.Drift (DriftRule (..), driftChar, driftP, driftSetup)
+import           Prax.Sight (sightedWithin)
+import           Prax.Schedule (sightRule)
 import           Prax.Witness (CoPresence)
 
 -- | The character the human player controls.
@@ -95,7 +95,7 @@ greetP = practice
           , Not (reactionPath "respondGreet" ["Other", "Actor"]) ]
           [ Insert "practice.greet.World.greeted.Actor.Other"
           , adjustScore "Actor" "Other" warmth 10 "greeting"
-          , feelToward "Actor" pleased "Other"
+          , feelTowardFor 4 "Actor" pleased "Other"
           , spawnReaction "respondGreet" ["Actor", "Other"] ]
 
       , action "[Actor]: Warn [Hearer] that [Subject] resents them"
@@ -113,7 +113,7 @@ greetP = practice
           [ Match (beliefSentence "Actor" "resentedBy.Subject" "yes")
           , Match "practice.greet.world.greeted.Subject.Actor" ]  -- they greeted you: evidence
           [ forget "Actor" "resentedBy.Subject"
-          , feelToward "Actor" pleased "Subject" ]
+          , feelTowardFor 4 "Actor" pleased "Subject" ]
 
       , action "[Actor]: Strike up a conversation with [Other]"
           ( [ Match "practice.world.world.at.Actor!Place"
@@ -137,8 +137,8 @@ greetP = practice
           [ Insert "practice.greet.World.bought.Actor.Other"
           , adjustScore "Other" "Actor" warmth 15 "boughtMeADrink"
           , adjustScore "Actor" "Other" warmth 5 "feelingGenerous"
-          , feelToward "Actor" pleased "Other"
-          , feelToward "Other" pleased "Actor" ]
+          , feelTowardFor 4 "Actor" pleased "Other"
+          , feelTowardFor 4 "Other" pleased "Actor" ]
       ]
   }
 
@@ -156,14 +156,14 @@ respondGreetP = practice
           , Not (beliefSentence "Greeted" "resentedBy.Greeter" "yes") ]
           [ Insert "practice.greet.world.greeted.Greeted.Greeter"
           , adjustScore "Greeted" "Greeter" warmth 10 "greetedBack"
-          , feelToward "Greeted" pleased "Greeter"
+          , feelTowardFor 4 "Greeted" pleased "Greeter"
           , endReaction "respondGreet" ["Greeter", "Greeted"] ]
 
       , action "[Actor]: Rebuff [Greeter]"
           [ Eq "Actor" "Greeted" ]
-          [ feelToward "Greeted" annoyed "Greeter"
+          [ feelTowardFor 4 "Greeted" annoyed "Greeter"
           , adjustScore "Greeted" "Greeter" warmth (-5) "rebuffed"
-          , feelToward "Greeter" sad "Greeted"
+          , feelTowardFor 4 "Greeter" sad "Greeted"
           , adjustScore "Greeter" "Greeted" warmth (-10) "rebuffedMe"
           , endReaction "respondGreet" ["Greeter", "Greeted"] ]
 
@@ -172,7 +172,7 @@ respondGreetP = practice
           , Not "practice.greet.world.greeted.Greeted.Greeter"
           , Not "practice.greet.world.grievance.Greeter.Greeted" ]
           [ Insert "practice.greet.world.grievance.Greeter.Greeted"
-          , feelToward "Greeter" annoyed "Greeted"
+          , feelTowardFor 4 "Greeter" annoyed "Greeted"
           , adjustScore "Greeter" "Greeted" warmth (-15) "snubbedMe"
           , endReaction "respondGreet" ["Greeter", "Greeted"] ]
       ]
@@ -205,7 +205,7 @@ arcP = practice
           ( [ Eq "Actor" "Self", arcIs "Actor" "hopeful" ]
             ++ scoreAtLeast "Actor" "Friend" warmth 20 )   -- you've warmed to someone
           [ enterArc "Actor" "belonging"
-          , feelToward "Actor" happy "here" ]
+          , feelTowardFor 4 "Actor" happy "here" ]
 
         -- A transformation *against* one's desires: sliding into loneliness
         -- forecloses the belonging you crave (+25) and is itself dreaded (-25),
@@ -216,7 +216,7 @@ arcP = practice
           [ Eq "Actor" "Self"
           , arcIs "Actor" "hopeful" ]
           [ enterArc "Actor" "lonely"
-          , feelToward "Actor" sad "here" ]
+          , feelTowardFor 4 "Actor" sad "here" ]
       ]
   }
 
@@ -245,7 +245,7 @@ tendBarP = practice
           [ Delete "practice.tendBar.Place.Bartender.customer.Customer!order"
           , Insert "practice.tendBar.Place.Bartender.customer.Customer!beverage!Beverage"
           , adjustScore "Customer" "Bartender" warmth 8 "servedMeWell"
-          , feelToward "Customer" pleased "Bartender"
+          , feelTowardFor 4 "Customer" pleased "Bartender"
           , spawnReaction "settleUp" ["Customer", "Bartender"]
             -- being served creates a real obligation to settle (a first-class □)
           , oblige "Customer" "Customer.tipped.Bartender" ]
@@ -278,25 +278,17 @@ tendBarP = practice
       ]
   }
 
--- TEST-COMPRESSED cadence (see Prax.Drift's authoring note; real
--- authoring: ~12 rounds, an hour a drink): each pulse metabolizes one drink
+-- TEST-COMPRESSED cadence (see Prax.Schedule's authoring note; real
+-- authoring: ~12 rounds, an hour a drink): each firing metabolizes one drink
 -- from every patron who has any, and sobriety returns when the count falls
 -- back under checkTipsy's own threshold (its mirror, one home).
-metabolism :: DriftRule
-metabolism = DriftRule "metabolism" 2
+metabolism :: ScheduleRule
+metabolism = ScheduleRule "metabolism" 2
   [ ( [ Match "practice.patron.P.drinks!N"
       , Cmp Gte "N" "1"
       , Calc "M" Sub "N" "1" ]
     , [ Insert "practice.patron.P.drinks!M"
       , Call "checkSober" ["P", "M"] ] ) ]
-
--- TEST-COMPRESSED cadence (see Prax.Drift's authoring note; real authoring:
--- hours, ~24-48 rounds): every standing feeling, an onlooker's
--- disapproval-annoyance chief among them, fades on this pulse if never
--- vented ('Prax.Emotion.feelingsFade'; coarse by design, the whole feels.*
--- family swept at once regardless of onset time).
-barFade :: DriftRule
-barFade = feelingsFade 4
 
 -- Settling up after being served: the obligation "[Patron] should tip
 -- [Bartender]" (a first-class deontic □, raised on serve — see 'oblige' above) is
@@ -315,7 +307,7 @@ settleUpP = practice
           , discharge "Patron" "Patron.tipped.Bartender" -- …so the obligation is met and closed
           , adjustScore "Bartender" "Patron" warmth 8 "aGoodTipper"
           , adjustScore "Patron" "Bartender" warmth 3 "friendlyService"
-          , feelToward "Bartender" pleased "Patron"
+          , feelTowardFor 4 "Bartender" pleased "Patron"
           , endReaction "settleUp" ["Patron", "Bartender"] ]
       , action "[Actor]: Leave [Bartender]'s tab unpaid"
           [ Eq "Actor" "Patron" ]
@@ -341,7 +333,7 @@ converseP = practice
           , adjustScore "Partner" "Actor" warmth 2 "pleasantChat" ]
       , quip "compliment" "[Actor]: Compliment [Partner]" "rapport" []
           [ adjustScore "Partner" "Actor" warmth 8 "kindWords"
-          , feelToward "Partner" pleased "Actor" ]
+          , feelTowardFor 4 "Partner" pleased "Actor" ]
       , quip "gossip" "[Actor]: Confide to [Partner] that [Subject] resents them" "gossip"
           [ feelingToward "Actor" annoyed "Subject"
           , Neq "Actor" "Subject", Neq "Partner" "Subject" ]
@@ -369,7 +361,7 @@ dmPractice = practice
             ++ scoreAtLeast "X" "Y" warmth 20     -- bind two who currently like each other…
             ++ [ Neq "X" "Y", Neq "X" "Actor", Neq "Y" "Actor" ] )  -- …then require them distinct
           [ Insert "dm.stirred"
-          , feelToward "X" annoyed "Y"
+          , feelTowardFor 4 "X" annoyed "Y"
           , adjustScore "X" "Y" warmth (-30) "aSuddenFallingOut"
           , Insert "practice.greet.world.grievance.X.Y" ]
       ]
@@ -396,7 +388,7 @@ directP = practice
           , Neq "X" "Y", Neq "X" "Director", Neq "Y" "Director"
           , Not "direct.stirred.X.Y" ]
           [ Insert "direct.stirred.X.Y"
-          , feelToward "X" annoyed "Y"
+          , feelTowardFor 4 "X" annoyed "Y"
           , adjustScore "X" "Y" warmth (-30) "aFallingOut"
           , Insert "practice.greet.world.grievance.X.Y" ]
 
@@ -409,8 +401,8 @@ directP = practice
           [ Insert "direct.kindled.X.Y"
           , adjustScore "X" "Y" warmth 15 "aWarmFeeling"
           , adjustScore "Y" "X" warmth 15 "aWarmFeeling"
-          , feelToward "X" pleased "Y"
-          , feelToward "Y" pleased "X" ]
+          , feelTowardFor 4 "X" pleased "Y"
+          , feelTowardFor 4 "Y" pleased "X" ]
 
       , action "[Actor]: cast a pall over [X]'s evening"
           [ Eq "Actor" "Director"
@@ -418,7 +410,7 @@ directP = practice
           , Neq "X" "Director"
           , Not "direct.unsettled.X" ]
           [ Insert "direct.unsettled.X"
-          , feelToward "X" sad "here" ]
+          , feelTowardFor 4 "X" sad "here" ]
       ]
   }
 
@@ -546,17 +538,17 @@ barWorld =
     -- takes to walk one room away and back."
     { predictionScope = [ Or [ together, sightedWithin 2 ] ] }
   where
-    -- driftChar rides after sightChar (the clock advances before bodies feel
-    -- it, stated): within a round, sight's tick has already bumped turn!N
-    -- by the time the drifter's due-gate reads it.
+    -- The engine owns time now (v44): the schedule fires sight (period 1) and
+    -- metabolism (period 2) at each round boundary — no ticker characters.
     withPractices =
-      (setCharacters [you, ada, bex, director, sightChar, driftChar]
-        (definePractices
-           [ coreLib, disapprovalP
-           , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
-           , arcP, sightP barSighting, driftP [metabolism, barFade] ]
-           emptyState))
-        { sorts = barSorts }
+      setSchedule [ sightRule barSighting, metabolism ]
+        ((setCharacters [you, ada, bex, director]
+           (definePractices
+              [ coreLib, disapprovalP
+              , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
+              , arcP ]
+              emptyState))
+           { sorts = barSorts })
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"
       , Insert "practice.world.world.connected.bar.entrance"
@@ -570,7 +562,7 @@ barWorld =
       , Insert "practice.dm.director"
       , Insert "practice.arc.you"
       , Insert "practice.arc.bex"
-      ] ++ sightSetup ++ driftSetup [metabolism, barFade]
+      ]
 
 -- | The same bar, but the human is the __drama manager__ (Versu §XI): the player
 -- controls 'directorPlayer', steering an autonomous cast (ada, bex, cai) with
@@ -584,13 +576,14 @@ barDirectorWorld =
     { predictionScope = [ Or [ together, sightedWithin 2 ] ] }
   where
     withPractices =
-      (setCharacters [ada, bex, cai, directorPlayer, sightChar]
-        (definePractices
-           [ coreLib, disapprovalP
-           , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, directP
-           , arcP, sightP barSighting ]
-           emptyState))
-        { sorts = barSorts }
+      setSchedule [ sightRule barSighting ]
+        ((setCharacters [ada, bex, cai, directorPlayer]
+           (definePractices
+              [ coreLib, disapprovalP
+              , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, directP
+              , arcP ]
+              emptyState))
+           { sorts = barSorts })
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"
       , Insert "practice.world.world.connected.bar.entrance"
@@ -604,4 +597,4 @@ barDirectorWorld =
       , Insert "practice.direct.director"
       , Insert "practice.arc.bex"
       , Insert "practice.arc.cai"
-      ] ++ sightSetup
+      ]

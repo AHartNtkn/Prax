@@ -41,9 +41,9 @@ tests = testGroup "Prax.TypeCheck"
         -- of the dead-condition lint's scope, so this stays clean.
       typeCheck Village.villageWorld  @?= []
         -- village's drawn-to-market desire reads marketDay.square, which
-        -- only the drift practice inserts — the pin holds because
-        -- 'producibleAtoms' includes the drifter, unlike the planner's
-        -- worldAtomPools.
+        -- only the market schedule rule inserts — the pin holds because
+        -- 'producibleAtoms' folds the schedule surface, unlike the planner's
+        -- mover-only worldAtomPools.
       typeCheck Audience.audienceWorld @?= []
 
   , testCase "an outcome variable bound by nothing is caught" $ do
@@ -237,5 +237,28 @@ tests = testGroup "Prax.TypeCheck"
   , testCase "a dead axiom body is not flagged (axiom bodies are out of scope)" $ do
       let w = setAxioms [ axiom [ Match "parent.P.C" ] [ "kin.P.C" ] ] emptyState
       typeCheck w @?= []
+
+    -- Engine-clock write guard (v44) -----------------------------------------
+  , testCase "an authored write to the engine clock is flagged" $ do
+      let p = practice
+            { practiceId = "clocksmith"
+            , actions = [ action "[Actor]: forge time" [] [ Insert "turn!99" ] ] }
+      assertBool "ClockWrite on the authored turn insert"
+        (any (\case ClockWrite _ "turn!99" -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "an axiom head deriving the clock family is flagged" $ do
+      let w = setAxioms [ Axiom [ Match "ping.X" ] [ "turn!5" ] ] emptyState
+      assertBool "ClockWrite on the axiom head"
+        (any (\case ClockWrite "axiom" "turn!5" -> True; _ -> False) (typeCheck w))
+
+  , testCase "a performOutcome clock-jump is NOT flagged (typeCheck sees no authored write)" $ do
+      -- Fixtures jump the clock through performOutcome, which touches no
+      -- authored definition -- so a well-formed world with a jumped clock in
+      -- its db stays clean.
+      let ok = practice
+            { practiceId = "ok"
+            , actions = [ action "[Actor]: wait" [] [] ] }
+          jumped = performOutcome (Insert "turn!42") (world1 ok)
+      typeCheck jumped @?= []
   ]
   where words' = words . map (\c -> if c == ',' then ' ' else c)

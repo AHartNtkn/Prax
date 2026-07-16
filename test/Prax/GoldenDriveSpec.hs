@@ -29,6 +29,12 @@ driveLabels n idle = go n
 -- this plan). These sequences ARE the planner's contract: any change that
 -- perturbs a single decision fails here. Never edit them to match new
 -- behavior — a failure means the change is wrong.
+-- v44: the ticker characters are gone from the roster (the engine fires the
+-- schedule at each round boundary, invisibly -- no line), so a village round is
+-- 6 real turns (was 8 with the sight+drift tickers) and a bar round is 4 (was
+-- 6). Re-captured by observation, decision for decision: 21 village turns now
+-- span 3.5 rounds of real movers (the same story beats, closer together), 12
+-- bar turns span 3 rounds.
 villageGolden :: [String]
 villageGolden =
   [ "you: -"
@@ -37,21 +43,21 @@ villageGolden =
   , "dana: dana: Wait a moment"
   , "eve: eve: whisper to dana that carol stole the loaf"
   , "gale: gale: Go to square"
-  , "_sight: "
-  , "_drift: "
   , "you: -"
   , "bob: bob: sweep the square"
   , "carol: carol: Wait a moment"
   , "dana: dana: shun carol"
   , "eve: eve: Go to square"
   , "gale: gale: Go to mill"
-  , "_sight: "
-  , "_drift: "
   , "you: -"
   , "bob: bob: Go to mill"
   , "carol: carol: Wait a moment"
   , "dana: dana: Go to square"
   , "eve: eve: Go to mill"
+  , "gale: gale: Go to square"
+  , "you: -"
+  , "bob: bob: fetch flour from the mill"
+  , "carol: carol: Wait a moment"
   ]
 
 barGolden :: [String]
@@ -60,14 +66,14 @@ barGolden =
   , "ada: ada: Greet you"
   , "bex: bex: Go to bar"
   , "director: -"
-  , "_sight: "
-  , "_drift: "
   , "you: you: Go to entrance"
   , "ada: ada: Greet bex"
   , "bex: bex: Order beer"
   , "director: -"
-  , "_sight: "
-  , "_drift: "
+  , "you: you: Go to bar"
+  , "ada: ada: Fulfill bex's order"
+  , "bex: bex: Greet ada back"
+  , "director: -"
   ]
 
 intrigueGolden :: [String]
@@ -88,7 +94,7 @@ intrigueGolden =
 
 tests :: TestTree
 tests = testGroup "Prax.GoldenDrive (decision-sequence exactness)"
-  [ testCase "village: 3 rounds of free play, decision for decision" $
+  [ testCase "village: 21 turns of free play, decision for decision" $
       driveLabels 21 (Just playerName) villageWorld @?= villageGolden
   , testCase "bar: 12 turns, decision for decision" $
       driveLabels 12 Nothing barWorld @?= barGolden

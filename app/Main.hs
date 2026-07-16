@@ -81,9 +81,9 @@ runCheck args = do
       "undefined reference " ++ n ++ " (" ++ w ++ ")"
     describe (SortConflict w d) =
       "sort conflict at " ++ w ++ ": " ++ d
-    describe ClocklessDrift =
-      "drift practice registered but no clock: add a clock -- the sight ticker (sightSetup) "
-        ++ "or the standalone Prax.Clock ticker (clockSetup) -- before driftSetup"
+    describe (ClockWrite w s) =
+      "authored write to the engine clock \"" ++ s ++ "\" (" ++ w
+        ++ "): only the engine advances the turn counter -- remove the write"
     describe SeedlessDraw =
       "draw used but the die is unseeded: append Prax.Rng.rngSetup to the world's setup"
     describe (DeadCondition w s) =
@@ -189,8 +189,8 @@ loop player st =
         else do
           let (mga, st2) = npcAct lookaheadDepth actor st1
           case mga of
-            Just ga | not (all (== ' ') (gaLabel ga)) -> putStrLn ("  " ++ gaLabel ga)
-            _ -> pure ()   -- idle NPCs (and the silent clock tick) stay quiet
+            Just ga -> putStrLn ("  " ++ gaLabel ga)
+            Nothing -> pure ()   -- idle NPCs stay quiet
           loop player st2
 
 -- @savePoint@ is the state *before* advancing to the player, so resuming from it

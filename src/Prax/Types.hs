@@ -123,7 +123,7 @@ outcomeVars o = case o of
 -- authored mark pattern reusing either would capture, so both are listed
 -- here). @forbiddenSplices@ is a BLOCKLIST, not an allowlist: a name that is
 -- neither Prax-prefixed nor in it is unrestricted — do not pass a
--- combinator's legitimate CONTRACT variables (e.g. 'Prax.Sight.sightP'\'s
+-- combinator's legitimate CONTRACT variables (e.g. 'Prax.Schedule.sightRule'\'s
 -- @Seer@\/@Seen@\/@Spot@) expecting them to be exempted; the empty list @[]@
 -- is how "nothing extra is forbidden" is spelled. Returns the offenders;
 -- each combinator raises its own contextual error.

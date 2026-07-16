@@ -7,30 +7,21 @@ import           Test.Tasty.HUnit (testCase, assertBool, assertFailure)
 
 import           Prax.Db (dbToSentences, exists)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction, performOutcome)
+import           Prax.Engine (possibleActions, performAction, performOutcome, roundBoundary)
 import           Prax.Planner (candidateActions, pickAction)
 import           Prax.Core (adjustScore, warmth)
 import           Prax.Emotion (feelToward, unfeelToward, annoyed)
 import           Prax.Beliefs (believe)
 import           Prax.Conversation (beginConversation)
-import           Prax.Sight (sightName)
-import           Prax.Drift (driftName)
 import           Prax.Worlds.Bar (barWorld)
 
--- Fire the sight ticker directly (advances turn!N by one; VillageSpec's own
--- "out of sight, out of mind" idiom, mirrored here for the bar's clock).
-tick :: PraxState -> PraxState
-tick st = case possibleActions st sightName of
-  (ga : _) -> performAction st ga
-  []       -> error "no sight action available"
-
--- Fire the drift pulse directly: the drifter's due-gated bundle only bites
--- once turn!N has reached the rule's due, so most calls (before the due) are
--- ordinary no-ops -- same silent idiom as 'tick'.
-pulse :: PraxState -> PraxState
-pulse st = case possibleActions st driftName of
-  (ga : _) -> performAction st ga
-  []       -> error "no drift action available"
+-- One round boundary: the engine advances the clock and fires every due
+-- schedule rule (sight every boundary; metabolism every 2). The bar's schedule
+-- seeds metabolism's first due one period out (turn 2), so @boundaries 2@ from
+-- a fresh (turn-0) state reaches it. Replaces the retired hand-fired
+-- sight-tick / drift-pulse idiom -- one engine, one boundary.
+boundaries :: Int -> PraxState -> PraxState
+boundaries k st = iterate roundBoundary st !! k
 
 -- Perform the first action whose label contains `needle` for `actor`.
 act :: PraxState -> (String, String) -> IO PraxState
@@ -68,28 +59,28 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       assertBool "now tipsy" ("person.you.tipsy" `elem` facts2)
 
     --------------------------------------------------------------------------
-    -- v36: metabolism, the wear-off cargo (Prax.Drift) -- checkSober is
-    -- checkTipsy's mirror, one home for the tipsy threshold either way.
+    -- v44: metabolism, the wear-off cargo, is now an engine schedule rule the
+    -- round boundary fires (period 2) -- checkSober is checkTipsy's mirror,
+    -- one home for the tipsy threshold either way.
     --------------------------------------------------------------------------
 
-  , testCase "a patron at 2 drinks is tipsy; one dry pulse (2 -> 1) clears it" $ do
+  , testCase "a patron at 2 drinks is tipsy; one dry metabolism firing (2 -> 1) clears it" $ do
       twoDrinks <- runSteps barWorld
         [ ("you", "Go to bar"), ("you", "Order beer"), ("ada", "Fulfill you")
         , ("you", "Drink the beer"), ("you", "Order beer"), ("ada", "Fulfill you")
         , ("you", "Drink the beer") ]
       let factsBefore = dbToSentences (db twoDrinks)
-      assertBool "counter at 2 before the pulse" ("practice.patron.you.drinks.2" `elem` factsBefore)
-      assertBool "tipsy before the pulse" ("person.you.tipsy" `elem` factsBefore)
+      assertBool "counter at 2 before the firing" ("practice.patron.you.drinks.2" `elem` factsBefore)
+      assertBool "tipsy before the firing" ("person.you.tipsy" `elem` factsBefore)
       -- metabolism's period is 2: the due (seeded at turn 2) is reached after
-      -- two sight ticks.
-      let atDue  = tick (tick twoDrinks)
-          pulsed = pulse atDue
+      -- two round boundaries.
+      let pulsed = boundaries 2 twoDrinks
           facts  = dbToSentences (db pulsed)
       assertBool "counter decremented to 1" ("practice.patron.you.drinks.1" `elem` facts)
       assertBool "the 2-drinks fact is gone" ("practice.patron.you.drinks.2" `notElem` facts)
       assertBool "tipsy cleared once under the threshold" ("person.you.tipsy" `notElem` facts)
 
-  , testCase "drinking again before the pulse (3 -> 2) keeps you tipsy through it" $ do
+  , testCase "drinking again before the firing (3 -> 2) keeps you tipsy through it" $ do
       twoDrinks <- runSteps barWorld
         [ ("you", "Go to bar"), ("you", "Order beer"), ("ada", "Fulfill you")
         , ("you", "Drink the beer"), ("you", "Order beer"), ("ada", "Fulfill you")
@@ -97,40 +88,38 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       threeDrinks <- runSteps twoDrinks
         [ ("you", "Order beer"), ("ada", "Fulfill you"), ("you", "Drink the beer") ]
       let factsBefore = dbToSentences (db threeDrinks)
-      assertBool "counter at 3 before the pulse" ("practice.patron.you.drinks.3" `elem` factsBefore)
-      assertBool "tipsy before the pulse" ("person.you.tipsy" `elem` factsBefore)
-      let atDue  = tick (tick threeDrinks)
-          pulsed = pulse atDue
+      assertBool "counter at 3 before the firing" ("practice.patron.you.drinks.3" `elem` factsBefore)
+      assertBool "tipsy before the firing" ("person.you.tipsy" `elem` factsBefore)
+      let pulsed = boundaries 2 threeDrinks
           facts  = dbToSentences (db pulsed)
       assertBool "counter decremented to 2, still at the threshold"
         ("practice.patron.you.drinks.2" `elem` facts)
       assertBool "still tipsy: 2 is still >= checkTipsy's own threshold"
         ("person.you.tipsy" `elem` facts)
 
-  , testCase "a pulse at 0 drinks leaves 0 (the Gte 1 guard never goes negative)" $ do
-      let atDue  = tick (tick barWorld)
-          pulsed = pulse atDue
+  , testCase "a firing at 0 drinks leaves 0 (the Gte 1 guard never goes negative)" $ do
+      let pulsed = boundaries 2 barWorld
           facts  = dbToSentences (db pulsed)
       assertBool "you never drank: still at 0" ("practice.patron.you.drinks.0" `elem` facts)
       assertBool "bex never drank: still at 0" ("practice.patron.bex.drinks.0" `elem` facts)
       assertBool "no negative counter appears"
         (not (any ("practice.patron.you.drinks.-" `isInfixOf`) facts))
 
-  , testCase "the metabolism due re-arms: the second pulse only fires a full period later" $ do
+  , testCase "the metabolism due re-arms: the second firing is only a full period later" $ do
       twoDrinks <- runSteps barWorld
         [ ("you", "Go to bar"), ("you", "Order beer"), ("ada", "Fulfill you")
         , ("you", "Drink the beer"), ("you", "Order beer"), ("ada", "Fulfill you")
         , ("you", "Drink the beer") ]
-      -- first pulse at turn 2: 2 -> 1, due re-arms to 2 + 2 = 4.
-      let firstPulse = pulse (tick (tick twoDrinks))
-      assertBool "first pulse landed" ("practice.patron.you.drinks.1" `elem` dbToSentences (db firstPulse))
-      -- one more tick (turn 3): below the re-armed due (4) -- a no-op.
-      let tooSoon = pulse (tick firstPulse)
+      -- first firing at turn 2: 2 -> 1, due re-arms to 2 + 2 = 4.
+      let firstPulse = boundaries 2 twoDrinks
+      assertBool "first firing landed" ("practice.patron.you.drinks.1" `elem` dbToSentences (db firstPulse))
+      -- one more boundary (turn 3): below the re-armed due (4) -- no metabolism.
+      let tooSoon = roundBoundary firstPulse
       assertBool "not due yet: counter unchanged at 1"
         ("practice.patron.you.drinks.1" `elem` dbToSentences (db tooSoon))
-      -- the due-reaching tick (turn 4): the second pulse fires.
-      let secondPulse = pulse (tick tooSoon)
-      assertBool "second pulse landed a full period (2 rounds) after the first"
+      -- the due-reaching boundary (turn 4): the second firing lands.
+      let secondPulse = roundBoundary tooSoon
+      assertBool "second firing landed a full period (2 rounds) after the first"
         ("practice.patron.you.drinks.0" `elem` dbToSentences (db secondPulse))
 
   , testCase "the bell requires two customers (Subquery/Count/Cmp)" $ do
@@ -190,20 +179,19 @@ tests = testGroup "Prax.Worlds.Bar (feature integration)"
       assertBool "un-annoyed again, she can buy"  (canBuy mollified)
       assertBool "un-annoyed again, she picks it" (picksBuy mollified)
 
-  , testCase "an onlooker's disapproval-annoyance fades on the pulse" $ do
+  , testCase "an onlooker's disapproval-annoyance fades on its own lifetime" $ do
       served  <- runSteps barWorld
         [ ("bex", "Go to bar"), ("bex", "Order beer"), ("ada", "Fulfill bex") ]
       stiffed <- runSteps served  [ ("bex", "Leave ada") ]
       judged  <- runSteps stiffed [ ("ada", "Disapprove of bex") ]
       assertBool "ada is annoyed at bex right after disapproving"
         (exists "ada.feels.annoyed.toward.bex" (db judged))
-      -- feelingsFade's period is 4 (Bar.hs, test-compressed): the same
-      -- hand-clock idiom as the metabolism pulse pins above, four ticks to
-      -- reach its own due.
-      let atDue  = tick (tick (tick (tick judged)))
-          pulsed = pulse atDue
-      assertBool "the annoyance has faded"
-        ("ada.feels.annoyed.toward.bex" `notElem` dbToSentences (db pulsed))
+      -- disapproval's annoyance carries a lifetime of 4 (Reactions.hs,
+      -- test-compressed): the onset fired at turn 0 (runSteps crosses no
+      -- boundary), so the engine's expiry queue retracts it at boundary 4.
+      let faded = boundaries 4 judged
+      assertBool "the annoyance has faded on its lifetime"
+        ("ada.feels.annoyed.toward.bex" `notElem` dbToSentences (db faded))
 
   , testCase "greeting spawns a response reaction the greeted party can take" $ do
       -- you go to the bar and greet ada; that spawns a respondGreet reaction.

@@ -29,22 +29,22 @@ module Prax.Worlds.Village
 
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, setCharacters)
+import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, setCharacters, setSchedule)
 import           Prax.Core (coreLib, adjustScore)
 import           Prax.Derive (Axiom, axiom)
 import           Prax.Project
 import           Prax.Witness
 import           Prax.Rumor
 import           Prax.Repute
-import           Prax.Sight
-import           Prax.Drift (DriftRule (..), driftChar, driftP, driftSetup, gathering)
+import           Prax.Sight (sightedWithin)
+import           Prax.Schedule (sightRule, gathering)
 import           Prax.Deceit
 import           Prax.Persona
 import           Prax.Debt (owes)
 import           Prax.Blackmail (shakedown)
 import           Prax.Confession (confess, absolve, incorrigible)
 import           Prax.Rng (rngSetup, draw)
-import           Prax.Emotion (feelToward, unfeelToward, angry, feelingsFade, feelingSomeone)
+import           Prax.Emotion (feelTowardFor, unfeelToward, angry, feelingSomeone)
 
 -- | You are a villager — one agent among many.
 playerName :: String
@@ -103,23 +103,15 @@ earnBreadPursuit :: Desire
     ]
 
 -- Hunger, the build-up cargo (v36 spec @docs/specs/2026-07-14-v36-drift.md@):
--- an episodic pulse that closes bob's bread economy into a cycle instead of
--- a one-shot want. TEST-COMPRESSED cadence (see Prax.Drift's authoring
--- note): hunger every three rounds keeps the cycle inside short test
--- drives; real authoring is ~72 rounds — two meals a waking day at ~5
--- minutes a round. The due re-arms from the pulse, so a fed bob stays fed
--- for a full period regardless of when he ate.
-hungerPulse :: DriftRule
-hungerPulse = DriftRule "hunger" 3
+-- an episodic engine-schedule rule that closes bob's bread economy into a
+-- cycle instead of a one-shot want. TEST-COMPRESSED cadence (see
+-- Prax.Schedule's authoring note): hunger every three rounds keeps the cycle
+-- inside short test drives; real authoring is ~72 rounds — two meals a waking
+-- day at ~5 minutes a round. The engine re-arms the rule a period FROM its
+-- firing, so a fed bob stays fed for a full period regardless of when he ate.
+hungerPulse :: ScheduleRule
+hungerPulse = ScheduleRule "hunger" 3
   [ ( [ Match "appetite.X", Not "hungry.X" ], [ Insert "hungry.X" ] ) ]
-
--- Feelings fade (v38 spec @docs/specs/2026-07-15-v38-chance-feelings.md@,
--- Task 3's own wiring pattern): the village gets its own pulse, independent
--- of the bar's. TEST-COMPRESSED cadence (see Prax.Drift's authoring note;
--- real authoring: hours, ~24-48 rounds) — period 4, the same shipped
--- cadence as 'Prax.Worlds.Bar.barFade'.
-villageFade :: DriftRule
-villageFade = feelingsFade 4
 
 -- The drama die's seed (Prax.Rng): an authored world parameter that selects
 -- THIS playthrough's fate — every draw below reads off this one stream, and
@@ -151,18 +143,17 @@ suffersHunger = Desire "suffers-hunger" (Want [ Match "hungry.Owner" ] (-22))
 marketP :: Practice
 marketP = practice { practiceId = "market", roles = ["Fair"] }
 
--- Market day: TEST-COMPRESSED cadence (see Prax.Drift's authoring note —
+-- Market day: TEST-COMPRESSED cadence (see Prax.Schedule's authoring note —
 -- real authoring: a daily morning market is ~150-round period, ~24-round
--- duration). Every sixth round, lasting one — most days are quiet.
--- (The original every-other-round cadence, chosen so the golden window
--- would witness a cycle, was measured leaving NO quiet rounds: the gate
--- toggled town-wide every round and 140-turn drives tripled. The cycle is
--- pinned at real turn counts instead of being golden-visible — the v36
--- hunger precedent.)
-marketCalendar :: ([DriftRule], [Outcome])
-marketCalendar = gathering "market" 6 1
+-- duration). Every sixth round, lasting one — most days are quiet. A
+-- 'Prax.Schedule.gathering': one open rule whose inserts each carry
+-- @lasts 1@, so the engine's expiry queue tears the market down a round later
+-- (the v37 close rule is subsumed by expiry — one mechanism). The cycle is
+-- pinned at real turn counts, not golden-visible (the v36 hunger precedent;
+-- the original every-other-round cadence left no quiet rounds).
+marketGathering :: ScheduleRule
+marketGathering = gathering "market" 6 1
   [ Insert "practice.market.fair", Insert "marketDay.square" ]
-  [ Delete "practice.market.fair", Delete "marketDay.square" ]
 
 -- Everyone likes a market day: +3 for being at the square while it's on —
 -- above the +1 loitering anchors (a market beats an idle preference), below
@@ -344,14 +335,17 @@ villageP = practice
         -- most slights too (a further 2 in 4, so 3 in 4 overall for the
         -- short-tempered — each arm's odds an authored sentence; the trait
         -- makes the feeling LIKELIER, never longer). Two draws, two stream
-        -- steps, by design; a double hit's insert is idempotent.
+        -- steps, by design; a double hit's insert is idempotent. The anger
+        -- carries a lifetime (v44): each onset lives 4 round boundaries from
+        -- when it flared — TEST-COMPRESSED (see Prax.Schedule; real authoring
+        -- ~24-48), replacing v38's synchronized fade sweep with a per-onset span.
       , action "[Actor]: shun [T]"
           [ regardedAs "Actor" "T" "thief"
           , Neq "T" "Actor"
           , Not "shunned.Actor.T" ]
           ( [ Insert "shunned.Actor.T" ]
-            ++ draw 1 4 [] [ feelToward "T" angry "Actor" ]
-            ++ draw 2 4 [ Match "shortTempered.T" ] [ feelToward "T" angry "Actor" ] )
+            ++ draw 1 4 [] [ feelTowardFor 4 "T" angry "Actor" ]
+            ++ draw 2 4 [ Match "shortTempered.T" ] [ feelTowardFor 4 "T" angry "Actor" ] )
 
         -- Atonement, not amnesia: returning the loaf defeats the standing --
         -- every regard dissolves on the next read -- while every belief (the
@@ -508,13 +502,12 @@ villageWorld =
         -- (+4/head), so eve whispers and gale never does
       , ((character "gale") { charDesires = ["spites-carol", "drawn-to-market"] }, [honest])
       ]
-    -- driftChar rides after sightChar (the clock advances before bodies feel
-    -- it, stated): within a round, sight's tick has already bumped turn!N
-    -- by the time the drifter's due-gate reads it.
-    base = setCharacters (roster ++ [sightChar, driftChar])
-             (definePractices [coreLib, worldP, villageP, earnBreadP, marketP
-                               , sightP villageSighting
-                               , driftP (hungerPulse : villageFade : fst marketCalendar)] emptyState)
+    -- The engine owns time now (v44): the schedule fires sight (period 1),
+    -- hunger (period 3), and the market gathering (period 6) at each round
+    -- boundary, in declaration order — no ticker characters in the roster.
+    base = setSchedule [ sightRule villageSighting, hungerPulse, marketGathering ]
+             (setCharacters roster
+                (definePractices [coreLib, worldP, villageP, earnBreadP, marketP] emptyState))
     setup =
       [ Insert "practice.village.here"
       , Insert "practice.world.world.connected.square.mill"
@@ -532,5 +525,4 @@ villageWorld =
         -- a conduct-desire) — like every disposition it never fades, unlike
         -- the episodic feeling it primes.
       , Insert "shortTempered.carol"
-      ] ++ sightSetup ++ driftSetup [hungerPulse, villageFade] ++ snd marketCalendar
-        ++ rngSetup villageSeed
+      ] ++ rngSetup villageSeed

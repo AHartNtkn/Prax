@@ -52,8 +52,7 @@ library
                       Prax.Persona
                       Prax.Project
                       Prax.Sight
-                      Prax.Drift
-                      Prax.Clock
+                      Prax.Schedule
                       Prax.Rng
                       Prax.Conversation
                       Prax.Arc
@@ -128,8 +127,7 @@ test-suite prax-test
                       Prax.RelevanceSpec
                       Prax.ProjectSpec
                       Prax.SightSpec
-                      Prax.DriftSpec
-                      Prax.ClockSpec
+                      Prax.ScheduleRuleSpec
                       Prax.RngSpec
                       Prax.ConversationSpec
                       Prax.ArcSpec

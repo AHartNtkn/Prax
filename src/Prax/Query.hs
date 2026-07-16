@@ -125,7 +125,7 @@ groundCondition b c = case c of
 -- including subquery internals (an over-approximation of what it binds: e.g.
 -- 'Eq'\/'Neq'\/'Cmp'\/'Calc'\/'Count' operands are listed whether they are
 -- variables or literal constants). The shared home for reserved-variable
--- guards ('Prax.Drift.guardRule', 'Prax.Rng.draw') and similar checks that
+-- guards ('Prax.Engine.setSchedule', 'Prax.Rng.draw') and similar checks that
 -- need every name a condition could touch, not just its free variables.
 conditionVars :: Condition -> [String]
 conditionVars c = case c of

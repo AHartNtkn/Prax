@@ -65,7 +65,7 @@ tests = testGroup "Prax.Gate"
         worldSourceOffenders "action \"[Actor]: greet [Other]\" [Match \"at.Actor!P\"] []" @?= []
 
     , testCase "ignores unquoted text (imports, comments) even if Prax-shaped" $
-        worldSourceOffenders "import Prax.Drift (driftP) -- see PraxTypes.hs" @?= []
+        worldSourceOffenders "import Prax.Schedule (sightRule) -- see PraxTypes.hs" @?= []
     ]
 
   , testCase "no world source file authors a Prax-namespaced variable in a quoted literal" $ do

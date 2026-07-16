@@ -55,7 +55,6 @@ import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Bindings, Val (..), pathNames, dbToSentences)
 import           Prax.Derive (CookedRule (..))
-import           Prax.Drift (driftPracticeId)
 import           Prax.Query (CookedCondition (..), cookCondition, cookedReadAnchors, groundCookedCondition, groundNames)
 import           Prax.Sym (Sym, intern, symIsVar)
 import           Prax.Types
@@ -165,11 +164,16 @@ cookedWantPatterns = foldr step ([], [], False)
       CCount {}    -> (pos, neg, True)
       CSubquery {} -> (pos, neg, True)
 
--- Every effect an authored action can cause, resolved once per world: the
--- insert- and delete-shaped atom pools ('cookedOutcomeAtoms' over every
+-- Every effect an authored MOVER action can cause, resolved once per world:
+-- the insert- and delete-shaped atom pools ('cookedOutcomeAtoms' over every
 -- action's declared outcomes, plus every practice's 'cpInits' — spawning runs
 -- those too), and whether any of them is "wild" (an unresolvable 'CCall',
--- conservatively improves-everything). Shared by 'improvableDesires' and
+-- conservatively improves-everything). Ranges over 'cookedDefs' — the
+-- practices movers can take — and NOT the schedule surface ('cookedSchedule'
+-- lives off 'cookedDefs' by construction, spec v44): a desire only the engine
+-- schedule can improve (@hungry.*@, @marketDay.*@) has no improving MOVER
+-- action, so the static screen stays exact and its liveness becomes a
+-- GateCheck the pulse flips (the v35 wake). Shared by 'improvableDesires' and
 -- 'livenessOf' — one atom-pool computation, not two.
 data AtomPools = AtomPools
   { poolInserted :: [[Sym]]
@@ -178,18 +182,12 @@ data AtomPools = AtomPools
   }
 
 worldAtomPools :: Map String CookedPractice -> AtomPools
-worldAtomPools allDefs = AtomPools
+worldAtomPools defs = AtomPools
   { poolInserted = concatMap (maybe [] fst) atoms
   , poolDeleted  = concatMap (maybe [] snd) atoms
   , poolWild     = Nothing `elem` atoms
   }
   where
-    -- The drifter's outcomes are the world acting on itself: excluding them
-    -- restores the v33 environment-gate semantics to clock-moved facts
-    -- (hungry.*, marketDay.*) — a desire only the clock can improve has no
-    -- improving MOVER action, so the static screen stays exact, and its
-    -- liveness becomes a GateCheck the pulse flips (the v35 wake).
-    defs = Map.delete driftPracticeId allDefs
     practices = Map.elems defs
     fns = cookedFnPool defs
     atoms = [ cookedOutcomeAtoms fns [] o
@@ -316,8 +314,7 @@ bearingTemplates :: PraxState -> Map String [String]
 bearingTemplates st =
   Map.fromList [ (charName c, bearing (charPats c)) | c <- characters st ]
   where
-    defs = cookedDefs st          -- NO drifter exclusion here (v37 scoped it
-                                  -- to the pools; bearing keeps every action)
+    defs = cookedDefs st
     fns = cookedFnPool defs
     actionAtoms = [ (caName a, atoms a)
                   | cp <- Map.elems defs, a <- cpActions cp ]
@@ -336,12 +333,13 @@ bearingTemplates st =
 
 -- | Everything the registered world can ever contain, as pattern anchors:
 -- the initial db's facts, every practice's insert-side atoms
--- ('cookedOutcomeAtoms'\'s insert half over ALL practices — the drifter
--- INCLUDED, unlike 'worldAtomPools': the consumer asks "can this fact ever
--- exist", and clock-moved facts exist), every axiom head ('cookedRules'\'
--- 'crHeads', □-lifted forms included — heads count regardless of whether
--- their rules can fire; conservative, which here only ever silences the
--- consumer), and the engine's own @contradiction@ witness
+-- ('cookedOutcomeAtoms'\'s insert half over ALL practices), every SCHEDULE
+-- rule's insert-side atoms (unlike 'worldAtomPools', which ranges over movers
+-- only: the consumer asks "can this fact ever exist", and schedule-moved facts
+-- — @marketDay.*@, expiring feelings — exist), every axiom head
+-- ('cookedRules'\' 'crHeads', □-lifted forms included — heads count regardless
+-- of whether their rules can fire; conservative, which here only ever silences
+-- the consumer), the engine's own @turn@ clock, and its @contradiction@ witness
 -- ('Prax.Engine.reclose' inserts it at ⊥). @Nothing@ = wild (an
 -- unresolvable 'CCall'): the caller must go silent. First consumer:
 -- "Prax.TypeCheck"'s dead-condition lint

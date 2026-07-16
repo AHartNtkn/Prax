@@ -7,10 +7,8 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (dbToSentences, exists)
 import           Prax.Query (Condition (..), query)
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setCharacters)
-import           Prax.Loop (npcAct)
+import           Prax.Engine (definePractices, performOutcome, setCharacters, roundBoundary)
 import           Prax.Planner (candidateActions)
-import           Prax.Drift (driftChar, driftP, driftSetup)
 import           Prax.Emotion
 
 facts :: PraxState -> [String]
@@ -70,34 +68,28 @@ tests = testGroup "Prax.Emotion"
           (null (query (db st) [feelingToward "ada" annoyed "bob"] Map.empty))
     ]
 
-  -- Fade-on-pulse, the DriftSpec hand-clock idiom: seed the drifter, jump the
-  -- clock to the due turn, pulse once, observe both feelings gone.
+  -- Fade-by-lifetime (v44): each onset carries its own expiry ('feelTowardFor'
+  -- -> InsertFor), and the engine retracts it at the round boundary its
+  -- lifetime lapses -- per-onset spans, no synchronized sweep.
   , testGroup "feelings fade"
-    [ testCase "both feelings gone after the pulse; feeling again is possible" $ do
-        let fadeR = feelingsFade 2
-            atTurn :: Int -> PraxState -> PraxState
-            atTurn k = performOutcome (Insert ("turn!" ++ show k))
-            pulse st = snd (npcAct 2 driftChar st)
-            base = foldl (flip performOutcome)
-                     (setCharacters [driftChar] (definePractices [driftP [fadeR]] emptyState))
-                     (driftSetup [fadeR] ++ [Insert "turn!0"])
-            withFeelings =
-              performOutcome (feelToward "ada" afraid "bob")
-                (performOutcome (feelToward "ada" angry "carol") base)
+    [ testCase "both feelings gone after the lifetime lapses; feeling again is possible" $ do
+        let withFeelings =
+              performOutcome (feelTowardFor 2 "ada" afraid "bob")
+                (performOutcome (feelTowardFor 2 "ada" angry "carol") emptyState)
 
-        assertBool "angry present before the pulse"
+        assertBool "angry present at onset"
           (exists "ada.feels.angry.toward.carol" (db withFeelings))
-        assertBool "afraid present before the pulse"
+        assertBool "afraid present at onset"
           (exists "ada.feels.afraid.toward.bob" (db withFeelings))
 
-        let st1 = pulse (atTurn 1 withFeelings)
-        assertBool "not yet due at turn 1"
+        let st1 = roundBoundary withFeelings         -- turn 1: not yet due (due at 0+2)
+        assertBool "not yet lapsed after one boundary"
           (exists "ada.feels.angry.toward.carol" (db st1))
 
-        let st2 = pulse (atTurn 2 st1)
-        assertBool "angry gone at the due pulse"
+        let st2 = roundBoundary st1                  -- turn 2: the lifetime lapses
+        assertBool "angry gone at the due boundary"
           (not (exists "ada.feels.angry.toward.carol" (db st2)))
-        assertBool "afraid gone at the due pulse"
+        assertBool "afraid gone at the due boundary"
           (not (exists "ada.feels.afraid.toward.bob" (db st2)))
 
         -- reappear-able: feeling again after the fade works exactly as before.
