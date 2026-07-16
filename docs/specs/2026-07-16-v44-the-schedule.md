@@ -13,8 +13,12 @@ fires every n rounds; this fact lives n rounds); the engine decides when and how
 
 ## The design
 
-**One engine-owned schedule.** `PraxState` gains a round counter and a schedule: a
-due-round-keyed queue of entries —
+**One engine-owned schedule, one clock.** `PraxState` gains a schedule: a
+due-turn-keyed queue of entries. There is NO separate engine round counter — the
+engine-maintained `turn!N` fact IS the one representation of time (two synchronized
+clocks would be a dual system), the schedule's dues compare against it, and the
+established clock-jump test-compression idiom (insert `turn!N` at a chosen value)
+keeps working: jumping the clock fast-forwards the schedule, deliberately. Entries —
 
 - **Recurring rules**: the `DriftRule` declaration shape survives (name, period, body
   clauses); firing means grounding each clause's conditions against the world and
@@ -23,19 +27,25 @@ due-round-keyed queue of entries —
   keeps the v36 convention: first fire one full period in (the world starts sated).
 - **One-shot expiries**: an insert declared with a lifetime (`lasts n` shape on the
   authoring side — `feel` and friends grow duration-taking forms) enqueues a retract at
-  round + n. Re-inserting the same fact refreshes the expiry (the new onset supersedes;
-  being provoked again renews the anger). The retract runs through the normal retract
-  path, so closure recompute, intention invalidation, and liveness wakes all follow
-  from ordinary delta processing.
+  turn + n. Insertion supersedes wholesale: re-inserting the same fact WITH a lifetime
+  refreshes the expiry (the new onset renews the anger); re-inserting it WITHOUT one
+  CANCELS the pending expiry (the fact was re-asserted as standing state — a permanent
+  assertion must never die on a stale timer). The retract runs through the normal
+  retract path, so closure recompute, intention invalidation, and liveness wakes all
+  follow from ordinary delta processing.
 - **The clock fact**: the engine maintains `turn!N` itself, advancing it at each round
   boundary — authored conditions (`sightedWithin`, gathering gates) keep reading time
   as a fact; no world seeds or ticks it ever again.
 
 **The round becomes explicit.** Today a round exists only as one cursor rotation. The
 loop gains a real boundary: when the rotation wraps, the engine runs the schedule —
-clock advance, then due recurring rules in declaration order, then due expiries —
-before the next round's first turn. This is the same semantic point as today's
-tickers-ride-last roster convention, now structural. Scheduled changes are ENVIRONMENT
+clock advance, then due EXPIRIES, then due recurring rules in declaration order —
+before the next round's first turn. Expiries run FIRST for a stated reason: a fact
+with lifetime n is present during rounds onset..onset+n−1 and GONE at the boundary —
+if rules ran first, a period-1 sighting rule would stamp a belief about a fact
+expiring that same instant (a ghost observation of state that no one in round
+onset+n can ever see). This is the same semantic point as today's tickers-ride-last
+roster convention, now structural. Scheduled changes are ENVIRONMENT
 by construction: they are not actions, appear in no candidate set, are never simulated
 inside imagined lookahead (v37's classification, previously enforced by a pool-deletion
 hack in `worldAtomPools`, now true because schedule rules are not in `cookedDefs` at
@@ -46,6 +56,14 @@ all).
 `_sight` character dies with the others. Gatherings re-express as their two recurring
 rules (open/close, the phase-offset seeding kept).
 
+**The scene clock dies too (no segregation).** `Prax.Script` compiles its own
+`_clock` character ticking a `sceneClock` fact for timed junctions — the same
+ticker-as-content shape, and it goes the same way: scene entry stamps
+`sceneEntered!<turn>` (setup already runs at entry), and a timed junction's condition
+compares the engine clock against the stamp (`turn − entered ≥ n`) — pure authored
+conditions over engine time, no character, no per-scene counter fact to maintain.
+Scripts without timed junctions are unchanged.
+
 ## What dies (no dual systems, no wrappers)
 
 The ticker characters and their practices: `driftP`/`driftChar`/`driftName`/
@@ -54,7 +72,8 @@ The ticker characters and their practices: `driftP`/`driftChar`/`driftName`/
 ceremony — `turnPath` and the authored-time reading surface survive). The `due.*` fact
 family and its compiled gate machinery. `feelingsFade` and the worlds' fade rules.
 `ClocklessDrift` (the engine always has a clock) and its CLI text.
-`worldAtomPools`' drift exclusion. Every world's roster and setup entries for tickers.
+`worldAtomPools`' drift exclusion. `Prax.Script`'s `_clock` character and the
+`sceneClock` fact family. Every world's roster and setup entries for tickers.
 
 ## Authoring surface
 
@@ -78,9 +97,10 @@ duration variants). The v40/v43 splice guards carry over to the rule bodies unch
   AnalysisTable pins re-capture where the drift-practice exclusion previously shaped
   pools. Decision CONTENT must be argued equivalent where the fiction is unchanged
   (same mover choices in the same world states, fewer bookkeeping turns between them).
-- **Persist**: the round counter and the schedule (per-rule next-due, expiry queue)
-  serialize — string-side, no Sym ids; the v43 format header bumps to `prax-state v2`
-  (the loud-rejection machinery just landed; this is what it is for).
+- **Persist**: the schedule (per-rule next-due, expiry queue) serializes —
+  string-side, no Sym ids; the clock needs nothing new (`turn!N` is a db fact and
+  already round-trips). The v43 format header bumps to `prax-state v2` (the
+  loud-rejection machinery just landed; this is what it is for).
 - **Tests**: DriftSpec/ClockSpec/SightSpec rewrite against the schedule (clock-jump
   fixtures become schedule/counter manipulation or short periods); the v42 lint's
   clockless composition pin dies with ClocklessDrift.
