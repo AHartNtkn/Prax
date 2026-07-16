@@ -20,13 +20,26 @@ SILENTLY — the no-silent-failures principle violated at the authoring boundary
 
 ## The design
 
-**One check, one table, one unforgeable exemption.** The keystone comes from v40: the
-`Prax` variable namespace is BANNED in authored fragments (enforced at every combinator
-boundary since v40/v43/v44), so a pattern whose value positions are all Prax-namespaced
-variables is machinery BY CONSTRUCTION — no author can counterfeit it. The mechanisms'
-own compiled accesses have exactly that shape (probed: `draw` reads `seed!PraxS`, writes
-`seed!PraxS3`; the scene stamp writes `sceneEntered!PraxNow`, `clockReached` reads
-`sceneEntered!PraxE`). Therefore:
+**The threat model, stated first** [AMENDED after the task review demonstrated a
+repl-level counterexample and the amendment adjudicated it]: Prax is a COMPILER. Its
+authoring surface is the eDSL combinators, the JSON script format, and the world
+sources — each of which carries a Prax-namespace guard (v40/v43/v44 combinator
+boundaries; the v44 JSON compile guard; v40's GateSpec literal scanner over
+`src/Prax/Worlds/`). Raw Haskell construction against the `Outcome`/`Condition` ADTs
+is COMPILER-LEVEL code — the same trust level as editing the engine — and is
+definitionally outside any in-language guard's reach: read the unforgeability claim as
+applying to raw Haskell and it proves too much, since the compiler's own combinators
+could not emit these forms either. The review's counterexample (a hand-built
+`Match "seed!PraxS"` action) is compiler-level code doing what that level can do; it
+is not an authored-surface forgery.
+
+**One check, one table, one exemption unforgeable AT THE AUTHORING SURFACE.** The
+keystone comes from v40: the `Prax` variable namespace is banned in authored fragments
+at every door of the surface above, so a pattern whose value positions are all
+Prax-namespaced variables is machinery by construction — no AUTHOR can counterfeit it.
+The mechanisms' own compiled accesses have exactly that shape (probed: `draw` reads
+`seed!PraxS`, writes `seed!PraxS3`; the scene stamp writes `sceneEntered!PraxNow`,
+`clockReached` reads `sceneEntered!PraxE`). Therefore:
 
 - `Prax.TypeCheck`'s `ClockWrite` generalizes to a `ReservedFamily` error (rename, no
   dual) driven by a declared table:
