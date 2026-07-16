@@ -35,7 +35,11 @@ keeps working: jumping the clock fast-forwards the schedule, deliberately. Entri
   follow from ordinary delta processing.
 - **The clock fact**: the engine maintains `turn!N` itself, advancing it at each round
   boundary — authored conditions (`sightedWithin`, gathering gates) keep reading time
-  as a fact; no world seeds or ticks it ever again.
+  as a fact; no world seeds or ticks it ever again. ENFORCED, not conventional: a new
+  `typeCheck` rule flags any authored outcome or axiom head writing the `turn` family
+  (an authored clock write would silently derange every pending due). The clock-jump
+  test idiom is untouched — fixtures jump time through direct engine calls
+  (`performOutcome`), which scan no authored definition and so meet no guard.
 
 **The round becomes explicit.** Today a round exists only as one cursor rotation. The
 loop gains a real boundary: when the rotation wraps, the engine runs the schedule —
