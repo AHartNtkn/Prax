@@ -1394,6 +1394,119 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   commit: zero warnings, hlint clean, `prax check` well-formed on all 7 worlds.
   Backlog — per-emotion DEFAULT lifetimes, intensity levels, emotion visibility, a
   chronicler — stays with the bank; no queue pointer.
+- **v45** — **protected families: one guard, one table, not a whitelist of `turn`**
+  (`Prax.TypeCheck`; `Prax.Types`; `Prax.Script`; spec
+  `docs/specs/2026-07-16-v45-protected-families.md` (`fdfc414`, amended `638ec5a`);
+  plan `docs/plans/2026-07-16-v45-protected-families.md`, `5e9eac8`; code
+  `1f13c32`). First of four audit-queued rounds, queued in order: **v45 protected
+  families** (this row) → v46 the narrator dies → v47 function registry → v48
+  generality bundle.
+
+  **The audit that queued it.** User-directed: four isolated auditors (temporal,
+  social, standing, format — one surface each; inventories at
+  `.superpowers/sdd/audit-{temporal,social,standing,format}.md`) swept the
+  authoring surface for the `feelingsFade` (v44) defect class generalized: engine
+  responsibility expressed as authored world content, and general mechanics
+  hardcoded to one application. Ranked findings: **[HIGH]** the surviving
+  `_narrator` bodiless character and its `storyAdvanced` motive pump — v44's own
+  named defect, left standing when the four ticker characters it killed
+  (`_sight`/`_drift`/`_time`/`_clock`) were deleted; **[HIGH]** engine-owned fact
+  families beyond `turn` left unprotected — v44's guard was a whitelist of
+  exactly one family, the same gap surfaced independently by two auditors;
+  **[HIGH]** `coreLib` as a phantom practice — `Function`s have no other home to
+  live in, so a reusable library must masquerade as a never-instantiated
+  practice; **[MED]** `Prax.Derive.liftObliged` hardcoding Deontic's `obliged.`
+  vocabulary into every world's closure, deontic or not; **[MED]**
+  `Blackmail.shakedown` welded to `owe`/debt as its only currency and to
+  exposure as its only threat; plus LOWs — Stress's `currentScene` hardcoding,
+  Confession's fixed discharge verb, `disapprovalP` shipped as content inside an
+  infrastructure module, Project's `done.sN` shadow accumulator, the
+  `feelingSomeone` alias, and Persona's `traitDesire`/`character.<who>` facts
+  banked as an engine question (a fixpoint join may have no other way to read
+  authored structure — flagged for the engine team, not asserted as a defect).
+  THE QUEUE orders remediation: **v45 protected families** → **v46 the narrator
+  dies** → **v47 function registry** → **v48 generality bundle**.
+
+  **The finding this round closes, confirmed by two auditors independently:**
+  v44 generalized "engine mechanism as world content" as the defect class but
+  implemented enforcement (`clockWriteErrors`) for exactly one family, `turn`.
+  Three structurally identical families sat exposed: `seed!N` (the die's stream
+  position — an authored read predicts every future draw, an authored write
+  rigs it); `sceneEntered!N` (the scene epoch — an authored write defeats every
+  timed junction, an authored read gates on raw machinery time); `contradiction`
+  (the ⊥ witness — an authored insert fakes a permanent logical contradiction).
+  Each mechanism assumes it is its family's sole accessor; an authored touch
+  corrupted it silently, the no-silent-failures principle violated at the
+  authoring boundary.
+
+  **The design: one check, one table, one exemption unforgeable at the
+  authoring surface.** `Prax.TypeCheck`'s `ClockWrite` generalizes to
+  `ReservedFamily`, driven by a declared table: `turn` — writes forbidden,
+  reads free (the documented authored-time interface, `sightedWithin` and
+  gathering gates); `seed`/`sceneEntered` — both polarities restricted to
+  machinery-shape only; `contradiction` — writes forbidden, reads free (a bare
+  zero-value family; reads cannot corrupt it). "Machinery-shape only" rides
+  v40's namespace ban doing double duty: since the `Prax` variable namespace is
+  already banned from every authored fragment at every door of the surface
+  (combinator boundaries, the JSON compile guard, GateSpec's world-source
+  literal scan), a pattern whose value positions are all Prax-namespaced
+  variables is machinery by construction — no author can counterfeit the
+  mechanisms' own compiled shapes (`draw` reading `seed!PraxS`, writing
+  `seed!PraxS3`; the scene stamp writing `sceneEntered!PraxNow`, `clockReached`
+  reading `sceneEntered!PraxE`, both now routed through a named
+  `Prax.Script.sceneEnteredPath` constant instead of a bare literal).
+  Delete-is-a-write: the old `clockWriteErrors` walk scanned only inserts, so a
+  `Delete` against a reserved family was an unguarded second write path,
+  strengthened shut in the same generalization. The read side is new: beyond
+  the existing outcome/axiom-head walk, every authored condition site is
+  scanned — action and function-case conditions, `ForEach` guards nested in
+  outcomes, axiom bodies, desires' and characters' want conditions, and
+  schedule-rule bodies — a user schedule rule reading `seed!S` is the identical
+  leak as an action condition doing so.
+
+  **The round's design lesson: the threat model, stated first, after a
+  review-adjudicated amendment.** The task reviewer forged the exemption
+  directly in a REPL — a hand-built `Match "seed!PraxS"` action typechecked
+  clean against the raw `Outcome`/`Condition` ADTs — and rated it Critical,
+  reading the spec's "unforgeable" claim as covering every code path that can
+  construct a `Condition`. Escalated to the user, who corrected the threat
+  model rather than the code: Prax is a COMPILER; its authoring surface is the
+  eDSL combinators, the JSON script format, and the world sources, each already
+  carrying its own Prax-namespace guard; raw Haskell construction against the
+  ADTs is compiler-level code, the same trust tier as editing the engine, and
+  definitionally outside any in-language guard's reach — the unforgeability
+  claim read against raw Haskell proves too much, since the compiler's own
+  combinators couldn't emit these forms either. The spec was amended in place
+  (`638ec5a`) to state the authoring surface explicitly, and the reviewer
+  re-verified all three doors reject the forgery before flipping its verdict on
+  that evidence, not on the reframe alone; its Subquery Minor was retracted on
+  a verified misreading (`setVar`/`find` are outputs, not scan targets — the
+  inner conditions ARE scanned). One recorded nuance, within charter: GateSpec's
+  world-source literal scanner is evadable by split literals — adversarial,
+  compiler-level, outside its documented job.
+
+  **Two stated deferrals, not omissions.** `atSince`'s stamp value is bound to
+  `Now`, the documented contract variable of sighting templates — the
+  machinery-shape rule cannot distinguish the sighting rule's own write from an
+  authored one without breaking that contract; protection waits on a
+  deliberate contract decision, banked as residue rather than silently
+  dropped. `storyAdvanced` dies entirely with the narrator in v46; guarding it
+  now would need a practice-id whitelist — a hack for a family with one round
+  left to live.
+
+  Suite: 606 → 619 (13 new pins: the reserved-family and unforgeable-exemption
+  cases for all four families and both polarities). Goldens byte-identical; no
+  engine, format, or Persist change — guards on illegal input only. Zero
+  warnings, hlint clean, `prax check` well-formed on all 7 worlds (bar,
+  bar-director, intrigue, play, feud, audience, village). Two mutations after
+  GREEN: m1 (drop the exemption) failed the exemption pin plus the
+  all-shipped-worlds pin (draw worlds flag), as planned; m2 (drop the
+  read-side scan) was planned to fail the seed-read pin alone but was
+  observed to fail four — adjudicated as the one-guard design's own
+  consequence, not a soundness gap: one shared check covering both
+  machinery-shape families and every read site widens a kill radius that four
+  bespoke checks would have kept narrow.
+  Queue: **v45 protected families** complete; **v46 the narrator dies** next.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
