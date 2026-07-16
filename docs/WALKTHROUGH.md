@@ -193,7 +193,9 @@ changes what they do. Watch the scene's new lines (`… feels … toward …`, `
   (`scoreAtLeast`).
 
 - **Feelings are momentary; the record persists.** Feelings coexist (angry at one patron while
-  pleased with another) and each FADES on the clock (`feelingsFade`) or is discharged by an act.
+  pleased with another) and each fades on its own — the onset declares a lifetime
+  (`feelTowardFor`, v44) and the engine retracts the feeling that many rounds later — or is
+  discharged sooner by an act.
   After a character cools off, the feeling is gone — but the lasting **grievance** and the
   lowered **warmth score** remain. That's how a fleeting feeling differs from a durable
   relationship.
@@ -738,9 +740,9 @@ from a live run, not fabricated or reused from any report:
   - you regards bob as a thief
 ```
 
-A round is **seven** turns now (you, bob, carol, dana, eve, gale, and the bodiless sight ticker —
-§25 notes where the ticker came from; v25 added gale to the six-member cast, so the "sight ticker"
-walkthrough sections' round-length note below counts seven, not six). carol confronted bob the
+A round is **six** turns now (you, bob, carol, dana, eve, gale — v25 added gale to the cast;
+since v44 perception and the clock run at the engine's round boundary, so no ticker character
+occupies a turn). carol confronted bob the
 instant she witnessed it, same mechanism as §22. eve, independently and for her own reasons (§25 —
 not this story), whispers a lie about *carol* to dana in the very same round; the two plots run
 concurrently in one world, unprompted by each other. bob, meanwhile, has his own second track
@@ -1979,14 +1981,14 @@ the spontaneous-confession and blackmail-defense arithmetic measured live before
 `Prax.DbSpec` (the trie's exact `!`/`.`/retract semantics, incl. the reverted ghost-pruning
 attempt's own regression net — an asserted instance fact must survive its transient children
 draining to zero), `Prax.BarSpec`, and `Prax.LoopSpec` (a deterministic
-25-turn replay — the bar's cast now includes the bodiless sight ticker). Part II: `Prax.IntrigueSpec` (death + branching endings, incl. the
+25-turn replay — since v44 the round boundary, not a ticker in the cast, runs the schedule). Part II: `Prax.IntrigueSpec` (death + branching endings, incl. the
 confidant/victim `predictMove` split), `Prax.StressSpec`, `Prax.PersistSpec` (save/resume),
 `Prax.ScriptSpec` + `Prax.Script.JsonSpec` (scene layer + JSON, incl. memories/timed junctions/sketches
 and the `audience`), `Prax.DirectorSpec` (player-as-DM), `Prax.ELSpec` + `Prax.DeriveSpec` (the
 exclusion-logic lattice and forward chaining), `Prax.TypeCheckSpec`, `Prax.WitnessSpec` +
 `Prax.VillageSpec` + `Prax.RumorSpec` + `Prax.SightSpec` (`ForEach` witnessing, co-presence, the
-confront affordance, sourced hearsay and the gossip gate, and the perception ticker/sightings that
-gate whose moves get predicted), `Prax.ReputeSpec` (derived standing, the base-fact
+confront affordance, sourced hearsay and the gossip gate, and the sighting schedule rule whose
+stamps gate whose moves get predicted), `Prax.ReputeSpec` (derived standing, the base-fact
 atonement defeater, and notoriety at threshold — `VillageSpec`'s later cases carry the same
 mechanisms through the full autonomous arc, the re-offense snap-back, and the resulting
 deterrence), `Prax.DeceitSpec` (`conceal`'s shape and its watched/unwatched planner probe,

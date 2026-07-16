@@ -177,8 +177,9 @@ utility. See the design writeups:
   provenance shape unchanged — gossip, lying, confiding, and forgetting all work on
   `desires.<owner>.<name>` with zero new machinery; "public" and "secret" fall out as *derived*,
   defeasible common knowledge (a professed desire, or a conventionally-assumed one) rather than a
-  flag. `Prax.Sight` makes location itself a belief: a compiled per-round ticker advances a
-  shared clock and refreshes co-present sightings, so predicting someone who has stepped out of
+  flag. `Prax.Sight` makes location itself a belief: a period-1 schedule rule, run by the engine
+  at each round boundary (v44), refreshes co-present sightings against the engine's clock, so
+  predicting someone who has stepped out of
   the room means predicting from where you last saw them, with an authored horizon for how long
   that guess stays good. `Prax.Worlds.Intrigue`'s plot is now a believed mind: a confidant's
   prediction of cassia foresees the poisoning; the uninformed victim's does not; and a leaked
