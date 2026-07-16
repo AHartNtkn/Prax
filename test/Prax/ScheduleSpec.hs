@@ -71,7 +71,18 @@ tests = testGroup "Prax.Schedule"
         assertBool "the re-asserted fact is untouched by any stale timer"
           (has "feels.anger.toward.bob" sN)
 
-    , testCase "law 5: a !-eviction drops silently — the displaced timer fires on nothing" $ do
+    , testCase "law 5: a !-eviction leaves the displaced timer queued, and its firing is a harmless no-op" $ do
+        -- The existence guard (expireOne: fire CDelete only `exists`, else drop
+        -- silently) is EXERCISED here — mood.a is gone before the timer's due
+        -- turn, so the guard's "already evicted" branch runs — but it is not
+        -- DISCRIMINATED at this layer: with or without the guard, CDelete on
+        -- an absent path is a no-op retract on a disjoint subtree, so the
+        -- surviving sibling and the emptied queue look identical either way.
+        -- The guard's only real effect is a suppressed closure
+        -- recompute/liveness wake, which isn't fact-observable until Task 2
+        -- wires the boundary into the loop and wakes become observable. What
+        -- this pins: the surviving sibling stands and the queue entry is
+        -- gone — supersession sanity, not guard discrimination.
         let s0  = performOutcome (InsertFor 2 "mood!a") base   -- due at 2
             s0' = performOutcome (Insert "mood!b") s0          -- excludes: mood.a evicted, timer stays queued
             s1  = roundBoundary s0'                            -- now 1
@@ -112,6 +123,19 @@ tests = testGroup "Prax.Schedule"
         assertBool "fired at boundary 1"       (has "beat.1" s3)
         assertBool "skipped boundary 2"        (not (has "beat.2" s3))
         assertBool "fired again at boundary 3" (has "beat.3" s3)
+
+    , testCase "law 8a (late fire): re-arm is FROM the boundary it fires at, not the stale due" $ do
+        -- law 8a's own fixture never discriminates "from now" against "from
+        -- the old due", because there the rule fires exactly on time (due ==
+        -- boundary), so now == old due and the two formulas agree. Seed a due
+        -- already in the PAST relative to the next boundary — a late fire —
+        -- so the two formulas diverge: from-now gives 1+2=3, from-stale-due
+        -- gives (-1)+2=1.
+        let beat = ScheduleRule "beat" 2 [([Match "turn!Now"], [Insert "beat.Now"])]
+            s0 = dueAt "beat" (-1) (withSchedule [beat] base)   -- already overdue
+            s1 = roundBoundary s0                                -- boundary 1: fires late
+        assertBool "fired late, at boundary 1" (has "beat.1" s1)
+        Map.lookup "beat" (scheduleDues s1) @?= Just 3
 
     , testCase "law 8b: due rules fire in declaration order within a boundary" $ do
         let open = ScheduleRule "open" 1 [([], [Insert "gate.open"])]

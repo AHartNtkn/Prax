@@ -35,4 +35,7 @@ tests = testGroup "Prax.Script.Json"
       let o = ForEach [ Match "at.Witness!P", Neq "Witness" "Actor" ]
                       [ Insert "Witness.believes.stole.Actor.loaf.seen" ]
       decode (encode o) @?= Just o
+
+  , testCase "an InsertFor outcome round-trips through JSON" $
+      decode (encode (InsertFor 3 "mood!a")) @?= Just (InsertFor 3 "mood!a")
   ]
