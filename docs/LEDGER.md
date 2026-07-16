@@ -1282,7 +1282,10 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 
   **Verification.** Every guard RED-first, with per-guard evidence; the Persist header
   and the Clock extraction each got a compile-level RED, sanctioned because no prior
-  behavior existed to regress against. 21 new guard pins plus 3 new `Clock` tests.
+  behavior existed to regress against. 21 new guard pins plus 3 new `Clock` tests
+  (`5fcee52`'s own commit message says "566 -> 579 (13 new)" — both figures wrong and
+  SUPERSEDED by this row's repo-verified 558 → 579, 21 new; the message is frozen
+  because this row cites its hash).
   Goldens and the `AnalysisTableSpec` pins byte-identical throughout both commits;
   `prax check` well-formed on all 7 worlds; zero warnings; hlint clean.
 

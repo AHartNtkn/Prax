@@ -38,7 +38,7 @@ explain st actor needle =
   [ label ++ verdict
   | pid <- childKeys "practice" (db st)
   , Just def <- [Map.lookup pid (practiceDefs st)]
-  , let instanceQuery = "practice." ++ pid ++ "." ++ intercalate "." (roles def)
+  , let instanceQuery = intercalate "." ("practice" : pid : roles def)
   , inst <- unify instanceQuery (db st) (Map.singleton (intern "Actor") (VSym (intern actor)))
   , a <- actions def
   , let label = renderText (actionName a) inst

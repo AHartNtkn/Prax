@@ -1,6 +1,9 @@
 -- | The world's turn counter, in one home. "Prax.Sight"'s ticker composes
 -- these fragments (perception rides the clock); a world that wants time
 -- without perception registers the standalone 'clockP'/'clockChar' instead.
+-- __Instead, never alongside__: each registered ticker advances the counter
+-- once per round, so a world carries exactly one — Sight's composed ticker
+-- OR the standalone clock, or its rounds are double-counted.
 -- "Prax.Drift" reads the counter through 'turnPath'; "Prax.TypeCheck"'s
 -- ClocklessDrift check tests for it by the same name.
 module Prax.Clock

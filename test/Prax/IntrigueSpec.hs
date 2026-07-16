@@ -5,8 +5,8 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, assertFailure, (@?=))
 
 import           Prax.Db (dbToSentences)
-import           Prax.Types (PraxState, Outcome (..), db, gaLabel, character)
-import           Prax.Engine (possibleActions, performAction, performOutcome)
+import           Prax.Types (PraxState, Outcome (..), db, gaLabel, character, practice, action, practiceId, actions)
+import           Prax.Engine (definePractices, possibleActions, performAction, performOutcome)
 import           Prax.Loop (runNpcTicks)
 import           Prax.Inspect (explain)
 import           Prax.Planner (predictMove)
@@ -79,6 +79,18 @@ tests = testGroup "Prax.Worlds.Intrigue (a dramatic slice)"
       -- once Cassia has confided, it becomes available
       let after = concat (explain afterConfide "marcus" "warn artus")
       assertBool ("now available: " ++ after) ("AVAILABLE" `isInfixOf` after)
+
+  , testCase "the inspector handles an instantiated zero-role practice" $ do
+      -- A zero-role practice's instance fact is exactly "practice.<pid>" —
+      -- the inspector's instance query must not append a dangling separator
+      -- (the v43 trailing-operator class; Prax.Cooked had the same bug).
+      let shrine = practice
+            { practiceId = "shrine"
+            , actions = [ action "[Actor]: kneel" [] [ Insert "knelt.Actor" ] ] }
+          w = performOutcome (Insert "practice.shrine")
+                (definePractices [shrine] intrigueWorld)
+          out = concat (explain w "marcus" "kneel")
+      assertBool ("kneel explained: " ++ out) ("AVAILABLE" `isInfixOf` out)
 
   , testCase "the confidant can foresee the poisoning; the victim cannot" $ do
       -- cassia confides in marcus (the existing plot action); this both
