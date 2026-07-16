@@ -3,12 +3,14 @@ module Prax.PersistSpec (tests) where
 import           Control.Exception (ErrorCall (..), evaluate, try)
 import           Data.Either (isLeft)
 import           Data.List (isInfixOf)
+import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, assertFailure, (@?=))
 
-import           Prax.Db (dbToSentences, insertAll)
-import           Prax.Types (PraxState, Character (..), characters, cursor,
-                              db, gaLabel, intentions)
+import           Prax.Db (dbToSentences, insertAll, internTokens)
+import           Prax.Types (PraxState, Character (..), ScheduleRule (..),
+                              characters, cursor, db, expiries, gaLabel,
+                              intentions, schedule, scheduleDues)
 import           Prax.Engine (possibleActions, performAction)
 import           Prax.Loop (runNpcTicks, npcAct)
 import           Prax.Persist (serializeState, deserializeState, formatVersion)
@@ -95,5 +97,37 @@ tests = testGroup "Prax.Persist"
     , testCase "a save with no header at all is a loud, malformed-save error" $ do
         r <- try (evaluate (length (dbToSentences (db (deserializeState "" intrigueWorld)))))
         assertBool "completely empty input rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "the previous format version (prax-state v1) is now rejected loudly" $ do
+        r <- try (evaluate (length (dbToSentences (db (deserializeState "prax-state v1\ncursor 0\n" intrigueWorld)))))
+        case r :: Either ErrorCall Int of
+          Left (ErrorCall msg) -> assertBool ("unsupported-format message, got: " ++ msg)
+                                    ("unsupported save format" `isInfixOf` msg)
+          Right _ -> assertFailure "expected a v1-rejection error"
+    ]
+
+  , testGroup "v44: the schedule's runtime half (per-rule dues + the expiry queue) round-trips"
+    [ testCase "populated dues and expiries survive save/load; dues re-associate by name" $ do
+        -- A world that declares one schedule rule (so the reloaded dues have a
+        -- rule to re-associate to). Task 1 has no schedule setter, so the
+        -- declaration is installed on the field directly, exactly as a state
+        -- carrying runtime dues/expiries would arrive.
+        let scheduled = intrigueWorld { schedule = [ScheduleRule "beat" 3 []] }
+            populated = scheduled
+              { scheduleDues = Map.fromList [("beat", 5)]
+              , expiries     = Map.fromList [(internTokens "mood!a", 7)] }
+            reloadedPop = deserializeState (serializeState populated) scheduled
+        scheduleDues reloadedPop @?= scheduleDues populated
+        expiries     reloadedPop @?= expiries populated
+
+    , testCase "a due naming a rule the reloaded world does not declare is a loud error" $ do
+        -- The re-association is forced by touching the reloaded dues (lazy,
+        -- like intention parsing): intrigueWorld declares no schedule.
+        r <- try (evaluate (length (show (scheduleDues
+               (deserializeState "prax-state v2\ncursor 0\ndue ghost 3\n" intrigueWorld)))))
+        case r :: Either ErrorCall Int of
+          Left (ErrorCall msg) -> assertBool ("unknown-rule message, got: " ++ msg)
+                                    ("unknown schedule rule" `isInfixOf` msg)
+          Right _ -> assertFailure "expected an unknown-schedule-rule error"
     ]
   ]

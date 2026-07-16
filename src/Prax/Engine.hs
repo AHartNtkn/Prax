@@ -22,20 +22,23 @@ module Prax.Engine
   , relevantDelta
   , monotoneInsert
   , groundedDeltaAnchors
+  , currentTurn
+  , roundBoundary
   ) where
 
-import           Data.List (intercalate)
+import           Data.List (intercalate, isPrefixOf)
 import           Data.Maybe (listToMaybe)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import           Data.Set (Set)
+import           Text.Read (readMaybe)
 
 import           Prax.Db
 import           Prax.Query (queryCooked, groundCondition, groundNames, CookedCondition(..), cookCondition)
 import           Prax.Types
 import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, axiomHeadPatterns, monotoneAxioms, cookAxioms, runCooked)
 import           Prax.Relevance (improvableDesires, livenessOf, mayUnifySyms, evictionShadowNames, bearingTemplates)
-import           Prax.Cooked (cookOutcome, cookPractice, groundCookedOutcome)
+import           Prax.Cooked (cookOutcome, cookPractice, cookScheduleRule, groundCookedOutcome)
 import           Prax.Sym (Sym, intern, symIsVar, symName)
 
 -- | Rebuild the derived vocabulary tables. Internal: every helper that
@@ -47,7 +50,8 @@ import           Prax.Sym (Sym, intern, symIsVar, symName)
 retable :: PraxState -> PraxState
 retable st0 =
   let st = st0
-        { cookedDefs    = Map.map cookPractice (practiceDefs st0)
+        { cookedDefs     = Map.map cookPractice (practiceDefs st0)
+        , cookedSchedule = map cookScheduleRule (schedule st0)
         , cookedWants   = Map.fromList
             [ (charName c, [ map cookCondition (wantConditions w) | w <- charWants c ])
             | c <- characters st0 ]
@@ -235,6 +239,7 @@ performAction st ga =
 groundOutcome :: Outcome -> Bindings -> Outcome
 groundOutcome (Insert s)          b = Insert (ground s b)
 groundOutcome (Delete s)          b = Delete (ground s b)
+groundOutcome (InsertFor n s)     b = InsertFor n (ground s b)
 groundOutcome (Call fn args)      b = Call fn (map (`ground` b) args)
 groundOutcome (ForEach conds outs) b =
   ForEach (map (groundCondition b) conds) (map (`groundOutcome` b) outs)
@@ -252,14 +257,22 @@ performOutcome o = performCooked (cookOutcome o)
 -- moves: classification, spawn detection, and insert/retract all run on
 -- names already in hand.
 performCooked :: CookedOutcome -> PraxState -> PraxState
-performCooked (CDelete toks) st
+performCooked (CDelete toks) st0
   | relevantNames names shadows st = withDb (retractNames names) st
   | otherwise                      = applyDirect (retractNames names) st
   where
+    -- A subtree delete takes its descendants' pending timers (spec v44):
+    -- eagerly purge every expiry entry AT OR UNDER the deleted path (by
+    -- name-prefix), so no later retract can fire on a fact already gone.
+    st = st0 { expiries = Map.filterWithKey (\k _ -> not (names `isPrefixOf` map fst k))
+                                            (expiries st0) }
     names = map fst toks
     shadows = evictionShadowNames toks
-performCooked (CInsert toks) st =
-  let names = map fst toks
+performCooked (CInsert toks) st0 =
+  let -- A bare insert of a path CANCELS any pending expiry on it (spec v44's
+      -- supersession law: a permanent assertion never dies on a stale timer).
+      st = st0 { expiries = Map.delete toks (expiries st0) }
+      names = map fst toks
       shadows = evictionShadowNames toks
       st' | not (relevantNames names shadows st) = applyDirect (insertToks toks) st
           | monotoneToks toks st                  = applyGrowToks toks st
@@ -270,6 +283,13 @@ performCooked (CInsert toks) st =
          in foldl' (\s2 o -> performCooked (groundCookedOutcome roleBindings o) s2)
                    st' (cpInits cp)
        Nothing -> st'
+performCooked (CInsertFor n toks) st =
+  -- Insert now (through the ordinary CInsert path, so relevance/closure tiers
+  -- and spawning all apply, and any stale timer on the path is cancelled),
+  -- then arm a fresh expiry n round boundaries out. Re-inserting the exact
+  -- path with a lifetime therefore REFRESHES the due (spec v44).
+  let st' = performCooked (CInsert toks) st
+  in st' { expiries = Map.insert toks (currentTurn st' + n) (expiries st') }
 performCooked (CCall fn args) st =
   case lookupCookedFn fn st of
     Nothing -> st
@@ -286,6 +306,50 @@ performCooked (CCall fn args) st =
 performCooked (CForEach conds outs) st =
   let bs = queryCooked (readView st) conds Map.empty   -- snapshot: all bindings up front
   in foldl' (\s b -> foldl' (\s2 o -> performCooked (groundCookedOutcome b o) s2) s outs) st bs
+
+-- | The engine clock's current value — the single @turn@ child in the db
+-- (spec v44). Loud error if absent or not a lone numeric value: the clock is
+-- seeded in 'emptyState' and only ever advanced by 'roundBoundary', so its
+-- absence is a construction bug, and silence is banned.
+currentTurn :: PraxState -> Int
+currentTurn st = case childKeys turnPath (db st) of
+  [n] | Just i <- readMaybe n -> i
+  ks -> error ("Prax.Engine.currentTurn: expected exactly one numeric " ++ show turnPath
+               ++ " value in the db, found " ++ show ks)
+
+-- | One round boundary (spec v44): advance the clock, fire due expiries
+-- (existence-guarded: an entry whose exact fact was evicted since drops
+-- silently — no retract, no recompute), then due schedule rules in
+-- declaration order, re-arming each period boundaries from NOW. A pure
+-- function of the state; the loop runs it at rotation wrap (Task 2).
+--
+-- Expiries fire BEFORE rules for a stated reason: a fact with lifetime n is
+-- present rounds onset..onset+n-1 and GONE at the boundary — rules-first would
+-- let a period-1 rule stamp a belief about a fact expiring that instant (a
+-- ghost observation).
+roundBoundary :: PraxState -> PraxState
+roundBoundary st0 = foldl' fireRule stExpired dueRules
+  where
+    now  = currentTurn st0 + 1
+    -- Advance the clock on the ordinary insert path so relevance/closure tiers
+    -- apply (turn!now excludes turn!prev — the @!@ is in the seeded fact).
+    st   = performCooked (CInsert (internTokens (turnPath ++ "!" ++ show now))) st0
+    (due, keep) = Map.partition (<= now) (expiries st)
+    stExpired = foldl' expireOne (st { expiries = keep }) (Map.keys due)
+    expireOne s toks
+      | exists (tokensToSentence toks) (db s) = performCooked (CDelete toks) s
+      | otherwise                             = s          -- evicted since: silent drop
+    dueRules = [ r | r <- cookedSchedule st0
+                   , Map.findWithDefault maxBound (csrName r) (scheduleDues st0) <= now ]
+    fireRule s r =
+      (foldl' (\s' (conds, outs) -> performCooked (CForEach conds outs) s') s (csrBody r))
+        { scheduleDues = Map.insert (csrName r) (now + periodOf r) (scheduleDues s) }
+    -- The rule's authored period, from the string-side schedule by name; a
+    -- cooked rule with no string-side declaration is a construction bug.
+    periodOf r = case [ srPeriod sr | sr <- schedule st0, srName sr == csrName r ] of
+      (p : _) -> p
+      []      -> error ("Prax.Engine.roundBoundary: no schedule rule named "
+                        ++ show (csrName r) ++ " to resolve its period")
 
 -- If inserting the sentence named by @names@ brings a not-yet-existing
 -- practice instance into being, return its (string-side) definition, its
@@ -353,6 +417,8 @@ outcomeDeltaAnchors st visited = go' Set.empty
         in if mightSpawn safe names || unanchored names
              then Nothing
              else Just (names : evictionShadowNames toks)
+      CInsertFor _ toks -> go safe (CInsert toks)   -- the deferred retract is
+                                                    -- environment: same anchors as CInsert
       CDelete toks ->
         let names = map fst toks
         in if unanchored names

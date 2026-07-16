@@ -7,8 +7,7 @@
 -- "Prax.Drift" reads the counter through 'turnPath'; "Prax.TypeCheck"'s
 -- ClocklessDrift check tests for it by the same name.
 module Prax.Clock
-  ( turnPath
-  , tickConditions
+  ( tickConditions
   , tickOutcome
   , clockSeed
   , clockName
@@ -19,10 +18,6 @@ module Prax.Clock
 
 import           Prax.Query (Condition (..), CalcOp (..))
 import           Prax.Types
-
--- | The counter's path family. The one spelling of @turn@ in the tree.
-turnPath :: String
-turnPath = "turn"
 
 -- | Read-and-advance fragments: bind the current turn, compute the next.
 -- @PraxN@\/@PraxM@ are machinery (v40 namespace).

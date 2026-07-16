@@ -20,7 +20,7 @@ module Prax.Sight
   , sightedWithin
   ) where
 
-import           Prax.Clock (turnPath, tickConditions, tickOutcome, clockSeed)
+import           Prax.Clock (tickConditions, tickOutcome, clockSeed)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Types
 

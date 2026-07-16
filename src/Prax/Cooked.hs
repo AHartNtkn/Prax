@@ -18,6 +18,7 @@ module Prax.Cooked
   ( cookOutcome
   , groundCookedOutcome
   , cookPractice
+  , cookScheduleRule
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -32,6 +33,7 @@ cookOutcome :: Outcome -> CookedOutcome
 cookOutcome o = case o of
   Insert s          -> CInsert (internTokens s)
   Delete s          -> CDelete (internTokens s)
+  InsertFor n s     -> CInsertFor n (internTokens s)
   Call fn args      -> CCall fn (map intern args)
   ForEach conds outs -> CForEach (map cookCondition conds) (map cookOutcome outs)
 
@@ -42,6 +44,7 @@ groundCookedOutcome :: Bindings -> CookedOutcome -> CookedOutcome
 groundCookedOutcome b o = case o of
   CInsert toks        -> CInsert (groundTokens toks b)
   CDelete toks         -> CDelete (groundTokens toks b)
+  CInsertFor n toks    -> CInsertFor n (groundTokens toks b)
   CCall fn args        -> CCall fn (groundNames b args)
   CForEach conds outs  -> CForEach (map (groundCookedCondition b) conds)
                                     (map (groundCookedOutcome b) outs)
@@ -72,3 +75,13 @@ cookPractice p = CookedPractice
       , caConds = map cookCondition (actionConditions a)
       , caOuts  = map cookOutcome (actionOutcomes a)
       }
+
+-- | Compile a 'ScheduleRule' to its cooked form (see 'CookedScheduleRule'):
+-- every body clause's conditions and outcomes precooked; the name carried
+-- unchanged (a lookup key, never unified).
+cookScheduleRule :: ScheduleRule -> CookedScheduleRule
+cookScheduleRule r = CookedScheduleRule
+  { csrName = srName r
+  , csrBody = [ (map cookCondition conds, map cookOutcome outs)
+              | (conds, outs) <- srBody r ]
+  }

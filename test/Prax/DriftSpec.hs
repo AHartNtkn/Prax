@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 module Prax.DriftSpec (tests) where
 
 import           Control.Exception (ErrorCall, evaluate, try)
@@ -128,21 +127,17 @@ tests = testGroup "Prax.Drift"
              (driftP [DriftRule "x" 0 [([Match "flag.a"], [Insert "marked.a"])]]))))
       assertBool "zero period rejected" (isLeft (r :: Either ErrorCall Int))
 
-  , testCase "a drift world with no clock is flagged; adding turn!0 clears it" $ do
-      let w = setCharacters [driftChar] (definePractices [driftP [markR]] emptyState)
+  , testCase "a drift world with no clock is flagged; restoring the clock clears it" $ do
+      -- v44 seeds turn!0 in 'emptyState' (the engine always has a clock), so a
+      -- genuinely clockless world must have the clock explicitly removed; the
+      -- ClocklessDrift lint (still present until Task 2 retires it) then fires.
+      -- The v42 due-gate DeadCondition no longer accompanies it: 'producibleAtoms'
+      -- now unconditionally produces the turn family, so "turn.PraxNow" can
+      -- never be a dead condition.
+      let clocked = setCharacters [driftChar] (definePractices [driftP [markR]] emptyState)
+          w       = performOutcome (Delete "turn") clocked
       assertBool "ClocklessDrift flagged" (any isClocklessDrift (typeCheck w))
-      -- The composition with the v42 dead-condition lint, pinned so it is
-      -- documented behavior rather than latent: with no clock, the drift
-      -- practice's own due-gate (Match "turn!PraxNow") reads a family nothing
-      -- produces, so DeadCondition on turn.PraxNow accompanies ClocklessDrift
-      -- — literally true on this already-broken world, and it clears with the
-      -- same one fix (the clock), so no suppression coupling is warranted.
-      assertBool "DeadCondition on the due-gate accompanies it"
-        (any (\case DeadCondition _ "turn.PraxNow" -> True; _ -> False) (typeCheck w))
-      let w' = performOutcome (Insert "turn!0") w
-      assertBool "clear once clocked" (not (any isClocklessDrift (typeCheck w')))
-      assertBool "the due-gate noise clears with the same fix"
-        (not (any (\case DeadCondition _ "turn.PraxNow" -> True; _ -> False) (typeCheck w')))
+      assertBool "clear once clocked" (not (any isClocklessDrift (typeCheck clocked)))
 
   , testCase "the drifty fixture world is well-formed" $ do
       -- markR's guard reads flag.X, but nothing in 'drifty' ever produces

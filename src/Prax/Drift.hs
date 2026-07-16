@@ -22,7 +22,6 @@ module Prax.Drift
   ) where
 
 import           Data.List (nub, (\\))
-import           Prax.Clock (turnPath)
 import           Prax.Db (pathNames)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Types

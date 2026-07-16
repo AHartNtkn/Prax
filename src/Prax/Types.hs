@@ -21,6 +21,9 @@ module Prax.Types
   , authoredPatClash
   , Function(..)
   , FnCase(..)
+  , ScheduleRule(..)
+  , CookedScheduleRule(..)
+  , turnPath
   , CookedOutcome(..)
   , CookedAction(..)
   , CookedPractice(..)
@@ -41,7 +44,7 @@ module Prax.Types
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Bindings, Db, emptyDb, exists, isVariable, pathNames)
+import           Prax.Db (Bindings, Db, emptyDb, exists, insert, isVariable, pathNames)
 import           Prax.Query (Condition, CookedCondition, conditionVars)
 import           Prax.Derive (Axiom, CookedRule)
 import           Prax.Sym (Sym, intern)
@@ -81,6 +84,14 @@ action = Action
 data Outcome
   = Insert String            -- ^ assert a sentence (may spawn a practice)
   | Delete String            -- ^ retract a subtree
+  | InsertFor Int String
+    -- ^ assert a sentence that EXPIRES: the engine retracts it (whole
+    -- subtree, so lifetimes belong on leaf facts) @n@ round boundaries
+    -- after this insert (spec @docs/specs/2026-07-16-v44-the-schedule.md@).
+    -- Re-inserting the exact path with a lifetime refreshes the due;
+    -- re-inserting it bare cancels it (v44's supersession law). Rides the
+    -- whole cooked pipeline exactly as 'Insert' — the deferred retract is
+    -- ENVIRONMENT, not a mover effect.
   | Call String [String]     -- ^ invoke a practice 'Function' by name with args
   | ForEach [Condition] [Outcome]
     -- ^ Quantified effect: for /every/ binding of the conditions (evaluated
@@ -99,6 +110,7 @@ outcomeVars :: Outcome -> [String]
 outcomeVars o = case o of
   Insert s       -> pathNames s
   Delete s       -> pathNames s
+  InsertFor _ s  -> pathNames s
   Call _ as      -> as
   ForEach cs os  -> concatMap conditionVars cs ++ concatMap outcomeVars os
 
@@ -159,6 +171,24 @@ data FnCase = FnCase
   }
   deriving (Eq, Show)
 
+-- | The engine's turn-counter path family — the one spelling of @turn@ in the
+-- tree (spec @docs/specs/2026-07-16-v44-the-schedule.md@). The engine maintains
+-- @turn!N@; schedule rule bodies may read it as a fact (@Match "turn!Now"@).
+-- Seeded @turn!0@ in 'emptyState' itself, so every path (worlds, Script
+-- compile, fixtures) has a clock before anything reads it.
+turnPath :: String
+turnPath = "turn"
+
+-- | One recurring engine-schedule rule (spec v44): every 'srPeriod' round
+-- boundaries, ground each clause's conditions against the world and apply its
+-- outcomes per binding. Bodies may read the clock ('turnPath') as a fact.
+data ScheduleRule = ScheduleRule
+  { srName   :: String   -- ^ single segment; the persist re-association key
+  , srPeriod :: Int      -- ^ round boundaries between firings (authored meaning)
+  , srBody   :: [([Condition], [Outcome])]
+  }
+  deriving (Eq, Show)
+
 -- | The cooked mirror of 'Outcome' (see @docs/specs/2026-07-12-v28-cooked-world.md@,
 -- @docs/specs/2026-07-12-v29-interning.md@ and 'Prax.Cooked.cookOutcome', which
 -- builds these): 'Insert'/'Delete' carry the sentence already split into
@@ -172,6 +202,9 @@ data FnCase = FnCase
 data CookedOutcome
   = CInsert [(Sym, Maybe Char)]
   | CDelete [(Sym, Maybe Char)]
+  | CInsertFor Int [(Sym, Maybe Char)]
+    -- ^ the cooked mirror of 'InsertFor': assert the tokens and enqueue a
+    -- retract @n@ round boundaries out ('Prax.Engine.performCooked').
   | CCall String [Sym]
   | CForEach [CookedCondition] [CookedOutcome]
   deriving (Eq, Show)
@@ -203,6 +236,17 @@ data CookedPractice = CookedPractice
     -- within one practice (built via a fold that keeps the first occurrence,
     -- not @Map.fromList@'s last-wins), matching the search order
     -- 'lookupCookedFn' uses across practices.
+  }
+  deriving (Eq, Show)
+
+-- | The cooked mirror of 'ScheduleRule' ('Prax.Cooked.cookScheduleRule'):
+-- body clauses precooked, the name carried unchanged (the persist
+-- re-association key and the string-side 'srPeriod' lookup key). Lives on its
+-- own cooked surface ('PraxState''s 'cookedSchedule'), NOT in 'cookedDefs':
+-- movers cannot take schedule rules, they appear in no candidate set.
+data CookedScheduleRule = CookedScheduleRule
+  { csrName :: String
+  , csrBody :: [([CookedCondition], [CookedOutcome])]
   }
   deriving (Eq, Show)
 
@@ -343,6 +387,21 @@ data PraxState = PraxState
     -- loop's ~5,400 calls\/round never re-cook the axiom set.
   , sorts        :: [(String, [String])]  -- ^ sort → member constants, for the type checker (default none)
   , desires      :: [Desire]      -- ^ the vocabulary of nameable desires (default none)
+  , schedule       :: [ScheduleRule]
+    -- ^ Authored recurring-rule declarations (spec v44); declaration order is
+    -- firing order. Default none. Cooked into 'cookedSchedule' by
+    -- 'Prax.Engine.retable'.
+  , cookedSchedule :: [CookedScheduleRule]
+    -- ^ 'schedule' compiled ('Prax.Cooked.cookScheduleRule'), maintained by
+    -- 'Prax.Engine.retable'. Its own cooked surface, NOT in 'cookedDefs'.
+  , scheduleDues   :: Map String Int
+    -- ^ Per recurring rule, the next round boundary it fires at (keyed by
+    -- 'csrName'\/'srName'). Runtime state like 'cursor'; re-associated by name
+    -- on load ('Prax.Persist').
+  , expiries       :: Map [(Sym, Maybe Char)] Int
+    -- ^ The one-shot expiry queue (spec v44): exact labeled path → the round
+    -- boundary at which the engine retracts it. Keyed by EXACT LABELED PATH so
+    -- refresh and cancel find entries by path. Runtime state.
   , predictionScope :: [Condition]  -- ^ conditions the planner predicts over (default none)
   , improvables :: [String]
     -- ^ Names of desires some authored action may improve
@@ -379,17 +438,22 @@ data PraxState = PraxState
     -- which rebuild it; a raw record update of either leaves this stale.
   }
 
--- | An empty interpreter state (cursor before the first actor).
+-- | An empty interpreter state (cursor before the first actor). The engine's
+-- clock is seeded @turn!0@ here — construction, not world setup — so every
+-- path (worlds, Script compile, fixtures) carries a clock before anything
+-- reads it (spec v44).
 emptyState :: PraxState
 emptyState = PraxState
-  { db = emptyDb, practiceDefs = Map.empty, cookedDefs = Map.empty, characters = []
+  { db = insert (turnPath ++ "!0") emptyDb
+  , practiceDefs = Map.empty, cookedDefs = Map.empty, characters = []
   , cookedWants = Map.empty, cookedDesires = Map.empty, cursor = -1
   , caresAbout = Map.empty, intentions = Map.empty
   , axioms = [], cookedRules = [], sorts = [], desires = [], predictionScope = []
+  , schedule = [], cookedSchedule = [], scheduleDues = Map.empty, expiries = Map.empty
   , improvables = [], liveness = Map.empty, footprint = []
   , axiomHeads = [[intern "contradiction"]]
   , negFootprint = [], contMonotone = True
-  , readView = emptyDb }
+  , readView = insert (turnPath ++ "!0") emptyDb }
 
 -- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead
 -- character stays in the cast list but is skipped in turn-taking and lookahead.

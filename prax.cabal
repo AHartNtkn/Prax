@@ -136,6 +136,7 @@ test-suite prax-test
                       Prax.IntrigueSpec
                       Prax.StressSpec
                       Prax.PersistSpec
+                      Prax.ScheduleSpec
                       Prax.ScriptSpec
                       Prax.Script.JsonSpec
                       Prax.DirectorSpec

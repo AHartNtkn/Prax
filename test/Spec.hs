@@ -43,6 +43,7 @@ import qualified Prax.ArcSpec
 import qualified Prax.IntrigueSpec
 import qualified Prax.StressSpec
 import qualified Prax.PersistSpec
+import qualified Prax.ScheduleSpec
 import qualified Prax.ScriptSpec
 import qualified Prax.Script.JsonSpec
 import qualified Prax.DirectorSpec
@@ -93,6 +94,7 @@ main = defaultMain $ testGroup "prax"
   , Prax.IntrigueSpec.tests
   , Prax.StressSpec.tests
   , Prax.PersistSpec.tests
+  , Prax.ScheduleSpec.tests
   , Prax.ScriptSpec.tests
   , Prax.Script.JsonSpec.tests
   , Prax.DirectorSpec.tests

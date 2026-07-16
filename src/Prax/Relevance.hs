@@ -125,6 +125,8 @@ cookedOutcomeAtoms fns visited o = case o of
     | any ((== Just '!') . snd) toks
                   -> Just ([map fst toks], map fst toks : evictionShadowNames toks)
     | otherwise   -> Just ([map fst toks], [])
+  CInsertFor _ toks -> cookedOutcomeAtoms fns visited (CInsert toks)  -- deferred
+                                                     -- retract is environment: same atoms
   CDelete toks    -> Just ([], [map fst toks])
   CForEach _ outs -> mconcat' (map (cookedOutcomeAtoms fns visited) outs)
   CCall fn _
@@ -349,10 +351,13 @@ producibleAtoms st = do
   pairs <- sequence ( [ cookedOutcomeAtoms fns [] o
                       | cp <- practices, a <- cpActions cp, o <- caOuts a ]
                    ++ [ cookedOutcomeAtoms fns [] o
-                      | cp <- practices, o <- cpInits cp ] )
+                      | cp <- practices, o <- cpInits cp ]
+                   ++ [ cookedOutcomeAtoms fns [] o
+                      | csr <- cookedSchedule st, (_, outs) <- csrBody csr, o <- outs ] )
   pure ( concatMap fst pairs
       ++ [ map intern (pathNames s) | s <- dbToSentences (db st) ]
       ++ [ map fst h | r <- cookedRules st, h <- crHeads r ]
+      ++ [[intern turnPath]]        -- the engine produces the clock
       ++ [[intern "contradiction"]] )
   where
     practices = Map.elems (cookedDefs st)

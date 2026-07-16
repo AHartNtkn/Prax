@@ -34,7 +34,6 @@ import           Data.List (intercalate, nub)
 import           Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Clock (turnPath)
 import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, exists)
 import           Prax.Drift (driftPracticeId)
 import           Prax.Query (Condition (..), CookedCondition (..))
@@ -107,6 +106,7 @@ condVars c = case c of
 outcomeUses :: Outcome -> [(String, String)]
 outcomeUses (Insert s)           = [ (v, s) | v <- varsOf s ]
 outcomeUses (Delete s)           = [ (v, s) | v <- varsOf s ]
+outcomeUses (InsertFor _ s)      = [ (v, s) | v <- varsOf s ]
 outcomeUses (Call fn args)       = [ (v, fn) | a <- args, v <- varsOf a ]
 outcomeUses (ForEach conds outs) =
   [ (v, s) | (v, s) <- concatMap outcomeUses outs
@@ -178,6 +178,9 @@ refErrors st = concatMap practiceRefs ps
     outcomeRef loc (Insert s)
       | ("practice" : pid : _) <- pathNames s
       , pid `notElem` definedPrac = [ UndefinedRef loc ("practice." ++ pid) ]
+    outcomeRef loc (InsertFor _ s)
+      | ("practice" : pid : _) <- pathNames s
+      , pid `notElem` definedPrac = [ UndefinedRef loc ("practice." ++ pid) ]
     outcomeRef loc (ForEach _ subs) = concatMap (outcomeRef loc) subs
     outcomeRef _ _ = []
 
@@ -197,7 +200,8 @@ assertedSentences st =
   ++ dbToLabeledSentences (db st)
   where
     ps = Map.elems (practiceDefs st)
-    inserts os = [ s | Insert s <- os ] ++ concat [ inserts subs | ForEach _ subs <- os ]
+    inserts os = [ s | Insert s <- os ] ++ [ s | InsertFor _ s <- os ]
+              ++ concat [ inserts subs | ForEach _ subs <- os ]
 
 -- Check 4: ML-style sort inference (only when sorts are declared) -------------
 
@@ -276,6 +280,7 @@ seedlessDrawErrors st =
       [ initOutcomes p | p <- ps ]
       ++ [ actionOutcomes a | p <- ps, a <- actions p ]
       ++ [ caseOutcomes c | p <- ps, f <- functions p, c <- fnCases f ]
+      ++ [ outs | r <- schedule st, (_, outs) <- srBody r ]
     outcomeUsesSeed (ForEach conds outs) =
       any guardReadsSeed conds || any outcomeUsesSeed outs
     outcomeUsesSeed _ = False
@@ -335,6 +340,10 @@ lintSites st =
   ++ [ (pid ++ " / fn " ++ fn ++ " (effect guard)", gs)
      | (pid, cp) <- defs, (fn, (_, cases)) <- Map.toList (cpFns cp)
      , (_, os) <- cases, gs <- forEachGuards os ]
+  ++ [ ("schedule " ++ csrName r, cs)
+     | r <- cookedSchedule st, (cs, _) <- csrBody r ]
+  ++ [ ("schedule " ++ csrName r ++ " (effect guard)", gs)
+     | r <- cookedSchedule st, (_, os) <- csrBody r, gs <- forEachGuards os ]
   ++ [ ("desire " ++ n, cs) | (n, cs) <- Map.toList (cookedDesires st) ]
   ++ [ ("want of " ++ n, cs)
      | (n, css) <- Map.toList (cookedWants st), cs <- css ]
@@ -387,5 +396,6 @@ outcomeSents = concatMap go
   where
     go (Insert s)          = [s]
     go (Delete s)          = [s]
+    go (InsertFor _ s)     = [s]
     go (Call _ _)          = []
     go (ForEach conds outs) = condSents conds ++ outcomeSents outs
