@@ -1296,6 +1296,104 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   bundle**. The backlog reverts to the bank — emotion visibility to other minds, a
   chronicler, per-feeling fade stamps, intensity levels, a new fixture when a design
   needs one — with no queue pointer; next steps are the user's call.
+- **v44** — **the schedule: time belongs to the engine, not the world** (`Prax.Types`;
+  `Prax.Engine`; `Prax.Schedule` (new); `Prax.Loop`; `Prax.Script`; `Prax.Persist`; spec
+  `docs/specs/2026-07-16-v44-the-schedule.md` (`a906dc8`, amended through review to
+  `d7b337a`); plan `docs/plans/2026-07-16-v44-the-schedule.md`, `6aa90aa`). A paradigm
+  correction, user-directed, full blast radius. Origin: the v38 `feelingsFade` review
+  named the defect — a global sweep masquerading as per-feeling decay — and the user
+  generalized it at the review to a standing directive: **scheduling is engine
+  semantics, not world content.** Every bodiless ticker character, every authored
+  `due.*` pulse gate, every mass-delete wear-off rule was in scope.
+
+  **NEW pre-gate practice: three isolated fresh-context reviewers before the user
+  gate.** Before this round's user approval, the spec was reviewed independently for
+  soundness, architecture, and completeness (`.superpowers/sdd/v44-spec-review-
+  soundness.md`, `-design.md`, `-completeness.md`), and the spec was rewritten in
+  response (`20aeeda`, `637e974`, `d7b337a`) before the user ever saw it. Their
+  findings changed the design: the gathering-close rule collapsed onto plain expiry
+  (one mechanism for "a temporary fact," not two); the `lasts n` insert gained an
+  honest representation (a new `InsertFor`/`CInsertFor` outcome constructor threaded
+  through the whole cooked pipeline, not a bolt-on); the round-boundary wrap predicate
+  was stated precisely (`i ≤ cursor`, equality included, so a single-survivor cast
+  still wraps every turn); the clock fact's seed moved into `emptyState` itself
+  (construction, not world setup, so every path has a clock before anything reads it);
+  and the fade-migration commitment — every shipped `feelToward`/`feel` onset
+  converting to an explicit lifetime — was written into the spec as a decision, not
+  left implicit.
+
+  **Task 1 — the inert core** (`5a858a2` + review-fix `7c467ae`). Lifetime inserts
+  through the whole cooked pipeline; an exact-path expiry queue with supersession
+  (a re-insert WITH a lifetime refreshes the due, WITHOUT one cancels it), delete-purge,
+  and a fire-time existence guard for `!`-evicted entries; `roundBoundary` (clock
+  advance → due expiries → due rules, re-armed from now); `turn!0` seeded in
+  `emptyState`; `turnPath` re-homed to `Prax.Types`; `Prax.Persist` v2. Review caught
+  the plan's own `CInsertFor` sketch bug (delegate-then-arm is the only order the law
+  satisfies) and three test-completeness gaps; both fixed before merge. Suite 583 →
+  598.
+
+  **Task 2 — THE SWITCH** (`434b2bd` + doc-fix `f33b8b6`). `Loop.advance` becomes
+  wrap-aware (`i ≤ cursor` is a wrap, equality a single-survivor case) → boundary →
+  re-select the actor from POST-boundary aliveness (a rule may kill; the dead take no
+  turn). `Engine.setSchedule` is the one install point for the new `Prax.Schedule`
+  surface (`lasts`, `gathering` as one rule, `sightRule`). `Prax.Drift` and
+  `Prax.Clock` deleted outright — no wrapper, no re-export. Four ticker characters
+  (`_sight`, `_drift`, `_time`, and Script's `_clock` in Task 3) leave every world's
+  roster. Every Bar and Village `feelToward` onset gained an explicit authored lifetime
+  (`feelTowardFor 4`, test-compressed, labeled as such). `ClocklessDrift` deleted (the
+  engine always has a clock now); `Loop.narrate`'s blank-label suppression removed (no
+  silent action remains). Golden re-captures verified per licensed class: ticker lines
+  removed, sequences extended with the earlier lines byte-identical, fade semantics
+  changed as specified; time-free worlds' goldens unchanged in content. Two
+  adjudications upheld under independent review, including an independently-reproduced
+  VillageSpec reframe — the retimed shakedown arc surfaces `notorious.bob.thief` as a
+  genuine independent theft storyline, orthogonal to the carol→eve extortion the test
+  actually pins. Suite 598 → 602.
+
+  **Task 3 — Script's scene clock died, and became the round's hard lesson**
+  (`7e8ddf7` + fix waves `253072c` + `15efe1e`). The re-expression itself shipped
+  clean: the timed-junction fiction survived verbatim, and both clocks (engine turn,
+  scene entry) advance once per round. But the reviewer DEMONSTRATED a live
+  variable-capture bug through the real engine path — an author `goto` condition
+  binding a variable named `Now` for its own purpose silently corrupted the
+  destination scene's entry stamp, because the machinery's own `Now`-bearing `ForEach`
+  pre-substituted against the same action's bindings. Fix wave 1 (namespacing the
+  machinery variables, adding a guard) was then bypassed via the JSON authoring
+  surface — where the machinery vocabulary was the ONLY way to author a timed
+  junction at all, so the guard at the smart-constructor level never ran. Fix wave 2
+  fixed the representation instead of patching the guard's location: `Junction` gained
+  `junctionAfter :: Maybe Int`; `clockReached`'s expansion moved out of `after`/
+  `timeout` and into `compileJunction` itself, so `junctionWhen` is now 100% author
+  content on every construction path (Haskell smart constructor, raw `Junction`, or
+  JSON); one uniform guard runs at `compile`, the actual consumption point, instead of
+  at construction; the JSON schema gained an `"after"` field. The reviewer re-ran its
+  exact bypass repro against both fix waves and confirmed the corruption was closed
+  only by wave 2. Suite 602 → 606.
+
+  **Deaths, total.** `_sight`/`_drift`/`_time`/`_clock` (all four ticker characters);
+  `Prax.Drift`; `Prax.Clock` (lived one day — the v43 extraction made this round's diff
+  smaller, which is worth saying honestly rather than treating as a wasted move); the
+  `due.*` family and its compiled gates; `feelingsFade` (and both world fade rules);
+  `ClocklessDrift`; `Loop.narrate`'s blank-label suppression; Script's `sceneClock`
+  family.
+
+  **The laws, named.** Supersession (a re-insert with a lifetime refreshes; a bare
+  re-insert cancels); delete-purge plus the fire-time existence guard for eviction;
+  expiries-before-rules, a global un-authorable ordering chosen for a stated reason (a
+  period-1 sighting rule firing before that round's expiry would stamp a belief about a
+  fact that is gone the same instant — a ghost observation); wrap-with-equality;
+  re-arm-from-now. The deliberate fiction change, stated plainly: per-onset lifetimes
+  replace synchronized mass-wipes — each feeling now lives its own n rounds, which is
+  the v36/v38 episodic principle actually implemented, not just bookkeeping cleanup.
+
+  **Persist v2.** v1 is rejected loudly on load — by v43's own day-old header
+  machinery, which exists for exactly this reason. Superseded and closed: the banked
+  "per-feeling fade stamps" item, now delivered as explicit per-site lifetimes.
+
+  Suite: 583 → 598 (Task 1) → 602 (Task 2) → 606 (Task 3). All gates green at every
+  commit: zero warnings, hlint clean, `prax check` well-formed on all 7 worlds.
+  Backlog — per-emotion DEFAULT lifetimes, intensity levels, emotion visibility, a
+  chronicler — stays with the bank; no queue pointer.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
