@@ -1209,9 +1209,10 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
 
   **Round mechanics, one clause.** Task 1's implementer wedged mid-task (tree written,
   nothing verified or committed); the controller completed verification and commit, and
-  the task review re-derived every claim independently — RED reconstructed from
-  scratch, both mutations re-run, the soundness ledger checked line-by-line against the
-  diff — rather than trusting the report, and approved.
+  the task review re-derived the load-bearing claims independently — RED reconstructed
+  from scratch, the full suite re-run, the soundness ledger checked line-by-line against
+  the diff — rather than trusting the report, and approved (the two mutation
+  observations remain the controller's, recorded in the task report).
 
   Suite: 558/558 (547 + 11 new `TypeCheck` cases), zero warnings, hlint clean, `prax
   check` well-formed on all 7 worlds, goldens byte-identical. Queue item closed: v42 is
