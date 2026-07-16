@@ -103,7 +103,7 @@ data Outcome
 -- and its nested outcomes. Declared here (not alongside 'conditionVars' in
 -- "Prax.Query") because 'Outcome' lives here and "Prax.Types" already
 -- depends on "Prax.Query" — the reverse dependency would cycle. The shared
--- home for reserved-variable guards ('Prax.Drift.guardRule',
+-- home for reserved-variable guards ('Prax.Engine.setSchedule',
 -- 'Prax.Rng.draw') and similar checks that need every name an outcome could
 -- touch.
 outcomeVars :: Outcome -> [String]
