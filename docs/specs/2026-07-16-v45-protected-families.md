@@ -52,6 +52,11 @@ The mechanisms' own compiled accesses have exactly that shape (probed: `draw` re
   where "machinery-shape only" = every value position beyond the family head is a
   Prax-namespaced variable; anything else (a literal, a plain variable, a bare subtree
   match on the family) is a loud `ReservedFamily` error naming the site and family.
+  These four heads are globally reserved vocabulary: no authored fact family may reuse
+  them. Construction-time seeding (`rngSetup`'s literal `seed!<n>`, performed into the
+  db at world build) is exempt by NOT being a scanned site — the check reads authored
+  DEFINITIONS, and the definitions-vs-built-db boundary is the same one that keeps
+  test drivers legal.
 - **Scan sites**: everything authored — practice outcomes and axiom heads (the existing
   `clockWriteErrors` walk) PLUS authored conditions and schedule-rule bodies (the read
   side is new; a user schedule rule reading `seed!S` is the same leak). Test code is

@@ -1489,8 +1489,9 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   `Now`, the documented contract variable of sighting templates — the
   machinery-shape rule cannot distinguish the sighting rule's own write from an
   authored one without breaking that contract; protection waits on a
-  deliberate contract decision, banked as residue rather than silently
-  dropped. `storyAdvanced` dies entirely with the narrator in v46; guarding it
+  deliberate contract decision — REVISIT AT v46 (whose junction/schedule
+  redesign is the natural place to decide the sighting contract) or carry it
+  explicitly forward; banked as residue rather than silently dropped. `storyAdvanced` dies entirely with the narrator in v46; guarding it
   now would need a practice-id whitelist — a hack for a family with one round
   left to live.
 
