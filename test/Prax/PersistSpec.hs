@@ -1,5 +1,7 @@
 module Prax.PersistSpec (tests) where
 
+import           Control.Exception (ErrorCall (..), evaluate, try)
+import           Data.Either (isLeft)
 import           Data.List (isInfixOf)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, assertFailure, (@?=))
@@ -9,7 +11,7 @@ import           Prax.Types (PraxState, Character (..), characters, cursor,
                               db, gaLabel, intentions)
 import           Prax.Engine (possibleActions, performAction)
 import           Prax.Loop (runNpcTicks, npcAct)
-import           Prax.Persist (serializeState, deserializeState)
+import           Prax.Persist (serializeState, deserializeState, formatVersion)
 import           Prax.Worlds.Intrigue (intrigueWorld)
 
 -- A mid-episode state (Cassia has confided; Marcus now knows the plot).
@@ -69,4 +71,29 @@ tests = testGroup "Prax.Persist"
       assertBool "carries the belief Marcus formed"
         ("marcus.believes.plotAgainst.artus!yes" `isInfixOf` text)
       assertBool "has a cursor header" ("cursor " `isInfixOf` text)
+
+  , testGroup "v43: the save-format version header (previously latent: a save from another era misparsed silently)"
+    [ testCase "the serialized form's first line is the format version tag" $ do
+        case lines (serializeState mid) of
+          (v : _) -> v @?= formatVersion
+          []      -> assertFailure "serializeState produced no lines"
+
+    , testCase "a header with no cursor line is a loud, malformed-save error" $ do
+        r <- try (evaluate (length (dbToSentences (db (deserializeState (formatVersion ++ "\n") intrigueWorld)))))
+        case r :: Either ErrorCall Int of
+          Left (ErrorCall msg) -> assertBool ("malformed message, got: " ++ msg)
+                                     ("malformed save" `isInfixOf` msg)
+          Right _ -> assertFailure "expected a malformed-save error"
+
+    , testCase "an unsupported format version (prax-state v0) is a loud, version-mismatch error" $ do
+        r <- try (evaluate (length (dbToSentences (db (deserializeState "prax-state v0\ncursor 0\n" intrigueWorld)))))
+        case r :: Either ErrorCall Int of
+          Left (ErrorCall msg) -> assertBool ("unsupported-format message, got: " ++ msg)
+                                     ("unsupported save format" `isInfixOf` msg)
+          Right _ -> assertFailure "expected an unsupported-format error"
+
+    , testCase "a save with no header at all is a loud, malformed-save error" $ do
+        r <- try (evaluate (length (dbToSentences (db (deserializeState "" intrigueWorld)))))
+        assertBool "completely empty input rejected" (isLeft (r :: Either ErrorCall Int))
+    ]
   ]

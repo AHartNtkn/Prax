@@ -20,10 +20,9 @@ module Prax.Cooked
   , cookPractice
   ) where
 
-import           Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (Bindings, groundTokens, internTokens, pathNames)
+import           Prax.Db (Bindings, groundTokens, internTokens)
 import           Prax.Query (cookCondition, groundCookedCondition, groundNames)
 import           Prax.Sym (intern)
 import           Prax.Types
@@ -53,7 +52,13 @@ groundCookedOutcome b o = case o of
 -- (@practice.\<pid\>.\<Role1\>...@) pre-split once.
 cookPractice :: Practice -> CookedPractice
 cookPractice p = CookedPractice
-  { cpInstanceNames = map intern (pathNames ("practice." ++ practiceId p ++ "." ++ intercalate "." (roles p)))
+  { cpInstanceNames = map intern ("practice" : practiceId p : roles p)
+    -- ^ Built as a segment list directly, not a dotted string reparsed by
+    -- 'pathNames': a zero-role practice (e.g. 'Prax.Core.coreLib', never
+    -- instantiated) has 'roles' @[]@, and joining with @"."@ then re-splitting
+    -- would leave a trailing separator with nothing after it -- illegal input
+    -- to 'Prax.Db.tokens' (v43). The segment list has no such degenerate case
+    -- to begin with.
   , cpActions = map cookAction (actions p)
   , cpInits   = map cookOutcome (initOutcomes p)
   , cpFns     = Map.fromListWith (\_new old -> old)

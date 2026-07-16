@@ -13,6 +13,7 @@ module Prax.Persist
   , deserializeState
   , saveState
   , loadState
+  , formatVersion
   ) where
 
 import           Data.List (isPrefixOf)
@@ -57,6 +58,12 @@ unreprIntention (mga, (b, s, l, m)) =
              (Map.fromList [ (intern k, unreprVal v) | (k, v) <- bs ]) lbl) mga)
     (MotiveSignature b s l m)
 
+-- | The save-format tag, first line of every serialized state. Bump it when
+-- the line format below changes; 'deserializeState' rejects anything else
+-- loudly — no silent misparse of a save from another era.
+formatVersion :: String
+formatVersion = "prax-state v1"
+
 -- | Serialize the mutable state (@cursor@ + standing intentions + all facts)
 -- to text, with @!@/@.@ labels so the reload rebuilds the exclusion structure
 -- exactly. Intention lines are prefixed @"intention "@; since fact sentences
@@ -65,7 +72,8 @@ unreprIntention (mga, (b, s, l, m)) =
 serializeState :: PraxState -> String
 serializeState st =
   unlines
-    ( ("cursor " ++ show (cursor st))
+    ( formatVersion
+    : ("cursor " ++ show (cursor st))
     : [ "intention " ++ name ++ " " ++ show (reprIntention i)
       | (name, i) <- Map.toList (intentions st) ]
     ++ dbToLabeledSentences (db st)
@@ -73,18 +81,23 @@ serializeState st =
 
 -- | Rebuild a saved state onto @world@ (a fresh world of the same kind, which
 -- supplies the practice definitions and cast). Crashes loudly on malformed
--- input, including a malformed intention line.
+-- input, including a malformed intention line, and on a save from another
+-- format era (a version tag other than 'formatVersion').
 deserializeState :: String -> PraxState -> PraxState
 deserializeState text world =
   case lines text of
-    (hd : rest)
-      | ["cursor", n] <- words hd, Just c <- readMaybe n ->
+    (v : hd : rest)
+      | v == formatVersion, ["cursor", n] <- words hd, Just c <- readMaybe n ->
           let intentionLines = filter ("intention " `isPrefixOf`) rest
               factLines      = filter (not . ("intention " `isPrefixOf`)) rest
               newIntentions  = Map.fromList (map parseIntentionLine intentionLines)
           in (withDb (const (insertAll (filter (not . null) factLines) emptyDb)) world)
                { cursor = c, intentions = newIntentions }
-    _ -> error "Prax.Persist.deserializeState: malformed save (expected a 'cursor <n>' header)"
+    (v : _)
+      | v /= formatVersion ->
+          error ("Prax.Persist.deserializeState: unsupported save format "
+                 ++ show v ++ " (expected " ++ show formatVersion ++ ")")
+    _ -> error "Prax.Persist.deserializeState: malformed save (expected the format header, then 'cursor <n>')"
   where
     parseIntentionLine line =
       case break (== ' ') (drop (length "intention ") line) of

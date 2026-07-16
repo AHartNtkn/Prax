@@ -112,6 +112,11 @@ tests = testGroup "Prax.Drift"
              (driftP [DriftRule "x" 2 [([Match "flag.PraxNow"], [])]]))))
       assertBool "the Prax namespace (PraxNow) is rejected" (isLeft (r :: Either ErrorCall Int))
 
+  , testCase "a body authoring Actor is a loud error (drift bodies run as the ticker, not a mover)" $ do
+      r <- try (evaluate (length (show
+             (driftP [DriftRule "x" 2 [([Match "flag.Actor"], [])]]))))
+      assertBool "Actor in a drift body is rejected" (isLeft (r :: Either ErrorCall Int))
+
   , testCase "the usability win: D/D2/Now are ordinary variables now, no longer reserved" $ do
       r <- try (evaluate (length (show
              (driftP [DriftRule "x" 2 [([Match "flag.Now"], [Insert "marked.D"])]]))))

@@ -107,11 +107,37 @@ applyGrowToks toks st =
 
 -- | Register a practice and insert its static @dataFacts@ under
 -- @practiceData.<id>.@.
+--
+-- (Excluding @practiceId q == practiceId p@ lets a practice be legally
+-- re-defined over its own old version. The within-practice duplicate arms
+-- close the same holes 'cpFns''s first-wins fold and
+-- 'groundedDeltaAnchors''s first-match papered over.)
 definePractice :: Practice -> PraxState -> PraxState
-definePractice p st =
-  retable (withDb (insertAll (map (prefix ++) (dataFacts p))) st)
-    { practiceDefs = Map.insert (practiceId p) p (practiceDefs st) }
-  where prefix = "practiceData." ++ practiceId p ++ "."
+definePractice p st
+  | a : _ <- dupActions =
+      error ("Prax.Engine.definePractice: practice " ++ show (practiceId p)
+             ++ " declares two actions named " ++ show a
+             ++ " -- action names are lookup keys (delta anchors, standing"
+             ++ " intentions); rename one")
+  | (fn, home) : _ <- fnCollisions =
+      error ("Prax.Engine.definePractice: function " ++ show fn ++ " in practice "
+             ++ show (practiceId p) ++ " is already declared by practice "
+             ++ show home
+             ++ " -- Call resolution is by bare name (lookupCookedFn); rename one")
+  | otherwise =
+      retable (withDb (insertAll (map (prefix ++) (dataFacts p))) st)
+        { practiceDefs = Map.insert (practiceId p) p (practiceDefs st) }
+  where
+    prefix = "practiceData." ++ practiceId p ++ "."
+    names = map actionName (actions p)
+    dupActions = [ n | (n, i) <- zip names [0 :: Int ..], n `elem` take i names ]
+    ownFns = map fnName (functions p)
+    fnCollisions =
+      [ (fn, practiceId p)
+      | (fn, i) <- zip ownFns [0 :: Int ..], fn `elem` take i ownFns ]
+      ++ [ (fnName f, practiceId q)
+         | q <- Map.elems (practiceDefs st), practiceId q /= practiceId p
+         , f <- functions p, fnName f `elem` map fnName (functions q) ]
 
 -- | Register several practices in order.
 definePractices :: [Practice] -> PraxState -> PraxState

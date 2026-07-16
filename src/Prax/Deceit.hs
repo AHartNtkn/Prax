@@ -29,7 +29,7 @@ module Prax.Deceit
 
 import           Prax.Db (isVariable, pathNames)
 import           Prax.Query (Condition (..))
-import           Prax.Types (Action, Outcome (..), Want (..), action)
+import           Prax.Types (Action, Outcome (..), Want (..), action, authoredVarClash, authoredPatClash)
 import           Prax.Beliefs (beliefAbout)
 import           Prax.Witness (CoPresence, asRole)
 
@@ -56,13 +56,18 @@ lie :: CoPresence   -- ^ who can be told
     -> String       -- ^ event pattern, e.g. @"stole.Culprit.loaf"@
     -> String       -- ^ action label
     -> Action
-lie copresence gate fabrication pat label =
-  action label conds
-    [ Insert (beliefAbout "Hearer" pat ++ ".heard.Actor")
-      -- the liar's own memory of the deed — a mark on their psyche, rooted
-      -- under their name like all mental state; there is no world ledger
-    , Insert ("Actor.lied.Hearer." ++ pat) ]
+lie copresence gate fabrication pat label
+  | (v : _) <- offenders =
+      error ("Prax.Deceit.lie: " ++ show v ++ " in an authored gate, fabrication,"
+             ++ " or event pattern -- the Prax namespace is reserved for machinery")
+  | otherwise =
+      action label conds
+        [ Insert (beliefAbout "Hearer" pat ++ ".heard.Actor")
+          -- the liar's own memory of the deed — a mark on their psyche, rooted
+          -- under their name like all mental state; there is no world ledger
+        , Insert ("Actor.lied.Hearer." ++ pat) ]
   where
+    offenders = authoredVarClash [] (gate ++ fabrication) [] ++ authoredPatClash [] (pathNames pat)
     subject = case filter isVariable (pathNames pat) of
       (v : _) -> v
       []      -> error ("lie: event pattern " ++ show pat

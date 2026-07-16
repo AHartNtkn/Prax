@@ -1,9 +1,11 @@
 module Prax.DbSpec (tests) where
 
+import           Control.Exception (ErrorCall, evaluate, try)
 import           Data.Bifunctor (first)
+import           Data.Either (isLeft)
 import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
-import           Test.Tasty.HUnit (testCase, (@?=))
+import           Test.Tasty.HUnit (testCase, (@?=), assertBool)
 
 import           Prax.Db
 import           Prax.Sym (intern, symName)
@@ -216,6 +218,22 @@ tests = testGroup "Prax.Db"
             names = [ symName who
                     | bs <- results, Just (VSym who) <- [Map.lookup (intern "Who") bs] ]
         names @?= ["alpha", "mu", "zeta"]
+    ]
+
+  , testGroup "tokens: trailing-operator rejection (v43 -- a trailing op would set a leaf's exclusion flag nothing ever reads)"
+    [ testCase "a sentence ending in ! is a loud construction-time error" $ do
+        r <- try (evaluate (length (tokens "at.bob!")))
+        assertBool "trailing ! rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "a sentence ending in . is a loud construction-time error" $ do
+        r <- try (evaluate (length (tokens "at.bob.")))
+        assertBool "trailing . rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "a sentence with no trailing operator is unaffected" $
+        tokens "at.bob" @?= [("at", Just '.'), ("bob", Nothing)]
+
+    , testCase "an interior ! (not trailing) is unaffected" $
+        tokens "turn!0" @?= [("turn", Just '!'), ("0", Nothing)]
     ]
   ]
 

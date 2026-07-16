@@ -146,15 +146,21 @@ trim = f . f where f = reverse . dropWhile (`elem` " \t\n\r")
 
 -- | Tokenize a sentence into @(name, punctuationAfterName)@ pairs,
 -- preserving the operator following each name (used for 'ground', which
--- must re-emit them).
+-- must re-emit them). A trailing operator (the sentence ends in @.@\/@!@
+-- rather than a name) is rejected loudly: it would set a leaf's exclusion
+-- flag that nothing ever reads (write-only state breaking 'Db' equality and
+-- the serialize round-trip identity).
 tokens :: String -> [(String, Maybe Char)]
-tokens = go . trim
+tokens s0 = go (trim s0)
   where
     go [] = []
     go s =
       let (name, rest) = span (\c -> c /= '.' && c /= '!') s
       in case rest of
-           []          -> [(name, Nothing)]
+           []   -> [(name, Nothing)]
+           [op] -> error ("Prax.Db.tokens: trailing operator " ++ show op
+                          ++ " in " ++ show s0
+                          ++ " -- a sentence ends in a name, not an operator")
            (op : more) -> (name, Just op) : go more
 
 -- | 'tokens', interning each segment name — the Sym-level entry every

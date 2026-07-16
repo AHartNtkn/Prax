@@ -1,5 +1,7 @@
 module Prax.EngineSpec (tests) where
 
+import           Control.Exception (ErrorCall, evaluate, try)
+import           Data.Either (isLeft)
 import           Data.List (isInfixOf)
 import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
@@ -315,4 +317,31 @@ tests = testGroup "Prax.Engine"
       assertBool "the head"        (has "hungry.X")
       assertBool "the lifted head" (has "obliged.Obligor.hungry.X")
       assertBool "the ⊥ witness"   (has "contradiction")
+
+  , testGroup "definePractice: the v43 collision guards (previously latent: two actions or two functions could share a lookup key)"
+    [ testCase "two actions with the same name in one practice is a loud construction-time error" $ do
+        let p = practice { practiceId = "dup", roles = ["R"]
+                          , actions = [ action "dup" [] [], action "dup" [] [] ] }
+        r <- try (evaluate (Map.size (practiceDefs (definePractice p emptyState))))
+        assertBool "duplicate action names rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "two functions with the same name within one practice is a loud construction-time error" $ do
+        let p = practice { practiceId = "dupfn"
+                          , functions = [ Function "f" [] [], Function "f" [] [] ] }
+        r <- try (evaluate (Map.size (practiceDefs (definePractice p emptyState))))
+        assertBool "within-practice function name collision rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "a function name already declared by another practice is a loud construction-time error" $ do
+        let p1 = practice { practiceId = "p1", functions = [ Function "f" [] [] ] }
+            p2 = practice { practiceId = "p2", functions = [ Function "f" [] [] ] }
+            st1 = definePractice p1 emptyState
+        r <- try (evaluate (Map.size (practiceDefs (definePractice p2 st1))))
+        assertBool "cross-practice function name collision rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "re-defining the SAME practice (its own old version) is legal (self excluded from fn collision)" $ do
+        let p1 = practice { practiceId = "p1", functions = [ Function "f" [] [] ] }
+            st1 = definePractice p1 emptyState
+        r <- try (evaluate (Map.size (practiceDefs (definePractice p1 st1))))
+        assertBool "self re-definition is not rejected" (not (isLeft (r :: Either ErrorCall Int)))
+    ]
   ]

@@ -130,9 +130,10 @@ gathering name period duration openOuts closeOuts
 
 -- Loud construction-time guards: a multi-segment rule name would corrupt the
 -- due path; a body authoring the Prax namespace would capture the gate's
--- own machinery (no other forbidden names here — drift bodies are
--- whole-condition author fragments, so the shared guard's forbiddenSplices
--- list is empty).
+-- own machinery; a body authoring @Actor@ would bind the ticker character
+-- (drift bodies run as the ticker, never a mover) — 'forbiddenSplices' is
+-- @["Actor"]@ for that one extra reason, not an empty list (drift bodies are
+-- otherwise whole-condition author fragments).
 guardRule :: DriftRule -> DriftRule
 guardRule r
   | length (pathNames (driftRuleName r)) /= 1 =
@@ -141,10 +142,12 @@ guardRule r
   | (v : _) <- offenders =
       error ("Prax.Drift: rule " ++ driftRuleName r
              ++ " authors " ++ show v
-             ++ " -- the Prax namespace is reserved for the due gate's own machinery")
+             ++ " -- the Prax namespace is reserved for the due gate's own machinery,"
+             ++ " and Actor is reserved for the ticker (drift bodies run as the"
+             ++ " ticker character, never a mover)")
   | driftPeriod r < 1 =
       error ("Prax.Drift: rule " ++ driftRuleName r
              ++ " needs a positive period")
   | otherwise = r
   where
-    offenders = concat [ authoredVarClash [] cs os | (cs, os) <- driftBody r ]
+    offenders = concat [ authoredVarClash ["Actor"] cs os | (cs, os) <- driftBody r ]

@@ -30,15 +30,18 @@ sightName = "_sight"
 
 -- | The perception clock: one tick per round. @sighting@ is spliced beside
 -- the clock's own tick machinery inside the same 'ForEach', so it may not use
--- the @Prax@ namespace; @Seer@\/@Seen@\/@Spot@ are its CONTRACT variables —
--- the sighting template is expected and required to bind them (the ticker's
--- own outcomes read them straight back out), so they are NOT forbidden —
--- only the namespace is.
+-- the @Prax@ namespace or @Actor@ (the ticker itself, never a mover);
+-- @Seer@\/@Seen@\/@Spot@ are its CONTRACT variables — the sighting template
+-- is expected and required to bind them (the ticker's own outcomes read them
+-- straight back out), so they are NOT forbidden — only the namespace and
+-- @Actor@ are.
 sightP :: [Condition] -> Practice
 sightP sighting
   | (v : _) <- offenders =
       error ("Prax.Sight: sighting template authors " ++ show v
-             ++ " -- the Prax namespace is reserved for the ticker's own machinery")
+             ++ " -- the Prax namespace is reserved for the ticker's own machinery,"
+             ++ " and Actor is reserved for the ticker itself (Actor would bind the"
+             ++ " ticker character, never a mover)")
   | otherwise = practice
       { practiceId = "sight"
       , practiceName = "time passes and people see each other"
@@ -56,7 +59,7 @@ sightP sighting
           ]
       }
   where
-    offenders = authoredVarClash [] sighting []
+    offenders = authoredVarClash ["Actor"] sighting []
 
 sightChar :: Character
 sightChar = (character sightName) { charBoundTo = Just "sight" }

@@ -114,4 +114,22 @@ tests = testGroup "Prax.Rumor"
                  "[Actor]: mention it to [Hearer]"))))
       assertBool "gossip on a subject-less pattern is an error"
         (isLeft (r :: Either ErrorCall Int))
+
+  , testGroup "v43: the missing namespace guard (previously latent: an authored gate or event pattern had no guard at all)"
+    [ testCase "a gate authoring the Prax namespace is a loud construction-time error" $ do
+        r <- try (evaluate (length (show
+               (gossip together [ Not "flag.PraxD" ] "tripped.Klutz"
+                  "[Actor]: tell [Hearer] that [Klutz] tripped"))))
+        assertBool "the Prax namespace in the gate is rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "an event pattern authoring the Prax namespace is a loud construction-time error" $ do
+        r <- try (evaluate (length (show
+               (gossip together [] "tripped.PraxWho"
+                  "[Actor]: tell [Hearer] that [Klutz] tripped"))))
+        assertBool "the Prax namespace in the event pattern is rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "the shipped tell fixture (an ordinary gate and pattern) is not rejected" $ do
+        r <- try (evaluate (length (show tell)))
+        assertBool "the legal shape is not rejected" (not (isLeft (r :: Either ErrorCall Int)))
+    ]
   ]

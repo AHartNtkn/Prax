@@ -19,7 +19,7 @@ module Prax.Rumor
 
 import           Prax.Db (isVariable, pathNames)
 import           Prax.Query (Condition (..))
-import           Prax.Types (Action, Outcome (..), action)
+import           Prax.Types (Action, Outcome (..), action, authoredVarClash, authoredPatClash)
 import           Prax.Beliefs (beliefAbout)
 import           Prax.Witness (CoPresence, asRole)
 
@@ -41,9 +41,13 @@ import           Prax.Witness (CoPresence, asRole)
 -- issue path in the same world — 'Witness' and gossip deposits must be the only
 -- writers under the pattern's @believes.@ prefix.
 gossip :: CoPresence -> [Condition] -> String -> String -> Action
-gossip copresence gate pat label =
-  action label conds [ Insert (beliefAbout "Hearer" pat ++ ".heard.Actor") ]
+gossip copresence gate pat label
+  | (v : _) <- offenders =
+      error ("Prax.Rumor.gossip: " ++ show v ++ " in an authored gate or event"
+             ++ " pattern -- the Prax namespace is reserved for machinery")
+  | otherwise = action label conds [ Insert (beliefAbout "Hearer" pat ++ ".heard.Actor") ]
   where
+    offenders = authoredVarClash [] gate [] ++ authoredPatClash [] (pathNames pat)
     subject = case filter isVariable (pathNames pat) of
       (v : _) -> v
       []      -> error ("gossip: event pattern " ++ show pat

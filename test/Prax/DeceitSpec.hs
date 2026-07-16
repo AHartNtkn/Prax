@@ -182,6 +182,34 @@ tests = testGroup "Prax.Deceit"
       let st' = performOutcome (Delete "nia.lied") st
       assertBool "forgetting clears it" (not (exists "nia.lied" (db st')))
 
+  , testGroup "v43: the missing namespace guard (previously latent: an authored gate, fabrication, or event pattern had no guard at all)"
+    [ testCase "a gate authoring the Prax namespace is a loud construction-time error" $ do
+        r <- try (evaluate (length (show
+               (lie together [ Not "flag.PraxD" ] [ Match "at.Culprit!Anywhere" ]
+                  "took.Culprit.gem" "[Actor]: whisper to [Hearer] that [Culprit] took the gem"))))
+        assertBool "the Prax namespace in the gate is rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "the fabrication conditions authoring the Prax namespace is a loud construction-time error" $ do
+        r <- try (evaluate (length (show
+               (lie together [] [ Match "at.Culprit!PraxAnywhere" ]
+                  "took.Culprit.gem" "[Actor]: whisper to [Hearer] that [Culprit] took the gem"))))
+        assertBool "the Prax namespace in fabrication is rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "an event pattern authoring the Prax namespace is a loud construction-time error" $ do
+        r <- try (evaluate (length (show
+               (lie together [] [ Match "at.Culprit!Anywhere" ]
+                  "took.PraxCulprit.gem" "[Actor]: whisper to [Hearer] that [Culprit] took the gem"))))
+        assertBool "the Prax namespace in the event pattern is rejected" (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "the shipped lie fixture (an ordinary gate, fabrication, and pattern) is not rejected" $ do
+        let rawLie = lie together []
+              [ Match "at.Culprit!Anywhere" ]
+              "took.Culprit.gem"
+              "[Actor]: whisper to [Hearer] that [Culprit] took the gem"
+        r <- try (evaluate (length (show rawLie)))
+        assertBool "the legal shape is not rejected" (not (isLeft (r :: Either ErrorCall Int)))
+    ]
+
   , testCase "truthful gossip leaves no lie-mark" $ do
       -- sid takes the gem before witnesses; oz (an eyewitness) honestly tells
       -- mia, who is walked over from the shed to be a valid hearer.

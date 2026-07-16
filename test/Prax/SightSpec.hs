@@ -91,4 +91,10 @@ tests = testGroup "Prax.Sight"
         assertBool "the ordinary Seer/Seen/Spot fixture is NOT rejected"
           (not (isLeft (r :: Either ErrorCall Int)))
     ]
+
+  , testGroup "the v43 guard: a sighting template must not author Actor (it would bind the ticker, never a mover)"
+    [ testCase "a sighting template authoring Actor is a loud construction-time error" $ do
+        r <- try (evaluate (length (roles (sightP [Match "at.Actor!Spot", Match "at.Seen!Spot"]))))
+        assertBool "Actor in the sighting template is rejected" (isLeft (r :: Either ErrorCall Int))
+    ]
   ]
