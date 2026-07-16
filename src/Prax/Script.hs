@@ -63,7 +63,8 @@ module Prax.Script
   ) where
 
 import           Data.Char (isAlphaNum)
-import           Data.List (find, isPrefixOf, stripPrefix)
+import           Data.List (find, stripPrefix)
+import           Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (unify, valToString)
@@ -130,12 +131,25 @@ data Beat = Beat
   deriving (Eq, Show)
 
 -- | A junction: a labelled route out of a scene, fired (by the narrator) as soon
--- as @junctionWhen@ holds. @junctionTo (Just s)@ transitions to scene @s@;
--- @Nothing@ ends the story with @junctionName@ as the ending key.
+-- as @junctionWhen@ holds AND (if 'junctionAfter' is set) at least that many
+-- engine rounds have elapsed since the scene was entered. @junctionTo (Just s)@
+-- transitions to scene @s@; @Nothing@ ends the story with @junctionName@ as the
+-- ending key.
+--
+-- @junctionWhen@ is always 100% author content — unlike the pre-v44-fix
+-- design, it never carries spliced machinery, so 'compile' can (and does)
+-- validate it uniformly with the same v40 hygiene guard 'sceneSetup' gets,
+-- regardless of how the 'Junction' was built (Haskell smart constructor, raw
+-- constructor, or decoded from JSON — see "Prax.Script.Json"'s @FromJSON
+-- Junction@, the module's documented external-authoring surface). The
+-- timeout machinery ('clockReached') lives entirely in 'compileJunction',
+-- expanded from 'junctionAfter' at compile time, so it never appears in
+-- author-visible data at all.
 data Junction = Junction
-  { junctionName :: String
-  , junctionTo   :: Maybe String
-  , junctionWhen :: [Condition]
+  { junctionName  :: String
+  , junctionTo    :: Maybe String
+  , junctionWhen  :: [Condition]
+  , junctionAfter :: Maybe Int    -- ^ fire only >= this many rounds after scene entry
   }
   deriving (Eq, Show)
 
@@ -186,30 +200,27 @@ beat lbl = Beat lbl Nothing
 quip :: String -> String -> [Condition] -> [Outcome] -> Beat
 quip spk lbl = Beat lbl (Just spk)
 
--- | A transition junction: @goto name toScene when@. Loud if @when@ authors a
--- Prax-namespaced variable: the destination scene's entry-stamp machinery
--- (@PraxNow@, spliced into the SAME generated action's outcomes — see
--- 'setupOf') is grounded with the whole action's bindings by
--- 'Prax.Engine.performAction' before it runs its own fresh clock query, so an
--- authored condition that happened to bind @PraxNow@ for an unrelated reason
--- would silently pre-substitute into it and corrupt the stamp (v40 hygiene
--- boundary).
+-- | A transition junction: @goto name toScene when@. @when@ is validated at
+-- 'compile' time (uniformly with every other junction, however built) rather
+-- than here: a constructor-level guard is bypassable through any authoring
+-- surface that builds a 'Junction' without going through 'goto' — notably
+-- "Prax.Script.Json"'s @FromJSON Junction@ — so the v40 hygiene check lives
+-- at the actual consumption point instead.
 goto :: String -> String -> [Condition] -> Junction
-goto name to conds
-  | (v : _) <- authoredVarClash [] conds [] =
-      error ("Prax.Script.goto: " ++ show v ++ " in an authored condition"
-             ++ " -- the Prax namespace is reserved for the entry-stamp machinery")
-  | otherwise = Junction name (Just to) conds
+goto name to conds = Junction name (Just to) conds Nothing
 
 -- | An ending junction: @ending name when@ (ending key = @name@).
 ending :: String -> [Condition] -> Junction
-ending name = Junction name Nothing
+ending name conds = Junction name Nothing conds Nothing
 
 -- At least @n@ engine rounds have elapsed since the current scene was
 -- entered (spec v44 — the scene clock is a stamp against the live engine
--- clock, not a scene-local ticker). Used to build timed junctions. Its bound
--- names are Prax-namespaced (v40 hygiene): this splices into 'compileJunction'
--- beside 'setupOf'\'s own machinery in the SAME generated action.
+-- clock, not a scene-local ticker). Expanded by 'compileJunction' (not by
+-- 'after'/'timeout') from 'junctionAfter', so this machinery never appears
+-- in a 'Junction'\'s author-visible 'junctionWhen' — it splices into
+-- 'compileJunction'\'s condition list beside 'setupOf'\'s own machinery in
+-- the SAME generated action. Its bound names are Prax-namespaced (v40
+-- hygiene).
 clockReached :: Int -> [Condition]
 clockReached n =
   [ Match "sceneEntered!PraxE", Match (turnPath ++ "!PraxNow")
@@ -218,12 +229,12 @@ clockReached n =
 -- | A __timed transition__: @after name n toScene@ — hand off to @toScene@ once
 -- @n@ rounds have elapsed in the current scene (Prompter's timeout transition).
 after :: String -> Int -> String -> Junction
-after name n to = Junction name (Just to) (clockReached n)
+after name n to = Junction name (Just to) [] (Just n)
 
 -- | A __timeout ending__: @timeout name n@ — end the story with key @name@ after
 -- @n@ rounds in the scene (Prompter's @timeout_conclusion@).
 timeout :: String -> Int -> Junction
-timeout name n = Junction name Nothing (clockReached n)
+timeout name n = Junction name Nothing [] (Just n)
 
 -- | A __memory__: @memory text when@ — the one-shot exposition @text@, shown the
 -- first time @when@ holds while the scene is current.
@@ -252,20 +263,30 @@ currentSceneOf st =
     []      -> Nothing
 
 -- | Compile a 'Script' into a ready-to-run 'PraxState'. Loud if any scene's
--- @sceneSetup@ authors a Prax-namespaced variable: it splices into the SAME
--- generated action as the entry-stamp machinery (see 'setupOf'), so a v40
--- hygiene guard applies here exactly as 'goto'\'s applies to junction
--- conditions.
+-- @sceneSetup@, or any junction's @junctionWhen@, authors a Prax-namespaced
+-- variable: both splice into the SAME generated action as spliced machinery
+-- (the entry stamp, and — for a timed junction — 'clockReached' too), so the
+-- v40 hygiene guard runs here, uniformly, over every 'Junction' regardless of
+-- how it was built (smart constructor, raw 'Junction' constructor, or
+-- decoded from JSON — the actual consumption point, not any one authoring
+-- surface).
 compile :: Script -> PraxState
 compile scr
   | (sid, v) : _ <- sceneSetupOffenders =
       error ("Prax.Script.compile: scene " ++ show sid ++ "'s setup authors " ++ show v
              ++ " -- the Prax namespace is reserved for the entry-stamp machinery")
+  | (sid, jn, v) : _ <- junctionWhenOffenders =
+      error ("Prax.Script.compile: scene " ++ show sid ++ "'s junction " ++ show jn
+             ++ " authors " ++ show v
+             ++ " -- the Prax namespace is reserved for the entry-stamp/timeout machinery")
   | otherwise = foldl (flip performOutcome) base setup
   where
     scenes = scriptScenes scr
     sceneSetupOffenders =
       [ (sceneId s, v) | s <- scenes, v <- authoredVarClash [] [] (sceneSetup s) ]
+    junctionWhenOffenders =
+      [ (sceneId s, junctionName j, v)
+      | s <- scenes, j <- sceneJunctions s, v <- authoredVarClash [] (junctionWhen j) [] ]
 
     base = setCharacters (castChars ++ [narrator])
              (definePractices [coreLib, beatsP, junctionsP] emptyState)
@@ -306,7 +327,8 @@ compile scr
       ( [ Eq "Actor" narratorName
         , Match ("currentScene!" ++ sid)
         , Absent [ Match "ending.E" ] ]
-        ++ junctionWhen j )
+        ++ junctionWhen j
+        ++ maybe [] clockReached (junctionAfter j) )
       ( case junctionTo j of
           Just next -> Insert ("currentScene!" ++ next)
                          : setupOf next
@@ -330,9 +352,7 @@ compile scr
     -- Only scripts with a timed junction need the entry stamp at all
     -- (unchanged beyond the universal clock every world now carries).
     stampsSceneEntry = any (any timed . sceneJunctions) scenes
-      where timed j = any isStamp (junctionWhen j)
-            isStamp (Match s) = "sceneEntered!" `isPrefixOf` s
-            isStamp _         = False
+      where timed j = isJust (junctionAfter j)
 
     -- Scene entry stamps the LIVE engine clock (spec v44): a plain Insert
     -- can't capture a live value, so this queries the clock fact fresh and

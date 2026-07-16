@@ -132,10 +132,22 @@ tests = testGroup "Prax.Script"
       endingOf driven @?= Just "gaveUp"
 
     -- v40 hygiene: the entry-stamp machinery's Prax-namespaced variables ------
-  , testCase "goto rejects an authored condition that reuses the entry-stamp's PraxNow" $ do
-      r <- try (evaluate (length (show (goto "go" "b" [ Match "chapter!PraxNow" ]))))
-      assertBool "the Prax namespace in a goto condition is rejected"
-        (isLeft (r :: Either ErrorCall Int))
+    -- Guarded at 'compile', not at 'goto' itself: a constructor-level guard is
+    -- bypassable through any authoring surface that builds a 'Junction'
+    -- without going through 'goto' (JsonSpec pins the JSON route below), so
+    -- the check runs uniformly at the actual consumption point instead.
+  , testCase "compile rejects a goto whose condition reuses the entry-stamp's PraxNow" $ do
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes =
+                [ (scene "a")
+                    { sceneJunctions = [ goto "go" "b" [ Match "chapter!PraxNow" ] ] }
+                , (scene "b") { sceneJunctions = [] }
+                ]
+            }
+      r <- try (evaluate (currentSceneOf (compile sc)))
+      assertBool "the Prax namespace in a goto condition is rejected at compile"
+        (isLeft (r :: Either ErrorCall (Maybe String)))
 
   , testCase "an author's own \"Now\" in a goto condition no longer collides with the stamp" $ do
       -- The exact scenario that demonstrated the bug pre-fix: an author

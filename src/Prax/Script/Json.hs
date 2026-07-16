@@ -14,7 +14,15 @@
 -- >                              "when": [ { "not": "confided" } ],
 -- >                              "effects": [ { "insert": "confided" } ] } ],
 -- >                 "junctions": [ { "name": "toBanquet", "to": "banquet",
--- >                                  "when": [ { "match": "confided" } ] } ] } ] }
+-- >                                  "when": [ { "match": "confided" } ] },
+-- >                                { "name": "gaveUp", "after": 5 } ] } ] }
+--
+-- A junction's optional @"after"@ is a round-count timeout (Prompter's timed
+-- transition/@timeout_conclusion@, "Prax.Script"'s 'Prax.Script.after'\/
+-- 'Prax.Script.timeout'): the ONLY way JSON expresses one. @"when"@ is always
+-- 100% author content — the entry-stamp and timeout machinery ('compile'
+-- expands @"after"@ into it at compile time) never appears in author data, so
+-- it can never be spelled out literally in @"when"@ by hand.
 --
 -- The instances are (deliberately) orphans: keeping the JSON schema in one place
 -- avoids coupling the core logic modules ("Prax.Query", "Prax.Types") to aeson.
@@ -166,15 +174,17 @@ instance FromJSON Beat where
          <*> o .:? "effects" .!= []
 
 instance ToJSON Junction where
-  toJSON (Junction name to whn) =
+  toJSON (Junction name to whn aft) =
     object $ [ "name" .= name, "when" .= whn ]
              ++ maybe [] (\t -> [ "to" .= t ]) to
+             ++ maybe [] (\n -> [ "after" .= n ]) aft
 
 instance FromJSON Junction where
   parseJSON = withObject "Junction" $ \o ->
     Junction <$> o .:  "name"
              <*> o .:? "to"
              <*> o .:? "when" .!= []
+             <*> o .:? "after"
 
 instance ToJSON Memory where
   toJSON (Memory t whn) = object [ "text" .= t, "when" .= whn ]
