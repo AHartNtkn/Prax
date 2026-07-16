@@ -59,11 +59,15 @@ exclusion:
 - Insertion supersedes wholesale: re-insert WITH a lifetime refreshes the due; WITHOUT
   one, CANCELS it (a permanent assertion never dies on a stale timer). This cancel is
   action-at-a-distance by design and gets its own tests [D].
-- Any retract of the exact path — authored `Delete` (a vented feeling) or `!`-eviction
-  (a displaced value) — PURGES the pending entry: no timer outlives its fact, no
-  spurious no-op retract drives a later closure recompute [C][S]. A different value
-  arriving in a `!` family is therefore eviction-purge, not "refresh": `mood!calm`
-  displacing `mood!angry` kills angry's timer with angry.
+- No timer ever has an observable effect on a fact that is gone [C][S], via two
+  mechanisms: an authored `Delete` PURGES eagerly (every pending entry at or under the
+  deleted path — a vented feeling's timer dies with it, and a subtree delete takes its
+  descendants' timers too); a `!`-EVICTION resolves at fire time by an existence guard
+  — the displaced value's entry fires as a silent drop (no retract, no closure
+  recompute, no wake), because enumerating displaced siblings eagerly at every
+  exclusion insert would rebuild eviction-shadow machinery inside the queue for zero
+  observable difference. Insert-supersession (above) covers every re-assertion of the
+  same path in the interim, so no stale timer can touch a live fact.
 - Expiry fires as a normal retract (then purges itself), so closure recompute and
   liveness wakes follow from ordinary delta processing. NOTE the retract takes the
   path's whole subtree (retract semantics): lifetimes belong on leaf facts — authoring
