@@ -12,7 +12,7 @@ import           Prax.Db (exists, unify, valToString)
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Sym (intern)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction, performOutcome)
+import           Prax.Engine (possibleActions, performAction, performOutcome, roundBoundary)
 import           Prax.Core (adjustScore)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Script
@@ -54,9 +54,9 @@ tests = testGroup "Prax.Script"
       currentSceneOf playWorld @?= Just "confidence"
       assertBool "marcus present" (exists "character.marcus" (db playWorld))
       assertBool "cassia present" (exists "character.cassia" (db playWorld))
-      -- the narrator is a cast member (the story manager) but not a fact-character
-      assertBool "narrator in cast"
-        (narratorName `elem` map charName (characters playWorld))
+      -- v46: there is no story manager; the cast is only real characters
+      assertBool "no _narrator in the cast"
+        ("_narrator" `notElem` map charName (characters playWorld))
 
   , testCase "a beat fires only in its scene and applies its effects" $ do
       -- in the opening scene Cassia's only move is to confide; it sets the facts
@@ -68,15 +68,11 @@ tests = testGroup "Prax.Script"
       assertBool "no banquet beats yet"
         (null [ ga | ga <- possibleActions st1 "cassia", "poison" `isInfixOf` gaLabel ga ])
 
-  , testCase "a transition junction is fired automatically by the narrator" $ do
+  , testCase "a transition junction fires silently at the round boundary (no story manager)" $ do
       let confide = actionMatching "cassia" "confide" playWorld
           st1     = performAction playWorld confide     -- confided holds
-      case [ c | c <- characters st1, charName c == narratorName ] of
-        (narr : _) -> do
-          let (mv, st2) = npcAct 2 narr st1
-          assertBool "narrator acted" (isJust mv)
-          currentSceneOf st2 @?= Just "banquet"         -- scene advanced
-        [] -> assertBool "narrator should be in the cast" False
+          st2     = roundBoundary st1                   -- the engine fires the story rule
+      currentSceneOf st2 @?= Just "banquet"             -- scene advanced, no actor took a turn
 
   , testCase "idle player: the plot runs to betrayal across two scenes" $ do
       let st = driveIdle Nothing "marcus" 30 playWorld
@@ -109,27 +105,66 @@ tests = testGroup "Prax.Script"
             , "betrayal", "loyalty", "complicity", "graph TD" ]
 
     -- Prompter compilation features ------------------------------------------
-  , testCase "a memory fires once, the first time its trigger holds" $ do
-      let sc = Script
-            { scriptStart = "s"
-            , scriptCast  = [ player "p", member "npc" `wanting` [ Want [ Match "done" ] 10 ] ]
-            , scriptScenes =
-                [ (scene "s")
-                    { sceneBeats = [ quip "npc" "[Actor]: act"
-                                       [ Not "done" ] [ Insert "done", Insert "trigger" ] ]
-                    , sceneMemories = [ memory "RECALL" [ Match "trigger" ] ] } ] }
-          driven = driveIdle Nothing "p" 12 (compile sc)
-      assertBool "npc acted (trigger set)" (exists "trigger" (db driven))
-      assertBool "memory fired"            (exists "memoryFired.s_mem0" (db driven))
-      assertBool "one-shot: memory no longer on offer"
-        (not (any (("RECALL" `isInfixOf`) . gaLabel) (possibleActions driven narratorName)))
-
   , testCase "a timed junction times out after N turns of inaction" $ do
       let sc = Script
             { scriptStart = "wait", scriptCast = [ player "p" ]
             , scriptScenes = [ (scene "wait") { sceneJunctions = [ timeout "gaveUp" 3 ] } ] }
           driven = driveIdle Nothing "p" 30 (compile sc)   -- nobody acts; the clock runs out
       endingOf driven @?= Just "gaveUp"
+
+    -- The story law: one boundary, the existing schedule machinery (v46) ------
+    -- Every clause carries its own gates; the executor threads state between
+    -- clauses, so eviction and Absent-ending decide firing, not any mode.
+  , testCase "same-scene co-enabled junctions: first in authored order fires, the eviction masks the second" $ do
+      -- Both routes out of 's' are enabled at once; 'toX' is authored first, so
+      -- it fires and its currentScene eviction masks 'toY' in the same boundary.
+      let sc = Script
+            { scriptStart = "s", scriptCast = [ player "p" ]
+            , scriptScenes =
+                [ (scene "s") { sceneJunctions =
+                    [ goto "toX" "x" [ Match "go" ], goto "toY" "y" [ Match "go" ] ] }
+                , scene "x", scene "y" ] }
+          st = roundBoundary (performOutcome (Insert "go") (compile sc))
+      currentSceneOf st @?= Just "x"          -- not "y": authored order + eviction
+
+  , testCase "authored order, not alphabetical label order, resolves a simultaneous enable" $ do
+      -- 'zzz' fires before 'aaa' though it sorts later — the old tiebreak was
+      -- an accident of the planner's alphabetical sort; authored order is a
+      -- statement. Alphabetical order would land on "y".
+      let sc = Script
+            { scriptStart = "s", scriptCast = [ player "p" ]
+            , scriptScenes =
+                [ (scene "s") { sceneJunctions =
+                    [ goto "zzz" "x" [ Match "go" ], goto "aaa" "y" [ Match "go" ] ] }
+                , scene "x", scene "y" ] }
+          st = roundBoundary (performOutcome (Insert "go") (compile sc))
+      currentSceneOf st @?= Just "x"
+
+  , testCase "an ending masks every later clause in the same boundary" $ do
+      -- 'endHere' fires (an ending) before 'toY'; the ending.E fact masks the
+      -- transition's Absent-ending gate, so no scene change slips through.
+      let sc = Script
+            { scriptStart = "s", scriptCast = [ player "p" ]
+            , scriptScenes =
+                [ (scene "s") { sceneJunctions =
+                    [ ending "endHere" [ Match "go" ], goto "toY" "y" [ Match "go" ] ] }
+                , scene "y" ] }
+          st = roundBoundary (performOutcome (Insert "go") (compile sc))
+      endingOf st        @?= Just "endHere"
+      currentSceneOf st  @?= Just "s"         -- the transition was masked
+
+  , testCase "cross-scene cascade: a pass-through scene traverses in one boundary (documented eager semantics)" $ do
+      -- Scene 'b's exit condition already holds on entry (both gates read 'go'),
+      -- so a->b->c happens within one boundary: 'toB' fires, then 'toC' sees the
+      -- fresh currentScene!b and fires too. The gates decide, not a mode.
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes =
+                [ (scene "a") { sceneJunctions = [ goto "toB" "b" [ Match "go" ] ] }
+                , (scene "b") { sceneJunctions = [ goto "toC" "c" [ Match "go" ] ] }
+                , scene "c" ] }
+          st = roundBoundary (performOutcome (Insert "go") (compile sc))
+      currentSceneOf st @?= Just "c"          -- traversed a->b->c in one boundary
 
     -- v40 hygiene: the entry-stamp machinery's Prax-namespaced variables ------
     -- Guarded at 'compile', not at 'goto' itself: a constructor-level guard is
@@ -155,7 +190,10 @@ tests = testGroup "Prax.Script"
       -- "chapter!99") used to pre-substitute into the entry-stamp's ForEach
       -- and silently leave the destination scene's sceneEntered stale. Now
       -- that the machinery uses PraxNow, the author's own Now is unrestricted
-      -- and the stamp captures the live turn correctly.
+      -- and the stamp captures the live turn correctly. v46: the goto fires
+      -- silently at the round boundary (the clock advances 7 -> 8 first), and
+      -- 'go' precedes the co-enabled 'gaveUp' timeout in authored order, so it
+      -- wins and its currentScene eviction masks the timeout.
       let sc = Script
             { scriptStart = "a", scriptCast = [ player "p" ]
             , scriptScenes =
@@ -172,12 +210,9 @@ tests = testGroup "Prax.Script"
           stampOf st = [ v | b <- unify "sceneEntered.E" (db st) Map.empty
                             , Just v <- [valToString <$> Map.lookup (intern "E") b] ]
       stampOf base @?= ["0"]      -- scene a's compile-time stamp: turn was 0 then
-      case [ ga | ga <- possibleActions base narratorName, gaLabel ga == "(story) go" ] of
-        (ga : _) -> do
-          let st2 = performAction base ga
-          currentSceneOf st2 @?= Just "b"
-          stampOf st2 @?= ["7"]   -- the live turn at goto time, not the stale 0
-        [] -> assertBool "goto action should be offered" False
+      let st2 = roundBoundary base            -- clock 7 -> 8; the story rule fires 'go'
+      currentSceneOf st2 @?= Just "b"
+      stampOf st2 @?= ["8"]       -- the live turn at boundary time, not the stale 0
 
   , testCase "a character sketch compiles concerns to wants and traits to facts" $ do
       let cm = member "vain" `concernedWith` [ ("beauty", 50) ] `withTraits` [ "proud" ]
@@ -226,14 +261,13 @@ tests = testGroup "Prax.Script"
       let w0 = audienceWorld
           w1 = performAction w0 (actionMatching "envoy" "flatter" w0)
           w2 = performAction w1 (actionMatching "envoy" "petition" w1)
-          -- enough narrator turns for both the pending memory and the ending to
-          -- fire (they both count as advancing the story); granted lands well
-          -- before the timeout clock could reach 'dismissed'.
+          -- enough round boundaries for the story rule to fire the ending;
+          -- 'granted' (petitioned holds) lands well before the timeout clock
+          -- could reach 'dismissed'.
       endingOf (driveIdle Nothing "envoy" 15 w2) @?= Just "granted"
 
-  , testCase "the audience: memory fires and the Duke's concern moves him (once)" $ do
+  , testCase "the audience: the Duke's concern moves him (once)" $ do
       let driven = driveIdle Nothing "envoy" 6 audienceWorld
-      assertBool "memory fired"                 (exists "memoryFired.audience_mem0" (db driven))
       assertBool "the Duke, concerned for favour, flattered unbidden"
                                                 (exists "dukeSpoke" (db driven))
       assertBool "and the one-shot held: no flatter left on the Duke's menu"

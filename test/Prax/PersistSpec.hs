@@ -104,6 +104,16 @@ tests = testGroup "Prax.Persist"
           Left (ErrorCall msg) -> assertBool ("unsupported-format message, got: " ++ msg)
                                     ("unsupported save format" `isInfixOf` msg)
           Right _ -> assertFailure "expected a v1-rejection error"
+
+    , testCase "the immediately-prior format version (prax-state v2) is rejected under v46's v3 bump" $ do
+        -- A v45-era Script save carries storyAdvanced.*/memoryFired.* facts and
+        -- a junctions-practice instance but no story due -- byte-shaped like v2
+        -- yet semantically dead now, so v2 must not load silently.
+        r <- try (evaluate (length (dbToSentences (db (deserializeState "prax-state v2\ncursor 0\n" intrigueWorld)))))
+        case r :: Either ErrorCall Int of
+          Left (ErrorCall msg) -> assertBool ("unsupported-format message, got: " ++ msg)
+                                    ("unsupported save format" `isInfixOf` msg)
+          Right _ -> assertFailure "expected a v2-rejection error"
     ]
 
   , testGroup "v44: the schedule's runtime half (per-rule dues + the expiry queue) round-trips"
@@ -124,7 +134,7 @@ tests = testGroup "Prax.Persist"
         -- The re-association is forced by touching the reloaded dues (lazy,
         -- like intention parsing): intrigueWorld declares no schedule.
         r <- try (evaluate (length (show (scheduleDues
-               (deserializeState "prax-state v2\ncursor 0\ndue ghost 3\n" intrigueWorld)))))
+               (deserializeState (formatVersion ++ "\ncursor 0\ndue ghost 3\n") intrigueWorld)))))
         case r :: Either ErrorCall Int of
           Left (ErrorCall msg) -> assertBool ("unknown-rule message, got: " ++ msg)
                                     ("unknown schedule rule" `isInfixOf` msg)

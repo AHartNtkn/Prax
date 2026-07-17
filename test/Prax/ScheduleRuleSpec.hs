@@ -9,9 +9,10 @@ import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (performOutcome, setSchedule, roundBoundary, definePractices)
+import           Prax.Engine (performOutcome, setSchedule, registerEngineRules, roundBoundary, definePractices)
 import           Prax.TypeCheck (typeCheck)
 import           Prax.Schedule (gathering)
+import           Prax.Worlds.Play (playWorld)
 
 -- A one-rule schedule: "mark" flags every flagged thing every 2 boundaries
 -- (the retired DriftSpec markR, now an engine ScheduleRule the boundary fires).
@@ -152,5 +153,34 @@ tests = testGroup "Prax.ScheduleRule"
     , testCase "duration == 0 is a loud construction-time error" $ do
         r <- try (evaluate (length (show (gathering "fair" 3 0 [Insert "x"]))))
         assertBool "duration == 0 rejected" (isLeft (r :: Either ErrorCall Int))
+    ]
+
+  , testGroup "the compiler-level door shares the global rule-name table (v46)"
+    [ testCase "registerEngineRules seeds a due exactly like setSchedule (one period out)" $ do
+        -- emptyState clocks turn!0, so a period-1 engine rule is due at 1.
+        let st = registerEngineRules [ScheduleRule "story" 1 []] emptyState
+        dueOf "story" st @?= Just 1
+
+    , testCase "adding an authored 'story' rule to a compiled script world is a loud collision" $ do
+        -- playWorld already carries the engine-registered 'story' rule; an
+        -- author naming a schedule rule 'story' would share its one due key.
+        r <- try (evaluate (length (show (scheduleDues
+               (setSchedule [ScheduleRule "story" 2 []] playWorld)))))
+        assertBool "rejected: the compiled script already registered 'story'"
+          (isLeft (r :: Either ErrorCall Int))
+
+    , testCase "an authored 'story' rule blocks the engine door, and vice versa" $ do
+        -- Direction 1: authored first, engine door second.
+        let authored = setSchedule [ScheduleRule "story" 2 []] emptyState
+        r1 <- try (evaluate (length (show (scheduleDues
+                (registerEngineRules [ScheduleRule "story" 1 []] authored)))))
+        assertBool "engine door rejected: 'story' already authored"
+          (isLeft (r1 :: Either ErrorCall Int))
+        -- Direction 2: engine door first, authored second.
+        let engineFirst = registerEngineRules [ScheduleRule "story" 1 []] emptyState
+        r2 <- try (evaluate (length (show (scheduleDues
+                (setSchedule [ScheduleRule "story" 2 []] engineFirst)))))
+        assertBool "authoring door rejected: 'story' already registered by the engine"
+          (isLeft (r2 :: Either ErrorCall Int))
     ]
   ]

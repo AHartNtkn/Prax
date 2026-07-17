@@ -13,20 +13,23 @@
 --   * a __playtext = CAST + scenes__; exactly one scene is "current" at a time;
 --   * a __scene__ has opening text, a @setup@ (facts asserted on entry), a body of
 --     scene-local __beats__ (dialogue/affordances, available only while that scene
---     is current), and one or more __junctions__ (labelled routes that fire when a
+--     is current), and one or more __junctions__ (routes that fire when a
 --     condition holds, either transitioning to another scene or ending the story);
 --   * a __character__ carries its desires (FOL 'Want's) directly.
 --
--- Compilation model:
+-- Compilation model (spec v46 — /the world's own dynamics fire silently; only
+-- characters' actions surface as fiction/):
 --
 --   * the current scene is the single-slot fact @currentScene!\<id\>@;
 --   * beats become actions of a @beats@ practice, each gated on
---     @currentScene!\<id\>@ (+ @character.Actor@ so only cast, never the narrator,
---     may speak) and the beat's own conditions;
---   * junctions become actions of a @junctions@ practice, gated on the scene being
---     current and the junction's condition, performed by a bodiless __narrator__
---     (Versu's story manager) whose sole desire is to advance the story — so a
---     junction fires automatically the moment its condition is met;
+--     @currentScene!\<id\>@ (+ @character.Actor@ so only a cast member may speak)
+--     and the beat's own conditions;
+--   * junctions and endings compile to ONE plain period-1 engine schedule rule,
+--     @"story"@ — clauses in authored order (scenes in declaration order, a
+--     scene's junctions in declaration order) — registered through the internal
+--     'Prax.Engine.registerEngineRules' door (it carries Prax-namespaced
+--     machinery 'Prax.Engine.setSchedule' rightly rejects). The engine fires it
+--     silently at each round boundary; there is no story manager and no actor;
 --   * an ending reuses the engine-wide @ending.\<key\>@ convention the loop and
 --     "Prax.Stress" already detect.
 --
@@ -39,7 +42,6 @@ module Prax.Script
   , Scene(..)
   , Beat(..)
   , Junction(..)
-  , Memory(..)
     -- * Smart constructors
   , member
   , player
@@ -53,9 +55,7 @@ module Prax.Script
   , ending
   , after
   , timeout
-  , memory
     -- * Compilation and tooling
-  , narratorName
   , scriptPlayer
   , currentSceneOf
   , compile
@@ -72,7 +72,7 @@ import           Prax.Db (unify, valToString)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Sym (intern)
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setCharacters)
+import           Prax.Engine (definePractices, performOutcome, setCharacters, registerEngineRules)
 import           Prax.Core (coreLib)
 
 -- The AST ---------------------------------------------------------------------
@@ -97,24 +97,13 @@ data CastMember = CastMember
   deriving (Eq, Show)
 
 -- | One scene: the unit of grouping. Its beats are available only while it is
--- current; its junctions are the ways it can end or hand off to another scene;
--- its memories are one-shot exposition fired the first time a trigger holds.
+-- current; its junctions are the ways it can end or hand off to another scene.
 data Scene = Scene
   { sceneId      :: String
   , sceneOpening :: String         -- ^ narration shown on entering the scene
   , sceneSetup   :: [Outcome]      -- ^ facts asserted when the scene becomes current
   , sceneBeats   :: [Beat]
   , sceneJunctions :: [Junction]
-  , sceneMemories :: [Memory]
-  }
-  deriving (Eq, Show)
-
--- | A memory: a one-shot line of exposition fired (as narration) the first time
--- @memoryWhen@ holds while its scene is current. Generalizes Prompter's "the
--- first time a conversation reaches a topic" to any first-time condition.
-data Memory = Memory
-  { memoryText :: String
-  , memoryWhen :: [Condition]
   }
   deriving (Eq, Show)
 
@@ -131,11 +120,11 @@ data Beat = Beat
   }
   deriving (Eq, Show)
 
--- | A junction: a labelled route out of a scene, fired (by the narrator) as soon
--- as @junctionWhen@ holds AND (if 'junctionAfter' is set) at least that many
--- engine rounds have elapsed since the scene was entered. @junctionTo (Just s)@
--- transitions to scene @s@; @Nothing@ ends the story with @junctionName@ as the
--- ending key.
+-- | A junction: a route out of a scene, fired (by the engine's @"story"@
+-- schedule rule at a round boundary) as soon as @junctionWhen@ holds AND (if
+-- 'junctionAfter' is set) at least that many engine rounds have elapsed since
+-- the scene was entered. @junctionTo (Just s)@ transitions to scene @s@;
+-- @Nothing@ ends the story with @junctionName@ as the ending key.
 --
 -- @junctionWhen@ is always 100% author content — unlike the pre-v44-fix
 -- design, it never carries spliced machinery, so 'compile' can (and does)
@@ -191,7 +180,7 @@ withTraits c ts = c { castTraits = castTraits c ++ ts }
 scene :: String -> Scene
 scene sid = Scene
   { sceneId = sid, sceneOpening = "", sceneSetup = []
-  , sceneBeats = [], sceneJunctions = [], sceneMemories = [] }
+  , sceneBeats = [], sceneJunctions = [] }
 
 -- | A beat open to any cast member: @beat label conditions effects@.
 beat :: String -> [Condition] -> [Outcome] -> Beat
@@ -243,17 +232,7 @@ after name n to = Junction name (Just to) [] (Just n)
 timeout :: String -> Int -> Junction
 timeout name n = Junction name Nothing [] (Just n)
 
--- | A __memory__: @memory text when@ — the one-shot exposition @text@, shown the
--- first time @when@ holds while the scene is current.
-memory :: String -> [Condition] -> Memory
-memory = Memory
-
 -- Compilation -----------------------------------------------------------------
-
--- | The bodiless story manager that fires junctions. Underscore-prefixed so it
--- never collides with a cast name and is never a beat speaker.
-narratorName :: String
-narratorName = "_narrator"
 
 -- | The player-controlled character (the first cast member marked @playable@).
 scriptPlayer :: Script -> String
@@ -286,7 +265,7 @@ compile scr
       error ("Prax.Script.compile: scene " ++ show sid ++ "'s junction " ++ show jn
              ++ " authors " ++ show v
              ++ " -- the Prax namespace is reserved for the entry-stamp/timeout machinery")
-  | otherwise = foldl (flip performOutcome) base setup
+  | otherwise = foldl (flip performOutcome) (registerEngineRules [storyRule] base) setup
   where
     scenes = scriptScenes scr
     sceneSetupOffenders =
@@ -295,18 +274,32 @@ compile scr
       [ (sceneId s, junctionName j, v)
       | s <- scenes, j <- sceneJunctions s, v <- authoredVarClash [] (junctionWhen j) [] ]
 
-    base = setCharacters (castChars ++ [narrator])
-             (definePractices [coreLib, beatsP, junctionsP] emptyState)
+    base = setCharacters castChars (definePractices [coreLib, beatsP] emptyState)
 
     beatsP = practice
       { practiceId = "beats", practiceName = "scene dialogue", roles = ["Stage"]
       , actions = concatMap compileBeats scenes }
 
-    -- Junctions and memories are both narrator-fired (they raise its
-    -- @storyAdvanced@ utility), so they live in one practice.
-    junctionsP = practice
-      { practiceId = "junctions", practiceName = "story flow", roles = ["Stage"]
-      , actions = concatMap compileJunctions scenes ++ concatMap compileMemories scenes }
+    -- Junctions and endings are the world's own dynamics, not a character's
+    -- action, so they compile to ONE plain period-1 schedule rule the engine
+    -- fires silently at each round boundary — clauses in authored order (scenes
+    -- in declaration order, a scene's junctions in declaration order). Each
+    -- clause's own gates self-mask: the transition's @currentScene@ eviction
+    -- masks same-scene doubles, and @Absent ending@ masks everything after an
+    -- ending. Carries Prax-namespaced machinery (the entry stamp, and — for a
+    -- timed junction — 'clockReached'), so it registers through the engine door,
+    -- not 'setSchedule'.
+    storyRule = ScheduleRule "story" 1
+      [ storyClause (sceneId s) j | s <- scenes, j <- sceneJunctions s ]
+
+    storyClause sid j =
+      ( [ Match ("currentScene!" ++ sid)
+        , Absent [ Match "ending.E" ] ]
+        ++ junctionWhen j
+        ++ maybe [] clockReached (junctionAfter j)
+      , case junctionTo j of
+          Just next -> Insert ("currentScene!" ++ next) : setupOf next
+          Nothing   -> [ Insert ("ending!" ++ junctionName j) ] )
 
     compileBeats s = map (compileBeat (sceneId s)) (sceneBeats s)
     -- A quip is a *specific* speaker's action, so its compiled id bakes the
@@ -329,33 +322,6 @@ compile scr
                         Just rest -> spk ++ go rest
                         Nothing   -> c : go cs
 
-    compileJunctions s = map (compileJunction (sceneId s)) (sceneJunctions s)
-    compileJunction sid j = action ("(story) " ++ junctionName j)
-      ( [ Eq "Actor" narratorName
-        , Match ("currentScene!" ++ sid)
-        , Absent [ Match "ending.E" ] ]
-        ++ junctionWhen j
-        ++ maybe [] clockReached (junctionAfter j) )
-      ( case junctionTo j of
-          Just next -> Insert ("currentScene!" ++ next)
-                         : setupOf next
-                         ++ [ Insert ("storyAdvanced." ++ junctionName j) ]
-          Nothing   -> [ Insert ("ending!" ++ junctionName j)
-                       , Insert ("storyAdvanced." ++ junctionName j) ] )
-
-    -- A memory: fired once (label = its text ⇒ shown as narration) the first
-    -- time its trigger holds while the scene is current.
-    compileMemories s = zipWith (compileMemory (sceneId s)) [0 :: Int ..] (sceneMemories s)
-    compileMemory sid i m =
-      let key = sid ++ "_mem" ++ show i
-      in action (memoryText m)
-           ( [ Eq "Actor" narratorName
-             , Match ("currentScene!" ++ sid)
-             , Absent [ Match "ending.E" ]
-             , Not ("memoryFired." ++ key) ]
-             ++ memoryWhen m )
-           [ Insert ("memoryFired." ++ key), Insert ("storyAdvanced." ++ key) ]
-
     -- Only scripts with a timed junction need the entry stamp at all
     -- (unchanged beyond the universal clock every world now carries).
     stampsSceneEntry = any (any timed . sceneJunctions) scenes
@@ -372,15 +338,9 @@ compile scr
 
     castChars = [ (character (castName c)) { charWants = castDesires c }
                 | c <- scriptCast scr ]
-    -- The narrator's one desire: advance the story. Every junction/memory it
-    -- fires asserts a @storyAdvanced.\<key\>@ marker, so firing any available one
-    -- strictly raises its utility — it acts the instant one is enabled.
-    narrator = (character narratorName)
-      { charWants = [ Want [ Match "storyAdvanced.J" ] 100 ]
-      , charBoundTo = Just "junctions" }
 
     setup =
-      [ Insert "practice.beats.stage", Insert "practice.junctions.stage" ]
+      [ Insert "practice.beats.stage" ]
       ++ [ Insert ("character." ++ castName c) | c <- scriptCast scr ]
       ++ [ Insert ("trait." ++ castName c ++ "." ++ t)
          | c <- scriptCast scr, t <- castTraits c ]

@@ -63,11 +63,13 @@ unreprIntention (mga, (b, s, l, m)) =
              (Map.fromList [ (intern k, unreprVal v) | (k, v) <- bs ]) lbl) mga)
     (MotiveSignature b s l m)
 
--- | The save-format tag, first line of every serialized state. Bump it when
--- the line format below changes; 'deserializeState' rejects anything else
--- loudly — no silent misparse of a save from another era.
+-- | The save-format tag, first line of every serialized state. Bump it when the
+-- line format below changes OR when the same bytes would carry different meaning
+-- under the current world model (a Script save's fact vocabulary is part of that
+-- model); 'deserializeState' rejects any other tag loudly — no silent misparse
+-- of a save whose facts a freshly-constructed world no longer interprets.
 formatVersion :: String
-formatVersion = "prax-state v2"
+formatVersion = "prax-state v3"
 
 -- | Serialize the mutable state (@cursor@ + standing intentions + all facts)
 -- to text, with @!@/@.@ labels so the reload rebuilds the exclusion structure

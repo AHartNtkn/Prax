@@ -15,6 +15,7 @@ module Prax.Engine
   , setDesires
   , setCharacters
   , setSchedule
+  , registerEngineRules
   , possibleActions
   , performAction
   , performOutcome
@@ -201,40 +202,72 @@ setDesires ds st = retable st { desires = ds }
 setCharacters :: [Character] -> PraxState -> PraxState
 setCharacters cs st = retable st { characters = cs }
 
--- | The only sanctioned way to install a world's engine schedule (spec v44):
--- store the authored declarations, cook their mirror ('retable'), and seed
--- each rule's next-due one full period out (the start-sated convention —
--- @currentTurn + srPeriod@, uniform across rules). This is the one choke point
--- for schedule-rule hygiene, enforced as loud construction-time errors:
--- single-segment rule names (a multi-segment name would
--- corrupt the by-name due keying), positive periods, no duplicate names (the
--- dues map is keyed by name), and — on every clause of every rule — the v40
--- splice hygiene ('authoredVarClash' @["Actor"]@): the @Prax@ namespace is
--- reserved for engine machinery and @Actor@ is reserved for movers (a
--- schedule rule has no actor at all).
+-- | The AUTHORING door onto a world's engine schedule (spec v44): install
+-- authored recurring rules. This is the one choke point for schedule-rule
+-- authoring hygiene — on every clause of every rule the v40 splice check
+-- ('authoredVarClash' @["Actor"]@): the @Prax@ namespace is reserved for engine
+-- machinery and @Actor@ is reserved for movers (a schedule rule has no actor at
+-- all). Everything else (single-segment names, positive periods, no duplicate
+-- names, due seeding) is the shared 'addScheduleRules' core, which
+-- 'registerEngineRules' shares.
 setSchedule :: [ScheduleRule] -> PraxState -> PraxState
 setSchedule rules st
-  | (r : _) <- filter ((/= 1) . length . pathNames . srName) rules =
-      error ("Prax.Engine.setSchedule: rule name must be a single segment: "
-             ++ show (srName r))
-  | (r : _) <- filter ((< 1) . srPeriod) rules =
-      error ("Prax.Engine.setSchedule: rule " ++ show (srName r)
-             ++ " needs a positive period")
-  | names /= nub names =
-      error ("Prax.Engine.setSchedule: duplicate rule names would share one due key: "
-             ++ show (names \\ nub names))
   | (v : _) <- offenders =
       error ("Prax.Engine.setSchedule: a rule authors " ++ show v
              ++ " -- the Prax namespace is reserved for engine machinery, and Actor"
              ++ " is reserved for movers (a schedule rule has no actor at all)")
-  | otherwise =
-      retable st { schedule = rules
-                 , scheduleDues = Map.fromList
-                     [ (srName r, currentTurn st + srPeriod r) | r <- rules ] }
+  | otherwise = addScheduleRules rules st
   where
-    names = map srName rules
     offenders = concat [ authoredVarClash ["Actor"] conds outs
                        | r <- rules, (conds, outs) <- srBody r ]
+
+-- | The COMPILER-LEVEL door onto the engine schedule (spec v46): register rules
+-- that authoring code could not. The compiled "Prax.Script" story rule carries
+-- Prax-namespaced machinery (the timed junction's clock arithmetic, the
+-- @sceneEntered@ stamp) that 'setSchedule''s v40 splice-hygiene guard rightly
+-- rejects on authored rules. This door omits ONLY that guard: its caller is
+-- compiler-level code ('Prax.Script.compile'), squarely inside v45's
+-- threat model (the family of reserved-namespace writes that only mechanism may
+-- make), so it carries no authoring guard BY DESIGN. It is deliberately NOT
+-- re-exported from any authoring-surface module. Every other schedule-rule
+-- invariant still holds (single-segment names, positive periods, no duplicate
+-- names ACROSS BOTH DOORS, dues seeded one period out) — the shared
+-- 'addScheduleRules' core.
+registerEngineRules :: [ScheduleRule] -> PraxState -> PraxState
+registerEngineRules = addScheduleRules
+
+-- | Install schedule rules onto the world, APPENDING to any already registered
+-- (both doors write the one globally-keyed rule table): store the declarations,
+-- cook their mirror ('retable'), and seed each rule's next-due one full period
+-- out (the start-sated convention — @currentTurn + srPeriod@, uniform across
+-- rules). Loud construction-time errors: single-segment rule names (a
+-- multi-segment name would corrupt the by-name due keying), positive periods,
+-- and no duplicate names — checked both within this batch AND against rules the
+-- other door already registered (the dues map is keyed by name; a collision
+-- would share one due key), naming both doors so the author knows where to look.
+addScheduleRules :: [ScheduleRule] -> PraxState -> PraxState
+addScheduleRules rules st
+  | (r : _) <- filter ((/= 1) . length . pathNames . srName) rules =
+      error ("Prax.Engine: schedule rule name must be a single segment: "
+             ++ show (srName r))
+  | (r : _) <- filter ((< 1) . srPeriod) rules =
+      error ("Prax.Engine: schedule rule " ++ show (srName r)
+             ++ " needs a positive period")
+  | (n : _) <- clashes =
+      error ("Prax.Engine: duplicate schedule-rule name " ++ show n
+             ++ " would share one due key -- rule names are globally keyed across"
+             ++ " both registration doors (Prax.Engine.setSchedule for authored"
+             ++ " rules, Prax.Engine.registerEngineRules for compiler-level rules);"
+             ++ " rename one")
+  | otherwise =
+      retable st { schedule = schedule st ++ rules
+                 , scheduleDues = Map.union (scheduleDues st)
+                     (Map.fromList
+                        [ (srName r, currentTurn st + srPeriod r) | r <- rules ]) }
+  where
+    newNames = map srName rules
+    existing = map srName (schedule st)
+    clashes  = (newNames \\ nub newNames) ++ filter (`elem` existing) newNames
 
 -- | All actions the named actor can currently perform, across every
 -- instantiated practice and every satisfying binding of each action. Conditions

@@ -1,8 +1,7 @@
--- | A short play-script that exercises all three v18 Prompter compilation
--- features in one story: a __memory__ (exposition on entering court), a
--- __character sketch__ (the ambitious Duke, whose /concern/ for royal favour makes
--- him flatter the king unbidden), and a __timed junction__ (the audience ends of
--- its own accord if you dawdle).
+-- | A short play-script that exercises two Prompter compilation features in one
+-- story: a __character sketch__ (the ambitious Duke, whose /concern/ for royal
+-- favour makes him flatter the king unbidden), and a __timed junction__ (the
+-- audience ends of its own accord if you dawdle).
 --
 -- You are the envoy at a royal audience. Flatter the king to win a little favour,
 -- then present your petition while you still have it — do it and the petition is
@@ -41,11 +40,6 @@ audience = (scene "audience")
   { sceneOpening =
       "The throne room. You hold the king's ear — but not for long, and the Duke is circling."
   , sceneSetup = [ Insert "atCourt" ]
-    -- a memory: exposition interleaved the moment you're before the throne
-  , sceneMemories =
-      [ memory "(You recall the last envoy who displeased the king — exiled by dawn.)"
-          [ Match "atCourt" ]
-      ]
   , sceneBeats =
       [ quip "envoy" "[Actor]: flatter the king"
           [ Not "petitioned" ]

@@ -12,8 +12,9 @@
 -- killing). This is a faithful recasting of "Prax.Worlds.Intrigue" — same cast,
 -- same affordances, same endings — in fewer authored lines and split into scenes.
 --
--- The narrator (Versu's story manager, supplied by 'compile') advances the scene
--- and fires the ending automatically the moment a junction's condition holds.
+-- The engine's @"story"@ schedule rule (supplied by 'compile') advances the
+-- scene and fires the ending silently at a round boundary, the moment a
+-- junction's condition holds.
 module Prax.Worlds.Play
   ( playScript
   , playWorld
@@ -90,11 +91,6 @@ banquet = (scene "banquet")
       [ ending "betrayal"   [ Match "poisoned.artus.byCassia" ]
       , ending "loyalty"    [ Match "foiled" ]
       , ending "complicity" [ Match "poisoned.artus.byMarcus" ]
-      ]
-    -- exposition, interleaved: recalled once Marcus is in on the plot
-  , sceneMemories =
-      [ memory "(Marcus remembers the last poet who crossed Cassia — and was never seen again.)"
-          [ Match "marcusKnows" ]
       ]
   }
 

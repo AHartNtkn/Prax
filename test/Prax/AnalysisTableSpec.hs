@@ -224,7 +224,6 @@ feudPin =
 audiencePin :: [String]
 audiencePin =
   [ "contMonotone: True"
-  , "caresAbout: _narrator -> (story) granted; (story) dismissed; (You recall the last envoy who displeased the king \8212 exiled by dawn.)"
   , "caresAbout: duke -> envoy: flatter the king; duke: flatter the king"
   , "caresAbout: envoy -> "
   , "caresAbout: king -> "
@@ -234,7 +233,6 @@ audiencePin =
 playPin :: [String]
 playPin =
   [ "contMonotone: True"
-  , "caresAbout: _narrator -> (story) toBanquet; (story) betrayal; (story) loyalty; (story) complicity; (Marcus remembers the last poet who crossed Cassia \8212 and was never seen again.)"
   , "caresAbout: artus -> "
   , "caresAbout: cassia -> cassia: slip poison into artus's cup; marcus: poison artus with your own hand"
   , "caresAbout: marcus -> "

@@ -186,16 +186,10 @@ instance FromJSON Junction where
              <*> o .:? "when" .!= []
              <*> o .:? "after"
 
-instance ToJSON Memory where
-  toJSON (Memory t whn) = object [ "text" .= t, "when" .= whn ]
-
-instance FromJSON Memory where
-  parseJSON = withObject "Memory" $ \o -> Memory <$> o .: "text" <*> o .:? "when" .!= []
-
 instance ToJSON Scene where
-  toJSON (Scene sid op setup beats juncs mems) =
+  toJSON (Scene sid op setup beats juncs) =
     object [ "id" .= sid, "opening" .= op, "setup" .= setup
-           , "beats" .= beats, "junctions" .= juncs, "memories" .= mems ]
+           , "beats" .= beats, "junctions" .= juncs ]
 
 instance FromJSON Scene where
   parseJSON = withObject "Scene" $ \o ->
@@ -204,7 +198,6 @@ instance FromJSON Scene where
           <*> o .:? "setup"     .!= []
           <*> o .:? "beats"     .!= []
           <*> o .:? "junctions" .!= []
-          <*> o .:? "memories"  .!= []
 
 instance ToJSON Script where
   toJSON (Script cast scenes start) =
