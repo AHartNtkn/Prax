@@ -30,9 +30,13 @@ exactly the lifted rows removed, itemized, and their goldens must be byte-identi
 
 ## 2. Blackmail generalizes FULLY: demand, punishment, and motivation are authored
 
-[AMENDED at the gate — the first draft banked the threat side claiming a "fear model"
-needed designing; the user rejected the deferral and the discussion falsified the
-premise.] v30's fear was never an engine model: it is three existing pieces composing
+[AMENDED at the gate, twice — the first draft banked the threat side claiming a "fear
+model" needed designing; the user rejected the deferral, and the v30 record then
+showed the premise was doubly false: the general model was APPROVED IN v30 (LEDGER:
+"a threat is a motive-belief deposit … credibility is self-motivation"), and the
+implementation narrowed it to its demo's content without the narrowing ever being
+surfaced. This item is a FIDELITY RESTORATION to the approved v30 model, not a new
+generalization.] v30's fear was never an engine model: it is three existing pieces composing
 — the EXTORTER carries an authored punitive desire that makes punishing rational
 after defiance; the VICTIM's own wants price the punishment's outcome (eve fears
 exposure through her own notoriety want, not through engine audience-semantics); and
