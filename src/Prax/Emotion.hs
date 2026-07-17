@@ -24,7 +24,7 @@ module Prax.Emotion
     -- * Feeling with a lifetime (fades on its own onset's clock)
   , feelFor, feelTowardFor
     -- * Reading feelings (Conditions)
-  , feeling, feelingToward, feelingSomeone
+  , feeling, feelingToward
   ) where
 
 import           Prax.Query (Condition (..))
@@ -77,23 +77,22 @@ unfeelToward who emotion target =
 -- deletes the targeted @.toward.\<target\>@ leaf, and the now-childless,
 -- never-asserted @.toward@ scaffold is pruned rather than left standing, so
 -- there is no residue for a subtree 'Match' to read. For PRICING that should
--- scale with how many targets remain, prefer 'feelingSomeone' — not for
--- safety (the residue trap is gone) but for its per-target semantics.
+-- scale with how many targets remain, prefer 'feelingToward' with a fresh
+-- variable as the target — not for safety (the residue trap is gone) but for
+-- its per-target semantics.
 feeling :: String -> String -> Condition
 feeling who emotion = Match (feelsPath who emotion)
 
--- | @who@ feels @emotion@ toward the specific, already-known @target@.
+-- | @who@ feels @emotion@ toward @target@ — pass an already-known target for
+-- a specific check, or a fresh variable (the caller's own choice of name) to
+-- bind it to an ACTUAL remaining target, so a want priced over it counts once
+-- per standing grudge (v38's reviewer note: −8 per target is the better
+-- semantics than a single presence test over the bare subtree ('feeling')).
+-- Since v39 both this and 'feeling' correctly stop matching once every
+-- instance is discharged (the drained scaffold is pruned), so the choice
+-- between them is about SEMANTICS — per-target pricing versus a single
+-- presence test — not about avoiding a residue trap. The recommended shape
+-- for any PRICING want over "still feels this, toward whoever".
 feelingToward :: String -> String -> String -> Condition
 feelingToward who emotion target =
   Match (feelsPath who emotion ++ ".toward." ++ target)
-
--- | Like 'feeling', but binds @targetVar@ (a fresh variable the caller
--- names) to an ACTUAL remaining target, so a want priced over it counts once
--- per standing grudge (v38's reviewer note: −8 per target is the better
--- semantics). Since v39 both this and 'feeling' correctly stop matching once
--- every instance is discharged (the drained scaffold is pruned), so the
--- choice between them is now about SEMANTICS — per-target pricing versus a
--- single presence test — not about avoiding a residue trap. The recommended
--- shape for any PRICING want over "still feels this, toward whoever".
-feelingSomeone :: String -> String -> String -> Condition
-feelingSomeone = feelingToward

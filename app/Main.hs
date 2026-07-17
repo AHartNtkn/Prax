@@ -54,7 +54,7 @@ worldNamed _                = ("a night at the bar", Bar.barWorld, Bar.playerNam
 runStress :: [String] -> IO ()
 runStress args = do
   let (name, world, _) = worldNamed args
-      r = stressTest 200 50 world
+      r = stressTest 200 50 (Just "currentScene") world
   putStrLn ("stress-testing " ++ name ++ " — 200 random runs, cap 50 turns")
   putStrLn ("  endings:   " ++ show (Map.toList (srEndings r)))
   putStrLn ("  coverage:  " ++ show (Set.size (srCoverage r)) ++ " distinct actions fired")

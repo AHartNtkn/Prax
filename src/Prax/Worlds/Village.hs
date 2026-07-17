@@ -44,7 +44,7 @@ import           Prax.Debt (owes)
 import           Prax.Blackmail (shakedown)
 import           Prax.Confession (confess, absolve, incorrigible)
 import           Prax.Rng (rngSetup, draw)
-import           Prax.Emotion (feelTowardFor, unfeelToward, angry, feelingSomeone)
+import           Prax.Emotion (feelTowardFor, unfeelToward, angry, feelingToward)
 
 -- | You are a villager — one agent among many.
 playerName :: String
@@ -195,15 +195,15 @@ honest = Trait "honest"
 -- shunned.carol.T-and-regards) so she acts to relieve it when she can, but
 -- there is no conduct stake of hers in this world for it to outweigh; v33's
 -- FloorCheck keeps the unfelt state planning-free (verified in the pins).
--- Bound to a real target ('feelingSomeone', not the bare subtree 'feeling'
--- Match) for its PER-TARGET semantics: two grudges smoulder twice as hot
--- (-8 each), and confront's discharge ('unfeelToward', below) lifts exactly
--- the vented grudge's price. (Historically this shape also dodged the
--- drained-ancestor residue v39's asserted-endpoint marking has since
--- removed — 'Prax.Db.retract' now prunes; the binding is kept for the
--- semantics, not for safety.)
+-- Bound to a real target ('feelingToward' with a fresh variable, not the
+-- bare subtree 'feeling' Match) for its PER-TARGET semantics: two grudges
+-- smoulder twice as hot (-8 each), and confront's discharge ('unfeelToward',
+-- below) lifts exactly the vented grudge's price. (Historically this shape
+-- also dodged the drained-ancestor residue v39's asserted-endpoint marking
+-- has since removed — 'Prax.Db.retract' now prunes; the binding is kept for
+-- the semantics, not for safety.)
 smoulders :: Desire
-smoulders = Desire "smoulders" (Want [ feelingSomeone "Owner" angry "T" ] (-8))
+smoulders = Desire "smoulders" (Want [ feelingToward "Owner" angry "T" ] (-8))
 
 -- Malice with a name: wanting carol ill-regarded, per head. Naming it makes
 -- it believable (a told-about spite enters prediction) but it stays
@@ -261,7 +261,7 @@ whisperAct =
 -- from the mark's own bindings (Actor, H) -- not a re-assertion of the
 -- fabricated content.
 confessWhisper :: Action
-confessWhisper = confess "lied" together "stole.C.loaf" "whispered.Actor.H"
+confessWhisper = confess "lied" "confessed" together "stole.C.loaf" "whispered.Actor.H"
   "[Actor]: confess to [Hearer] about framing [C]"
 
 absolveWhisper :: Action

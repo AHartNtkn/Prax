@@ -9,8 +9,8 @@
 -- Like "Prax.Core", this is a reusable standard library on top of the existing
 -- engine; it adds no new machinery. A reaction instance is just a spawned
 -- practice keyed on its participants; a response consumes it by deleting the
--- instance. Register 'disapprovalP' (and your own reaction practices) with
--- 'Prax.Engine.definePractice'.
+-- instance. Register your own reaction practices (e.g.
+-- 'Prax.Worlds.Bar.disapprovalP') with 'Prax.Engine.definePractice'.
 module Prax.Reactions
   ( -- * Spawning and ending reactions
     reactionPath
@@ -20,16 +20,12 @@ module Prax.Reactions
     -- * Norm violations
   , markViolation
   , violationOf
-    -- * A ready-made disapproval reaction
-  , disapprovalP
   ) where
 
 import           Data.List (intercalate)
 
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Core (adjustScore, warmth)
-import           Prax.Emotion (feelTowardFor, annoyed, pleased)
 
 -- Reactions --------------------------------------------------------------------
 
@@ -64,27 +60,3 @@ markViolation who norm = Insert (violationPath who norm)
 -- | Condition matching a recorded violation of @norm@ by @who@.
 violationOf :: String -> String -> Condition
 violationOf who norm = Match (violationPath who norm)
-
--- Disapproval ------------------------------------------------------------------
-
--- | A ready-made reaction: when spawned as @practice.disapproval.\<Offender\>.\<Onlooker\>@,
--- it offers the onlooker a chance to disapprove of (or forgive) the offender.
--- Spawn it with @'spawnReaction' "disapproval" [offender, onlooker]@.
-disapprovalP :: Practice
-disapprovalP = practice
-  { practiceId   = "disapproval"
-  , practiceName = "[Onlooker] saw [Offender] break a norm"
-  , roles        = ["Offender", "Onlooker"]
-  , actions =
-      [ action "[Actor]: Disapprove of [Offender]"
-          [ Eq "Actor" "Onlooker" ]
-          [ Insert "Onlooker.disapprovedOf.Offender"
-          , feelTowardFor 4 "Onlooker" annoyed "Offender"
-          , adjustScore "Onlooker" "Offender" warmth (-20) "brokeANorm"
-          , endReaction "disapproval" ["Offender", "Onlooker"] ]
-      , action "[Actor]: Let [Offender]'s lapse slide"
-          [ Eq "Actor" "Onlooker" ]
-          [ feelTowardFor 4 "Onlooker" pleased "Offender"
-          , endReaction "disapproval" ["Offender", "Onlooker"] ]
-      ]
-  }

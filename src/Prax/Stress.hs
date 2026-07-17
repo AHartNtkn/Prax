@@ -9,6 +9,13 @@
 -- dead end (a living character with no move). Pure and deterministic given the
 -- seeds — uses a tiny built-in LCG so there is no extra dependency.
 --
+-- Coverage over a single-valued fact family (a @\<family\>!\<id\>@ or
+-- @\<family\>.\<id\>@ path — e.g. a "Prax.Script" world's @currentScene@) is
+-- an optional, DECLARED parameter (@Maybe String@): the caller names the
+-- family it wants tracked, or @Nothing@ to skip tracking. There is no
+-- default family — @currentScene@ is not privileged by this module, only by
+-- the CLI's own callers, which happen to name it.
+--
 -- STATED LIMIT of the dead-end detector (v46): the idle-pass counter tolerates
 -- exactly ONE round boundary of move-less progression — a scene that advances
 -- only via the engine schedule across TWO OR MORE boundaries (e.g. a beat-less
@@ -49,18 +56,22 @@ endingReached st =
   listToMaybe [ e | b <- unify "ending.E" (db st) Map.empty
                   , Just e <- [valToString <$> Map.lookup (intern "E") b] ]
 
--- The active scene, if any (a @currentScene!\<id\>@ fact from a "Prax.Script"
--- world). Non-scene worlds have none, so scene coverage is simply empty there.
-sceneReached :: PraxState -> Maybe String
-sceneReached st =
-  listToMaybe [ s | b <- unify "currentScene.S" (db st) Map.empty
+-- | The current member of a coverage @family@, if any (a @\<family\>.\<id\>@
+-- path — e.g. a "Prax.Script" world's @currentScene!\<id\>@ fact). Worlds
+-- with no fact in the family simply report nothing, so a caller can name any
+-- family without checking first whether the world under test populates it.
+familyReached :: String -> PraxState -> Maybe String
+familyReached family st =
+  listToMaybe [ s | b <- unify (family ++ ".S") (db st) Map.empty
                   , Just s <- [valToString <$> Map.lookup (intern "S") b] ]
 
 -- | The result of one random play.
 data RunResult = RunResult
   { runEnding  :: Maybe String   -- ^ the ending reached, if any
   , runActions :: Set String     -- ^ ids of actions performed
-  , runScenes  :: Set String     -- ^ scenes visited (empty for non-scene worlds)
+  , runScenes  :: Set String     -- ^ coverage-family members visited (empty
+                                  --   if no family was named, or the world
+                                  --   populates none of it)
   , runDeadEnd :: Bool           -- ^ a living character had no available action
   , runTurns   :: Int
   } deriving (Eq, Show)
@@ -69,11 +80,12 @@ data RunResult = RunResult
 -- performs a uniformly-random available action, stopping at an ending, the turn
 -- cap, no one left alive, or a true dead end (a full round in which no living
 -- character has any move). A character with no action simply passes.
-runRandom :: Int -> Word64 -> PraxState -> RunResult
-runRandom cap seed st0 = go cap seed Set.empty (visit Set.empty st0) 0 0 st0
+-- @mFamily@ is the optional coverage family to track (see 'familyReached').
+runRandom :: Int -> Word64 -> Maybe String -> PraxState -> RunResult
+runRandom cap seed mFamily st0 = go cap seed Set.empty (visit Set.empty st0) 0 0 st0
   where
-    -- Record the active scene (if any) of a visited state.
-    visit scs st = maybe scs (`Set.insert` scs) (sceneReached st)
+    -- Record the visited state's current member of the tracked family, if any.
+    visit scs st = maybe scs (`Set.insert` scs) (mFamily >>= (`familyReached` st))
     -- passes = how many living characters in a row have had nothing to do.
     -- 'advance' fires the engine's round boundary once per rotation, on the
     -- wrap call (the first call after every living character has had a
@@ -109,16 +121,18 @@ data StressReport = StressReport
   { srRuns     :: Int
   , srEndings  :: Map String Int   -- ^ ending → how many runs reached it
   , srCoverage :: Set String       -- ^ every action id that fired in any run
-  , srScenes   :: Map String Int   -- ^ scene → how many runs visited it
+  , srScenes   :: Map String Int   -- ^ coverage-family member → how many runs visited it
   , srDeadEnds :: Int              -- ^ runs that hit a dead end
   , srNoEnding :: Int              -- ^ runs that hit the turn cap with no ending
   } deriving (Eq, Show)
 
--- | Run @runs@ seeded random games of up to @cap@ turns and aggregate the report.
-stressTest :: Int -> Int -> PraxState -> StressReport
-stressTest runs cap st0 =
+-- | Run @runs@ seeded random games of up to @cap@ turns and aggregate the
+-- report. @mFamily@ is the optional coverage family to track (see
+-- 'familyReached'); the CLI's own callers pass @Just \"currentScene\"@.
+stressTest :: Int -> Int -> Maybe String -> PraxState -> StressReport
+stressTest runs cap mFamily st0 =
   foldl' tally (StressReport runs Map.empty Set.empty Map.empty 0 0)
-    [ runRandom cap (seedFor i) st0 | i <- [1 .. runs] ]
+    [ runRandom cap (seedFor i) mFamily st0 | i <- [1 .. runs] ]
   where
     seedFor i = fromIntegral i * 2654435761   -- spread the seeds apart
     tally r res =

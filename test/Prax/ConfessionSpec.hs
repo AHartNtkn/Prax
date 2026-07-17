@@ -66,7 +66,7 @@ conscience = Trait "conscience"
   , Desire "clearConscience" (Want [ Match "Owner.confessed.H.wronged.Owner.Victim" ] 0) ]
 
 confessAct :: Action
-confessAct = confess "lied" together pat pat "[Actor]: confess to [Hearer] about wronging [Victim]"
+confessAct = confess "lied" "confessed" together pat pat "[Actor]: confess to [Hearer] about wronging [Victim]"
 
 convWorld :: PraxState
 convWorld = foldl (flip performOutcome) base (personaFacts ++ setup)
@@ -224,7 +224,7 @@ incorrigibilityTests = testGroup "incorrigibility: threshold, gossip, independen
 --   big  stake=20: hold your tongue = 37.94, confess = 0.0    -> doesn't
 
 spontConfessAct :: Action
-spontConfessAct = confess "lied" together pat pat "[Actor]: confess to [Hearer] about wronging [Victim]"
+spontConfessAct = confess "lied" "confessed" together pat pat "[Actor]: confess to [Hearer] about wronging [Victim]"
 
 holdTongue :: Action
 holdTongue = action "[Actor]: hold your tongue" [ Match "at.Actor!P" ] []
@@ -285,7 +285,7 @@ threatenAct, complyAct, defyAct, exposeAct :: Action
   acts -> error ("shakedown produced " ++ show (length acts) ++ " actions, expected 4")
 
 blackmailConfessAct :: Action
-blackmailConfessAct = confess "lied" together blackmailPat blackmailPat "[Actor]: confess to [Hearer] about the loaf"
+blackmailConfessAct = confess "lied" "confessed" together blackmailPat blackmailPat "[Actor]: confess to [Hearer] about the loaf"
 
 waitAct :: Action
 waitAct = action "[Actor]: wait" [ Match "at.Actor!P" ] []
@@ -430,7 +430,7 @@ reoffenseTests = testGroup "re-offense deletes the defeater (v21 idiom)"
 -- of having whispered the lie, and to WHOM (H, the mark's own original
 -- hearer), grounded straight from the mark's own bindings.
 decoupledConfessAct :: Action
-decoupledConfessAct = confess "lied" together "stole.C.loaf" "whispered.Actor.H"
+decoupledConfessAct = confess "lied" "confessed" together "stole.C.loaf" "whispered.Actor.H"
   "[Actor]: confess to [Hearer] about framing [C]"
 
 decoupledWorld :: PraxState
@@ -467,15 +467,19 @@ decoupledDepositTests = testGroup "the deposit is decoupled from the mark's own 
 guardTests :: TestTree
 guardTests = testGroup "guards"
   [ testCase "confess rejects a dotted mark kind" $ do
-      r <- try (evaluate (length (show (confess "li.ed" together pat pat "[Actor]: confess"))))
+      r <- try (evaluate (length (show (confess "li.ed" "confessed" together pat pat "[Actor]: confess"))))
       assertBool "a dotted kind is an error" (isLeft (r :: Either ErrorCall Int))
 
+  , testCase "confess rejects a dotted discharge verb" $ do
+      r <- try (evaluate (length (show (confess "lied" "con.fessed" together pat pat "[Actor]: confess"))))
+      assertBool "a dotted verb is an error" (isLeft (r :: Either ErrorCall Int))
+
   , testCase "confess rejects a mark pattern reserving H/Hearer/Actor" $ do
-      r <- try (evaluate (length (show (confess "lied" together "wronged.H.Victim" "wronged.H.Victim" "[Actor]: confess"))))
+      r <- try (evaluate (length (show (confess "lied" "confessed" together "wronged.H.Victim" "wronged.H.Victim" "[Actor]: confess"))))
       assertBool "H is reserved (the mark's own hearer slot)" (isLeft (r :: Either ErrorCall Int))
 
   , testCase "confess rejects a deposit pattern reserving Hearer" $ do
-      r <- try (evaluate (length (show (confess "lied" together "stole.C.loaf" "told.Actor.Hearer" "[Actor]: confess"))))
+      r <- try (evaluate (length (show (confess "lied" "confessed" together "stole.C.loaf" "told.Actor.Hearer" "[Actor]: confess"))))
       assertBool "Hearer is reserved (the confession's own audience role)"
         (isLeft (r :: Either ErrorCall Int))
 
@@ -483,7 +487,7 @@ guardTests = testGroup "guards"
       -- "Someone" is neither Actor, H, nor one of the mark's own variables
       -- (the mark is "stole.C.loaf", whose only variable is C) -- grounding
       -- it would insert a variable-bearing fact.
-      r <- try (evaluate (length (show (confess "lied" together "stole.C.loaf" "whispered.Actor.Someone" "[Actor]: confess"))))
+      r <- try (evaluate (length (show (confess "lied" "confessed" together "stole.C.loaf" "whispered.Actor.Someone" "[Actor]: confess"))))
       assertBool "an ungroundable deposit variable is an error"
         (isLeft (r :: Either ErrorCall Int))
 

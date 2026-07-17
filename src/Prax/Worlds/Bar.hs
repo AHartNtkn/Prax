@@ -295,6 +295,29 @@ metabolism = ScheduleRule "metabolism" 2
     , [ Insert "practice.patron.P.drinks!M"
       , Call "checkSober" ["P", "M"] ] ) ]
 
+-- A ready-made reaction: when spawned as @practice.disapproval.\<Offender\>.\<Onlooker\>@,
+-- it offers the onlooker a chance to disapprove of (or forgive) the offender.
+-- Spawned by 'settleUpP' below with @'spawnReaction' "disapproval" [patron, bartender]@
+-- when a tab goes unpaid.
+disapprovalP :: Practice
+disapprovalP = practice
+  { practiceId   = "disapproval"
+  , practiceName = "[Onlooker] saw [Offender] break a norm"
+  , roles        = ["Offender", "Onlooker"]
+  , actions =
+      [ action "[Actor]: Disapprove of [Offender]"
+          [ Eq "Actor" "Onlooker" ]
+          [ Insert "Onlooker.disapprovedOf.Offender"
+          , feelTowardFor 4 "Onlooker" annoyed "Offender"
+          , adjustScore "Onlooker" "Offender" warmth (-20) "brokeANorm"
+          , endReaction "disapproval" ["Offender", "Onlooker"] ]
+      , action "[Actor]: Let [Offender]'s lapse slide"
+          [ Eq "Actor" "Onlooker" ]
+          [ feelTowardFor 4 "Onlooker" pleased "Offender"
+          , endReaction "disapproval" ["Offender", "Onlooker"] ]
+      ]
+  }
+
 -- Settling up after being served: the obligation "[Patron] should tip
 -- [Bartender]" (a first-class deontic □, raised on serve — see 'oblige' above) is
 -- discharged by tipping, or breached by leaving the tab unpaid — a norm violation

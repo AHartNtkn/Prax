@@ -11,6 +11,7 @@ import           Prax.Types (PraxState)
 import           Prax.Worlds.Bar (barWorld)
 import           Prax.Worlds.Intrigue (intrigueWorld)
 import           Prax.Worlds.Play (playWorld)
+import           Prax.Worlds.Village (villageWorld)
 
 -- | The task-1 reviewer's repro (v46 finding 4): scene @"s"@ offers its cast no
 -- beat at all, only a pending unconditional transition to @"s2"@ — the only way
@@ -35,12 +36,12 @@ tests = testGroup "Prax.Stress"
              \false positive: the dead-end detector must give the round \
              \boundary's wrap its turn before declaring deadlock (v46 review \
              \finding 4)" $ do
-      let r = stressTest 50 40 deadEndRegressionWorld
+      let r = stressTest 50 40 (Just "currentScene") deadEndRegressionWorld
       srDeadEnds r @?= 0
       assertBool "s2 reached" (Map.member "s2" (srScenes r))
 
   , testCase "random play of the episode: no dead ends, both active branches reached" $ do
-      let r = stressTest 60 40 intrigueWorld
+      let r = stressTest 60 40 (Just "currentScene") intrigueWorld
       assertBool "no dead ends"           (srDeadEnds r == 0)
       assertBool "no run stuck at the cap" (srNoEnding r == 0)
       -- with an active (random) protagonist, both branches Marcus can force are hit
@@ -49,12 +50,12 @@ tests = testGroup "Prax.Stress"
       -- (betrayal needs a *passive* Marcus — proven deterministically in IntrigueSpec)
 
   , testCase "the bar survives random play with no dead ends and broad coverage" $ do
-      let r = stressTest 20 30 barWorld
+      let r = stressTest 20 30 (Just "currentScene") barWorld
       srDeadEnds r @?= 0
       assertBool "many distinct actions exercised" (Set.size (srCoverage r) >= 10)
 
   , testCase "scene coverage: random play reaches both scenes and every ending" $ do
-      let r = stressTest 200 50 playWorld
+      let r = stressTest 200 50 (Just "currentScene") playWorld
       -- both authored scenes are reached by random play (no unreachable scene)
       assertBool "confidence visited" (Map.member "confidence" (srScenes r))
       assertBool "banquet visited"    (Map.member "banquet"    (srScenes r))
@@ -63,4 +64,10 @@ tests = testGroup "Prax.Stress"
       mapM_ (\e -> assertBool (e ++ " reached") (Map.member e (srEndings r)))
             ["betrayal", "loyalty", "complicity"]
       assertBool "no dead ends" (srDeadEnds r == 0)
+
+  , testCase "coverage family generalizes past Script's currentScene: the village's \
+             \marketDay family is tracked when named, proving the second application" $ do
+      let r = stressTest 80 60 (Just "marketDay") villageWorld
+      assertBool "the market was observed open at least once"
+        (Map.member "square" (srScenes r))
   ]

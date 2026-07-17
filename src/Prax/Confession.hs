@@ -23,7 +23,9 @@ segOk n = not (null n) && all (`notElem` (".!" :: String)) n
 -- | Confess ONE deed (one mark binding) to a co-present hearer. The lied-mark
 -- is the precondition and it CONVERTS — a deed can be confessed once; further
 -- hearers learn by gossip. @H@ is the mark's own original-hearer slot and is
--- reserved in the MARK pattern.
+-- reserved in the MARK pattern. The discharge @verb@ names what the mark
+-- becomes (shipped worlds pass @\"confessed\"@; recant, boast, admit — same
+-- machinery, a different word for what survives).
 --
 -- The MARK pattern and the DEPOSIT pattern are deliberately separate
 -- (amended after implementation blocked on the anticipated shape finding): a
@@ -36,10 +38,12 @@ segOk n = not (null n) && all (`notElem` (".!" :: String)) n
 -- fact, so it is a loud error. Worlds whose deed IS self-shaped (the mark's
 -- content and what it reveals coincide) pass the same pattern for both
 -- arguments, explicitly — there is no default.
-confess :: String -> CoPresence -> String -> String -> String -> Action
-confess kind copresence markPat depositPat label
+confess :: String -> String -> CoPresence -> String -> String -> String -> Action
+confess kind verb copresence markPat depositPat label
   | not (segOk kind) =
       error ("confess: mark kind " ++ show kind ++ " must be a single path segment")
+  | not (segOk verb) =
+      error ("confess: discharge verb " ++ show verb ++ " must be a single path segment")
   | (v : _) <- authoredPatClash ["H", "Hearer", "Actor"] (pathNames markPat) =
       error ("confess: mark pattern " ++ show markPat ++ " reserves variable " ++ show v
              ++ " (the mark's hearer slot / the action's own roles, or the Prax"
@@ -55,7 +59,7 @@ confess kind copresence markPat depositPat label
   | otherwise = action label conds outs
   where
     liedPath      = "Actor." ++ kind ++ ".H." ++ markPat
-    confessedPath = "Actor.confessed.H." ++ markPat
+    confessedPath = "Actor." ++ verb ++ ".H." ++ markPat
     groundedVars  = "Actor" : "H" : filter isVariable (pathNames markPat)
     ungroundable  = [ v | v <- filter isVariable (pathNames depositPat)
                         , v `notElem` groundedVars ]

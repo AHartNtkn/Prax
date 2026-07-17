@@ -9,7 +9,8 @@ import           Prax.Query (Condition (..))
 import           Prax.Types
 import           Prax.Engine (definePractices, defineFunctions, performOutcome, possibleActions, performAction, setCharacters)
 import           Prax.Planner (pickAction)
-import           Prax.Core (coreFns)
+import           Prax.Core (coreFns, adjustScore, warmth)
+import           Prax.Emotion (feelTowardFor, annoyed, pleased)
 import           Prax.Reactions
 
 -- Perform the first action whose label contains `needle`.
@@ -28,8 +29,32 @@ labels st actor = map gaLabel (possibleActions st actor)
 facts :: PraxState -> [String]
 facts = dbToSentences . db
 
+-- A minimal reaction fixture, local to this spec (the mechanism's own unit
+-- coverage is deliberately independent of any world's shipped content — see
+-- 'Prax.Worlds.Bar.disapprovalP' for the shipped equivalent). Shaped the same
+-- way any reaction is: spawned keyed on its participants, offered only to the
+-- onlooker, and consumed by either response.
+disapprovalFixture :: Practice
+disapprovalFixture = practice
+  { practiceId   = "disapproval"
+  , practiceName = "[Onlooker] saw [Offender] break a norm"
+  , roles        = ["Offender", "Onlooker"]
+  , actions =
+      [ action "[Actor]: Disapprove of [Offender]"
+          [ Eq "Actor" "Onlooker" ]
+          [ Insert "Onlooker.disapprovedOf.Offender"
+          , feelTowardFor 4 "Onlooker" annoyed "Offender"
+          , adjustScore "Onlooker" "Offender" warmth (-20) "brokeANorm"
+          , endReaction "disapproval" ["Offender", "Onlooker"] ]
+      , action "[Actor]: Let [Offender]'s lapse slide"
+          [ Eq "Actor" "Onlooker" ]
+          [ feelTowardFor 4 "Onlooker" pleased "Offender"
+          , endReaction "disapproval" ["Offender", "Onlooker"] ]
+      ]
+  }
+
 base :: PraxState
-base = defineFunctions coreFns (definePractices [disapprovalP] emptyState)
+base = defineFunctions coreFns (definePractices [disapprovalFixture] emptyState)
 
 -- A tiny reaction whose response spawns a further (disapproval) reaction,
 -- to exercise chaining generically.
@@ -110,7 +135,7 @@ tests = testGroup "Prax.Reactions"
 
   , testGroup "chaining"
     [ testCase "a response can spawn a further reaction" $ do
-        let base' = defineFunctions coreFns (definePractices [disapprovalP, chainerP] emptyState)
+        let base' = defineFunctions coreFns (definePractices [disapprovalFixture, chainerP] emptyState)
             st = performOutcome (spawnReaction "chainer" ["bex", "ada"]) base'
         st' <- perform st "ada" "React to bex"
         let fs = facts st'
