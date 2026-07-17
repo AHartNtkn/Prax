@@ -5,7 +5,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, setCharacters, setSchedule)
+import           Prax.Engine (definePractices, defineFunctions, performOutcome, setAxioms, setDesires, setCharacters, setSchedule)
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Derive (Axiom (..), axiom)
 import           Prax.Rng (rngSetup, draw)
@@ -80,6 +80,15 @@ tests = testGroup "Prax.TypeCheck"
             , actions = [ action "[Actor]: z" [] [ Insert "practice.ghost.R" ] ] }
       assertBool "UndefinedRef practice.ghost"
         (any (\case UndefinedRef _ "practice.ghost" -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "an unbound variable in a registered function's case is caught, sited at fn <name>" $ do
+      -- The function's case outcome uses Ghost, bound by neither its params
+      -- nor its (empty) conditions -- caught by the registry-level walk, whose
+      -- site label drops the phantom practice prefix (spec v47).
+      let f = Function "grant" ["P"] [ FnCase [] [ Insert "gift.Ghost" ] ]
+          w = defineFunctions [f] emptyState
+      assertBool "UnboundVar Ghost sited at \"fn grant\""
+        (any (\case UnboundVar "fn grant" "Ghost" _ -> True; _ -> False) (typeCheck w))
 
   , testCase "a correct little practice is well-formed" $ do
       let p = practice

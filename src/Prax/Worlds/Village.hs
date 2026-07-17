@@ -29,8 +29,8 @@ module Prax.Worlds.Village
 
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setAxioms, setDesires, setCharacters, setSchedule)
-import           Prax.Core (coreLib, adjustScore)
+import           Prax.Engine (definePractices, defineFunctions, performOutcome, setAxioms, setDesires, setCharacters, setSchedule)
+import           Prax.Core (coreFns, adjustScore)
 import           Prax.Derive (Axiom, axiom)
 import           Prax.Project
 import           Prax.Witness
@@ -507,7 +507,8 @@ villageWorld =
     -- boundary, in declaration order — no ticker characters in the roster.
     base = setSchedule [ sightRule villageSighting, hungerPulse, marketGathering ]
              (setCharacters roster
-                (definePractices [coreLib, worldP, villageP, earnBreadP, marketP] emptyState))
+                (defineFunctions coreFns
+                   (definePractices [worldP, villageP, earnBreadP, marketP] emptyState)))
     setup =
       [ Insert "practice.village.here"
       , Insert "practice.world.world.connected.square.mill"

@@ -58,7 +58,6 @@ data Practice = Practice
   , actions      :: [Action]      -- ^ affordances offered to participants
   , dataFacts    :: [String]      -- ^ static facts, inserted under @practiceData.<id>.@
   , initOutcomes :: [Outcome]     -- ^ run once when an instance first spawns
-  , functions    :: [Function]    -- ^ named guarded effect bundles, invoked by 'Call'
   }
   deriving (Eq, Show)
 
@@ -66,7 +65,7 @@ data Practice = Practice
 practice :: Practice
 practice = Practice
   { practiceId = "", practiceName = "", roles = []
-  , actions = [], dataFacts = [], initOutcomes = [], functions = [] }
+  , actions = [], dataFacts = [], initOutcomes = [] }
 
 -- | An affordance: a named, conditioned bundle of outcomes.
 data Action = Action
@@ -194,7 +193,7 @@ data ScheduleRule = ScheduleRule
 -- @docs/specs/2026-07-12-v29-interning.md@ and 'Prax.Cooked.cookOutcome', which
 -- builds these): 'Insert'/'Delete' carry the sentence already split into
 -- @(symbol, punctuationAfterName)@ tokens ('Prax.Db.internTokens'); 'CCall'\'s
--- @fn@ stays a String (a @cpFns@ lookup key, never unified) while its @args@
+-- @fn@ stays a String (a @cookedFns@ registry lookup key, never unified) while its @args@
 -- are interned; 'CForEach' recurses. Declared here rather than in "Prax.Cooked"
 -- because 'PraxState' below embeds 'CookedPractice' (built from these), and
 -- "Prax.Cooked" depends on this module for 'Outcome'\/'Practice' — these are
@@ -230,13 +229,6 @@ data CookedPractice = CookedPractice
     -- 'possibleActions' call.
   , cpActions :: [CookedAction]
   , cpInits   :: [CookedOutcome]
-  , cpFns     :: Map String ([String], [([CookedCondition], [CookedOutcome])])
-    -- ^ Cooked 'Function' cases, keyed by 'fnName', paired with 'fnParams' —
-    -- so the cooked hot path ('Prax.Engine.performCooked') never falls back
-    -- to a string-side 'fnParams' lookup. First-wins on a duplicate 'fnName'
-    -- within one practice (built via a fold that keeps the first occurrence,
-    -- not @Map.fromList@'s last-wins), matching the search order
-    -- 'lookupCookedFn' uses across practices.
   }
   deriving (Eq, Show)
 
@@ -357,6 +349,13 @@ data PraxState = PraxState
     -- ^ 'practiceDefs' compiled to cooked/token form
     -- ('Prax.Cooked.cookPractice'), rebuilt in lockstep by the same Engine
     -- helper ('Prax.Engine.retable') that maintains 'improvables'\/'footprint'.
+  , worldFns  :: [Function]                 -- ^ the authored registry (build-time vocabulary)
+  , cookedFns :: Map String ([String], [([CookedCondition], [CookedOutcome])])
+    -- ^ cooked once by 'Prax.Engine.defineFunctions'; the ONE home 'Call'
+    -- resolution reads ('Prax.Engine.lookupCookedFn'). Keyed by 'fnName';
+    -- uniqueness is the setter's loud guard, so the Map never silently
+    -- collapses a duplicate. Functions carry no practice locality — resolution
+    -- was always global (spec 2026-07-17-v47).
   , characters   :: [Character]
   , cookedWants :: Map String [[CookedCondition]]
     -- ^ Each character's 'charWants' conditions precooked, one entry per
@@ -446,7 +445,8 @@ data PraxState = PraxState
 emptyState :: PraxState
 emptyState = PraxState
   { db = insert (turnPath ++ "!0") emptyDb
-  , practiceDefs = Map.empty, cookedDefs = Map.empty, characters = []
+  , practiceDefs = Map.empty, cookedDefs = Map.empty
+  , worldFns = [], cookedFns = Map.empty, characters = []
   , cookedWants = Map.empty, cookedDesires = Map.empty, cursor = -1
   , caresAbout = Map.empty, intentions = Map.empty
   , axioms = [], cookedRules = [], sorts = [], desires = [], predictionScope = []

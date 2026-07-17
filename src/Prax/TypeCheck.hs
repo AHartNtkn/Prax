@@ -74,6 +74,7 @@ data TypeError
 typeCheck :: PraxState -> [TypeError]
 typeCheck st =
      concatMap unboundInPractice ps
+  ++ concatMap unboundInFunction (worldFns st)
   ++ concatMap unboundInAxiom (axioms st)
   ++ cardinalityErrors (assertedSentences st)
   ++ refErrors st
@@ -127,18 +128,22 @@ unboundInPractice :: Practice -> [TypeError]
 unboundInPractice p =
      unboundInOutcomes (practiceId p ++ " (init)") (roles p) (initOutcomes p)
   ++ concatMap action' (actions p)
-  ++ concatMap fn' (functions p)
   where
     action' a =
       unboundInOutcomes (practiceId p ++ " / " ++ actionName a)
         ("Actor" : roles p ++ concatMap condVars (actionConditions a))
         (actionOutcomes a)
-    fn' f =
-      concatMap
-        (\c -> unboundInOutcomes (practiceId p ++ " / fn " ++ fnName f)
-                 (fnParams f ++ concatMap condVars (caseConditions c))
-                 (caseOutcomes c))
-        (fnCases f)
+
+-- Each function case's outcomes may only use the function's params and the
+-- case's own condition-bound variables (spec v47: functions are registry-level,
+-- so the site label drops the practice prefix).
+unboundInFunction :: Function -> [TypeError]
+unboundInFunction f =
+  concatMap
+    (\c -> unboundInOutcomes ("fn " ++ fnName f)
+             (fnParams f ++ concatMap condVars (caseConditions c))
+             (caseOutcomes c))
+    (fnCases f)
 
 unboundInAxiom :: Axiom -> [TypeError]
 unboundInAxiom ax =
@@ -168,15 +173,15 @@ cardinalityErrors sentences =
 -- Check 3: dangling references ------------------------------------------------
 
 refErrors :: PraxState -> [TypeError]
-refErrors st = concatMap practiceRefs ps
+refErrors st = concatMap practiceRefs ps ++ concatMap functionRefs (worldFns st)
   where
     ps          = Map.elems (practiceDefs st)
-    definedFns  = [ fnName f | p <- ps, f <- functions p ]
+    definedFns  = map fnName (worldFns st)
     definedPrac = Map.keys (practiceDefs st)
     practiceRefs p = concatMap (outcomeRef (practiceId p)) (allOutcomes p)
-    allOutcomes p =
-      initOutcomes p ++ concatMap actionOutcomes (actions p)
-      ++ [ o | f <- functions p, c <- fnCases f, o <- caseOutcomes c ]
+    allOutcomes p = initOutcomes p ++ concatMap actionOutcomes (actions p)
+    functionRefs f =
+      concatMap (outcomeRef ("fn " ++ fnName f)) [ o | c <- fnCases f, o <- caseOutcomes c ]
     outcomeRef loc (Call fn _)
       | fn `notElem` definedFns = [ UndefinedRef loc fn ]
     outcomeRef loc (Insert s)
@@ -198,8 +203,8 @@ assertedSentences st =
      [ s | p <- ps
          , s <- dataFacts p
                 ++ inserts (initOutcomes p)
-                ++ concatMap (inserts . actionOutcomes) (actions p)
-                ++ concatMap (concatMap (inserts . caseOutcomes) . fnCases) (functions p) ]
+                ++ concatMap (inserts . actionOutcomes) (actions p) ]
+  ++ [ s | f <- worldFns st, s <- concatMap (inserts . caseOutcomes) (fnCases f) ]
   ++ [ h | ax <- axioms st, h <- axiomThen ax ]
   ++ dbToLabeledSentences (db st)
   where
@@ -316,8 +321,8 @@ writeSites :: PraxState -> [(String, [Outcome])]
 writeSites st =
      [ (practiceId p ++ " (init)", initOutcomes p) | p <- ps ]
   ++ [ (practiceId p ++ " / " ++ actionName a, actionOutcomes a) | p <- ps, a <- actions p ]
-  ++ [ (practiceId p ++ " / fn " ++ fnName f, caseOutcomes c)
-     | p <- ps, f <- functions p, c <- fnCases f ]
+  ++ [ ("fn " ++ fnName f, caseOutcomes c)
+     | f <- worldFns st, c <- fnCases f ]
   ++ [ ("schedule " ++ srName r, outs) | r <- schedule st, (_, outs) <- srBody r ]
   where ps = Map.elems (practiceDefs st)
 
@@ -327,8 +332,8 @@ writeSites st =
 readSites :: PraxState -> [(String, [Condition])]
 readSites st =
      [ (practiceId p ++ " / " ++ actionName a, actionConditions a) | p <- ps, a <- actions p ]
-  ++ [ (practiceId p ++ " / fn " ++ fnName f, caseConditions c)
-     | p <- ps, f <- functions p, c <- fnCases f ]
+  ++ [ ("fn " ++ fnName f, caseConditions c)
+     | f <- worldFns st, c <- fnCases f ]
   ++ [ (loc ++ " (effect guard)", gs) | (loc, os) <- writeSites st, gs <- outcomeGuards os ]
   ++ [ ("axiom", axiomWhen ax) | ax <- axioms st ]
   ++ [ ("desire " ++ desireName d, wantConditions (desireWant d)) | d <- desires st ]
@@ -356,7 +361,7 @@ seedlessDrawErrors st =
     allOutcomeLists =
       [ initOutcomes p | p <- ps ]
       ++ [ actionOutcomes a | p <- ps, a <- actions p ]
-      ++ [ caseOutcomes c | p <- ps, f <- functions p, c <- fnCases f ]
+      ++ [ caseOutcomes c | f <- worldFns st, c <- fnCases f ]
       ++ [ outs | r <- schedule st, (_, outs) <- srBody r ]
     outcomeUsesSeed (ForEach conds outs) =
       any guardReadsSeed conds || any outcomeUsesSeed outs
@@ -411,11 +416,10 @@ lintSites st =
      | (pid, cp) <- defs, a <- cpActions cp, gs <- forEachGuards (caOuts a) ]
   ++ [ (pid ++ " (init guard)", gs)
      | (pid, cp) <- defs, gs <- forEachGuards (cpInits cp) ]
-  ++ [ (pid ++ " / fn " ++ fn, cs)
-     | (pid, cp) <- defs, (fn, (_, cases)) <- Map.toList (cpFns cp)
-     , (cs, _) <- cases ]
-  ++ [ (pid ++ " / fn " ++ fn ++ " (effect guard)", gs)
-     | (pid, cp) <- defs, (fn, (_, cases)) <- Map.toList (cpFns cp)
+  ++ [ ("fn " ++ fn, cs)
+     | (fn, (_, cases)) <- Map.toList (cookedFns st), (cs, _) <- cases ]
+  ++ [ ("fn " ++ fn ++ " (effect guard)", gs)
+     | (fn, (_, cases)) <- Map.toList (cookedFns st)
      , (_, os) <- cases, gs <- forEachGuards os ]
   ++ [ ("schedule " ++ csrName r, cs)
      | r <- cookedSchedule st, (cs, _) <- csrBody r ]
@@ -447,6 +451,7 @@ unionAll uf (x : xs) = foldl (`link` x) uf xs
 sentencesByScope :: PraxState -> [(String, [String])]
 sentencesByScope st =
      [ (practiceId p, practiceSents p) | p <- Map.elems (practiceDefs st) ]
+  ++ [ ("fn " ++ fnName f, fnSents f) | f <- worldFns st ]
   ++ zipWith (\i ax -> ("axiom" ++ show i, condSents (axiomWhen ax) ++ axiomThen ax))
              [0 :: Int ..] (axioms st)
   ++ [ ("<facts>", dbToLabeledSentences (db st)) ]
@@ -454,8 +459,10 @@ sentencesByScope st =
     practiceSents p =
          concatMap (\a -> condSents (actionConditions a) ++ outcomeSents (actionOutcomes a)) (actions p)
       ++ outcomeSents (initOutcomes p)
-      ++ concatMap (concatMap (\c -> condSents (caseConditions c)
-                                     ++ outcomeSents (caseOutcomes c)) . fnCases) (functions p)
+    -- Each function is its own binding scope: its params are call-scoped, not
+    -- shared with any practice (spec v47).
+    fnSents f =
+      concatMap (\c -> condSents (caseConditions c) ++ outcomeSents (caseOutcomes c)) (fnCases f)
 
 condSents :: [Condition] -> [String]
 condSents = concatMap go

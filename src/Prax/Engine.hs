@@ -9,6 +9,7 @@
 module Prax.Engine
   ( definePractice
   , definePractices
+  , defineFunctions
   , renderText
   , withDb
   , setAxioms
@@ -40,7 +41,7 @@ import           Prax.Query (queryCooked, groundCondition, groundNames, CookedCo
 import           Prax.Types
 import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, axiomHeadPatterns, monotoneAxioms, cookAxioms, runCooked)
 import           Prax.Relevance (improvableDesires, livenessOf, mayUnifySyms, evictionShadowNames, bearingTemplates)
-import           Prax.Cooked (cookOutcome, cookPractice, cookScheduleRule, groundCookedOutcome)
+import           Prax.Cooked (cookOutcome, cookPractice, cookFunctions, cookScheduleRule, groundCookedOutcome)
 import           Prax.Sym (Sym, intern, symIsVar, symName)
 
 -- | Rebuild the derived vocabulary tables. Internal: every helper that
@@ -113,11 +114,6 @@ applyGrowToks toks st =
 
 -- | Register a practice and insert its static @dataFacts@ under
 -- @practiceData.<id>.@.
---
--- (Excluding @practiceId q == practiceId p@ lets a practice be legally
--- re-defined over its own old version. The within-practice duplicate arms
--- close the same holes 'cpFns''s first-wins fold and
--- 'groundedDeltaAnchors''s first-match papered over.)
 definePractice :: Practice -> PraxState -> PraxState
 definePractice p st
   | a : _ <- dupActions =
@@ -125,11 +121,6 @@ definePractice p st
              ++ " declares two actions named " ++ show a
              ++ " -- action names are lookup keys (delta anchors, standing"
              ++ " intentions); rename one")
-  | (fn, home) : _ <- fnCollisions =
-      error ("Prax.Engine.definePractice: function " ++ show fn ++ " in practice "
-             ++ show (practiceId p) ++ " is already declared by practice "
-             ++ show home
-             ++ " -- Call resolution is by bare name (lookupCookedFn); rename one")
   | otherwise =
       retable (withDb (insertAll (map (prefix ++) (dataFacts p))) st)
         { practiceDefs = Map.insert (practiceId p) p (practiceDefs st) }
@@ -137,17 +128,36 @@ definePractice p st
     prefix = "practiceData." ++ practiceId p ++ "."
     names = map actionName (actions p)
     dupActions = [ n | (n, i) <- zip names [0 :: Int ..], n `elem` take i names ]
-    ownFns = map fnName (functions p)
-    fnCollisions =
-      [ (fn, practiceId p)
-      | (fn, i) <- zip ownFns [0 :: Int ..], fn `elem` take i ownFns ]
-      ++ [ (fnName f, practiceId q)
-         | q <- Map.elems (practiceDefs st), practiceId q /= practiceId p
-         , f <- functions p, fnName f `elem` map fnName (functions q) ]
 
 -- | Register several practices in order.
 definePractices :: [Practice] -> PraxState -> PraxState
 definePractices ps st = foldl' (flip definePractice) st ps
+
+-- | Register the world's functions — the one home ('cookedFns'). 'Practice'
+-- carries no functions since v47: practice-locality was fiction, resolution
+-- was always global ('lookupCookedFn' searched every practice first-wins,
+-- 'Call' sites name bare functions). Cooks each into the registry and retables
+-- so the fn-pool analyses ('Prax.Relevance.producibleAtoms',
+-- 'improvableDesires', 'livenessOf', 'bearingTemplates') see the vocabulary.
+-- Loud on a duplicate 'fnName' — within this batch OR against the
+-- already-registered set (v43's two per-practice collision arms collapse into
+-- this one check: a Map cannot hold a duplicate silently, so the guard makes
+-- the attempt loud). Order relative to 'definePractices' does not matter: both
+-- setters persist their own field ('cookedFns'\/'practiceDefs') and 'retable'
+-- reads both, so whichever runs last leaves every table coherent.
+defineFunctions :: [Function] -> PraxState -> PraxState
+defineFunctions fs st
+  | (fn : _) <- clashes =
+      error ("Prax.Engine.defineFunctions: function " ++ show fn
+             ++ " is already registered -- Call resolution is by bare name"
+             ++ " (lookupCookedFn); rename one")
+  | otherwise =
+      retable st { worldFns  = worldFns st ++ fs
+                 , cookedFns = Map.union (cookedFns st) (cookFunctions fs) }
+  where
+    newNames = map fnName fs
+    existing = Map.keys (cookedFns st)
+    clashes  = (newNames \\ nub newNames) ++ filter (`elem` existing) newNames
 
 -- | Substitute @[Var]@ placeholders in a template using the bindings, leaving
 -- unknown placeholders untouched.
@@ -442,17 +452,12 @@ spawnedInstanceNames names st =
     -- The instance is newly spawned iff it did not exist before this insert.
     existedBefore ns = not (null (unifySyms ns (db st) Map.empty))
 
--- | The function named @fn@'s params and cooked cases: the first practice
--- (in 'Map.elems' order) whose 'cpFns' declares it — 'cpFns' itself is
--- first-wins within a practice ('Prax.Cooked.cookPractice'), so this single
--- lookup gives the correct two-level first-match resolution (first practice,
--- then first same-named function within it) on its own, with no string-side
--- fallback needed for 'fnParams'.
+-- | The function named @fn@'s params and cooked cases — a plain lookup in the
+-- one registry ('cookedFns'). Since v47 functions have a single home (the
+-- practice-fold-and-first-wins resolution is gone), so this is exactly
+-- @Map.lookup fn (cookedFns st)@.
 lookupCookedFn :: String -> PraxState -> Maybe ([String], [([CookedCondition], [CookedOutcome])])
-lookupCookedFn fn st =
-  case [ entry | cp <- Map.elems (cookedDefs st), Just entry <- [Map.lookup fn (cpFns cp)] ] of
-    (e : _) -> Just e
-    []      -> Nothing
+lookupCookedFn fn st = Map.lookup fn (cookedFns st)
 
 -- | The insert\/delete anchor families one grounded action's outcomes can
 -- touch — 'performAction''s effects, bounded statically per call by walking

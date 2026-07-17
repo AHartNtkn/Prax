@@ -80,12 +80,13 @@ mathP = practice
           [ Match "practice.math.M.n!N" ]
           [ Call "dbl" ["M", "N"] ]
       ]
-  , functions =
-      [ Function "dbl" ["M", "N"]
-          [ FnCase [ Calc "R" Mul "N" "2" ]
-                   [ Insert "practice.math.M.n!R" ] ]
-      ]
   }
+
+-- mathP's registered function (spec v47: the world registry, not a practice field).
+dblFn :: Function
+dblFn = Function "dbl" ["M", "N"]
+  [ FnCase [ Calc "R" Mul "N" "2" ]
+           [ Insert "practice.math.M.n!R" ] ]
 
 -- Test driver: perform the first action whose label contains `needle`. ---------
 
@@ -105,7 +106,7 @@ labels st actor = map gaLabel (possibleActions st actor)
 tests :: TestTree
 tests = testGroup "Prax.Engine"
   [ testCase "cookedDefs mirrors practiceDefs' keys after definePractices" $
-      let st = definePractices [greetP, tendBarP, duelP, mathP] emptyState
+      let st = defineFunctions [dblFn] (definePractices [greetP, tendBarP, duelP, mathP] emptyState)
       in Map.keys (cookedDefs st) @?= Map.keys (practiceDefs st)
 
   , testCase "definePractice inserts static data under practiceData" $
@@ -149,7 +150,7 @@ tests = testGroup "Prax.Engine"
       labels st1 "nic" @?= []
 
   , testCase "call into a guarded function applies its calc effect" $ do
-      let st0 = definePractice mathP emptyState
+      let st0 = defineFunctions [dblFn] (definePractice mathP emptyState)
           st1 = performOutcome (Insert "practice.math.box") st0
       assertBool "init n=3" ("practice.math.box.n.3" `elem` dbToSentences (db st1))
       st2 <- step st1 "alice" "Double"
@@ -250,11 +251,10 @@ tests = testGroup "Prax.Engine"
                 , action "[Actor]: ritual" [] [ Call "bless" ["Actor"] ]
                 , action "[Actor]: chant"  [] [ Call "unknownFn" ["Actor"] ]
                 ]
-            , functions =
-                [ Function "bless" ["Who"]
-                    [ FnCase [] [ Insert "blessed.Who" ] ] ]
             }
-          st = definePractices [p] emptyState
+          blessFn = Function "bless" ["Who"]
+                      [ FnCase [] [ Insert "blessed.Who" ] ]
+          st = defineFunctions [blessFn] (definePractices [p] emptyState)
           st1 = performOutcome (Insert "practice.market.here") st
           gaOf label = case [ ga | ga <- possibleActions st1 "ada", gaLabel ga == label ] of
             (ga : _) -> ga
@@ -318,30 +318,27 @@ tests = testGroup "Prax.Engine"
       assertBool "the lifted head" (has "obliged.Obligor.hungry.X")
       assertBool "the ⊥ witness"   (has "contradiction")
 
-  , testGroup "definePractice: the v43 collision guards (previously latent: two actions or two functions could share a lookup key)"
+  , testGroup "collision guards (v43, re-expressed against the v47 registry): action names and registered function names must each be unique"
     [ testCase "two actions with the same name in one practice is a loud construction-time error" $ do
         let p = practice { practiceId = "dup", roles = ["R"]
                           , actions = [ action "dup" [] [], action "dup" [] [] ] }
         r <- try (evaluate (Map.size (practiceDefs (definePractice p emptyState))))
         assertBool "duplicate action names rejected" (isLeft (r :: Either ErrorCall Int))
 
-    , testCase "two functions with the same name within one practice is a loud construction-time error" $ do
-        let p = practice { practiceId = "dupfn"
-                          , functions = [ Function "f" [] [], Function "f" [] [] ] }
-        r <- try (evaluate (Map.size (practiceDefs (definePractice p emptyState))))
-        assertBool "within-practice function name collision rejected" (isLeft (r :: Either ErrorCall Int))
+    , testCase "two functions with the same name within ONE defineFunctions batch is a loud error" $ do
+        r <- try (evaluate (Map.size (cookedFns
+                    (defineFunctions [ Function "f" [] [], Function "f" [] [] ] emptyState))))
+        assertBool "within-batch function name collision rejected" (isLeft (r :: Either ErrorCall Int))
 
-    , testCase "a function name already declared by another practice is a loud construction-time error" $ do
-        let p1 = practice { practiceId = "p1", functions = [ Function "f" [] [] ] }
-            p2 = practice { practiceId = "p2", functions = [ Function "f" [] [] ] }
-            st1 = definePractice p1 emptyState
-        r <- try (evaluate (Map.size (practiceDefs (definePractice p2 st1))))
-        assertBool "cross-practice function name collision rejected" (isLeft (r :: Either ErrorCall Int))
+    , testCase "a function name already registered by an EARLIER defineFunctions call is a loud error" $ do
+        let st1 = defineFunctions [ Function "f" [] [] ] emptyState
+        r <- try (evaluate (Map.size (cookedFns
+                    (defineFunctions [ Function "f" [] [] ] st1))))
+        assertBool "across-call function name collision rejected" (isLeft (r :: Either ErrorCall Int))
 
-    , testCase "re-defining the SAME practice (its own old version) is legal (self excluded from fn collision)" $ do
-        let p1 = practice { practiceId = "p1", functions = [ Function "f" [] [] ] }
-            st1 = definePractice p1 emptyState
-        r <- try (evaluate (Map.size (practiceDefs (definePractice p1 st1))))
-        assertBool "self re-definition is not rejected" (not (isLeft (r :: Either ErrorCall Int)))
+    , testCase "distinct function names across two calls register cleanly (accumulation)" $ do
+        let st2 = defineFunctions [ Function "g" [] [] ]
+                    (defineFunctions [ Function "f" [] [] ] emptyState)
+        Map.keys (cookedFns st2) @?= ["f", "g"]
     ]
   ]

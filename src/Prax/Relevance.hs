@@ -100,15 +100,14 @@ evictionShadowNames toks =
   [ map fst (take i toks) ++ [intern "PraxEvicted"]
   | (i, (_, op)) <- zip [1 ..] toks, op == Just '!' ]
 
--- The Call-resolution pool: every function's cooked case outcomes, guards
--- ignored (conservatively: all cases), unioned across practices first-wins
--- in practice order — the same resolution order as
--- 'Prax.Engine.lookupCookedFn' (observable only under a cross-practice
--- duplicate 'fnName', which no shipped world has; v43's guard makes one
--- impossible).
-cookedFnPool :: Map String CookedPractice -> Map String [CookedOutcome]
-cookedFnPool defs =
-  Map.unions [ Map.map (concatMap snd . snd) (cpFns cp) | cp <- Map.elems defs ]
+-- The Call-resolution pool: every registered function's cooked case outcomes,
+-- guards ignored (conservatively: all cases), keyed by 'fnName'. Reads the one
+-- registry ('Prax.Types.cookedFns') directly — since v47 functions have a
+-- single home, so there is no practice fold and no resolution-order subtlety
+-- (both this pool and 'Prax.Engine.lookupCookedFn' read the same Map, exactly).
+cookedFnPool :: Map String ([String], [([CookedCondition], [CookedOutcome])])
+             -> Map String [CookedOutcome]
+cookedFnPool = Map.map (concatMap snd . snd)
 
 -- The insert- and delete-shaped atoms an outcome can produce, resolving
 -- 'CCall's through the pool (conservatively: all cases). An exclusion insert
@@ -181,15 +180,14 @@ data AtomPools = AtomPools
   , poolWild     :: Bool
   }
 
-worldAtomPools :: Map String CookedPractice -> AtomPools
-worldAtomPools defs = AtomPools
+worldAtomPools :: Map String CookedPractice -> Map String [CookedOutcome] -> AtomPools
+worldAtomPools defs fns = AtomPools
   { poolInserted = concatMap (maybe [] fst) atoms
   , poolDeleted  = concatMap (maybe [] snd) atoms
   , poolWild     = Nothing `elem` atoms
   }
   where
     practices = Map.elems defs
-    fns = cookedFnPool defs
     atoms = [ cookedOutcomeAtoms fns [] o
             | cp <- practices, a <- cpActions cp, o <- caOuts a ]
          ++ [ cookedOutcomeAtoms fns [] o | cp <- practices, o <- cpInits cp ]
@@ -210,7 +208,7 @@ improvableDesires :: PraxState -> [String]
 improvableDesires st =
   [ desireName d | d <- desires st, improvable d ]
   where
-    pools = worldAtomPools (cookedDefs st)
+    pools = worldAtomPools (cookedDefs st) (cookedFnPool (cookedFns st))
     wild = poolWild pools
     inserted = poolInserted pools
     deleted  = poolDeleted pools
@@ -238,7 +236,7 @@ livenessOf :: PraxState -> Map String Liveness
 livenessOf st =
   Map.fromList [ (desireName d, classify d) | d <- desires st ]
   where
-    pools = worldAtomPools (cookedDefs st)
+    pools = worldAtomPools (cookedDefs st) (cookedFnPool (cookedFns st))
     derivable = axiomDerivable (cookedRules st)
     classify d@(Desire _ (Want _ u))
       | u < 0     = FloorCheck
@@ -269,7 +267,7 @@ livenessOf st =
 -- not the mover's.
 moverReadAnchors :: PraxState -> Character -> Character -> [[Sym]]
 moverReadAnchors st actor m =
-  scopeReads ++ [believesRead, deadRead] ++ affordanceReads ++ desireReads
+  scopeReads ++ [believesRead, deadRead] ++ affordanceReads ++ functionReads ++ desireReads
   where
     mSym   = intern (charName m)
     actorB = Map.singleton (intern "Actor") (VSym mSym)
@@ -287,9 +285,11 @@ moverReadAnchors st actor m =
                             ++ outcomeCondReads actorB (caOuts ca))
                     (cpActions cp)
         ++ outcomeCondReads Map.empty (cpInits cp)
-        ++ concat [ readsOf Map.empty cs ++ outcomeCondReads Map.empty os
-                  | (_, cases) <- Map.elems (cpFns cp), (cs, os) <- cases ]
       | cp <- Map.elems (cookedDefs st) ]
+    -- The one registry ('cookedFns'), read once (not per practice, since
+    -- functions have a single home since v47).
+    functionReads = concat [ readsOf Map.empty cs ++ outcomeCondReads Map.empty os
+                           | (_, cases) <- Map.elems (cookedFns st), (cs, os) <- cases ]
     desireReads = concat [ readsOf ownerB conds | conds <- Map.elems (cookedDesires st) ]
 
 -- Conditions embedded in outcomes ('CForEach' guards, recursively) — the
@@ -315,7 +315,7 @@ bearingTemplates st =
   Map.fromList [ (charName c, bearing (charPats c)) | c <- characters st ]
   where
     defs = cookedDefs st
-    fns = cookedFnPool defs
+    fns = cookedFnPool (cookedFns st)
     actionAtoms = [ (caName a, atoms a)
                   | cp <- Map.elems defs, a <- cpActions cp ]
     atoms a = do
@@ -359,4 +359,4 @@ producibleAtoms st = do
       ++ [[intern "contradiction"]] )
   where
     practices = Map.elems (cookedDefs st)
-    fns = cookedFnPool (cookedDefs st)
+    fns = cookedFnPool (cookedFns st)

@@ -6,12 +6,12 @@ import           Test.Tasty.HUnit (testCase, assertBool)
 
 import           Prax.Db (dbToSentences)
 import           Prax.Types
-import           Prax.Engine (definePractice, performOutcome)
+import           Prax.Engine (defineFunctions, performOutcome)
 import           Prax.Core
 
 -- A state with the core library registered.
 base :: PraxState
-base = definePractice coreLib emptyState
+base = defineFunctions coreFns emptyState
 
 facts :: PraxState -> [String]
 facts = dbToSentences . db

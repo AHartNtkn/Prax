@@ -27,8 +27,8 @@ module Prax.Worlds.Bar
 
 import           Prax.Query
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setCharacters, setSchedule)
-import           Prax.Core (coreLib, adjustScore, warmth, scoreAtLeast)
+import           Prax.Engine (definePractices, defineFunctions, performOutcome, setCharacters, setSchedule)
+import           Prax.Core (coreFns, adjustScore, warmth, scoreAtLeast)
 import           Prax.Emotion (feelTowardFor, feelingToward, happy, sad, annoyed, pleased)
 import           Prax.Reactions
 import           Prax.Deontic
@@ -264,19 +264,24 @@ tendBarP = practice
           , Not "practice.tendBar.Place.Bartender.rang" ]
           [ Insert "practice.tendBar.Place.Bartender.rang" ]
       ]
-  , functions =
-      [ Function "recordDrink" ["P", "Kind", "N"]
-          [ FnCase [ Eq "Kind" "alcoholic", Calc "M" Add "N" "1" ]
-                   [ Insert "practice.patron.P.drinks!M"
-                   , Call "checkTipsy" ["P", "M"] ]
-          , FnCase [] []
-          ]
-      , Function "checkTipsy" ["P", "M"]
-          [ FnCase [ Cmp Gte "M" "2" ] [ Insert "person.P.tipsy" ] ]
-      , Function "checkSober" ["P", "M"]
-          [ FnCase [ Cmp Lte "M" "1" ] [ Delete "person.P.tipsy" ] ]
-      ]
   }
+
+-- The bar's drink-counter functions (spec v47: the world registry, registered
+-- via 'Prax.Engine.defineFunctions' beside 'coreFns' — not a practice field).
+recordDrinkFn, checkTipsyFn, checkSoberFn :: Function
+recordDrinkFn = Function "recordDrink" ["P", "Kind", "N"]
+  [ FnCase [ Eq "Kind" "alcoholic", Calc "M" Add "N" "1" ]
+           [ Insert "practice.patron.P.drinks!M"
+           , Call "checkTipsy" ["P", "M"] ]
+  , FnCase [] []
+  ]
+checkTipsyFn = Function "checkTipsy" ["P", "M"]
+  [ FnCase [ Cmp Gte "M" "2" ] [ Insert "person.P.tipsy" ] ]
+checkSoberFn = Function "checkSober" ["P", "M"]
+  [ FnCase [ Cmp Lte "M" "1" ] [ Delete "person.P.tipsy" ] ]
+
+barFns :: [Function]
+barFns = coreFns ++ [recordDrinkFn, checkTipsyFn, checkSoberFn]
 
 -- TEST-COMPRESSED cadence (see Prax.Schedule's authoring note; real
 -- authoring: ~12 rounds, an hour a drink): each firing metabolizes one drink
@@ -543,11 +548,12 @@ barWorld =
     withPractices =
       setSchedule [ sightRule barSighting, metabolism ]
         ((setCharacters [you, ada, bex, director]
-           (definePractices
-              [ coreLib, disapprovalP
-              , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
-              , arcP ]
-              emptyState))
+           (defineFunctions barFns
+             (definePractices
+                [ disapprovalP
+                , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, dmPractice
+                , arcP ]
+                emptyState)))
            { sorts = barSorts })
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"
@@ -578,11 +584,12 @@ barDirectorWorld =
     withPractices =
       setSchedule [ sightRule barSighting ]
         ((setCharacters [ada, bex, cai, directorPlayer]
-           (definePractices
-              [ coreLib, disapprovalP
-              , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, directP
-              , arcP ]
-              emptyState))
+           (defineFunctions barFns
+             (definePractices
+                [ disapprovalP
+                , worldP, greetP, respondGreetP, patronP, tendBarP, settleUpP, converseP, directP
+                , arcP ]
+                emptyState)))
            { sorts = barSorts })
     setup =
       [ Insert "practice.world.world.connected.entrance.bar"

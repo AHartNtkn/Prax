@@ -7,9 +7,9 @@ import           Test.Tasty.HUnit (testCase, assertBool, assertFailure, (@?=))
 import           Prax.Db (dbToSentences)
 import           Prax.Query (Condition (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setCharacters)
+import           Prax.Engine (definePractices, defineFunctions, performOutcome, possibleActions, performAction, setCharacters)
 import           Prax.Planner (pickAction)
-import           Prax.Core (coreLib)
+import           Prax.Core (coreFns)
 import           Prax.Reactions
 
 -- Perform the first action whose label contains `needle`.
@@ -29,7 +29,7 @@ facts :: PraxState -> [String]
 facts = dbToSentences . db
 
 base :: PraxState
-base = definePractices [coreLib, disapprovalP] emptyState
+base = defineFunctions coreFns (definePractices [disapprovalP] emptyState)
 
 -- A tiny reaction whose response spawns a further (disapproval) reaction,
 -- to exercise chaining generically.
@@ -99,7 +99,7 @@ tests = testGroup "Prax.Reactions"
                   , action "[Actor]: Misbehave" [] [ markViolation "Actor" "tipping" ] ] }
             bex = (character "bex")
               { charWants = [ Want [ violationOf "bex" "tipping" ] (-50) ] }
-            st0 = setCharacters [bex] (definePractices [coreLib, conductP] emptyState)
+            st0 = setCharacters [bex] (defineFunctions coreFns (definePractices [conductP] emptyState))
             st  = performOutcome (spawnReaction "conduct" ["bex"]) st0
         -- Both options are on the table…
         assertBool "can behave"    (any ("Behave"    `isInfixOf`) (labels st "bex"))
@@ -110,7 +110,7 @@ tests = testGroup "Prax.Reactions"
 
   , testGroup "chaining"
     [ testCase "a response can spawn a further reaction" $ do
-        let base' = definePractices [coreLib, disapprovalP, chainerP] emptyState
+        let base' = defineFunctions coreFns (definePractices [disapprovalP, chainerP] emptyState)
             st = performOutcome (spawnReaction "chainer" ["bex", "ada"]) base'
         st' <- perform st "ada" "React to bex"
         let fs = facts st'

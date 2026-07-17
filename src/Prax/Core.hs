@@ -15,13 +15,12 @@
 -- (the bar's migration).
 --
 -- The read-modify-write pieces (seed-then-accumulate a score) are provided
--- once as practice 'Function's on 'coreLib', reusing the same @Call@/@Calc@
--- machinery proven by the drink counter in "Prax.Worlds.Bar". Register
--- 'coreLib' with 'Prax.Engine.definePractice' to make the smart constructors
--- below usable.
+-- once as 'Function's ('coreFns'), reusing the same @Call@/@Calc@ machinery
+-- proven by the drink counter in "Prax.Worlds.Bar". Register 'coreFns' with
+-- 'Prax.Engine.defineFunctions' to make the smart constructors below usable.
 module Prax.Core
   ( -- * Registering the library
-    coreLib
+    coreFns
     -- * Relationship roles
   , warmth, respect
     -- * Effects (smart-constructor 'Outcome's)
@@ -71,17 +70,13 @@ capitalize :: String -> String
 capitalize []       = []
 capitalize (c : cs) = toUpper c : cs
 
--- The library practice -----------------------------------------------------------
+-- The library functions -----------------------------------------------------------
 
--- | A never-instantiated practice that simply carries the reusable core-model
--- functions. Register it with 'Prax.Engine.definePractice'; its functions are
--- found by name whenever an action calls them.
-coreLib :: Practice
-coreLib = practice
-  { practiceId   = "core"
-  , practiceName = "core model library"
-  , functions    = [adjustScoreFn, setBondFn]
-  }
+-- | The reusable core-model functions. Register them with
+-- 'Prax.Engine.defineFunctions'; they are found by name whenever an action
+-- calls them.
+coreFns :: [Function]
+coreFns = [adjustScoreFn, setBondFn]
 
 -- Add Delta to an existing score, or seed it with Delta on first interaction.
 adjustScoreFn :: Function

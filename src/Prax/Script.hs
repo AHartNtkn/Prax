@@ -72,8 +72,8 @@ import           Prax.Db (unify, valToString)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Sym (intern)
 import           Prax.Types
-import           Prax.Engine (definePractices, performOutcome, setCharacters, registerEngineRules)
-import           Prax.Core (coreLib)
+import           Prax.Engine (definePractices, defineFunctions, performOutcome, setCharacters, registerEngineRules)
+import           Prax.Core (coreFns)
 
 -- The AST ---------------------------------------------------------------------
 
@@ -274,7 +274,8 @@ compile scr
       [ (sceneId s, junctionName j, v)
       | s <- scenes, j <- sceneJunctions s, v <- authoredVarClash [] (junctionWhen j) [] ]
 
-    base = setCharacters castChars (definePractices [coreLib, beatsP] emptyState)
+    base = setCharacters castChars
+             (defineFunctions coreFns (definePractices [beatsP] emptyState))
 
     beatsP = practice
       { practiceId = "beats", practiceName = "scene dialogue", roles = ["Stage"]

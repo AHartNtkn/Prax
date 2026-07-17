@@ -4,7 +4,7 @@ import qualified Data.Map.Strict as Map
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
-import           Prax.Engine (setDesires, setCharacters, setAxioms, setSchedule, definePractices, relevantDelta, monotoneInsert)
+import           Prax.Engine (setDesires, setCharacters, setAxioms, setSchedule, definePractices, defineFunctions, relevantDelta, monotoneInsert)
 import           Prax.Query (Condition (..), cookCondition)
 import           Prax.Derive (axiom)
 import           Prax.Db (pathNames)
@@ -192,15 +192,15 @@ tests = testGroup "Prax.Relevance"
                             , Insert "meal.Actor" ]
                         , action "[Actor]: clean up" [] [ Call "tidy" ["Actor"] ]
                         ]
-            , functions =
-                [ Function "tidy" ["Who"]
-                    [ FnCase [] [ ForEach [ Match "dish.D" ] [ Delete "dish.D" ] ] ] ]
             }
+          tidyFn = Function "tidy" ["Who"]
+                     [ FnCase [] [ ForEach [ Match "dish.D" ] [ Delete "dish.D" ] ] ]
           vocab = [ Desire "wants-food" (Want [ Match "hungry.Owner" ] 5) ]
           priya = character "priya"
           beth' = character "beth"
           st = setDesires vocab
-                 (setCharacters [priya, beth'] (definePractices [p] emptyState))
+                 (setCharacters [priya, beth']
+                    (defineFunctions [tidyFn] (definePractices [p] emptyState)))
           anchors = moverReadAnchors st priya beth'
           has s = map intern (pathNames s) `elem` anchors
       assertBool "believes family, actor+mover grounded"
