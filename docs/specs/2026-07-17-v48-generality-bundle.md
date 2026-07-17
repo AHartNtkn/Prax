@@ -65,8 +65,8 @@ fact.
 - **Consumers named**: `axiomDerivable` walks lifted heads into
   `improvables`/`liveness`/`caresAbout` — verified safe for Feud (its wants never
   unify `obliged.Obligor.*`) and moot for Village; the plan carries the check.
-- **Exactness**: exactly ONE pin changes — `feudPin` loses its 8 lifted rows
-  (footprint ×6, axiomHead ×2), itemized. `villagePin` and all others BYTE-IDENTICAL.
+- **Exactness**: exactly ONE pin changes — `feudPin` loses its 25 lifted rows
+  (footprint ×18, axiomHead ×7 — corrected from the draft's stale "8", which transcribed VILLAGE's kept counts; the implementer observed the true figure rather than trusting the spec), itemized. `villagePin` and all others BYTE-IDENTICAL.
   All goldens byte-identical everywhere (vanished rules were unfireable). Any other
   movement = BLOCK.
 
@@ -96,7 +96,7 @@ the survivor's haddock; Village's `smoulders` and the specs re-point.
 
 ## Exactness (bundle-wide)
 
-Items 2-5: goldens and pins byte-identical. Item 1: `feudPin` −8 rows, itemized;
+Items 2-5: goldens and pins byte-identical. Item 1: `feudPin` −25 rows, itemized;
 everything else byte-identical. Persist untouched; no format bump.
 
 ## v49 — leverage, queued (the panel's verdict and the design fork)

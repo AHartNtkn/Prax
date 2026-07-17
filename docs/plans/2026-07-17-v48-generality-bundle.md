@@ -11,7 +11,7 @@ every axiom-bearing world's rules are □-lifted unconditionally, whether the wo
 ever produce an obligation or not. Corrected census (the panel caught the first
 draft's error through three independent lenses): Village and Feud carry lifted rules
 today; Village genuinely produces `obliged.*` (comply → owe → oblige) and must KEEP
-them (DEON property 1); Feud cannot, and its 8 lifted rows are provably-unfireable
+them (DEON property 1); Feud cannot, and its 25 lifted rows (18 footprint, 7 axiomHead — the spec draft's "8" was Village's kept counts mis-transcribed; observed, corrected) are provably-unfireable
 tax. Items 2-5 are the same defect class at module level: a hardcoded verb, a
 hardcoded coverage family, content in a mechanism module, a dead alias.
 
@@ -22,8 +22,8 @@ rewritten 2562299 — its item-1 precisions and the v49 graduation are binding).
 
 ## Global Constraints
 
-- Exactness: exactly ONE pin changes in the whole round — `feudPin` loses its 8
-  lifted rows (footprint ×6, axiomHead ×2), itemized. `villagePin` BYTE-IDENTICAL
+- Exactness: exactly ONE pin changes in the whole round — `feudPin` loses its 25
+  lifted rows (footprint ×18, axiomHead ×7, observed), itemized. `villagePin` BYTE-IDENTICAL
   (Village lifts before and after — stripping its rows is the exact wrong move the
   panel warned about). All goldens byte-identical everywhere. Any other movement =
   BLOCK and trace.
@@ -109,7 +109,7 @@ carries the build-order invariant. `setAxioms`' old direct `cookAxioms` call die
 - The db leg: a setup-performed `oblige` fact (performOutcome before setAxioms) lifts.
 - `axiomDerivable` consumer check (panel): feud's want-patterns unify no vanishing
   lifted head — assert once against the real world.
-- feudPin re-captured −8 rows, each named as a lifted twin in the commit body;
+- feudPin re-captured −25 rows, each named as a lifted twin in the commit body;
   villagePin asserted UNTOUCHED (run it, don't trust it); ViewInvariant green
   (now doubling as the gate's net — comment updated in ViewInvariantSpec).
 - DeriveSpec's lifted-form tests pass the flag explicitly (True preserves today's
@@ -154,7 +154,7 @@ mentions, feelingSomeone).
 
 - [ ] The v48 legend row: the corrected census AS the round's story (three lenses,
   one error, detection vindicated); the gate's design (pool, invariants, ViewInvariant
-  as net); feudPin −8 itemized; the four de-couplings; the v49 graduation recorded
+  as net); feudPin −25 itemized; the four de-couplings; the v49 graduation recorded
   with its five constraints and the (a)/(b) fork's resolution; queue state after: v49
   is the audit queue's last member.
 - [ ] Sweeps; gates; commit `"Docs: v48 — the innocent untaxed; leverage graduates"`.
