@@ -33,7 +33,9 @@ utility. See the design writeups:
 - `Prax.Reactions` (v3) — reactions-as-practices and norms: an action spawns a reaction practice
   offering responses (greet back / rebuff / take offense), and a norm violation (stiffing the
   bartender) spawns disapproval. NPCs avoid violations because the planner scores the
-  violation→disapproval future poorly.
+  violation→disapproval future poorly. The mechanism (spawn/consume/violation-marking) ships no
+  content of its own; the ready-made `disapproval` reaction lives with its sole consumer,
+  `Prax.Worlds.Bar` (**v48** — `Prax.Reactions` no longer holds shipped world content).
 - `Prax.Beliefs` (v4) — per-agent beliefs that can diverge from the shared world. A rumour plants a
   possibly-false belief; a character who believes someone resents them won't be friendly to them
   even when their actual warmth is high; evidence can dispel the belief.
@@ -239,9 +241,11 @@ utility. See the design writeups:
   round (goldens byte-identical); `factionStanding` (belief-gated regard through a faction-mate)
   ships spec-tested but unwired into any world, a stated and deferred decision.
 - `Prax.Confession` (v32) — **the road back is real, and it narrows**: a lied-mark converts to a
-  confessed one (never deleted, so a trait can still price the residue), confessing
-  self-incriminates through the same sourced-hearsay channel gossip already rides, and absolution
-  is a separate, refusable second-party act that inserts the world's own standing-defeater. An
+  confessed one (never deleted, so a trait can still price the residue; the discharge verb is an
+  authored parameter since **v48** — shipped worlds pass `"confessed"`, but recant/boast/admit fit
+  the same machinery), confessing self-incriminates through the same sourced-hearsay channel
+  gossip already rides, and absolution is a separate, refusable second-party act that inserts the
+  world's own standing-defeater. An
   absolver's patience (`incorrigible`) points `Prax.Repute.notoriety`'s own counting idiom inward —
   fed-up-ness is what she *believes*, not a bookkept tally. `Prax.Worlds.Village`'s eve confesses to
   gale, who already regards her a slanderer from witnessing the whisper directly, and it costs

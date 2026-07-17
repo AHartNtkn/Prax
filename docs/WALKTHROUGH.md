@@ -190,8 +190,9 @@ changes what they do. Watch the scene's new lines (`… feels … toward …`, `
   feeling makes them not WANT to (v38's invariant: emotions change decision-making, never what
   decisions can be made — the reluctance is priced, not gated).
   → features: coexisting feelings (`Prax.Emotion.feelToward`), a negative `adjustScore`, priced
-  reluctance (a negative `Want` reading `feelingSomeone`), and score-gated preconditions
-  (`scoreAtLeast`).
+  reluctance (a negative `Want` reading `feelingToward` with a fresh target variable — v48 deleted
+  `feelingSomeone`, a literal alias since v39; the per-target-pricing guidance it carried moved to
+  `feelingToward`'s own haddock), and score-gated preconditions (`scoreAtLeast`).
 
 - **Feelings are momentary; the record persists.** Feelings coexist (angry at one patron while
   pleased with another) and each fades on its own — the onset declares a lifetime
@@ -229,8 +230,11 @@ Actions now provoke *responses*, and the bar has a social rule with teeth. Watch
   tip*. Choose **`Tip ada`** (she warms to you) or **`Leave ada's tab unpaid`**. Stiff her and the
   scene marks *"you broke a norm (stiffedTheBartender)"*; on her next turn ada **disapproves**, and
   her warmth toward you drops sharply.
-  → features: `markViolation`; a violation spawning the ready-made `disapproval` reaction;
-  core-model consequences. code: `Prax.Reactions` + `settleUpP`.
+  → features: `markViolation`; a violation spawning the `disapproval` reaction; core-model
+  consequences. code: `Prax.Reactions` (`markViolation`, the reaction mechanism) + `Prax.Worlds.Bar`
+  (`disapprovalP`, `settleUpP` — v48 moved the ready-made reaction out of the mechanism module and
+  into its one consumer; `Prax.Reactions` now ships no content, only the spawn/consume/violation
+  machinery).
 
 - **NPCs respect norms on their own.** bex is given a strong aversion to stiffing
   (`Want [violationOf "bex" "stiffedTheBartender"] (-40)`) plus a small liking for tipping, so
@@ -439,6 +443,12 @@ always acts, so a purely autonomous cast never produces it — a real, useful si
 Its companion is the **inspector** `explain`, which answers "why *can't* this character do X right
 now?" by walking the failed preconditions (used from tests and the REPL). → code: `Prax.Stress`,
 `Prax.Inspect`.
+
+Coverage tracking isn't hardcoded to scenes: `stressTest` takes an optional **coverage family**
+(`Maybe String`, e.g. `"currentScene"`), a single-valued fact family the caller wants visit-counted,
+or `Nothing` to skip tracking. The CLI's script entry points default it to `currentScene` — that's
+the CLI's own choice, not a privilege `Prax.Stress` grants the name (**v48**). `prax village`'s
+stress run instead names `"marketDay"`, proving the parameter with a second, non-Script family.
 
 ### 16. Save & resume (v11)
 
@@ -1774,11 +1784,14 @@ imports `Prax.Faction` or `Prax.Kin` this round.
 
 `Prax.Confession` gives the village its first way back from a lie. A mark doesn't delete when
 confessed — it *converts*: `<who>.lied.<hearer>.<event>` becomes `<who>.confessed.<hearer>.<event>`,
-the same memory, a changed valence, so a trait can still price what's left of it. Confessing is
-self-incriminating by design: it deposits the deed into the hearer's beliefs through the identical
-sourced-hearsay channel gossip and lying already ride (v20), so everything §24's reputation stack
-does with a belief, it does with a confession too. Absolution is a separate act, and a refusable
-one: confessing clears your own conscience; only a second party's *grant* clears your standing, by
+the same memory, a changed valence, so a trait can still price what's left of it. (**v48**: the
+discharge verb is an authored parameter, not the hardcoded word `confessed` — the village passes
+`"confessed"` and nothing here changes, but recant/boast/admit ride the identical machinery.)
+Confessing is self-incriminating by design: it deposits the deed into the hearer's beliefs through
+the identical sourced-hearsay channel gossip and lying already ride (v20), so everything §24's
+reputation stack does with a belief, it does with a confession too. Absolution is a separate act,
+and a refusable one: confessing clears your own conscience; only a second party's *grant* clears
+your standing, by
 inserting the world's defeater fact. You can confess and be refused — conscience clean, standing
 still dirty. And an absolver's patience is not a counter someone increments; it's knowledge —
 `incorrigible` points §24's `notoriety` Count idiom inward, so "I've forgiven you enough" derives

@@ -1722,6 +1722,141 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   field, and `definePractice`'s two fn-collision guard arms — all gone from `src/`.
   Queue: **v47 function registry** complete; **v48 generality bundle** next — the last
   of the four.
+- **v48** — **the innocent untaxed; leverage graduates**
+  (`Prax.Derive`; `Prax.Engine`; `Prax.Relevance`; `Prax.Types`; `Prax.Confession`;
+  `Prax.Stress`; `Prax.Reactions`; `Prax.Worlds.Bar`; `Prax.Emotion`;
+  `Prax.Worlds.Village`; spec `docs/specs/2026-07-17-v48-generality-bundle.md`
+  (`46c4c7d`, amended `36bab8e` then `e9785bf`, PANEL-REWRITTEN `2562299`,
+  count-corrected `43b2beb`); plan `docs/plans/2026-07-17-v48-generality-bundle.md`
+  (`77b1068`); code `7e34cd8` (the gate) + `b06f62d` (a review-forced doc note) +
+  `b6c3a6b` (the four de-couplings) + `f4aba11` (a review-forced rename)). Fourth of
+  the four audit-queued rounds: v45 protected families → v46 the narrator dies → v47
+  function registry → **v48** (this row), the last.
+
+  **The round's story is the census, not the code.** The spec's first draft claimed a
+  single deontic consumer (the bar) and six worlds' lifted rules vanishing — wrong at
+  both ends, and all three panel lenses (`.superpowers/sdd/v48-spec-review-{soundness,
+  design,completeness}.md`) caught it independently: Bar never lifted at all (it holds
+  no axioms; its tipping obligation is producibility, not the lift); the lifting worlds
+  are Village and Feud; and Village is a SECOND deontic consumer (`shakedown`'s
+  `comply → owe → oblige` statically produces `obliged.eve.favor`) that must KEEP its
+  lifted rows, not lose them. The rewrite (`2562299`) fixed the census and, with it,
+  concluded the gate has to be DETECTION — a hand-set flag would only have re-encoded
+  the same miscount as law. It happened again anyway: the corrected spec's own
+  itemization ("Feud loses 8 rows, footprint ×6, axiomHead ×2") was VILLAGE's KEPT
+  counts transcribed onto Feud's loss by mistake. Told to observe rather than trust the
+  spec's number, the implementer did — and found 25 (footprint ×18, axiomHead ×7),
+  corrected in `43b2beb` before the code commit landed. Two human counts of the same
+  seven-world, two-consumer system failed, independently, in two different documents;
+  detection-not-flag is the conclusion this round makes twice, not once.
+
+  **The gate.** `liftObliged` used to add an `obliged.Obligor.*` twin to every
+  all-Match axiom in every axiom-bearing world, unconditionally — a DEON property-1
+  courtesy paid even by worlds that can never produce an obligation. `cookAxioms` gains
+  a `Bool`: the MECHANISM. The DECISION lives in `retable`, via a NEW pool query,
+  `Prax.Relevance.deonticProducible`, over the UNLIFTED producers only — practice and
+  schedule insert atoms, db facts as of retable time, unlifted axiom heads — never
+  `producibleAtoms` (rejected by the panel: it reads `cookedRules`, the very field
+  being computed, and includes lifted heads, which would make the gate
+  self-fulfilling). Two panel-forced precisions besides: the db leg reads only facts
+  present AT RETABLE TIME, a build-order invariant now stated at `setAxioms` (an
+  obliged-producing setup fact must precede the final retable; both axiom worlds
+  already build `setAxioms`-outermost) — and (found by the T1 review, M1, after the
+  fact) the db leg is DOUBLY load-bearing: it also keeps the gate monotone against any
+  `obliged.*` fact already in the db, so a producer-setter's retable (which does not
+  reclose) can never leave `readView` holding a lifted-derived fact while the gate
+  reads off. Documented at its site (`b06f62d`) rather than left as an unstated second
+  duty. `cookedRules` re-homes from `setAxioms` into `retable`, so every
+  producer-changing setter (`definePractices`, `defineFunctions`, `setSchedule`,
+  `setDesires`, `setCharacters`) keeps the lift decision current by construction —
+  pinned five times, once per setter (the SETTER-COHERENCE INVARIANT), plus a
+  behavioral pin proving a lifted rule genuinely FIRES under `□`-closure, not merely
+  appears in a head list. `setAxioms` becomes `reclose (retable ...)`. The string
+  reference path (`Derive.run`/`closure`) stays ungated BY DESIGN — pure
+  `[Axiom] → Db` with no producer pool, always lifting — so `ViewInvariantSpec` doubles
+  as the gate's own soundness net: if detection ever wrongly withholds a lift from a
+  producible world, the gated cooked view diverges from the always-lifting reference
+  and the net fires. Both axiom-bearing worlds (feud gate-off, village gate-on) sit in
+  `ViewInvariantSpec`'s world list, so the net actually covers the case it exists for.
+
+  **feudPin: −25, itemized.** footprint loses 18 rows, axiomHead loses 7 — every one an
+  `obliged.Obligor.*` twin of a kinAxioms/feudAxioms all-Match head, genuinely
+  unfireable because Feud imports no Deontic/Debt/Blackmail vocabulary and produces no
+  `obliged.*` fact anywhere. `villagePin` and every other golden and pin: BYTE-
+  IDENTICAL — Village produces `obliged.*` (comply → owe → oblige) and keeps every one
+  of its lifted rows (8: footprint ×6, axiomHead ×2), exactly the count the spec draft
+  mis-transcribed onto Feud's loss. `axiomDerivable`'s consumers
+  (`improvables`/`liveness`/`caresAbout`) were checked against the vanished heads: no
+  Feud want unifies one.
+
+  **Review arc.** T1 (opus) re-derived the −25 itemization from the diff itself rather
+  than trusting the report, confirmed the no-cycle/no-self-fulfilling argument for
+  `deonticProducible` by reading the code, confirmed all five setter-coherence pins
+  discriminate (forcing the gate True fails every off-assertion), and confirmed
+  `ViewInvariantSpec`'s world list actually covers both axiom-bearing worlds — one
+  Minor (the db leg's monotonicity duty undocumented; code correct), closed by
+  `b06f62d`. T2 (sonnet) ran the full 643-test suite twice from the reviewed commit,
+  traced the "old code already reported empty coverage for every non-Script world"
+  claim back to the PRE-CHANGE source (`git show` on the parent commit) rather than
+  taking the report's word, traced the marketDay pin's non-vacuity through
+  `gathering`'s actual producer and `runRandom`'s real per-turn `advance` call (0.94s
+  runtime, not an instantly-passing vacuous assertion), and confirmed
+  `feelingSomeone`/`disapprovalP` fully grep-proof — one Minor (the coverage fields
+  still said `Scenes` under generalized Haddocks), closed by `f4aba11`
+  (`runVisited`/`srVisited`).
+
+  **The four de-couplings** (items 2-5, byte-identical everywhere). Confession's
+  discharge verb parameterizes: `confess` gains a guarded, single-segment `verb`
+  argument; shipped sites pass `"confessed"`, unchanged in effect; a dotted-verb guard
+  is pinned RED-first. Stress's coverage family generalizes past Script's
+  `currentScene`: `stressTest`/`runRandom`/`StressReport` take an optional
+  `Maybe String` family with NO privileged default inside `Prax.Stress` itself —
+  `currentScene` is the CLI's own choice at its script entry points, stated as such in
+  the module's own Haddock; `Prax.Worlds.Village`'s stress run names `"marketDay"`
+  instead, and the T2 review traced that pin non-vacuous end-to-end before trusting
+  it. `disapprovalP` moves out of the `Reactions` mechanism module into its one
+  consumer, `Prax.Worlds.Bar`; `ReactionsSpec` gets its own minimal standalone reaction
+  fixture so the mechanism keeps unit coverage independent of Bar's content.
+  `feelingSomeone`, a literal alias of `feelingToward` since v39, is deleted outright;
+  its per-target-pricing guidance moves into `feelingToward`'s own haddock, and
+  `Prax.Worlds.Village`'s `smoulders` re-points.
+
+  **v49 recorded, queued — the audit queue's last member.** The Blackmail
+  generalization the audit demanded is real work, not a bundle line item: the panel
+  found the amended-in-bundle version an incoherent chimera (general
+  punishment/motivation bolted to a mandatory evidence trigger, forcing the flagship
+  non-exposure test to author a FAKE evidence pattern — the audit's own defect class,
+  reintroduced at the trigger) and its "fidelity restoration" framing over-claimed (v30
+  approved the epistemic motive-belief-deposit model; three-axis parameterization is
+  new design, not restoration). Two coherent designs went to the fork: (a) an
+  information-leverage charter keeping evidence mandatory and punishment
+  parameterized to exposure only — REJECTED, because the audit's second-application
+  member ("dig my field or I burn your barn") would stay inexpressible under the
+  standing directive that this defect class is never left around; (b) a general
+  coercion primitive — threaten/comply/defy/punish + motive-belief deposit +
+  prediction credibility, evidence made OPTIONAL, blackmail demoted to a thin instance
+  (the evidence gate + exposure punishment) alongside a protection-racket instance —
+  CHOSEN, since it closes the class fully. Five mechanism constraints bind the v49
+  design: the credibility deposit's desire-name must derive from the authored punitive
+  want's own `desireName`, with the want registered and held
+  (`setDesires`/`charDesires`), else the threat is silently non-credible; a
+  demand-independent compliance marker replaces the debt-shaped re-buy guard, so
+  repeat extraction stays impossible for every demand kind (v49's verification must
+  drive a RE-threat after compliance); the standing-threat `Or [threat, defiance]`
+  disjunction survives on both the punish action's availability and the authored want,
+  with punishment availability-gated and only its effect authored (verification drives
+  punish against a STANDING threat); the new authored surfaces (demand, punishment,
+  want) carry the v40 splice guards; and the mechanism/content boundary — which
+  reveal-fragments are exported mechanism versus Village-authored content — is decided
+  IN the v49 spec, not punted to its plan, with `BlackmailSpec`'s exact v30 arithmetic
+  (−63.84 …) preserved under whatever call-site reshaping lands.
+
+  Suite: 630 → 641 (task 1: the gate, 11 new pins) → 643 (task 2: the confess
+  dotted-verb guard + the village marketDay pin). Goldens: `feudPin` −25 (above),
+  every other golden and pin BYTE-IDENTICAL. Zero warnings, hlint clean, `prax check`
+  well-formed on all 7 worlds.
+  Queue: **v48 generality bundle** complete; **v49 leverage** next — the last of the
+  four audit-queued rounds. The queue closes after it.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
