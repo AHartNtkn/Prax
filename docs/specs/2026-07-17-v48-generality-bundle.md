@@ -28,17 +28,38 @@ rules VANISH — their `footprint`/`axiomHeads` AnalysisTable pins re-capture wi
 exactly the lifted rows removed, itemized, and their goldens must be byte-identical
 (the vanished rules could never fire).
 
-## 2. Blackmail's demand parameterizes; threat generalization is honestly BANKED
+## 2. Blackmail generalizes FULLY: demand, punishment, and motivation are authored
 
-`shakedown`'s price is hardwired debt-content (comply → `Prax.Debt` currency). The
-demand becomes authored outcomes (`[Outcome]` — compliance applies them; a favor, a
-feeling, a fact, or the old debt all expressible; `Prax.Debt` stops being a hard
-dependency of leverage). The THREAT side stays exposure — deliberately: the punitive
-fear model (weight-per-believer-of-evidence) IS exposure's semantics, and a
-non-exposure threat ("comply or I hurt X") needs its own fear design (pricing a
-threatened consequence, not an audience). That is a real design round, not a
-parameter — banked with this reason, closing the audit item honestly rather than
-gesturing at generality the fear model cannot back.
+[AMENDED at the gate — the first draft banked the threat side claiming a "fear model"
+needed designing; the user rejected the deferral and the discussion falsified the
+premise.] v30's fear was never an engine model: it is three existing pieces composing
+— the EXTORTER carries an authored punitive desire that makes punishing rational
+after defiance; the VICTIM's own wants price the punishment's outcome (eve fears
+exposure through her own notoriety want, not through engine audience-semantics); and
+the prediction machinery lets the victim foresee the extorter acting. The
+believer-counting want was one authored motivation SHAPE that v30 baked into the
+mechanism — application content in mechanism clothing, this audit's exact defect
+class. Therefore `shakedown` parameterizes on all three application axes:
+
+- **demand** (`[Outcome]` — what compliance does; a favor, a feeling, a fact, or the
+  old debt; `Prax.Debt` stops being a hard dependency of leverage),
+- **punishment** (label + `[Outcome]` — what the extorter does on defiance; exposure's
+  reveal-to-witnesses, a burned barn, anything actionable),
+- **the extorter's punitive want** (authored — the motivation that makes the
+  punishment credible post-defiance; weight-per-believer for exposure, a plain
+  vengeance want for violence).
+
+What stays is the module's IDENTITY: the evidence pattern as the threat's trigger —
+leverage means holding something over someone. Evidence-free coercion (a protection
+racket) is a DIFFERENT mechanic by charter, not a deferred piece of this one. The
+threaten/comply/defy/punish skeleton, the marker plumbing, and the credibility
+plumbing (how the victim comes to predict the extorter) are the mechanism and are
+untouched. Village AUTHORS the exposure/debt instantiation in the new parameters
+(any genuinely mechanical fragment of the old reveal — e.g. a witness-belief
+insertion helper — is exported as mechanism if the authored form needs it; the plan
+probes this). BlackmailSpec pins BOTH: the v30 exposure/debt arithmetic unchanged
+(both compliance regimes), and a full non-debt, non-exposure arc (favor demand,
+harm punishment) — the second-application test executed, not asserted.
 
 ## 3. Confession's discharge verb parameterizes
 
@@ -82,14 +103,17 @@ BLOCK. Persist untouched.
   DEON property 1 observed); the same fixture without it doesn't (no lifted heads in
   `axiomHeads`); adding the oblige practice AFTER `setAxioms` still lifts (the
   re-homing's whole point — pinned); Bar's obligation behavior byte-identical.
-- Item 2: a non-debt demand (a favor-fact) drives a full shakedown arc; the debt
-  shipped behavior unchanged (existing pins untouched).
+- Item 2: a full non-debt, NON-EXPOSURE arc pinned end-to-end (favor demand, harm
+  punishment, authored vengeance want — threaten/comply and threaten/defy/punish both
+  driven, the victim's compliance arithmetic observed through its own want over the
+  harm); the shipped exposure/debt behavior unchanged (existing pins untouched);
+  Village's instantiation authored in the new parameters, byte-identical goldens.
 - Items 3-6: guard/behavior pins at the new parameter surfaces; the mechanism-level
   ReactionsSpec fixture; deaths/moves grep-proof (`feelingSomeone`, `disapprovalP`
   out of Reactions).
 
 ## Out of scope
 
-Non-exposure threats (banked, with the fear-model reason). Sort scoping that models
+Evidence-free coercion (a different mechanic by charter, named in item 2). Sort scoping that models
 Call bindings (v47's recorded successor, unforced). The queue ends here; the bank
 holds what remains.
