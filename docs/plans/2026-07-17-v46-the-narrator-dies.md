@@ -4,10 +4,56 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
+## The problem, and why each change exists
+
+**The hack being removed.** The scene layer (v12) needed story events — scene
+transitions, endings, one-shot narration — to HAPPEN, and the only thing that happens
+in Prax is a character performing an action. So the compiler invented `_narrator`: a
+hidden bodiless cast member whose one desire is "advance the story," bribed by
+fabricated `storyAdvanced.<key>` facts that every junction/memory inserts purely to
+raise its utility. A fake person takes a real turn each round, driven through the full
+planner, to execute what is actually scheduling ("fire the story event whose condition
+holds"). v44 built the correct home for scheduling — the engine's round boundary — and
+this round moves story flow into it. The narrator, its bribe-fact family, and its
+carrier practice are deleted.
+
+**Why the removal is not just a deletion — each addition traced to what forces it:**
+
+1. **A narration channel** (`roundBoundary` returns fired labels; the loop threads
+   them) — forced because the narrator's action LABELS were the story's text: a
+   memory's narration reaches the player as the label of the action the narrator
+   performs. Kill the actor and the words need another road. Unavoidable in ANY
+   removal design.
+2. **`FirstMatch` clause mode** — forced because the narrator fired exactly ONE story
+   event per turn (the planner picks one action); naive one-rule-per-junction firing
+   would fire ALL enabled junctions in a boundary (double transitions, skipped
+   scenes — the panel demonstrated this). First-match over ordered clauses reproduces
+   one-per-round; the semantics already exist in the engine as `Function`'s
+   first-matching-case.
+3. **The tiebreak law changes, deliberately** — today, when several junctions are
+   enabled at once, the winner is chosen ALPHABETICALLY BY LABEL (an accident of the
+   planner's `sortOn (Down score, gaLabel)` — all story weights are equal). That was
+   never authored meaning. The replacement law is authored order. Pins that shift
+   because of this are itemized as law-change, not noise.
+4. **Two doors to the schedule** — forced because the compiled story rule carries
+   Prax-namespaced machinery (the scene-clock reads, the `sceneEntered` stamp) which
+   `setSchedule`'s authoring guard rightly rejects; the guard is correct and must not
+   be weakened, so compiler-emitted rules enter by an internal door instead (the same
+   definitions-vs-engine-calls boundary as `performOutcome`; v45's threat model).
+5. **The CLI save point moves post-boundary** — forced because narration made the
+   boundary VISIBLE: replaying it on resume (today's pre-advance save idiom) would
+   re-print lines the player already read.
+6. **`prax-state v3`** — forced because a v45-era script save (`storyAdvanced` facts,
+   a `junctions` practice instance, no `story` due) is format-identical to v46 under
+   the v2 header but semantically dead; the header exists to make that loud.
+
+Net ledger, stated honestly: this deletes one hack (fake character + bribe family +
+carrier practice + a planner drive per round) at the price of real new engine surface.
+It is a correctness/principle round — the user accepted it as such — not a
+line-count reduction.
+
 **Goal:** per `docs/specs/2026-07-16-v46-the-narrator-dies.md` (panel-reviewed, amended
-f25d944) — the schedule gains FirstMatch clauses and a narration channel; the schedule
-gets two doors; Script's junctions/memories become one engine-door story rule; the
-narrator, `junctionsP`, and `storyAdvanced` die; Persist bumps to v3.
+f25d944), execute the above.
 
 **Task shape:** T1 lands the engine surface with every existing rule migrated
 blank-label/AllClauses — goldens BYTE-IDENTICAL (nothing labeled exists yet; the
