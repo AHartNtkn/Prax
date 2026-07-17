@@ -58,9 +58,9 @@ runStress args = do
   putStrLn ("stress-testing " ++ name ++ " — 200 random runs, cap 50 turns")
   putStrLn ("  endings:   " ++ show (Map.toList (srEndings r)))
   putStrLn ("  coverage:  " ++ show (Set.size (srCoverage r)) ++ " distinct actions fired")
-  if Map.null (srScenes r)
+  if Map.null (srVisited r)
     then pure ()
-    else putStrLn ("  scenes:    " ++ show (Map.toList (srScenes r)) ++ " (runs visiting each)")
+    else putStrLn ("  scenes:    " ++ show (Map.toList (srVisited r)) ++ " (runs visiting each)")
   putStrLn ("  dead ends: " ++ show (srDeadEnds r))
   putStrLn ("  no ending: " ++ show (srNoEnding r) ++ " / " ++ show (srRuns r) ++ " runs")
 

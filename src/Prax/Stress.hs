@@ -69,7 +69,7 @@ familyReached family st =
 data RunResult = RunResult
   { runEnding  :: Maybe String   -- ^ the ending reached, if any
   , runActions :: Set String     -- ^ ids of actions performed
-  , runScenes  :: Set String     -- ^ coverage-family members visited (empty
+  , runVisited  :: Set String     -- ^ coverage-family members visited (empty
                                   --   if no family was named, or the world
                                   --   populates none of it)
   , runDeadEnd :: Bool           -- ^ a living character had no available action
@@ -121,7 +121,7 @@ data StressReport = StressReport
   { srRuns     :: Int
   , srEndings  :: Map String Int   -- ^ ending → how many runs reached it
   , srCoverage :: Set String       -- ^ every action id that fired in any run
-  , srScenes   :: Map String Int   -- ^ coverage-family member → how many runs visited it
+  , srVisited   :: Map String Int   -- ^ coverage-family member -> how many runs visited it
   , srDeadEnds :: Int              -- ^ runs that hit a dead end
   , srNoEnding :: Int              -- ^ runs that hit the turn cap with no ending
   } deriving (Eq, Show)
@@ -140,8 +140,8 @@ stressTest runs cap mFamily st0 =
                              (\e -> Map.insertWith (+) e 1 (srEndings r))
                              (runEnding res)
         , srCoverage = Set.union (srCoverage r) (runActions res)
-        , srScenes   = foldr (\s -> Map.insertWith (+) s 1)
-                             (srScenes r) (Set.toList (runScenes res))
+        , srVisited   = foldr (\s -> Map.insertWith (+) s 1)
+                             (srVisited r) (Set.toList (runVisited res))
         , srDeadEnds = srDeadEnds r + fromEnum (runDeadEnd res)
         , srNoEnding = srNoEnding r
                          + fromEnum (isNothing (runEnding res) && not (runDeadEnd res))

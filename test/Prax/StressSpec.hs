@@ -38,7 +38,7 @@ tests = testGroup "Prax.Stress"
              \finding 4)" $ do
       let r = stressTest 50 40 (Just "currentScene") deadEndRegressionWorld
       srDeadEnds r @?= 0
-      assertBool "s2 reached" (Map.member "s2" (srScenes r))
+      assertBool "s2 reached" (Map.member "s2" (srVisited r))
 
   , testCase "random play of the episode: no dead ends, both active branches reached" $ do
       let r = stressTest 60 40 (Just "currentScene") intrigueWorld
@@ -57,8 +57,8 @@ tests = testGroup "Prax.Stress"
   , testCase "scene coverage: random play reaches both scenes and every ending" $ do
       let r = stressTest 200 50 (Just "currentScene") playWorld
       -- both authored scenes are reached by random play (no unreachable scene)
-      assertBool "confidence visited" (Map.member "confidence" (srScenes r))
-      assertBool "banquet visited"    (Map.member "banquet"    (srScenes r))
+      assertBool "confidence visited" (Map.member "confidence" (srVisited r))
+      assertBool "banquet visited"    (Map.member "banquet"    (srVisited r))
       -- all three endings occur: Marcus can force loyalty/complicity, and when he
       -- instead romances (spending his turn) Cassia gets to poison — betrayal
       mapM_ (\e -> assertBool (e ++ " reached") (Map.member e (srEndings r)))
@@ -69,5 +69,5 @@ tests = testGroup "Prax.Stress"
              \marketDay family is tracked when named, proving the second application" $ do
       let r = stressTest 80 60 (Just "marketDay") villageWorld
       assertBool "the market was observed open at least once"
-        (Map.member "square" (srScenes r))
+        (Map.member "square" (srVisited r))
   ]
