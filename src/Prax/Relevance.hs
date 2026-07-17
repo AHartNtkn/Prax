@@ -388,6 +388,11 @@ deonticProducible st = wild || any headProduces producerHeads
     -- An unresolvable Call could produce anything: keep the lift.
     wild = Nothing `elem` outcomeAtoms
     insertHeads = [ h | Just (ins, _) <- outcomeAtoms, (h : _) <- ins ]
+    -- The db leg is doubly load-bearing (v48 review M1): besides setup-time
+    -- obliged facts, it keeps the gate MONOTONE against ANY obliged.* fact
+    -- already in the db — so a retable run by a producer-setter that skips
+    -- reclose can never UN-lift a world whose obligations already exist.
+    -- Do not narrow this scan to "setup facts only".
     dbHeads     = [ h | s <- dbToSentences (db st), (h : _) <- [map intern (pathNames s)] ]
     axiomHeadsU = [ h | ax <- axioms st, s <- axiomThen ax, (h : _) <- [map intern (pathNames s)] ]
     producerHeads = insertHeads ++ dbHeads ++ axiomHeadsU
