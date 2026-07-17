@@ -3,8 +3,10 @@ module Prax.Script.JsonSpec (tests) where
 
 import           Control.Exception (ErrorCall, evaluate, try)
 import           Data.Aeson (decode, encode)
+import qualified Data.ByteString.Lazy as BL
 import           Data.Either (isLeft)
 import           Data.List (isInfixOf)
+import           Data.Maybe (isJust)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
@@ -80,4 +82,18 @@ tests = testGroup "Prax.Script.Json"
         Right sc -> assertBool ("expected decoding to fail, but got: " ++ show sc) False
         Left err -> assertBool ("error should name the removed memories feature: " ++ err)
                       ("memories" `isInfixOf` err)
+
+    -- The v46 final review's Critical: the SHIPPED example file had gone
+    -- stale against a format change (a leftover "memories" field) and the
+    -- README-documented `prax -- play examples/play.json` failed on HEAD --
+    -- because nothing in the suite ever decoded the file itself. This pin is
+    -- that net: any format change that breaks the shipped example now fails
+    -- here, loudly, before it ships.
+  , testCase "the shipped examples/play.json decodes and compiles" $ do
+      raw <- BL.readFile "examples/play.json"
+      case decodeScript raw of
+        Left err -> assertBool ("examples/play.json no longer decodes: " ++ err) False
+        Right sc -> case compile sc of
+          st -> assertBool "compiles to a scene-bearing world"
+                  (isJust (currentSceneOf st))
   ]
