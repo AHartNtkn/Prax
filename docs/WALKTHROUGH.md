@@ -149,8 +149,9 @@ the **second** alcoholic drink the scene shows *"you is looking tipsy."*
   counter reaches the threshold (`Cmp gte M 2`), inserting `person.you.tipsy`.
 
 Order a *soda* (non-alcoholic) and drink it: your counter won't move — that's the fallback case.
-→ features: `init`, `Call`, functions, `FnCase` guards, `Eq`, `Calc`, `Cmp`. code: `tendBarP`
-`functions` + the `Drink` action.
+→ features: `init`, `Call`, functions, `FnCase` guards, `Eq`, `Calc`, `Cmp`. code: `tendBarP`'s
+`Drink` action + `Bar.hs`'s `recordDrinkFn`/`checkTipsyFn` (registered via `defineFunctions`,
+not a practice field — functions live in the one world-level registry since v47).
 
 ### 6. Make the bar busy — the bell
 

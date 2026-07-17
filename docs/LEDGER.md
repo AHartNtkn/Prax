@@ -1643,6 +1643,85 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   every time-free world byte-identical. Zero warnings, hlint clean, all
   seven worlds well-formed.
   Queue: **v46 the narrator dies** complete; **v47 function registry** next.
+- **v47** — **the function registry: functions get a real home, and Practice loses a
+  fake one**
+  (`Prax.Types`; `Prax.Engine`; `Prax.Cooked`; `Prax.Relevance`; `Prax.TypeCheck`;
+  `Prax.Core`; `Prax.Script`; `Prax.Worlds.Bar`; spec
+  `docs/specs/2026-07-17-v47-function-registry.md` (`ec1fba4`); plan
+  `docs/plans/2026-07-17-v47-function-registry.md` (`271f23d`); code `f9962c9`). Third
+  of four audit-queued rounds: v45 protected families → v46 the narrator dies → **v47**
+  (this row) → v48 generality bundle, the last.
+
+  **The finding this round closes.** v45's audit rated **[HIGH]** `coreLib` as a
+  phantom practice: `Function`s could live ONLY on a `Practice` (`functions` field →
+  `cpFns` → `lookupCookedFn` folding `cookedDefs`), so the reusable core-model
+  functions (`prax_adjustScore`/`prax_setBond`) shipped as a never-instantiated
+  practice (`"core"`), registered by every world, occupying the practice namespace,
+  folded over by every analysis — already the source of one shipped bug (v43's
+  trailing-dot find was `cookPractice` choking on exactly this zero-role phantom).
+  The spec's own gate note: no pre-gate panel this round — "a field deletion with two
+  migration sites, not new engine surface."
+
+  **The probe's sharpening: locality was fiction.** The tree had exactly two function
+  residences — `coreLib`'s pair and Bar's `tendBar` trio
+  (`recordDrink`/`checkTipsy`/`checkSober`) — and resolution was already global:
+  `lookupCookedFn` searched every practice first-wins, `Call` sites name bare function
+  names, and v43's collision guard already enforced cross-practice uniqueness. Nothing
+  scopes, nothing shadows, nothing could. So the fix is not a registry beside the field
+  (two homes — the dual-system ban) but field deletion: `Practice.functions` DIES,
+  `PraxState` gains the one registry (`worldFns :: [Function]`,
+  `cookedFns :: Map String (...)`), `CookedPractice.cpFns` DIES with it.
+
+  **The design.** `defineFunctions` is the new setter beside `definePractice`, cooking
+  once into `cookedFns` and retabling; its uniqueness guard checks both directions
+  (within-batch AND against-already-registered) in one pass — v43's two per-practice
+  collision arms (`definePractice`'s within- and cross-practice `fnCollisions` checks)
+  COLLAPSE into this single check, since a `Map` can't hold a duplicate silently and
+  the guard makes the attempt loud. `lookupCookedFn` becomes a plain
+  `Map.lookup fn (cookedFns st)` — the per-practice fold and its first-wins die, and
+  with it the v41-era footnote about Call-resolution pool-vs-lookup order bias (both
+  now read the same Map, exactly, with no order to differ over). `Prax.Core.coreLib`
+  DIES; `Core` exports `coreFns :: [Function]`, the same two functions, no longer
+  wearing a practice costume. Every `definePractices [coreLib, …]` site becomes an
+  honest practice list plus `defineFunctions coreFns`; Bar's trio moves to its own
+  `defineFunctions barFns` call (`barFns = coreFns ++ [recordDrinkFn, checkTipsyFn,
+  checkSoberFn]`), no longer a field of `tendBarP`. Order relative to
+  `definePractices` doesn't matter — traced end-to-end: `cookedFns` persists across
+  every `retable`, `cookedDefs` is rebuilt from `practiceDefs` by every `retable`, and
+  the fn-dependent tables (`improvables`/`caresAbout`/`liveness`) read both, so
+  whichever setter runs last leaves every table coherent (confirmed by byte-identical
+  `AnalysisTable` pins across worlds whose setter nestings differ). All seven fn-site
+  walks re-plumbed from per-practice to registry with identical coverage:
+  `unboundInFunction` (was `unboundInPractice`'s `fn'` arm), `refErrors`'
+  defined-function set, `assertedSentences`' fn inserts, the reserved-family
+  write/read sites, `lintSites`' dead-condition fn arms, `seedlessDrawErrors`, and
+  `sentencesByScope` — labels drop the phantom prefix (`"core / fn …"` → `"fn …"`).
+
+  **One honest residual, not swept under the exactness claim.** Functions left their
+  host practice's `sentencesByScope` scope for per-function scopes. Splitting a scope
+  can only remove variable-position unions, never add sort-conflict detections — but a
+  real one IS lost: `recordDrink`'s `P` and `checkTipsy`/`checkSober`'s `P` were
+  union-linked under the old shared `"tendBar"` scope, and `P` genuinely is the same
+  entity at runtime (`recordDrink` calls `checkTipsy` with it) — that linkage fired
+  only on the coincidence of same param name + same host practice, never on a modeled
+  `Call` binding, and is now conservatively unmodeled. No shipped world regresses (all
+  seven byte-identical "well-formed" before and after); the task reviewer caught the
+  task report overstating this as "verified safe" rather than "no shipped world
+  regresses, cross-`Call` linkage unmodeled" (Minor finding, no code change — verdict
+  APPROVED both spec compliance and task quality). The principled fix — threading
+  sorts through `Call` args — is unforced and out of scope, sitting beside v48's
+  related `disapprovalP` placement question without being folded into it.
+
+  Suite: 629 → 630 (one net new pin: the registry uniqueness guard, both directions).
+  Goldens and `AnalysisTable` pins BYTE-IDENTICAL across all seven worlds — the
+  phantom had no actions, roles, or instance facts, so no pin ever named it;
+  `cookedDefs` losing `"core"` changed no rendered field. No format-header bump;
+  Persist untouched (functions are build-time vocabulary, like desires). Zero warnings
+  on a forced full recompile (`Types.hs` touched), hlint clean, `prax check`
+  well-formed on all 7 worlds. Deaths grep-proof: `coreLib`, `cpFns`, the `functions`
+  field, and `definePractice`'s two fn-collision guard arms — all gone from `src/`.
+  Queue: **v47 function registry** complete; **v48 generality bundle** next — the last
+  of the four.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
