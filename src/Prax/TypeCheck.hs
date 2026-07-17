@@ -460,7 +460,12 @@ sentencesByScope st =
          concatMap (\a -> condSents (actionConditions a) ++ outcomeSents (actionOutcomes a)) (actions p)
       ++ outcomeSents (initOutcomes p)
     -- Each function is its own binding scope: its params are call-scoped, not
-    -- shared with any practice (spec v47).
+    -- shared with any practice (spec v47). The old host-practice scoping
+    -- incidentally union-linked sort constraints across functions of one host
+    -- (Bar's recordDrink/checkTipsy shared @P@ by name+host coincidence, never
+    -- by a modeled Call binding) — that accidental linkage is deliberately
+    -- dropped; sort scoping that models Call bindings would be its principled
+    -- successor if ever needed.
     fnSents f =
       concatMap (\c -> condSents (caseConditions c) ++ outcomeSents (caseOutcomes c)) (fnCases f)
 
