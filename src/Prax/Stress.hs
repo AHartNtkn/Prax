@@ -67,14 +67,24 @@ runRandom cap seed st0 = go cap seed Set.empty (visit Set.empty st0) 0 0 st0
   where
     -- Record the active scene (if any) of a visited state.
     visit scs st = maybe scs (`Set.insert` scs) (sceneReached st)
-    -- passes = how many living characters in a row have had nothing to do
+    -- passes = how many living characters in a row have had nothing to do.
+    -- 'advance' fires the engine's round boundary once per rotation, on the
+    -- wrap call (the first call after every living character has had a
+    -- turn) — so a full rotation of idle passes (passes == length living)
+    -- does NOT by itself prove the boundary has had its say: whichever idle
+    -- streak starts right at the top of a fresh run (cursor == -1) needs one
+    -- MORE call beyond that rotation before the wrap fires (advance's own
+    -- wrap condition is "i <= cursor", and cursor starts at -1, one below
+    -- every valid index). So only declare a dead end once passes exceeds a
+    -- full rotation — that extra call guarantees a wrap, hence a boundary
+    -- firing, occurred within the idle streak and still changed nothing.
     go 0 _ acc scs n _ st = RunResult (endingReached st) acc scs False n
     go k s acc scs n passes st =
       case endingReached st of
         Just e -> RunResult (Just e) acc scs False n
         Nothing
           | null living                 -> RunResult Nothing acc scs False n
-          | passes >= length living     -> RunResult Nothing acc scs True  n  -- everyone stuck
+          | passes > length living      -> RunResult Nothing acc scs True  n  -- everyone stuck, boundary included
           | otherwise ->
               let (actor, st1) = advance st
                   acts = possibleActions st1 (charName actor)

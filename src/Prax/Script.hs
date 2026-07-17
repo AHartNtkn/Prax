@@ -132,7 +132,7 @@ data Beat = Beat
 -- regardless of how the 'Junction' was built (Haskell smart constructor, raw
 -- constructor, or decoded from JSON — see "Prax.Script.Json"'s @FromJSON
 -- Junction@, the module's documented external-authoring surface). The
--- timeout machinery ('clockReached') lives entirely in 'compileJunction',
+-- timeout machinery ('clockReached') lives entirely in 'storyClause',
 -- expanded from 'junctionAfter' at compile time, so it never appears in
 -- author-visible data at all.
 data Junction = Junction
@@ -211,11 +211,11 @@ sceneEnteredPath = "sceneEntered"
 
 -- At least @n@ engine rounds have elapsed since the current scene was
 -- entered (spec v44 — the scene clock is a stamp against the live engine
--- clock, not a scene-local ticker). Expanded by 'compileJunction' (not by
+-- clock, not a scene-local ticker). Expanded by 'storyClause' (not by
 -- 'after'/'timeout') from 'junctionAfter', so this machinery never appears
 -- in a 'Junction'\'s author-visible 'junctionWhen' — it splices into
--- 'compileJunction'\'s condition list beside 'setupOf'\'s own machinery in
--- the SAME generated action. Its bound names are Prax-namespaced (v40
+-- 'storyClause'\'s condition list beside 'setupOf'\'s own machinery in
+-- the SAME story-rule clause. Its bound names are Prax-namespaced (v40
 -- hygiene).
 clockReached :: Int -> [Condition]
 clockReached n =
@@ -250,7 +250,7 @@ currentSceneOf st =
 
 -- | Compile a 'Script' into a ready-to-run 'PraxState'. Loud if any scene's
 -- @sceneSetup@, or any junction's @junctionWhen@, authors a Prax-namespaced
--- variable: both splice into the SAME generated action as spliced machinery
+-- variable: both splice into the SAME story-rule clause as spliced machinery
 -- (the entry stamp, and — for a timed junction — 'clockReached' too), so the
 -- v40 hygiene guard runs here, uniformly, over every 'Junction' regardless of
 -- how it was built (smart constructor, raw 'Junction' constructor, or
@@ -286,9 +286,15 @@ compile scr
     -- in declaration order, a scene's junctions in declaration order). Each
     -- clause's own gates self-mask: the transition's @currentScene@ eviction
     -- masks same-scene doubles, and @Absent ending@ masks everything after an
-    -- ending. Carries Prax-namespaced machinery (the entry stamp, and — for a
-    -- timed junction — 'clockReached'), so it registers through the engine door,
-    -- not 'setSchedule'.
+    -- ending. The fold is eager, forward-only, and order-sensitive: a clause
+    -- is re-queried against the PRECEDING clause's post-state (not the
+    -- boundary's start state), so a transition can cascade straight into a
+    -- later-declared scene's own junction firing in the same boundary —
+    -- including an ending right after a cross-scene transition — but never
+    -- into an earlier-declared scene's clause, whose turn in the fold has
+    -- already passed. Carries Prax-namespaced machinery (the entry stamp, and
+    -- — for a timed junction — 'clockReached'), so it registers through the
+    -- engine door, not 'setSchedule'.
     storyRule = ScheduleRule "story" 1
       [ storyClause (sceneId s) j | s <- scenes, j <- sceneJunctions s ]
 

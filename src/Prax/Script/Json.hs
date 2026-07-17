@@ -39,6 +39,7 @@ import           Control.Applicative ((<|>))
 import qualified Data.ByteString.Lazy as BL
 import           Data.Aeson
 import           Data.Aeson.Types (Parser)
+import           Data.Maybe (isJust)
 
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
 import           Prax.Types (Outcome (..), Want (..))
@@ -191,13 +192,24 @@ instance ToJSON Scene where
     object [ "id" .= sid, "opening" .= op, "setup" .= setup
            , "beats" .= beats, "junctions" .= juncs ]
 
+-- | Loud, not silent, on a @"memories"@ field: aeson's 'withObject' otherwise
+-- ignores unknown keys, which would let a script authored against the pre-v46
+-- memory feature (deleted end-to-end, spec v46) decode with that content
+-- quietly dropped. "Prax.Persist" took the same "same bytes, different
+-- meaning" stance loudly (the v3 format bump rejects v1/v2 saves); a scene's
+-- JSON schema gets the same treatment here.
 instance FromJSON Scene where
-  parseJSON = withObject "Scene" $ \o ->
-    Scene <$> o .:  "id"
-          <*> o .:? "opening"   .!= ""
-          <*> o .:? "setup"     .!= []
-          <*> o .:? "beats"     .!= []
-          <*> o .:? "junctions" .!= []
+  parseJSON = withObject "Scene" $ \o -> do
+    hasMemories <- isJust <$> (o .:? "memories" :: Parser (Maybe Value))
+    if hasMemories
+      then fail "Prax.Script.Json: Scene's \"memories\" field is no longer \
+                \supported -- the memory feature was removed (spec v46); \
+                \author scene content via setup/beats/junctions instead"
+      else Scene <$> o .:  "id"
+                 <*> o .:? "opening"   .!= ""
+                 <*> o .:? "setup"     .!= []
+                 <*> o .:? "beats"     .!= []
+                 <*> o .:? "junctions" .!= []
 
 instance ToJSON Script where
   toJSON (Script cast scenes start) =

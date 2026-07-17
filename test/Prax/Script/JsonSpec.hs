@@ -4,6 +4,7 @@ module Prax.Script.JsonSpec (tests) where
 import           Control.Exception (ErrorCall, evaluate, try)
 import           Data.Aeson (decode, encode)
 import           Data.Either (isLeft)
+import           Data.List (isInfixOf)
 import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
@@ -64,4 +65,19 @@ tests = testGroup "Prax.Script.Json"
           r <- try (evaluate (currentSceneOf (compile sc)))
           assertBool "compile rejects the JSON-authored PraxNow goto condition"
             (isLeft (r :: Either ErrorCall (Maybe String)))
+
+    -- v46 review Minor 3: a scene JSON carrying the removed "memories" field
+    -- must be rejected loudly, not silently ignored (aeson's withObject
+    -- default) -- the same "same bytes, different meaning" stance Persist's
+    -- v3 bump took for saves.
+  , testCase "a scene JSON carrying a removed \"memories\" field is rejected \
+             \loudly, not silently ignored" $ do
+      let json = "{ \"start\": \"a\", \
+                  \  \"cast\": [ { \"name\": \"p\", \"playable\": true } ], \
+                  \  \"scenes\": [ \
+                  \    { \"id\": \"a\", \"memories\": [ \"artus.confided\" ] } ] }"
+      case decodeScript json of
+        Right sc -> assertBool ("expected decoding to fail, but got: " ++ show sc) False
+        Left err -> assertBool ("error should name the removed memories feature: " ++ err)
+                      ("memories" `isInfixOf` err)
   ]

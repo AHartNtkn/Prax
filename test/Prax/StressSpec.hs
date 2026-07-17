@@ -6,13 +6,40 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Stress
+import           Prax.Script (Script(..), Scene(..), beat, compile, goto, member, player, scene)
+import           Prax.Types (PraxState)
 import           Prax.Worlds.Bar (barWorld)
 import           Prax.Worlds.Intrigue (intrigueWorld)
 import           Prax.Worlds.Play (playWorld)
 
+-- | The task-1 reviewer's repro (v46 finding 4): scene @"s"@ offers its cast no
+-- beat at all, only a pending unconditional transition to @"s2"@ — the only way
+-- forward is the engine's round-boundary story rule, not a character's move
+-- (@"s2"@ offers an ordinary beat, so arriving there is not itself another dead
+-- end — the point under test is crossing the move-less @"s"@). Real play
+-- (`Prax.Loop.runNpcTicks`) crosses this fine; the stress harness's dead-end
+-- detector must too, once it gives the boundary's wrap its turn.
+deadEndRegressionWorld :: PraxState
+deadEndRegressionWorld = compile Script
+  { scriptCast   = [ player "p", member "q" ]
+  , scriptScenes =
+      [ (scene "s") { sceneJunctions = [ goto "go" "s2" [] ] }
+      , (scene "s2") { sceneBeats = [ beat "linger" [] [] ] }
+      ]
+  , scriptStart  = "s"
+  }
+
 tests :: TestTree
 tests = testGroup "Prax.Stress"
-  [ testCase "random play of the episode: no dead ends, both active branches reached" $ do
+  [ testCase "a move-less scene with a pending transition is not a stress-harness \
+             \false positive: the dead-end detector must give the round \
+             \boundary's wrap its turn before declaring deadlock (v46 review \
+             \finding 4)" $ do
+      let r = stressTest 50 40 deadEndRegressionWorld
+      srDeadEnds r @?= 0
+      assertBool "s2 reached" (Map.member "s2" (srScenes r))
+
+  , testCase "random play of the episode: no dead ends, both active branches reached" $ do
       let r = stressTest 60 40 intrigueWorld
       assertBool "no dead ends"           (srDeadEnds r == 0)
       assertBool "no run stuck at the cap" (srNoEnding r == 0)
