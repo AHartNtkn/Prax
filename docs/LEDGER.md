@@ -1812,9 +1812,10 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   `currentScene`: `stressTest`/`runRandom`/`StressReport` take an optional
   `Maybe String` family with NO privileged default inside `Prax.Stress` itself —
   `currentScene` is the CLI's own choice at its script entry points, stated as such in
-  the module's own Haddock; `Prax.Worlds.Village`'s stress run names `"marketDay"`
-  instead, and the T2 review traced that pin non-vacuous end-to-end before trusting
-  it. `disapprovalP` moves out of the `Reactions` mechanism module into its one
+  the module's own Haddock; the village marketDay pin (`StressSpec`, not the CLI —
+  the CLI's one entry passes `currentScene` for every world) proves the second,
+  non-Script family, and the T2 review traced that pin non-vacuous end-to-end before
+  trusting it. `disapprovalP` moves out of the `Reactions` mechanism module into its one
   consumer, `Prax.Worlds.Bar`; `ReactionsSpec` gets its own minimal standalone reaction
   fixture so the mechanism keeps unit coverage independent of Bar's content.
   `feelingSomeone`, a literal alias of `feelingToward` since v39, is deleted outright;

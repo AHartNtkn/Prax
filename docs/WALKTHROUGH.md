@@ -446,9 +446,10 @@ now?" by walking the failed preconditions (used from tests and the REPL). → co
 
 Coverage tracking isn't hardcoded to scenes: `stressTest` takes an optional **coverage family**
 (`Maybe String`, e.g. `"currentScene"`), a single-valued fact family the caller wants visit-counted,
-or `Nothing` to skip tracking. The CLI's script entry points default it to `currentScene` — that's
-the CLI's own choice, not a privilege `Prax.Stress` grants the name (**v48**). `prax village`'s
-stress run instead names `"marketDay"`, proving the parameter with a second, non-Script family.
+or `Nothing` to skip tracking. The CLI's single stress entry passes `currentScene` for every
+world — that's the CLI's own choice, not a privilege `Prax.Stress` grants the name (**v48**).
+The second, non-Script application is proven in the suite: `StressSpec` runs the village
+under `"marketDay"` coverage and observes the market's phases counted.
 
 ### 16. Save & resume (v11)
 
