@@ -1508,6 +1508,141 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   machinery-shape families and every read site widens a kill radius that four
   bespoke checks would have kept narrow.
   Queue: **v45 protected families** complete; **v46 the narrator dies** next.
+- **v46** — **the narrator dies, and takes the narration with it**
+  (`Prax.Engine`; `Prax.Script`; `Prax.Script.Json`; `Prax.Persist`;
+  `Prax.Stress`; spec `docs/specs/2026-07-16-v46-the-narrator-dies.md`
+  (`b5f9a0a`, REWRITTEN TWICE — `477f19a` after a three-lens panel proved
+  draft one unsound three ways, `3636d2d` after the user removed the
+  constraint the whole premium hung on); plan
+  `docs/plans/2026-07-17-v46-the-narrator-dies.md` (`8efd27a`, amended
+  `35b5504` with a why-spine, rewritten small alongside the spec at
+  `3636d2d`); code `7fd17c7` + fix wave `93fbced` + doc note `83306fd`).
+  Second of four audit-queued rounds: v45 protected families → **v46** (this
+  row) → v47 function registry → v48 generality bundle.
+
+  **The hack.** The scene layer (v12) needed story events — scene
+  transitions, endings, one-shot narration — to happen, and the only thing
+  that happens in Prax is a character performing an action. So the compiler
+  invented `_narrator`: a hidden bodiless cast member whose one desire was
+  "advance the story," bribed by fabricated `storyAdvanced.<key>` facts that
+  every junction and memory inserted purely to raise its utility — a fake
+  person taking a real planner-driven turn each round to execute what was
+  actually scheduling. v45's audit rated it HIGH: v44's own named defect
+  (a global mechanism masquerading as world content), surviving the four
+  ticker characters v44 itself had killed.
+
+  **Rewritten twice, for two different reasons.** Draft one (`b5f9a0a`) kept
+  the narrator's *fiction* — one story event firing per round, narrated per
+  clause — while moving its *mechanism* onto the schedule, and the
+  three-lens panel (`.superpowers/sdd/v46-spec-review-{soundness,design,
+  completeness}.md`) rated it unsound three ways: plain per-junction
+  schedule rules don't reproduce the narrator's one-per-round selection —
+  declaration order lets two junctions cascade through a scene's beats in
+  one boundary where today's narrator takes two turns with the scene's beats
+  played in between, and ending-vs-transition order flips on declaration
+  order instead of the narrator's own utility choice (Finding 1, CRITICAL);
+  the compiled rule bodies carry `Prax`-namespaced machinery (`PraxE`/
+  `PraxD`/`PraxNow` clock reads, the entry stamp) that `setSchedule`'s own
+  hygiene guard forbids outright, with no exemption stated, so no
+  timed-junction script could compile (Finding 2, CRITICAL); and the
+  companion fix for `atSince` — renaming its contract variable `Now`→
+  `PraxNow` and adding it to `reservedFamilies` — breaks `sightRule`
+  construction through that same guard and doesn't actually match
+  `reservedFamilies`' family-keying, since `atSince` sits three path
+  segments deep (Finding 3, CRITICAL). `477f19a` rewrote to fix all three
+  (`FirstMatch` clause mode, two schedule doors, a narration channel). Plan
+  `8efd27a` scoped that fix; the user rejected its first change-list as
+  unexplained, and it was amended (`35b5504`) with a why-spine tracing every
+  addition to what forced it. Then the user removed the premise underneath
+  the whole premium: the scene layer's omniscient narration was never a
+  required feature, and "the most principled option, including not
+  supporting any of this, is the right option." Spec and plan rewrote small
+  together (`3636d2d`) — with no words left to carry, `FirstMatch`, the
+  narration channel, clause labels, and the save-point move all evaporate;
+  junctions become plain rules.
+
+  **The principle.** Fiction surfaces through CHARACTERS' actions; the
+  world's own dynamics fire silently — hunger does not announce itself.
+  Under it, **memories** ("(You recall the last envoy…)") are omniscient
+  narration with no speaker, a presentation feature wearing world-content
+  clothes: REMOVED end-to-end (the `Memory` AST node, `compileMemory`, the
+  `memoryFired` latch, the JSON `"memories"` field — now LOUDLY rejected on
+  decode, naming the removal, matching Persist's own loud stance — the two
+  shipped one-liners in `Prax.Worlds.Play` and `Prax.Worlds.Audience`, and
+  their tests), recorded here as removed-by-design, not lost. **Junction
+  labels** (`"(story) toBanquet"`) are log markers, not fiction — gone with
+  the actor.
+
+  **The design.** Junctions and endings compile to ONE plain `AllClauses`
+  period-1 schedule rule (`"story"`; clauses = scenes in declaration order ×
+  each scene's junctions in declaration order), firing under the EXISTING
+  gates: `currentScene` eviction self-masks same-scene doubles, `Absent
+  ending` masks everything after an ending, and the simultaneous-enable
+  tiebreak becomes AUTHORED ORDER — the old alphabetical-by-label winner was
+  an accident of the planner's sort, never authored meaning; a new pin
+  proves `zzz` fires before `aaa`. Cross-scene cascade within one boundary is
+  PERMITTED and stated as eager semantics (a pass-through scene was authored
+  to traverse; the executor threads state between clauses, so the gates
+  decide, not a mode) — no shipped script cascades; a `ScriptSpec` pin
+  documents the semantics and the `Script.hs` Haddock states the fold is
+  eager, forward-only, and order-sensitive. One new internal door,
+  `Prax.Engine.registerEngineRules`, lets `Script.compile` register
+  Prax-namespaced machinery that `setSchedule`'s authoring guard rightly
+  rejects — compiler-level code, squarely inside v45's threat model,
+  carrying no authoring guard by design; both doors share one globally-keyed
+  rule table with a duplicate-name guard spanning both (an authored `story`
+  rule in a script world now errors at build, pinned both directions).
+  Sight is untouched — its rule is Prax-var-free and stays on `setSchedule`
+  as today, with no `withSighting` setter or door migration; the small
+  design never needed the `Now`→`PraxNow` rename the panel found unsound
+  (Finding 3), so it doesn't force that question either way. The `atSince`
+  residue itself is explicitly OUT OF SCOPE this round — it stands exactly
+  as v45 annotated it, not resolved here. Timed junctions keep their
+  fiction: `junctionAfter`'s clock-comparison expansion moves into the
+  story rule's clause conditions unchanged in meaning.
+
+  **Deaths, total.** `_narrator`/`narratorName` and its Want and every
+  roster/setup entry; the `junctionsP` practice (+ its setup entry);
+  `storyAdvanced.*` (closing v45's own deferral — "dies entirely with the
+  narrator," as that row predicted); `compileJunction`; the memory construct
+  end-to-end; the `"(story)"` label convention. Script casts contain only
+  characters again; beats are real cast affordances, untouched.
+
+  **Persist v3.** A v45-era script save carries `storyAdvanced.*`/
+  `memoryFired` facts and a `junctions`-practice instance but no `story`
+  due — format-identical to v46 under the v2 header, semantically dead.
+  v2 and v1 are both now rejected loudly on load, by v43's own header
+  machinery, which exists for exactly this.
+
+  **Stress: re-argued, found unsound, fixed, then the residual documented.**
+  The task report's first claim — the narrator leaving the mover pool and
+  boundary-deterministic firing can't open a dead end, because the boundary
+  fires before anyone can get stuck — was PROVEN FALSE by the task
+  reviewer's own repro: `Prax.Stress`'s dead-end check (`passes >= length
+  living`) trips one `advance` call BEFORE the wrap that fires the rescuing
+  boundary, so a move-less transition scene (cast of 2) hit 50/50 spurious
+  dead ends even though real play (`runNpcTicks`, which has no dead-end
+  check) crosses it cleanly. `playWorld`'s coverage held for an unrelated
+  reason — every authored scene always offers a beat, so the idle counter
+  never reaches threshold while a transition is pending. Fixed `>=`→`>`
+  (one wrap granted before declaring deadlock; traced minimal, not tuned,
+  and reran against the exact repro: 50/50 dead ends → 0). The reviewer then
+  found the residual CLASS member the fix doesn't reach: a move-less scene
+  whose only exit is a TIMED junction with delay ≥2 still false-positives,
+  needing a second boundary the one-wrap window doesn't grant. Adjudicated
+  as a DOCUMENTED detector limit, not a further fix — generalizing would
+  special-case Script inside a general stress harness, and no shipped world
+  has that shape — and stated in `Stress.hs`'s own Haddock (`83306fd`): the
+  detector tolerates exactly one boundary of move-less progression; drive a
+  world shaped like that with `runNpcTicks` instead.
+
+  Suite: 619 → 626 (task 1) → 628 (fix wave: the detector pin plus the JSON
+  `"memories"`-rejection pin). Goldens: `AnalysisTable` audience/play lost
+  exactly their `_narrator` `caresAbout` rows, every real character's row
+  byte-identical; `GoldenDrive` byte-identical (no Script world in it);
+  every time-free world byte-identical. Zero warnings, hlint clean, all
+  seven worlds well-formed.
+  Queue: **v46 the narrator dies** complete; **v47 function registry** next.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now

@@ -474,11 +474,12 @@ graph TD
 cabal run prax -- play
 ```
 
-> Now the drama is split across **two scenes**. In *confidence*, cassia confides; a bodiless
-> **narrator** (Versu's story manager) then fires *"(story) toBanquet"* on its own and the curtain
-> rises on *banquet*, where the same warn/poison/charm choices await. It's a *faithful* recasting of
-> `intrigue` — same cast and endings — in fewer authored lines, plus the scene transition and
-> flow-chart for free.
+> Now the drama is split across **two scenes**. In *confidence*, cassia confides; the `toBanquet`
+> junction fires silently at the next round boundary (the compiled scene graph is one engine
+> schedule rule — **v46**: no bodiless narrator character takes a turn to do it, matching how every
+> other engine dynamic, like hunger, fires unannounced) and the curtain rises on *banquet*, where
+> the same warn/poison/charm choices await. It's a *faithful* recasting of `intrigue` — same cast
+> and endings — in fewer authored lines, plus the scene transition and flow-chart for free.
 
 Play-scripts round-trip through **readable JSON** (the editable authoring format, chosen over a
 bespoke grammar):
@@ -573,8 +574,12 @@ rejects conflicts (e.g. a place where an agent belongs). Every shipped world che
 
 ### 21. The Prompter compilation features — `prax audience` (v18)
 
-A short scene that exercises the three authoring constructs the scene layer compiles beyond plain
-beats and junctions — **memories**, **timed junctions**, and **character sketches** — all at once.
+A short scene that exercises the authoring constructs the scene layer compiles beyond plain beats
+and junctions — **timed junctions** and **character sketches** — at once. (A third construct,
+**memories** — one-shot exposition narrated by a bodiless story manager — was built at v18 and
+REMOVED at v46: omniscient narration with no speaker turned out to be a presentation feature
+wearing world-content clothes, so the scene layer no longer compiles it at all. The audience scene
+used to open on one; it no longer does.)
 
 ```sh
 cabal run prax -- audience
@@ -582,9 +587,6 @@ cabal run prax -- audience
 
 > *"You are the envoy. Flatter the king, then petition — before the moment (or the Duke) passes."*
 
-- **A memory.** The instant you're before the throne, a line of exposition fires once:
-  *"(You recall the last envoy who displeased the king — exiled by dawn.)"* A **memory** is a
-  one-shot narration fired the first time its trigger holds.
 - **A character sketch.** The **Duke** has no hand-written desires — only a *concern* for standing
   (`concernedWith [("favor", …)]`) and a trait (`ambitious`). That concern compiles to a want, so he
   **courts the king unbidden** (*"duke: flatter the king"*) exactly once, then rests.
@@ -1954,7 +1956,7 @@ bar, Part I); the second is Part II, one row per world/tool.
 | Player as drama manager | `Bar.barDirectorWorld` / `candidateActions` | `prax dm`: your menu is authorial nudges |
 | Forward-chaining derivation (defeasible) | `Prax.EL` / `Prax.Derive` | `prax feud`: 1 wrong + 4 rules (v31 folds membership in) → a feud; amends dissolves it |
 | Static type checker + sort inference | `Prax.TypeCheck` | `prax check <world>` |
-| Memories, timed junctions, character sketches | `Prax.Script` / `Worlds.Audience` | `prax audience` |
+| Timed junctions, character sketches (memories: built v18, removed v46 — presentation, not world content) | `Prax.Script` / `Worlds.Audience` | `prax audience` |
 | Quantified outcomes (`ForEach`) + authored witnessing | `Prax.Engine` / `Prax.Witness` | `prax village`: carol (co-present) believes bob's theft and can confront him; dana (elsewhere) doesn't |
 | Gossip / sourced hearsay (`gossip`/`heard`, multi-valued `.seen`/`.heard.<source>` provenance) | `Prax.Rumor` | `prax village`: carol tells dana what she saw; hearsay licenses suspicion, not confrontation |
 | `standing`/`standingUnless`/`regardedAs`/`notoriety` (derived reputation, base-fact atonement defeater) | `Prax.Repute` | `prax village`: three regards tip `notorious.bob.thief`; atonement dissolves every regard while the belief persists; re-offense revokes it and an atoned bob is deterred from a restocked stall |
@@ -1983,8 +1985,8 @@ attempt's own regression net — an asserted instance fact must survive its tran
 draining to zero), `Prax.BarSpec`, and `Prax.LoopSpec` (a deterministic
 25-turn replay — since v44 the round boundary, not a ticker in the cast, runs the schedule). Part II: `Prax.IntrigueSpec` (death + branching endings, incl. the
 confidant/victim `predictMove` split), `Prax.StressSpec`, `Prax.PersistSpec` (save/resume),
-`Prax.ScriptSpec` + `Prax.Script.JsonSpec` (scene layer + JSON, incl. memories/timed junctions/sketches
-and the `audience`), `Prax.DirectorSpec` (player-as-DM), `Prax.ELSpec` + `Prax.DeriveSpec` (the
+`Prax.ScriptSpec` + `Prax.Script.JsonSpec` (scene layer + JSON, incl. the one-boundary story-rule
+law, timed junctions/sketches, and the `audience`), `Prax.DirectorSpec` (player-as-DM), `Prax.ELSpec` + `Prax.DeriveSpec` (the
 exclusion-logic lattice and forward chaining), `Prax.TypeCheckSpec`, `Prax.WitnessSpec` +
 `Prax.VillageSpec` + `Prax.RumorSpec` + `Prax.SightSpec` (`ForEach` witnessing, co-presence, the
 confront affordance, sourced hearsay and the gossip gate, and the sighting schedule rule whose

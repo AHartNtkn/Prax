@@ -60,21 +60,25 @@ utility. See the design writeups:
 - `Prax.Script` + `Prax.Worlds.Play` (v12) — a **Prompter-lite** scene-authoring layer. Drama is
   written as a screenplay — a `CAST` plus a graph of `scene`s, each with a body of `beat`s
   (dialogue/affordances) and `junction`s (labelled routes that end the story or hand off to the
-  next scene) — and `compile`d to ordinary practices. A bodiless *narrator* (Versu's story manager)
-  fires junctions automatically; `flowChart` renders the scene graph (`cabal run prax -- flow`), and
-  the stress-tester reports scene coverage. `Prax.Worlds.Play` is a *faithful* recasting of
-  `Prax.Worlds.Intrigue` — same cast, affordances (confide, poison, warn, self-poison, romance),
-  and endings — as a two-scene play in ~25% fewer authored lines, *plus* the scene transition,
-  flow-chart, and story manager the layer supplies for free. The scene layer also compiles the rest
-  of Prompter's authoring constructs (v18): **memories** (`memory` — one-shot exposition fired the
-  first time a trigger holds), **timed junctions** (`after`/`timeout` — a scene transition/ending
-  after N turns, via a passive scene clock), and **character sketches** (`concernedWith` turns
-  concerns into desires; `withTraits` records personality as queryable facts). Scene *bounds* are
-  subsumed by scene-local beats, and the readable text playtext is intentionally replaced by JSON.
-  `Prax.Worlds.Audience` (`prax audience`) exercises all three in one short scene: a royal audience
-  where a memory recalls a warning as you enter, an ambitious Duke's *concern* for standing makes him
-  court the king unbidden, and the audience times out (`dismissed`) if you don't press your petition
-  (`granted`) in time.
+  next scene) — and `compile`d to ordinary practices plus **one silent engine schedule rule**
+  that fires junctions/endings at the round boundary (**v46**: replacing a bodiless *narrator*
+  character that used to take a fake turn each round to do the same thing — fiction surfaces
+  through characters' actions, and scheduling is not one). `flowChart` renders the scene graph
+  (`cabal run prax -- flow`), and the stress-tester reports scene coverage. `Prax.Worlds.Play` is
+  a *faithful* recasting of `Prax.Worlds.Intrigue` — same cast, affordances (confide, poison,
+  warn, self-poison, romance), and endings — as a two-scene play in ~25% fewer authored lines,
+  *plus* the scene transition and flow-chart the layer supplies for free. The scene layer also
+  compiles **timed junctions** (`after`/`timeout` — a scene transition/ending after N turns, via
+  a passive scene clock) and **character sketches** (`concernedWith` turns concerns into desires;
+  `withTraits` records personality as queryable facts) from Prompter's authoring constructs
+  (v18). (Prompter's **memories** — one-shot exposition fired the first time a trigger holds —
+  were also built at v18 but REMOVED at v46: omniscient narration with no speaker is a
+  presentation feature, not world content, so it isn't compiled at all rather than re-homed.)
+  Scene *bounds* are subsumed by scene-local beats, and the readable text playtext is
+  intentionally replaced by JSON. `Prax.Worlds.Audience` (`prax audience`) exercises both
+  remaining constructs in one short scene: an ambitious Duke's *concern* for standing makes him
+  court the king unbidden, and the audience times out (`dismissed`) if you don't press your
+  petition (`granted`) in time.
 - `Prax.Script.Json` (v12) — play-scripts round-trip through **readable JSON** (`Prax.Script.Json`),
   the editable authoring/exchange format (chosen over maintaining a bespoke `.prompter` grammar).
   `cabal run prax -- dump-play` prints the built-in play as JSON; `cabal run prax -- play
@@ -270,7 +274,7 @@ utility. See the design writeups:
   that round's own pre-regression 31.11s, the residual being the world's own accumulated
   richness, not the filter.
 
-See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, memories, the
+See `docs/LEDGER.md` for what's next (character prose-sketches, timed junctions, the
 player as DM, …).
 
 ## Build, test, play
@@ -285,7 +289,7 @@ cabal run prax -- intrigue  # play the dramatic episode (a Roman conspiracy)
 cabal run prax -- play      # play the same drama authored as a Prompter-lite play-script
 cabal run prax -- dm        # you are the drama manager — steer an autonomous cast
 cabal run prax -- feud      # emergent sandbox: a feud derived from one wrong + a handful of rules
-cabal run prax -- audience  # a Prompter demo: memory + timed junction + character-sketch in one scene
+cabal run prax -- audience  # a Prompter demo: timed junction + character-sketch in one scene
 cabal run prax -- village   # witnessing + rumor + reputation + deception + endeavors: what you see or hear settles into standing, an atoned thief is deterred from stealing again, a concealed secret stays kept while it's worth keeping, an unproven whisper cascades into reputation exactly like the truth would, and — given a lawful way to earn what he wanted — the thief takes up honest work instead
 cabal run prax -- flow      # print the play's scene-flow chart (Mermaid)
 cabal run prax -- check feud   # static well-formedness check of a world
