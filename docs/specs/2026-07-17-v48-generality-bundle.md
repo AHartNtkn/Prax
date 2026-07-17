@@ -1,123 +1,139 @@
-# v48 — The generality bundle: six hardcodings unpicked; the queue closes
+# v48 — The generality bundle: five hardcodings unpicked; leverage graduates to its own round
 
-Fourth and LAST of the audit-queued rounds (v45 protected families → v46 the narrator
-dies → v47 function registry → **v48**). The audit's remaining MED/LOW findings: places
-where one application's choices are baked into general machinery, or content squats in
-a mechanism module. Bundled because none carries a round alone; each is a parameter, a
-gate, a move, or a deletion — no new engine surface, so no pre-gate panel (the audit
-record and this spec carry the rationale).
+Fourth of the audit-queued rounds (v45 → v46 → v47 → **v48** → v49 leverage). Rewritten
+after the three-lens isolated panel (`.superpowers/sdd/v48-spec-review-*.md`) — whose
+sharpest result was catching the same factual error through three independent routes,
+and whose design lens concluded the Blackmail item cannot ship inside a bundle at all.
 
-## 1. □-lifting gates on deontic producibility (the engine stops taxing every world)
+## What the panel changed, headline first
 
-`liftObliged` adds an `obliged.Obligor.*`-lifted twin for EVERY all-Match axiom in
-EVERY world — but the tree has exactly ONE deontic consumer (Bar's tipping
-obligation). Six worlds carry doubled rule sets, doubled footprints, and a perturbed
-`obliged`-shaped namespace for a guarantee none of them can ever invoke (a lifted rule
-can only fire if an `obliged.*` fact can exist). The fix is DETECTION, not a flag: an
-author who uses obligations must get DEON property 1 automatically — a forgotten
-opt-in flag would silently break entailment closure, the loud-safe choice is to lift
-exactly when the world can produce `obliged.*` facts. The decision pool is the
-NON-LIFTED producers (practice/schedule insert atoms, db facts, UNLIFTED axiom heads —
-no cycle: lifted heads are exactly what's being decided). Mechanically this re-homes
-`cookedRules` from `setAxioms` into `retable` (the lift decision depends on
-practices/schedule, which change after `setAxioms`): `setAxioms` becomes
-`retable`-then-`reclose`, and every setter keeps the tables coherent —
-the v41 one-surface pattern, extended to the rule table. Exactness: Bar's tables
-byte-identical (it lifts today, it lifts after); the six non-deontic worlds' lifted
-rules VANISH — their `footprint`/`axiomHeads` AnalysisTable pins re-capture with
-exactly the lifted rows removed, itemized, and their goldens must be byte-identical
-(the vanished rules could never fire).
+1. **The first draft's deontic world-census was wrong at both ends** [all three
+   lenses, independently]: Bar never lifted (it has no axioms — its tipping obligation
+   is *producibility*, not lifting); the lifting worlds are **Village and Feud**; and
+   Village is a SECOND deontic consumer (the shakedown's `comply → owe → oblige`
+   statically produces `obliged.eve.favor`). The reviewer's note stands as the round's
+   argument-in-miniature: the spec author, writing carefully with the records open,
+   still miscounted the deontic worlds — which is precisely why the gate must be
+   DETECTION, not a hand-set flag.
+2. **Blackmail (old item 2) leaves the bundle** — three lenses converged: as amended it
+   was an incoherent chimera (general punishment and motivation bolted to a mandatory
+   evidence trigger, forcing the flagship non-exposure test to author a FAKE evidence
+   pattern — the audit's defect class reintroduced at the trigger); its "fidelity
+   restoration" framing over-claimed (v30 approved the epistemic model — the
+   motive-belief deposit; three-axis parameterization is genuinely new design); and it
+   punted its one load-bearing decision (the mechanism/content boundary) to the plan.
+   It restructures a validated shipped mechanic and is **queued as v49**, its own round
+   with a pre-gate panel — see the closing section for the design fork and the five
+   binding mechanism constraints the panel established. NOT banked: queued next, per
+   the standing directive that this defect class is never left around.
 
-## 2. Blackmail generalizes FULLY: demand, punishment, and motivation are authored
+## 1. □-lifting gates on deontic producibility
 
-[AMENDED at the gate, twice — the first draft banked the threat side claiming a "fear
-model" needed designing; the user rejected the deferral, and the v30 record then
-showed the premise was doubly false: the general model was APPROVED IN v30 (LEDGER:
-"a threat is a motive-belief deposit … credibility is self-motivation"), and the
-implementation narrowed it to its demo's content without the narrowing ever being
-surfaced. This item is a FIDELITY RESTORATION to the approved v30 model, not a new
-generalization.] v30's fear was never an engine model: it is three existing pieces composing
-— the EXTORTER carries an authored punitive desire that makes punishing rational
-after defiance; the VICTIM's own wants price the punishment's outcome (eve fears
-exposure through her own notoriety want, not through engine audience-semantics); and
-the prediction machinery lets the victim foresee the extorter acting. The
-believer-counting want was one authored motivation SHAPE that v30 baked into the
-mechanism — application content in mechanism clothing, this audit's exact defect
-class. Therefore `shakedown` parameterizes on all three application axes:
+`liftObliged` adds an `obliged.Obligor.*` twin for every all-Match axiom in every
+axiom-bearing world. Corrected census: **Village and Feud** carry lifted rules today;
+Village can produce `obliged.*` (comply → owe) and KEEPS them; **Feud cannot** (no
+Deontic/Debt/Blackmail import; heads are kinship/feud families) and its lifted twins —
+genuinely unfireable — VANISH. The gate: lift iff the world can produce an `obliged.*`
+fact.
 
-- **demand** (`[Outcome]` — what compliance does; a favor, a feeling, a fact, or the
-  old debt; `Prax.Debt` stops being a hard dependency of leverage),
-- **punishment** (label + `[Outcome]` — what the extorter does on defiance; exposure's
-  reveal-to-witnesses, a burned barn, anything actionable),
-- **the extorter's punitive want** (authored — the motivation that makes the
-  punishment credible post-defiance; weight-per-believer for exposure, a plain
-  vengeance want for violence).
+- **Detection, not a flag**: an author using obligations must get DEON property 1
+  automatically; the panel's own census error is the demonstration that human
+  enumeration fails silently.
+- **The decision pool** is the UNLIFTED producers: practice insert atoms, schedule-rule
+  insert atoms, db facts AS OF RETABLE TIME, and unlifted axiom heads. Two panel-forced
+  precisions: (a) do NOT reuse `producibleAtoms` — it reads `cookedRules` (a laziness
+  cycle against the field being computed) and includes lifted heads (self-fulfilling:
+  the gate would always lift); the pool is a new query over the unlifted inputs. (b)
+  The db leg sees only facts present at retable time — the stated build-order
+  invariant: obliged-producing setup facts must precede the final retable (both
+  axiom worlds already build `setAxioms`-outermost; the invariant is now a stated
+  contract, and a violation is the author's, documented at `setAxioms`).
+- **Mechanics**: `cookedRules` re-homes from `setAxioms` into `retable`; `setAxioms`
+  becomes retable-then-reclose. This IS engine-internals surface [panel F5, accepted]:
+  the ordering guarantee `setAxioms` currently owns (cookedRules set before its
+  reclose) must be re-established and the SETTER-COHERENCE INVARIANT stated and
+  pinned — every producer-changing setter (definePractices, defineFunctions,
+  setSchedule, setDesires, setCharacters, setAxioms) leaves the lift decision current;
+  the verification generalizes the after-the-fact pin to every setter, not just the
+  oblige-practice-added-after-setAxioms seed case.
+- **The string reference path stays ungated BY DESIGN** [panel, completeness I1]:
+  `Derive.run`/`closure` are pure `[Axiom] → Db` with no producer pool and always
+  lift. Equivalence with the gated `runCooked` holds exactly when the gated-out rules
+  are unfireable — so **ViewInvariant doubles as the gate's soundness net**: if
+  detection ever wrongly skips a producible world, the view diverges and the net
+  fires. This is stated in both modules' docs.
+- **Consumers named**: `axiomDerivable` walks lifted heads into
+  `improvables`/`liveness`/`caresAbout` — verified safe for Feud (its wants never
+  unify `obliged.Obligor.*`) and moot for Village; the plan carries the check.
+- **Exactness**: exactly ONE pin changes — `feudPin` loses its 8 lifted rows
+  (footprint ×6, axiomHead ×2), itemized. `villagePin` and all others BYTE-IDENTICAL.
+  All goldens byte-identical everywhere (vanished rules were unfireable). Any other
+  movement = BLOCK.
 
-What stays is the module's IDENTITY: the evidence pattern as the threat's trigger —
-leverage means holding something over someone. Evidence-free coercion (a protection
-racket) is a DIFFERENT mechanic by charter, not a deferred piece of this one. The
-threaten/comply/defy/punish skeleton, the marker plumbing, and the credibility
-plumbing (how the victim comes to predict the extorter) are the mechanism and are
-untouched. Village AUTHORS the exposure/debt instantiation in the new parameters
-(any genuinely mechanical fragment of the old reveal — e.g. a witness-belief
-insertion helper — is exported as mechanism if the authored form needs it; the plan
-probes this). BlackmailSpec pins BOTH: the v30 exposure/debt arithmetic unchanged
-(both compliance regimes), and a full non-debt, non-exposure arc (favor demand,
-harm punishment) — the second-application test executed, not asserted.
-
-## 3. Confession's discharge verb parameterizes
+## 2. Confession's discharge verb parameterizes
 
 `confess` hardcodes `confessed` into the discharge path. The verb becomes an argument
-(the caller names the conversion: recant, boast, admit — same machinery). The shipped
-call sites pass `"confessed"`; behavior identical, goldens byte-identical.
+(recant, boast, admit — same machinery); shipped sites pass `"confessed"`; behavior
+identical, goldens byte-identical.
 
-## 4. Stress's coverage family parameterizes
+## 3. Stress's coverage family parameterizes
 
-`sceneReached` hardcodes Script's `currentScene` — the general harness special-cases
-one application. Coverage becomes a declarable family parameter (which path prefix
-marks a coverage bucket), defaulted by the CLI's script entry points to
-`currentScene`; a non-Script world can now ask for market-phase or arc-stage coverage
-without touching the module.
+`sceneReached` hardcodes Script's `currentScene`. Coverage becomes a declarable family
+parameter, defaulted by the CLI's script entry points to `currentScene`. The plan
+carries the full consumer list (stressTest/runRandom/StressReport signatures,
+StressSpec AND the CLI stress entry, ScriptSpec's coverage uses) [panel I7].
 
-## 5. `disapprovalP` moves to its consumer
+## 4. `disapprovalP` moves to its consumer
 
-Shipped content (fixed magnitudes, specific emotions) lives in the `Reactions`
-mechanism module — the same shape as the dead `coreLib` at lower stakes. It moves to
-`Prax.Worlds.Bar` (its only shipped consumer); `ReactionsSpec` builds its own minimal
-test reaction so the MECHANISM keeps unit coverage independent of Bar's content.
+Shipped content in the `Reactions` mechanism module moves to `Prax.Worlds.Bar` (its
+only consumer); `ReactionsSpec` builds its own minimal reaction so the mechanism keeps
+unit coverage independent of Bar's content.
 
-## 6. `feelingSomeone` collapses into `feelingToward`
+## 5. `feelingSomeone` collapses into `feelingToward`
 
-A literal alias since v39 killed the residue trap. One name survives
-(`feelingToward`); the per-target-pricing guidance (the reason the shape was kept)
-moves onto the survivor's haddock. Village's `smoulders` and the specs re-point.
+A literal alias since v39. One name survives; the per-target-pricing guidance moves to
+the survivor's haddock; Village's `smoulders` and the specs re-point.
 
-## Exactness
+## Exactness (bundle-wide)
 
-Items 2-6: goldens and pins byte-identical (parameter defaults preserve every shipped
-behavior; the alias and the move are name-level). Item 1: the six non-deontic worlds'
-AnalysisTable `footprint`/`axiomHeads` rows lose exactly their lifted entries
-(itemized re-capture — each removed row named as a lifted twin); ALL goldens
-byte-identical everywhere (vanished rules were unfireable). Any other movement =
-BLOCK. Persist untouched.
+Items 2-5: goldens and pins byte-identical. Item 1: `feudPin` −8 rows, itemized;
+everything else byte-identical. Persist untouched; no format bump.
 
-## Verification
+## v49 — leverage, queued (the panel's verdict and the design fork)
 
-- Item 1 RED-first: a fixture with an `oblige`-bearing practice lifts (□-closure pin —
-  DEON property 1 observed); the same fixture without it doesn't (no lifted heads in
-  `axiomHeads`); adding the oblige practice AFTER `setAxioms` still lifts (the
-  re-homing's whole point — pinned); Bar's obligation behavior byte-identical.
-- Item 2: a full non-debt, NON-EXPOSURE arc pinned end-to-end (favor demand, harm
-  punishment, authored vengeance want — threaten/comply and threaten/defy/punish both
-  driven, the victim's compliance arithmetic observed through its own want over the
-  harm); the shipped exposure/debt behavior unchanged (existing pins untouched);
-  Village's instantiation authored in the new parameters, byte-identical goldens.
-- Items 3-6: guard/behavior pins at the new parameter surfaces; the mechanism-level
-  ReactionsSpec fixture; deaths/moves grep-proof (`feelingSomeone`, `disapprovalP`
-  out of Reactions).
+The Blackmail generalization is REAL work the audit correctly demanded, and it gets a
+real round, immediately after this one. The panel's two coherent designs:
+
+- **(a) Information-leverage charter**: evidence stays mandatory AND punishment stays
+  parameterized *exposure* — the module remains "blackmail," and the burned-barn
+  application is out of charter. REJECTED under the standing directive: the audit's
+  second-application member ("dig my field or I burn your barn") would remain
+  inexpressible — the defect class survives.
+- **(b) General coercion primitive** (the v49 design): the
+  threaten/comply/defy/punish skeleton + motive-belief deposit + prediction
+  credibility becomes an evidence-OPTIONAL primitive; blackmail is a thin instance
+  adding the evidence gate and exposure punishment; a protection racket is another
+  instance. This kills the class member fully.
+
+Five mechanism constraints the panel established, binding on the v49 design:
+1. The credibility deposit's desire-name derives from the authored punitive want's
+   `desireName`, and the want must be registered (`setDesires`) and held
+   (`charDesires`) — else the threat is silently non-credible [soundness I3].
+2. A demand-independent compliance marker replaces the debt-shaped re-buy guard —
+   repeat extraction stays impossible for every demand kind, and the v49 verification
+   drives a RE-threat after compliance [soundness I4].
+3. The standing-threat `Or [threat, defiance]` disjunction survives in BOTH the punish
+   action's availability and the authored want; punishment is availability-gated with
+   only its EFFECT authored; the verification drives punish against a STANDING threat
+   [soundness I5].
+4. The new authored surfaces (demand, punishment, want) carry the v40 splice guards
+   [completeness I6].
+5. The mechanism/content boundary (which fragments of the old reveal are exported
+   mechanism vs Village-authored content) is decided IN the v49 spec, not its plan
+   [design F4]; BlackmailSpec's exact v30 arithmetic (−63.84 …) is preserved under
+   whatever call-site reshaping lands [completeness I4].
 
 ## Out of scope
 
-Evidence-free coercion (a different mechanic by charter, named in item 2). Sort scoping that models
-Call bindings (v47's recorded successor, unforced). The queue ends here; the bank
-holds what remains.
+v49 (queued, above). Sort scoping that models Call bindings (v47's recorded
+successor, unforced).
