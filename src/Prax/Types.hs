@@ -381,9 +381,11 @@ data PraxState = PraxState
   , axioms       :: [Axiom]       -- ^ domain rules; reads see their forward-chained closure (default none)
   , cookedRules  :: [CookedRule]
     -- ^ 'axioms' precompiled ('Prax.Derive.cookAxioms') — bodies pattern-
-    -- split, heads pre-tokenized, □-lifted forms included. Maintained by
-    -- 'Prax.Engine.setAxioms', consumed by 'Prax.Derive.runCooked' in
-    -- 'Prax.Engine.reclose'\/'Prax.Engine.applyGrowToks' so the closure
+    -- split, heads pre-tokenized, □-lifted forms included WHEN the world can
+    -- produce an @obliged.*@ fact (the □-lift gate, spec v48). Maintained by
+    -- 'Prax.Engine.retable' (which decides the gate via
+    -- 'Prax.Relevance.deonticProducible'), consumed by 'Prax.Derive.runCooked'
+    -- in 'Prax.Engine.reclose'\/'Prax.Engine.applyGrowToks' so the closure
     -- loop's ~5,400 calls\/round never re-cook the axiom set.
   , sorts        :: [(String, [String])]  -- ^ sort → member constants, for the type checker (default none)
   , desires      :: [Desire]      -- ^ the vocabulary of nameable desires (default none)

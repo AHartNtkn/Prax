@@ -85,16 +85,24 @@ tests = testGroup "Prax.Derive (m(X) closure)"
 
   , testCase "axiomFootprint collects bodies (any polarity), heads, and lifted forms" $ do
       let ax = axiom [ Match "parent.X.Y", Absent [ Match "dead.X" ] ] [ "elder.X" ]
-          fp = axiomFootprint (cookAxioms [ax])
+          fp = axiomFootprint (cookAxioms True [ax])
           hasPath ps s = map intern (pathNames s) `elem` ps
       assertBool "body atom"          (hasPath fp "parent.X.Y")
       assertBool "negated body atom"  (hasPath fp "dead.X")
       assertBool "head"               (hasPath fp "elder.X")
       -- an Absent body blocks □-lifting; an all-Match rule contributes both
-      -- lifted body and lifted head:
-      let fp2 = axiomFootprint (cookAxioms [ axiom [ Match "a.X" ] [ "b.X" ] ])
+      -- lifted body and lifted head — WHEN the gate admits the lift (@lift@ = True):
+      let fp2 = axiomFootprint (cookAxioms True [ axiom [ Match "a.X" ] [ "b.X" ] ])
       assertBool "lifted body" (hasPath fp2 "obliged.Obligor.a.X")
       assertBool "lifted head" (hasPath fp2 "obliged.Obligor.b.X")
+      -- gate off (@lift@ = False): the base rule stays, the lifted twin is gone
+      -- (the v48 gate's mechanism; the DECISION lives in Prax.Engine.retable via
+      -- Prax.Relevance.deonticProducible)
+      let fp3 = axiomFootprint (cookAxioms False [ axiom [ Match "a.X" ] [ "b.X" ] ])
+      assertBool "base body kept"   (hasPath fp3 "a.X")
+      assertBool "base head kept"   (hasPath fp3 "b.X")
+      assertBool "no lifted body"   (not (hasPath fp3 "obliged.Obligor.a.X"))
+      assertBool "no lifted head"   (not (hasPath fp3 "obliged.Obligor.b.X"))
 
   , testCase "closureFrom continues a closed model exactly as a from-scratch closure" $ do
       let axs = [ axiom [ Match "parent.X.Y" ] [ "elder.X" ]
@@ -108,26 +116,26 @@ tests = testGroup "Prax.Derive (m(X) closure)"
 
   , testCase "axiomNegPatterns collects exactly the negated interiors" $ do
       let axs = [ axiom [ Match "a.X", Absent [ Match "b.X", Not "c.X" ] ] [ "d.X" ] ]
-          np = axiomNegPatterns (cookAxioms axs)
+          np = axiomNegPatterns (cookAxioms True axs)
           hasPath ps s = map intern (pathNames s) `elem` ps
       assertBool "Absent interior" (hasPath np "b.X")
       assertBool "Not inside Absent" (hasPath np "c.X")
       assertBool "positive atom is NOT negated" (not (hasPath np "a.X"))
 
   , testCase "monotoneAxioms accepts the count-threshold shape and rejects anti-monotone" $ do
-      assertBool "Match-only is safe" (monotoneAxioms (cookAxioms [ axiom [ Match "a.X" ] [ "b.X" ] ]))
+      assertBool "Match-only is safe" (monotoneAxioms (cookAxioms True [ axiom [ Match "a.X" ] [ "b.X" ] ]))
       assertBool "the notoriety shape (Subquery+Count+Cmp Gte literal) is safe"
-        (monotoneAxioms (cookAxioms [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
+        (monotoneAxioms (cookAxioms True [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
                                 , Count "N" "Rs", Cmp Gte "N" "3" ] [ "n.T" ] ]))
       assertBool "Cmp Lt with the literal on the right is anti-monotone"
-        (not (monotoneAxioms (cookAxioms [ axiom [ Count "N" "Rs", Cmp Lt "N" "3" ] [ "q.T" ] ])))
+        (not (monotoneAxioms (cookAxioms True [ axiom [ Count "N" "Rs", Cmp Lt "N" "3" ] [ "q.T" ] ])))
       assertBool "Calc disables the tier"
-        (not (monotoneAxioms (cookAxioms [ axiom [ Calc "M" Add "N" "1" ] [ "q.M" ] ])))
+        (not (monotoneAxioms (cookAxioms True [ axiom [ Calc "M" Add "N" "1" ] [ "q.M" ] ])))
       assertBool "Eq over a count-bound variable is anti-monotone (exactly-k)"
-        (not (monotoneAxioms (cookAxioms [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
+        (not (monotoneAxioms (cookAxioms True [ axiom [ Subquery "Rs" ["W"] [ Match "r.W.T" ]
                                      , Count "N" "Rs", Eq "N" "3" ] [ "n.T" ] ])))
       assertBool "Neq over a count-bound variable is anti-monotone too"
-        (not (monotoneAxioms (cookAxioms [ axiom [ Count "N" "Rs", Neq "N" "3" ] [ "q.T" ] ])))
+        (not (monotoneAxioms (cookAxioms True [ axiom [ Count "N" "Rs", Neq "N" "3" ] [ "q.T" ] ])))
       assertBool "Eq over Match-bound names stays monotone"
-        (monotoneAxioms (cookAxioms [ axiom [ Match "a.X", Match "b.Y", Eq "X" "Y" ] [ "c.X" ] ]))
+        (monotoneAxioms (cookAxioms True [ axiom [ Match "a.X", Match "b.Y", Eq "X" "Y" ] [ "c.X" ] ]))
   ]

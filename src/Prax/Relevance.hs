@@ -48,13 +48,14 @@ module Prax.Relevance
   , evictionShadowNames
   , moverReadAnchors
   , producibleAtoms
+  , deonticProducible
   ) where
 
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Bindings, Val (..), pathNames, dbToSentences)
-import           Prax.Derive (CookedRule (..))
+import           Prax.Derive (Axiom (..), CookedRule (..), obligedHead)
 import           Prax.Query (CookedCondition (..), cookCondition, cookedReadAnchors, groundCookedCondition, groundNames)
 import           Prax.Sym (Sym, intern, symIsVar)
 import           Prax.Types
@@ -360,3 +361,34 @@ producibleAtoms st = do
   where
     practices = Map.elems (cookedDefs st)
     fns = cookedFnPool (cookedFns st)
+
+-- | Can this world ever contain an @obliged.*@ fact? The □-lift gate's
+-- decision (spec v48). Reads the UNLIFTED producers only — practice and
+-- schedule insert atoms, db facts as of now, and unlifted axiom heads — so
+-- there is no cycle with the 'cookedRules' being computed and no
+-- self-fulfilling read of lifted heads (why this is NOT 'producibleAtoms',
+-- which reads 'cookedRules' and includes the lifted forms). Conservative: a
+-- variable-headed producer counts (it could ground to @obliged@), and an
+-- unresolvable 'CCall' (wild) counts too; conservatism here only ever KEEPS a
+-- lift (the safe direction — the ungated string closure is the net for any
+-- lift wrongly dropped). Db facts are those present at retable time — the
+-- stated build-order invariant (documented at 'Prax.Engine.setAxioms'):
+-- obliged-producing setup facts must precede the final retable; both shipped
+-- axiom worlds build setAxioms-outermost.
+deonticProducible :: PraxState -> Bool
+deonticProducible st = wild || any headProduces producerHeads
+  where
+    fns = cookedFnPool (cookedFns st)
+    outcomeAtoms =
+      [ cookedOutcomeAtoms fns [] o
+      | cp <- Map.elems (cookedDefs st), a <- cpActions cp, o <- caOuts a ]
+      ++ [ cookedOutcomeAtoms fns [] o | cp <- Map.elems (cookedDefs st), o <- cpInits cp ]
+      ++ [ cookedOutcomeAtoms fns [] o
+         | csr <- cookedSchedule st, (_, outs) <- csrBody csr, o <- outs ]
+    -- An unresolvable Call could produce anything: keep the lift.
+    wild = Nothing `elem` outcomeAtoms
+    insertHeads = [ h | Just (ins, _) <- outcomeAtoms, (h : _) <- ins ]
+    dbHeads     = [ h | s <- dbToSentences (db st), (h : _) <- [map intern (pathNames s)] ]
+    axiomHeadsU = [ h | ax <- axioms st, s <- axiomThen ax, (h : _) <- [map intern (pathNames s)] ]
+    producerHeads = insertHeads ++ dbHeads ++ axiomHeadsU
+    headProduces h = h == intern obligedHead || symIsVar h

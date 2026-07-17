@@ -20,10 +20,15 @@
 --     variables (@parent.X.Y ∧ parent.Y.Z → grandparent.X.Z@). For a ground body
 --     this coincides with @≤@; with variables it is the natural generalization.
 --
--- __Auto-@□@-lifting__: every domain rule @A → B@ additionally contributes the
--- lifted rule @obliged.Obligor.A → obliged.Obligor.B@, so an obligation closes
--- over the consequences of its content (DEON property 1) with the rule written
--- once.
+-- __Auto-@□@-lifting__: every all-@Match@ domain rule @A → B@ can additionally
+-- contribute the lifted rule @obliged.Obligor.A → obliged.Obligor.B@, so an
+-- obligation closes over the consequences of its content (DEON property 1) with
+-- the rule written once. In the STRING path ('closure'\/'run') this lifting is
+-- unconditional (there is no producer pool to consult and its unconditional
+-- form is "Prax.ViewInvariantSpec"'s reference); in the cooked\/engine path
+-- ('cookAxioms', driven by 'Prax.Engine.retable') it is GATED on the world's
+-- ability to produce an @obliged.*@ fact (spec v48) — a world that can never
+-- invoke an obligation carries no unfireable lifted rules.
 module Prax.Derive
   ( Axiom(..)
   , axiom
@@ -38,6 +43,7 @@ module Prax.Derive
   , monotoneAxioms
   , CookedRule(..)
   , cookAxioms
+  , obligedHead
   , runCooked
   ) where
 
@@ -143,15 +149,31 @@ data CookedRule = CookedRule
   }
   deriving (Eq, Show)
 
--- | Precompile a domain's axioms (with their auto-□-lifted forms — see
--- 'liftObliged') to 'CookedRule's. The caller ('Prax.Engine.setAxioms')
--- stores the result in 'Prax.Types.cookedRules', so 'runCooked' — invoked
--- once per 'Prax.Engine.reclose'\/'Prax.Engine.applyGrowToks', thousands of
--- times a round — never re-cooks the axiom set.
-cookAxioms :: [Axiom] -> [CookedRule]
-cookAxioms axs =
+-- | Precompile a domain's axioms to 'CookedRule's. @lift@ decides whether the
+-- auto-□-lifted forms (see 'liftObliged') are included (spec v48): the engine
+-- lifts exactly when the world can produce an @obliged.*@ fact — DEON property
+-- 1 for worlds that can invoke it, no doubled rule set for worlds that cannot.
+-- The DECISION lives in the caller ('Prax.Engine.retable', via
+-- 'Prax.Relevance.deonticProducible'); the MECHANISM is here. The STRING path
+-- ('closure'\/'run') always lifts and is deliberately ungated: it has no
+-- producer pool, and its unconditional lifting makes "Prax.ViewInvariantSpec"
+-- the gate's soundness net — if the gate ever wrongly skips a producible world,
+-- the gated cooked view diverges from the ungated reference and the net fires.
+--
+-- The caller stores the result in 'Prax.Types.cookedRules', so 'runCooked' —
+-- invoked once per 'Prax.Engine.reclose'\/'Prax.Engine.applyGrowToks',
+-- thousands of times a round — never re-cooks the axiom set.
+cookAxioms :: Bool -> [Axiom] -> [CookedRule]
+cookAxioms lift axs =
   [ CookedRule (map cookCondition body) (map internTokens hs)
-  | Axiom body hs <- axs ++ mapMaybe liftObliged axs ]
+  | Axiom body hs <- axs ++ (if lift then mapMaybe liftObliged axs else []) ]
+
+-- | The obligation operator's head literal: the first segment of every
+-- □-lifted fact ('liftObliged' prefixes @obliged.Obligor.@) and the name the
+-- □-lift gate ('Prax.Relevance.deonticProducible') screens producers for. One
+-- home for the vocabulary coupling that 'liftObliged' is inherently built on.
+obligedHead :: String
+obligedHead = "obliged"
 
 -- | 'run'\'s cooked mirror: case-for-case the same semi-naive loop
 -- (@go@\/@deltaJoin@), typed over precompiled 'CookedRule's and
@@ -196,7 +218,7 @@ liftObliged (Axiom body heads)
     isMatch _         = False
     liftCond (Match s) = Match (liftSent s)
     liftCond c         = c
-    liftSent s = "obliged.Obligor." ++ s
+    liftSent s = obligedHead ++ ".Obligor." ++ s
 
 -- | The facts the axioms /add/ to a world (closure minus base). Empty on
 -- contradiction.
@@ -213,9 +235,9 @@ contradiction axs db = case closure axs db of
 
 -- | Every path pattern the axioms can read or write: body atoms at any
 -- polarity (including inside Absent\/Exists\/Or\/Subquery — the
--- 'Prax.Query.cookedReadAnchors' walk), and head templates. Cooked rules
--- already carry the auto-□-lifted forms ('cookAxioms'), so lifting needs no
--- second enumeration here. A ground delta that may-unify none of these
+-- 'Prax.Query.cookedReadAnchors' walk), and head templates. Whatever □-lifted
+-- forms the gate admitted are already rules in their own right ('cookAxioms'),
+-- so lifting needs no second enumeration here. A ground delta that may-unify none of these
 -- commutes with 'closure' (v27 spec theorem) — the basis of the engine's
 -- delta-irrelevance fast path.
 axiomFootprint :: [CookedRule] -> [[Sym]]
@@ -236,10 +258,10 @@ axiomNegPatterns rules = concat [ concatMap negOf (crBody r) | r <- rules ]
       CSubquery _ _ w -> concatMap negOf w
       _               -> []
 
--- | Every head template the axioms can write — □-lifted forms included, for
--- free, since 'cookAxioms' already emitted them as rules of their own. A
--- delta that feeds some axiom can change derived facts only in these
--- families.
+-- | Every head template the axioms can write — whatever □-lifted forms the
+-- gate admitted included, for free, since 'cookAxioms' already emitted them as
+-- rules of their own. A delta that feeds some axiom can change derived facts
+-- only in these families.
 axiomHeadPatterns :: [CookedRule] -> [[Sym]]
 axiomHeadPatterns rules = concat [ map (map fst) (crHeads r) | r <- rules ]
 

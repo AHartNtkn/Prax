@@ -15,6 +15,15 @@ import           Prax.Worlds.Feud (feudWorld)
 
 -- The round's core invariant: the cached view IS the closure of the base
 -- under the axioms — label-faithfully, whatever construction path built it.
+--
+-- Since v48 this ALSO doubles as the □-lift gate's soundness net. The gated
+-- cooked path ('Prax.Engine.reclose' via 'Prax.Engine.retable') omits the
+-- □-lifted rules for a world it judges cannot produce an @obliged.*@ fact; the
+-- string reference ('closure', below) always lifts, ungated. The two agree
+-- exactly when the gated-out rules are unfireable — so if the gate ever WRONGLY
+-- skips a producible world, a lifted derivation the reference makes goes missing
+-- from 'readView' and this check fires. Feud (gate off) and Village (gate on)
+-- both exercise it below.
 viewConsistent :: PraxState -> Bool
 viewConsistent st =
   dbToLabeledSentences (readView st) == dbToLabeledSentences recomputed

@@ -184,24 +184,11 @@ feudPin =
   , "footprint: married.A.B"
   , "footprint: sibling.A.S"
   , "footprint: inLaw.S.B"
-  , "footprint: obliged.Obligor.allied.X.Y"
-  , "footprint: obliged.Obligor.allied.Y.X"
-  , "footprint: obliged.Obligor.wronged.X.Y"
-  , "footprint: obliged.Obligor.resents.Y.X"
-  , "footprint: obliged.Obligor.resents.A.B"
-  , "footprint: obliged.Obligor.allied.A.C"
-  , "footprint: obliged.Obligor.resents.C.B"
-  , "footprint: obliged.Obligor.married.A.B"
-  , "footprint: obliged.Obligor.married.B.A"
-  , "footprint: obliged.Obligor.parent.G.P"
-  , "footprint: obliged.Obligor.parent.P.C"
-  , "footprint: obliged.Obligor.grandparent.G.C"
-  , "footprint: obliged.Obligor.married.A.B"
-  , "footprint: obliged.Obligor.parent.P.A"
-  , "footprint: obliged.Obligor.inLaw.P.B"
-  , "footprint: obliged.Obligor.married.A.B"
-  , "footprint: obliged.Obligor.sibling.A.S"
-  , "footprint: obliged.Obligor.inLaw.S.B"
+  -- v48 □-lift gate: Feud imports no Deontic/Debt/Blackmail vocabulary and
+  -- produces no obliged.* fact (kinship/feud heads only), so the gate withholds
+  -- the auto-□-lifted twins — 18 footprint rows and 7 axiomHead rows below —
+  -- that were genuinely unfireable. villagePin keeps its (fireable) lifted rows;
+  -- every other pin is byte-identical.
   , "axiomHead: allied.Y.X"
   , "axiomHead: resents.Y.X"
   , "axiomHead: resents.C.B"
@@ -211,13 +198,6 @@ feudPin =
   , "axiomHead: grandparent.G.C"
   , "axiomHead: inLaw.P.B"
   , "axiomHead: inLaw.S.B"
-  , "axiomHead: obliged.Obligor.allied.Y.X"
-  , "axiomHead: obliged.Obligor.resents.Y.X"
-  , "axiomHead: obliged.Obligor.resents.C.B"
-  , "axiomHead: obliged.Obligor.married.B.A"
-  , "axiomHead: obliged.Obligor.grandparent.G.C"
-  , "axiomHead: obliged.Obligor.inLaw.P.B"
-  , "axiomHead: obliged.Obligor.inLaw.S.B"
   , "axiomHead: contradiction"
   ]
 
