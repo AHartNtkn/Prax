@@ -8,6 +8,13 @@
 -- reached, which action ids ever fired (coverage), and how many runs hit a
 -- dead end (a living character with no move). Pure and deterministic given the
 -- seeds — uses a tiny built-in LCG so there is no extra dependency.
+--
+-- STATED LIMIT of the dead-end detector (v46): the idle-pass counter tolerates
+-- exactly ONE round boundary of move-less progression — a scene that advances
+-- only via the engine schedule across TWO OR MORE boundaries (e.g. a beat-less
+-- scene whose sole exit is @after n@ with n ≥ 2) reports a spurious dead end.
+-- No shipped world has that shape (every scene offers a character beat); drive
+-- such a world with 'Prax.Loop.runNpcTicks' instead, which has no detector.
 module Prax.Stress
   ( RunResult(..)
   , StressReport(..)
