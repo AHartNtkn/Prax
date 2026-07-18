@@ -35,6 +35,7 @@ library
                       Prax.Reactions
                       Prax.Deontic
                       Prax.Debt
+                      Prax.Coerce
                       Prax.Blackmail
                       Prax.Confession
                       Prax.EL
@@ -107,6 +108,7 @@ test-suite prax-test
                       Prax.ReactionsSpec
                       Prax.DeonticSpec
                       Prax.DebtSpec
+                      Prax.CoerceSpec
                       Prax.BlackmailSpec
                       Prax.ConfessionSpec
                       Prax.ELSpec

@@ -15,6 +15,7 @@ import qualified Prax.EmotionSpec
 import qualified Prax.ReactionsSpec
 import qualified Prax.DeonticSpec
 import qualified Prax.DebtSpec
+import qualified Prax.CoerceSpec
 import qualified Prax.BlackmailSpec
 import qualified Prax.ConfessionSpec
 import qualified Prax.ELSpec
@@ -65,6 +66,7 @@ main = defaultMain $ testGroup "prax"
   , Prax.ReactionsSpec.tests
   , Prax.DeonticSpec.tests
   , Prax.DebtSpec.tests
+  , Prax.CoerceSpec.tests
   , Prax.BlackmailSpec.tests
   , Prax.ConfessionSpec.tests
   , Prax.ELSpec.tests
