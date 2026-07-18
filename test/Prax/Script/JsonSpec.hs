@@ -43,6 +43,11 @@ tests = testGroup "Prax.Script.Json"
   , testCase "an InsertFor outcome round-trips through JSON" $
       decode (encode (InsertFor 3 "mood!a")) @?= Just (InsertFor 3 "mood!a")
 
+  , testCase "a Roll outcome (the drama die, v50) round-trips through JSON" $ do
+      let o = Roll 1 4 [ Match "shortTempered.T" ]
+                       [ Insert "T.feels.angry.toward.Actor" ]
+      decode (encode o) @?= Just o
+
     -- v44 fix wave 2: the Junction "after" field, and the uniform compile-time
     -- guard reachable from JSON (JSON has no other way to author a timeout: it
     -- carries no "after" tag pre-fix, so a JSON author's only route to a timed

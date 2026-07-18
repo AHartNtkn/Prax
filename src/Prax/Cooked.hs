@@ -38,6 +38,7 @@ cookOutcome o = case o of
   InsertFor n s     -> CInsertFor n (internTokens s)
   Call fn args      -> CCall fn (map intern args)
   ForEach conds outs -> CForEach (map cookCondition conds) (map cookOutcome outs)
+  Roll num den conds outs -> CRoll num den (map cookCondition conds) (map cookOutcome outs)
 
 -- | Substitute bindings into a cooked outcome. 'CInsert'/'CDelete' reuse
 -- 'Prax.Db.groundTokens' directly — no string rebuild; 'CCall' args are
@@ -50,6 +51,8 @@ groundCookedOutcome b o = case o of
   CCall fn args        -> CCall fn (groundNames b args)
   CForEach conds outs  -> CForEach (map (groundCookedCondition b) conds)
                                     (map (groundCookedOutcome b) outs)
+  CRoll num den conds outs -> CRoll num den (map (groundCookedCondition b) conds)
+                                            (map (groundCookedOutcome b) outs)
 
 -- | Compile a 'Practice' to its cooked form (see 'CookedPractice'): every
 -- action's conditions/outcomes and every init outcome precooked; the

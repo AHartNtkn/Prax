@@ -2,15 +2,18 @@
 -- serialize and deserialize the world state").
 --
 -- The whole mutable state is the fact database, the turn cursor, the standing
--- intentions, and the engine schedule's runtime half — per-rule next-dues and
--- the one-shot expiry queue (spec @docs/specs/2026-07-16-v44-the-schedule.md@).
--- Practices, characters, wants, and the schedule DECLARATIONS are code (the
--- world's rules), so a save captures only @db@ + @cursor@ + @intentions@ +
--- @scheduleDues@ + @expiries@ and is reloaded onto a freshly-constructed world
--- of the same kind (which supplies the rule bodies the dues re-associate to BY
--- NAME). Facts serialize as sentences (one per line, via
--- @dbToLabeledSentences@ / @insertAll@); intentions, dues, and expiries
--- serialize on their own labelled lines (below), so the round trip is exact.
+-- intentions, the engine schedule's runtime half — per-rule next-dues and
+-- the one-shot expiry queue (spec @docs/specs/2026-07-16-v44-the-schedule.md@) —
+-- and the drama die's stream position (@rngSeed@, spec v50). Practices,
+-- characters, wants, and the schedule DECLARATIONS are code (the world's
+-- rules), so a save captures only @db@ + @cursor@ + @intentions@ +
+-- @scheduleDues@ + @expiries@ + @rngSeed@ and is reloaded onto a
+-- freshly-constructed world of the same kind (which supplies the rule bodies
+-- the dues re-associate to BY NAME). Facts serialize as sentences (one per
+-- line, via @dbToLabeledSentences@ / @insertAll@); intentions, dues, expiries,
+-- and the seed serialize on their own labelled lines (below), so the round
+-- trip is exact. The @rngseed@ line is emitted ONLY for a seeded state — an
+-- unseeded world's save carries no line and reloads as 'Nothing'.
 module Prax.Persist
   ( serializeState
   , deserializeState
@@ -69,7 +72,7 @@ unreprIntention (mga, (b, s, l, m)) =
 -- model); 'deserializeState' rejects any other tag loudly — no silent misparse
 -- of a save whose facts a freshly-constructed world no longer interprets.
 formatVersion :: String
-formatVersion = "prax-state v3"
+formatVersion = "prax-state v4"
 
 -- | Serialize the mutable state (@cursor@ + standing intentions + all facts)
 -- to text, with @!@/@.@ labels so the reload rebuilds the exclusion structure
@@ -81,7 +84,8 @@ serializeState st =
   unlines
     ( formatVersion
     : ("cursor " ++ show (cursor st))
-    : [ "intention " ++ name ++ " " ++ show (reprIntention i)
+    : maybe [] (\s -> [ "rngseed " ++ show s ]) (rngSeed st)
+    ++ [ "intention " ++ name ++ " " ++ show (reprIntention i)
       | (name, i) <- Map.toList (intentions st) ]
     ++ [ "due " ++ name ++ " " ++ show turn
        | (name, turn) <- Map.toList (scheduleDues st) ]
@@ -99,7 +103,7 @@ deserializeState text world =
   case lines text of
     (v : hd : rest)
       | v == formatVersion, ["cursor", n] <- words hd, Just c <- readMaybe n ->
-          let labelled       = ["intention ", "due ", "expiry "]
+          let labelled       = ["intention ", "due ", "expiry ", "rngseed "]
               intentionLines = filter ("intention " `isPrefixOf`) rest
               dueLines       = filter ("due " `isPrefixOf`) rest
               expiryLines    = filter ("expiry " `isPrefixOf`) rest
@@ -107,9 +111,12 @@ deserializeState text world =
               newIntentions  = Map.fromList (map parseIntentionLine intentionLines)
               newDues        = Map.fromList (map parseDueLine dueLines)
               newExpiries    = Map.fromList (map parseExpiryLine expiryLines)
+              newSeed        = case filter ("rngseed " `isPrefixOf`) rest of
+                                 []      -> Nothing
+                                 (l : _) -> Just (parseSeedLine l)
           in (withDb (const (insertAll (filter (not . null) factLines) emptyDb)) world)
                { cursor = c, intentions = newIntentions
-               , scheduleDues = newDues, expiries = newExpiries }
+               , scheduleDues = newDues, expiries = newExpiries, rngSeed = newSeed }
     (v : _)
       | v /= formatVersion ->
           error ("Prax.Persist.deserializeState: unsupported save format "
@@ -139,6 +146,12 @@ deserializeState text world =
         [turnStr, sent]
           | Just t <- readMaybe turnStr -> (internTokens sent, t)
         _ -> error ("Prax.Persist.deserializeState: malformed expiry line: " ++ line)
+    -- The die's stream position: @rngseed <n>@, at most one, emitted only for a
+    -- seeded state. A malformed value is a loud error, never a silent Nothing.
+    parseSeedLine line =
+      case words (drop (length "rngseed ") line) of
+        [nStr] | Just n <- readMaybe nStr -> n
+        _ -> error ("Prax.Persist.deserializeState: malformed rngseed line: " ++ line)
 
 -- | Save a session to a file.
 saveState :: FilePath -> PraxState -> IO ()

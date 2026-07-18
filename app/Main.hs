@@ -85,7 +85,7 @@ runCheck args = do
       "reserved family " ++ fam ++ ": " ++ show s ++ " (" ++ w
         ++ ") -- engine-owned; authored code may not touch it"
     describe SeedlessDraw =
-      "draw used but the die is unseeded: append Prax.Rng.rngSetup to the world's setup"
+      "draw used but the die is unseeded: seed it with Prax.Engine.seedDie when building the world"
     describe (DeadCondition w s) =
       "dead condition \"" ++ s ++ "\" (" ++ w
         ++ "): no action, initial fact, or axiom head can ever produce a match"

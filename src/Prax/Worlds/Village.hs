@@ -29,7 +29,7 @@ module Prax.Worlds.Village
 
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Types
-import           Prax.Engine (definePractices, defineFunctions, performOutcome, setAxioms, setDesires, setCharacters, setSchedule)
+import           Prax.Engine (definePractices, defineFunctions, performOutcome, setAxioms, setDesires, setCharacters, setSchedule, seedDie)
 import           Prax.Core (coreFns, adjustScore)
 import           Prax.Derive (Axiom, axiom)
 import           Prax.Project
@@ -43,7 +43,7 @@ import           Prax.Persona
 import           Prax.Debt (owes)
 import           Prax.Blackmail (shakedown)
 import           Prax.Confession (confess, absolve, incorrigible)
-import           Prax.Rng (rngSetup, draw)
+import           Prax.Rng (draw)
 import           Prax.Emotion (feelTowardFor, unfeelToward, angry, feelingToward)
 
 -- | You are a villager — one agent among many.
@@ -427,6 +427,7 @@ villageAxioms =
 
 villageWorld :: PraxState
 villageWorld =
+  seedDie villageSeed
   (setDesires ([ earnBreadPursuit, spitesCarol, punishesWhisper, suffersHunger
                  , drawnToMarket, smoulders ]
                  ++ personaVocabulary [honest])
@@ -526,4 +527,4 @@ villageWorld =
         -- a conduct-desire) — like every disposition it never fades, unlike
         -- the episodic feeling it primes.
       , Insert "shortTempered.carol"
-      ] ++ rngSetup villageSeed
+      ]

@@ -129,6 +129,8 @@ instance ToJSON Outcome where
   toJSON (Call fn args) = object [ "call" .= object [ "fn" .= fn, "args" .= args ] ]
   toJSON (ForEach conds outs) =
     object [ "forEach" .= object [ "when" .= conds, "do" .= outs ] ]
+  toJSON (Roll num den conds outs) =
+    object [ "roll" .= object [ "num" .= num, "den" .= den, "when" .= conds, "do" .= outs ] ]
 
 instance FromJSON Outcome where
   parseJSON = withObject "Outcome" $ \o ->
@@ -140,6 +142,8 @@ instance FromJSON Outcome where
            (\c -> Call <$> c .: "fn" <*> c .: "args"))
     <|> (o .: "forEach" >>= withObject "forEach"
            (\f -> ForEach <$> f .: "when" <*> f .: "do"))
+    <|> (o .: "roll" >>= withObject "roll"
+           (\r -> Roll <$> r .: "num" <*> r .: "den" <*> r .: "when" <*> r .: "do"))
 
 -- Wants -----------------------------------------------------------------------
 

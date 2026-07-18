@@ -8,10 +8,10 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, assertFailure, (@?=))
 
 import           Prax.Db (dbToSentences, insertAll, internTokens)
-import           Prax.Types (PraxState, Character (..), ScheduleRule (..),
-                              characters, cursor, db, expiries, gaLabel,
-                              intentions, schedule, scheduleDues)
-import           Prax.Engine (possibleActions, performAction)
+import           Prax.Types (PraxState, Character (..), Outcome (..), ScheduleRule (..),
+                              characters, cursor, db, emptyState, expiries, gaLabel,
+                              intentions, rngSeed, schedule, scheduleDues)
+import           Prax.Engine (possibleActions, performAction, performOutcome, seedDie)
 import           Prax.Loop (runNpcTicks, npcAct)
 import           Prax.Persist (serializeState, deserializeState, formatVersion)
 import           Prax.Worlds.Intrigue (intrigueWorld)
@@ -114,6 +114,16 @@ tests = testGroup "Prax.Persist"
           Left (ErrorCall msg) -> assertBool ("unsupported-format message, got: " ++ msg)
                                     ("unsupported save format" `isInfixOf` msg)
           Right _ -> assertFailure "expected a v2-rejection error"
+
+    , testCase "the immediately-prior format version (prax-state v3) is rejected under v50's v4 bump" $ do
+        -- A v47-era save predates the die's residence move: it carries a seed!N
+        -- fact instead of an rngseed line, so a v3 save must not load silently
+        -- onto a v50 world that reads the die from engine state.
+        r <- try (evaluate (length (dbToSentences (db (deserializeState "prax-state v3\ncursor 0\n" intrigueWorld)))))
+        case r :: Either ErrorCall Int of
+          Left (ErrorCall msg) -> assertBool ("unsupported-format message, got: " ++ msg)
+                                    ("unsupported save format" `isInfixOf` msg)
+          Right _ -> assertFailure "expected a v3-rejection error"
     ]
 
   , testGroup "v44: the schedule's runtime half (per-rule dues + the expiry queue) round-trips"
@@ -139,5 +149,28 @@ tests = testGroup "Prax.Persist"
           Left (ErrorCall msg) -> assertBool ("unknown-rule message, got: " ++ msg)
                                     ("unknown schedule rule" `isInfixOf` msg)
           Right _ -> assertFailure "expected an unknown-schedule-rule error"
+    ]
+
+  , testGroup "v50: the drama die's stream position (rngseed) round-trips"
+    [ testCase "a seeded, mid-stream state round-trips its rngseed exactly" $ do
+        -- Seed, advance the stream by one draw, then save/reload: the residence
+        -- move makes the position db-external, so Persist must carry it.
+        let st0 = seedDie 1988 emptyState
+            st1 = performOutcome (Roll 1 2 [] [Insert "hit.mark"]) st0
+            reloadedSt = deserializeState (serializeState st1) emptyState
+        rngSeed reloadedSt @?= rngSeed st1
+
+    , testCase "an unseeded state emits no rngseed line" $
+        assertBool "no rngseed line for an unseeded (intrigue) save"
+          (not ("rngseed" `isInfixOf` serializeState mid))
+
+    , testCase "mid-stream save/resume continues the stream identically" $ do
+        -- The pin the residence move makes newly meaningful: save between draws,
+        -- resume, and the NEXT draw lands at the same stream position either way.
+        let st1 = performOutcome (Roll 1 2 [] []) (seedDie 1988 emptyState)
+            reloadedSt = deserializeState (serializeState st1) emptyState
+            contDirect = performOutcome (Roll 1 2 [] []) st1
+            contReload = performOutcome (Roll 1 2 [] []) reloadedSt
+        rngSeed contReload @?= rngSeed contDirect
     ]
   ]

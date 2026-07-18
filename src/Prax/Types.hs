@@ -96,6 +96,16 @@ data Outcome
   | ForEach [Condition] [Outcome]
     -- ^ Quantified effect: for /every/ binding of the conditions (evaluated
     -- against the closed view, snapshot at entry), apply the sub-outcomes.
+  | Roll Int Int [Condition] [Outcome]
+    -- ^ The drama die (spec @docs/specs/2026-07-18-v50-machinery-state.md@):
+    -- @Roll num den conds outs@ advances the engine's RNG stream
+    -- ('Prax.Engine.rngSeed') UNCONDITIONALLY (the frozen-die law: every draw
+    -- spends one step, hit or miss), then rolls on the advanced value — on a
+    -- hit (@advanced \`mod\` den < num@) it applies @conds@\/@outs@ exactly as
+    -- a 'ForEach' would (same snapshot semantics). 'Prax.Rng.draw' is the
+    -- authoring surface that builds this; 'Prax.Engine.performCooked' executes
+    -- the cooked mirror ('CRoll') against the engine seed. A 'Roll' on an
+    -- unseeded state is a loud error (a typechecked world seeds the die).
   deriving (Eq, Show)
 
 -- | Every name an outcome /mentions/ — a total walk over every constructor,
@@ -113,6 +123,7 @@ outcomeVars o = case o of
   InsertFor _ s  -> pathNames s
   Call _ as      -> as
   ForEach cs os  -> concatMap conditionVars cs ++ concatMap outcomeVars os
+  Roll _ _ cs os -> concatMap conditionVars cs ++ concatMap outcomeVars os
 
 -- | Names an author-supplied fragment MUST NOT use when a combinator splices
 -- it into generated conditions (the v40 hygiene boundary). Two sources of
@@ -207,6 +218,10 @@ data CookedOutcome
     -- retract @n@ round boundaries out ('Prax.Engine.performCooked').
   | CCall String [Sym]
   | CForEach [CookedCondition] [CookedOutcome]
+  | CRoll Int Int [CookedCondition] [CookedOutcome]
+    -- ^ the cooked mirror of 'Roll' (spec v50): advance the engine seed, roll
+    -- on the advanced value, and on a hit apply the body as a 'CForEach'
+    -- ('Prax.Engine.performCooked').
   deriving (Eq, Show)
 
 -- | The cooked mirror of 'Action': 'actionConditions'\/'actionOutcomes' precooked;
@@ -433,6 +448,13 @@ data PraxState = PraxState
     -- derived facts and takes the continuation tier.
   , contMonotone :: Bool
     -- ^ 'Prax.Derive.monotoneAxioms' of this world's axioms.
+  , rngSeed :: Maybe Integer
+    -- ^ The drama die's stream position (spec v50): @Nothing@ = unseeded, @Just
+    -- s@ = the current Lehmer-stream value. Engine state, not a queryable world
+    -- fact — set by 'Prax.Engine.seedDie', advanced by 'Prax.Engine.performCooked'
+    -- on each 'CRoll'. 'Integer' matches the db's Calc arithmetic domain
+    -- exactly, so the residence move off the fact base is byte-identical.
+    -- Runtime state like 'cursor'; carried across saves by 'Prax.Persist'.
   , readView     :: Db
     -- ^ The db closed under the axioms — established (lazily) whenever the
     -- state is built, so reads share one closure per state. Change 'db' or
@@ -456,6 +478,7 @@ emptyState = PraxState
   , improvables = [], liveness = Map.empty, footprint = []
   , axiomHeads = [[intern "contradiction"]]
   , negFootprint = [], contMonotone = True
+  , rngSeed = Nothing
   , readView = insert (turnPath ++ "!0") emptyDb }
 
 -- | Death (and eviction) are represented by the fact @dead.\<name\>@. A dead

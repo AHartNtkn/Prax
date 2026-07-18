@@ -9,13 +9,12 @@ import           Prax.Db (Val (..), exists, dbToSentences)
 import           Prax.Query (Condition (..), groundCondition, query)
 import           Prax.Sym (intern)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction, performOutcome, setDesires, groundOutcome, roundBoundary)
+import           Prax.Engine (possibleActions, performAction, performOutcome, setDesires, groundOutcome, roundBoundary, seedDie)
 import           Prax.Loop (advance, npcAct)
 import           Prax.Core (adjustScore)
 import           Prax.Planner (predictMove, pickAction, candidateActions, motiveSignature, evaluateCooked)
 import           Prax.Minds (cookedSelfWants)
 import           Prax.Witness (witnessed)
-import           Prax.Rng (rngSetup)
 import           Prax.Emotion (feelToward, feelTowardFor, angry)
 import           Prax.Worlds.Village
 
@@ -799,7 +798,7 @@ tests = testGroup "Prax.Worlds.Village"
       -- mod 4 == 0 (a hit); lehmerNext 2 = 2*16807 = 33614 -> mod 4 == 2 (a
       -- miss). Computed and cross-checked against the probe run, not assumed.
       let stTheft   = doAct "bob" "steal the loaf" villageWorld
-          seeded n  = foldl (flip performOutcome) stTheft (rngSetup n)
+          seeded n  = seedDie n stTheft
           stHitPre  = seeded 4
           stMissPre = seeded 2
           stHit     = doAct "you" "shun bob" stHitPre
@@ -824,9 +823,9 @@ tests = testGroup "Prax.Worlds.Village"
       -- 'shortTempered.T', does not, even though the arithmetic is
       -- identical for both (verified: both branches share the same seed).
       let stFramed        = performOutcome (Insert "you.believes.stole.carol.loaf.seen") villageWorld
-          stFramedSeeded  = foldl (flip performOutcome) stFramed (rngSetup 1)
+          stFramedSeeded  = seedDie 1 stFramed
           stCarolShunned  = doAct "you" "shun carol" stFramedSeeded
-          stTheftSeeded   = foldl (flip performOutcome) (doAct "bob" "steal the loaf" villageWorld) (rngSetup 1)
+          stTheftSeeded   = seedDie 1 (doAct "bob" "steal the loaf" villageWorld)
           stBobShunned    = doAct "you" "shun bob" stTheftSeeded
       assertBool "carol bears the trait" (exists "shortTempered.carol" (db villageWorld))
       assertBool "bob does not" (not (exists "shortTempered.bob" (db villageWorld)))

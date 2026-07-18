@@ -128,6 +128,7 @@ cookedOutcomeAtoms fns visited o = case o of
                                                      -- retract is environment: same atoms
   CDelete toks    -> Just ([], [map fst toks])
   CForEach _ outs -> mconcat' (map (cookedOutcomeAtoms fns visited) outs)
+  CRoll _ _ _ outs -> mconcat' (map (cookedOutcomeAtoms fns visited) outs)  -- body may hit
   CCall fn _
     | fn `elem` visited -> Just ([], [])           -- cycle: already counted
     | otherwise -> case Map.lookup fn fns of
@@ -297,8 +298,13 @@ moverReadAnchors st actor m =
 -- imagined apply queries these against the node's view.
 outcomeCondReads :: Bindings -> [CookedOutcome] -> [[Sym]]
 outcomeCondReads b outs = concat
-  [ cookedReadAnchors (map (groundCookedCondition b) cs) ++ outcomeCondReads b os
-  | CForEach cs os <- outs ]
+  [ case o of
+      CForEach cs os    -> reads' cs os
+      CRoll _ _ cs os   -> reads' cs os   -- a roll's guard reads like a CForEach's
+      _                 -> []
+  | o <- outs ]
+  where reads' cs os = cookedReadAnchors (map (groundCookedCondition b) cs)
+                         ++ outcomeCondReads b os
 
 -- | Per character, the affordance templates whose authored outcomes could
 -- touch their own wants or desires — the opportunity-relevance half of the

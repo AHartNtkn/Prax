@@ -10,8 +10,7 @@
 -- One 'TypeError' constructor per check, seven in all — the four below plus
 -- declared-sort conflicts ('SortConflict', the opt-in sort pass), an authored
 -- touch of an engine-owned fact family ('ReservedFamily', spec v45 — @turn@,
--- @seed@, @sceneEntered@, @contradiction@), and an unseeded die
--- ('SeedlessDraw').
+-- @sceneEntered@, @contradiction@), and an unseeded die ('SeedlessDraw').
 --
 --   * __Unbound variables__ — a variable used in an outcome (or an axiom head) that
 --     no precondition, role, or @Actor@ can bind is ungroundable: it silently
@@ -33,13 +32,12 @@ module Prax.TypeCheck
   ) where
 
 import           Data.List (intercalate, nub)
-import           Data.Maybe (isJust)
+import           Data.Maybe (isJust, isNothing)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, exists)
+import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences)
 import           Prax.Query (Condition (..), CookedCondition (..))
 import           Prax.Relevance (mayUnifySyms, producibleAtoms)
-import           Prax.Rng (seedPath)
 import           Prax.Script (sceneEnteredPath)
 import           Prax.Sym (symName, symIsVar)
 import           Prax.Types
@@ -62,9 +60,11 @@ data TypeError
     -- value variables no author can write (the v40 namespace ban makes the
     -- shape unforgeable).
   | SeedlessDraw
-    -- ^ a world registers a practice whose outcomes compile a
-    -- 'Prax.Rng.draw' (a @ForEach@ guarded on the @seed@ family) but has no
-    -- @seed@ fact: every draw would silently fail to ever fire.
+    -- ^ a world's authored outcomes contain a 'Roll' (a compiled
+    -- 'Prax.Rng.draw') reachable anywhere — practices or schedule, nested
+    -- under 'ForEach' — but 'rngSeed' is 'Nothing': executing the draw would
+    -- be a loud unseeded-die error at runtime, so the die must be seeded
+    -- ('Prax.Engine.seedDie').
   | DeadCondition { teWhere :: String, teSentence :: String }
     -- ^ the positive pattern @teSentence@ (at @teWhere@) may-unifies nothing
     -- the world can ever contain: the site can never fire.
@@ -114,6 +114,9 @@ outcomeUses (Delete s)           = [ (v, s) | v <- varsOf s ]
 outcomeUses (InsertFor _ s)      = [ (v, s) | v <- varsOf s ]
 outcomeUses (Call fn args)       = [ (v, fn) | a <- args, v <- varsOf a ]
 outcomeUses (ForEach conds outs) =
+  [ (v, s) | (v, s) <- concatMap outcomeUses outs
+           , v `notElem` concatMap condVars conds ]
+outcomeUses (Roll _ _ conds outs) =
   [ (v, s) | (v, s) <- concatMap outcomeUses outs
            , v `notElem` concatMap condVars conds ]
 
@@ -191,6 +194,7 @@ refErrors st = concatMap practiceRefs ps ++ concatMap functionRefs (worldFns st)
       | ("practice" : pid : _) <- pathNames s
       , pid `notElem` definedPrac = [ UndefinedRef loc ("practice." ++ pid) ]
     outcomeRef loc (ForEach _ subs) = concatMap (outcomeRef loc) subs
+    outcomeRef loc (Roll _ _ _ subs) = concatMap (outcomeRef loc) subs
     outcomeRef _ _ = []
 
 -- The world's __asserting__ sentences, for the cardinality pass. Only inserts,
@@ -211,6 +215,7 @@ assertedSentences st =
     ps = Map.elems (practiceDefs st)
     inserts os = [ s | Insert s <- os ] ++ [ s | InsertFor _ s <- os ]
               ++ concat [ inserts subs | ForEach _ subs <- os ]
+              ++ concat [ inserts subs | Roll _ _ _ subs <- os ]
 
 -- Check 4: ML-style sort inference (only when sorts are declared) -------------
 
@@ -268,8 +273,8 @@ sortErrors st
 -- Only compiled mechanism may touch these families (spec v45). WritesForbidden
 -- families (@turn@, @contradiction@) have NO legitimate authored writer at
 -- all — reads stay free (turn is the documented time interface; a
--- contradiction read cannot corrupt). MachineryShapeOnly families (@seed@,
--- @sceneEntered@) are machinery in BOTH polarities: the only legal touch is
+-- contradiction read cannot corrupt). MachineryShapeOnly families
+-- (@sceneEntered@) are machinery in BOTH polarities: the only legal touch is
 -- the mechanism's own compiled shape — every name after the family head a
 -- Prax-namespaced variable. An authored literal, plain variable, or bare
 -- subtree pattern on the family is a loud error: each mechanism assumes it is
@@ -280,7 +285,6 @@ data FamilyLaw = WritesForbidden | MachineryShapeOnly
 reservedFamilies :: [(String, FamilyLaw)]
 reservedFamilies =
   [ (turnPath,         WritesForbidden)
-  , (seedPath,         MachineryShapeOnly)
   , (sceneEnteredPath, MachineryShapeOnly)
   , ("contradiction",  WritesForbidden)
   ]
@@ -313,6 +317,7 @@ reservedFamilyErrors st =
       InsertFor _ s -> [s]
       Delete s      -> [s]                    -- a delete is a write
       ForEach _ os  -> concatMap writesOf os
+      Roll _ _ _ os -> concatMap writesOf os
       Call _ _      -> []
 
 -- The authored write sites, with labels: practice action/init/function-case
@@ -344,18 +349,22 @@ readSites st =
 -- ForEach guards, recursively, in a list of outcomes (the write-effect side of
 -- the read scan — a draw's, or the scene stamp's, own guard is a read too).
 outcomeGuards :: [Outcome] -> [[Condition]]
-outcomeGuards outs = concat [ conds : outcomeGuards os | ForEach conds os <- outs ]
+outcomeGuards outs = concat $
+     [ conds : outcomeGuards os | ForEach conds os <- outs ]
+  ++ [ conds : outcomeGuards os | Roll _ _ conds os <- outs ]
 
 -- Check 6: draws need a seeded die ------------------------------------------
 
--- A world whose outcomes compile a 'Prax.Rng.draw' — a @ForEach@ whose
--- guard's first condition is a @Match@ on the @seed@ family (the shape
--- 'Prax.Rng.draw' always compiles to) — but has no @seed@ fact: the die was
--- never seeded, so every draw's guard can never hold.
+-- A world whose authored outcomes contain a 'Roll' (a compiled
+-- 'Prax.Rng.draw') anywhere — a practice's init/action outcomes, a function
+-- case, a schedule rule body, or nested under a @ForEach@ — while 'rngSeed' is
+-- 'Nothing': executing that draw is a loud unseeded-die error at runtime, so
+-- the die must be seeded ('Prax.Engine.seedDie'). Structural — it detects the
+-- draw by its constructor, not by sniffing a seed-family guard.
 seedlessDrawErrors :: PraxState -> [TypeError]
 seedlessDrawErrors st =
   [ SeedlessDraw
-  | any (any outcomeUsesSeed) allOutcomeLists, not (exists seedPath (db st)) ]
+  | isNothing (rngSeed st), any (any hasRoll) allOutcomeLists ]
   where
     ps = Map.elems (practiceDefs st)
     allOutcomeLists =
@@ -363,13 +372,10 @@ seedlessDrawErrors st =
       ++ [ actionOutcomes a | p <- ps, a <- actions p ]
       ++ [ caseOutcomes c | f <- worldFns st, c <- fnCases f ]
       ++ [ outs | r <- schedule st, (_, outs) <- srBody r ]
-    outcomeUsesSeed (ForEach conds outs) =
-      any guardReadsSeed conds || any outcomeUsesSeed outs
-    outcomeUsesSeed _ = False
-    guardReadsSeed (Match s) = case pathNames s of
-      (h : _) -> h == seedPath
-      []      -> False
-    guardReadsSeed _ = False
+    hasRoll o = case o of
+      Roll{}         -> True
+      ForEach _ outs -> any hasRoll outs
+      _              -> False
 
 -- Check 7: dead conditions ----------------------------------------------------
 
@@ -431,7 +437,9 @@ lintSites st =
   where defs = Map.toList (cookedDefs st)
 
 forEachGuards :: [CookedOutcome] -> [[CookedCondition]]
-forEachGuards outs = concat [ conds : forEachGuards os | CForEach conds os <- outs ]
+forEachGuards outs = concat $
+     [ conds : forEachGuards os | CForEach conds os <- outs ]
+  ++ [ conds : forEachGuards os | CRoll _ _ conds os <- outs ]
 
 -- A tiny union-find over position-key strings.
 find :: Map.Map String String -> String -> String
@@ -488,3 +496,4 @@ outcomeSents = concatMap go
     go (InsertFor _ s)     = [s]
     go (Call _ _)          = []
     go (ForEach conds outs) = condSents conds ++ outcomeSents outs
+    go (Roll _ _ conds outs) = condSents conds ++ outcomeSents outs

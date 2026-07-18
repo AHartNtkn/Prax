@@ -16,6 +16,7 @@ module Prax.Engine
   , setDesires
   , setCharacters
   , setSchedule
+  , seedDie
   , registerEngineRules
   , possibleActions
   , performAction
@@ -42,6 +43,7 @@ import           Prax.Types
 import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, axiomHeadPatterns, monotoneAxioms, cookAxioms, runCooked)
 import           Prax.Relevance (improvableDesires, livenessOf, mayUnifySyms, evictionShadowNames, bearingTemplates, deonticProducible)
 import           Prax.Cooked (cookOutcome, cookPractice, cookFunctions, cookScheduleRule, groundCookedOutcome)
+import           Prax.Rng (rollStep, seedBounds)
 import           Prax.Sym (Sym, intern, symIsVar, symName)
 
 -- | Rebuild the derived vocabulary tables. Internal: every helper that changes
@@ -245,6 +247,23 @@ setSchedule rules st
     offenders = concat [ authoredVarClash ["Actor"] conds outs
                        | r <- rules, (conds, outs) <- srBody r ]
 
+-- | Seed the drama die (spec v50): install the RNG stream's start position into
+-- engine state ('rngSeed'). Loud on a seed outside the stream's domain
+-- ('Prax.Rng.seedBounds' — @0@ and multiples of the modulus are fixed points, a
+-- die that always rolls the same face). A world calls this once at build time
+-- (the seed is an authored world parameter that selects the playthrough's
+-- fate); an unseeded world's 'Roll' is a loud error, caught statically by the
+-- 'Prax.TypeCheck.SeedlessDraw' check.
+seedDie :: Integer -> PraxState -> PraxState
+seedDie s st
+  | s < lo || s > hi =
+      error ("Prax.Engine.seedDie: seed " ++ show s ++ " lies outside the die's"
+             ++ " domain [" ++ show lo ++ ", " ++ show hi ++ "] -- 0 and multiples"
+             ++ " of the modulus are fixed points (a die that always rolls the"
+             ++ " same face)")
+  | otherwise = st { rngSeed = Just s }
+  where (lo, hi) = seedBounds
+
 -- | The COMPILER-LEVEL door onto the engine schedule (spec v46): register rules
 -- that authoring code could not. The compiled "Prax.Script" story rule carries
 -- Prax-namespaced machinery (the timed junction's clock arithmetic, the
@@ -336,6 +355,8 @@ groundOutcome (InsertFor n s)     b = InsertFor n (ground s b)
 groundOutcome (Call fn args)      b = Call fn (map (`ground` b) args)
 groundOutcome (ForEach conds outs) b =
   ForEach (map (groundCondition b) conds) (map (`groundOutcome` b) outs)
+groundOutcome (Roll num den conds outs) b =
+  Roll num den (map (groundCondition b) conds) (map (`groundOutcome` b) outs)
 
 -- | Apply a single, already-grounded outcome to the state — the public,
 -- string-facing entry, cook-then-run: one engine, two doors.
@@ -399,6 +420,19 @@ performCooked (CCall fn args) st =
 performCooked (CForEach conds outs) st =
   let bs = queryCooked (readView st) conds Map.empty   -- snapshot: all bindings up front
   in foldl' (\s b -> foldl' (\s2 o -> performCooked (groundCookedOutcome b o) s2) s outs) st bs
+performCooked (CRoll num den conds outs) st =
+  case rngSeed st of
+    Nothing -> error "Prax.Engine: Roll executed on an unseeded die \
+                     \(a draw in a world that never called seedDie)"
+    Just s  ->
+      -- Advance the stream UNCONDITIONALLY (the frozen-die law: every draw
+      -- spends one step, hit or miss), then roll on the advanced value — on a
+      -- hit apply the body exactly as a CForEach (same snapshot semantics).
+      let s'  = rollStep s
+          st1 = st { rngSeed = Just s' }
+      in if s' `mod` fromIntegral den < fromIntegral num
+           then performCooked (CForEach conds outs) st1
+           else st1
 
 -- | The engine clock's current value — the single @turn@ child in the db
 -- (spec v44). Loud error if absent or not a lone numeric value: the clock is
@@ -513,6 +547,9 @@ outcomeDeltaAnchors st visited = go' Set.empty
              then Nothing
              else Just (names : evictionShadowNames toks)
       CForEach conds os -> go' (safe `Set.union` safeBinders conds) os
+      CRoll _ _ conds os -> go' (safe `Set.union` safeBinders conds) os
+        -- the body may fire (the roll may hit): its anchors count, exactly as
+        -- a CForEach's, and the roll's guard binds like a CForEach's
       CCall fn args
         | fn `elem` visited -> Just []
         | otherwise -> case lookupCookedFn fn st of

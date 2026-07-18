@@ -5,10 +5,10 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Types
-import           Prax.Engine (definePractices, defineFunctions, performOutcome, setAxioms, setDesires, setCharacters, setSchedule)
+import           Prax.Engine (definePractices, defineFunctions, performOutcome, setAxioms, setDesires, setCharacters, seedDie)
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Derive (Axiom (..), axiom)
-import           Prax.Rng (rngSetup, draw)
+import           Prax.Rng (draw)
 import           Prax.Script (sceneEnteredPath)
 import           Prax.TypeCheck
 import qualified Prax.Worlds.Bar as Bar
@@ -279,53 +279,28 @@ tests = testGroup "Prax.TypeCheck"
       assertBool "ReservedFamily turn on the authored turn delete"
         (any (\case ReservedFamily "turn" _ "turn" -> True; _ -> False) (typeCheck (world1 p)))
 
-  , testCase "an authored Delete of seed is flagged" $ do
-      let p = practice
-            { practiceId = "diesmith"
-            , actions = [ action "[Actor]: erase fate" [] [ Delete "seed" ] ] }
-      assertBool "ReservedFamily seed on the authored seed delete"
-        (any (\case ReservedFamily "seed" _ "seed" -> True; _ -> False) (typeCheck (world1 p)))
-
-  , testCase "an authored literal seed write is flagged" $ do
-      let p = practice
-            { practiceId = "rigger"
-            , actions = [ action "[Actor]: rig fate" [] [ Insert "seed!7" ] ] }
-      assertBool "ReservedFamily seed on the authored literal seed insert"
-        (any (\case ReservedFamily "seed" _ "seed!7" -> True; _ -> False) (typeCheck (world1 p)))
-
-  , testCase "an authored plain-variable seed write is flagged" $ do
-      let p = practice
-            { practiceId = "rigger2"
-            , actions = [ action "[Actor]: rig fate" [ Match "spark.X" ] [ Insert "seed!X" ] ] }
-      assertBool "ReservedFamily seed on the authored variable seed insert"
-        (any (\case ReservedFamily "seed" _ "seed!X" -> True; _ -> False) (typeCheck (world1 p)))
-
-  , testCase "an authored seed read (single-slot Match) is flagged" $ do
-      let p = practice
-            { practiceId = "diviner"
-            , actions = [ action "[Actor]: read fate" [ Match "seed!S" ] [] ] }
-      assertBool "ReservedFamily seed on the authored seed condition"
-        (any (\case ReservedFamily "seed" _ "seed!S" -> True; _ -> False) (typeCheck (world1 p)))
-
-  , testCase "a bare seed read (no slot at all) is flagged" $ do
-      let p = practice
-            { practiceId = "diviner2"
-            , actions = [ action "[Actor]: sense fate" [ Match "seed" ] [] ] }
-      assertBool "ReservedFamily seed on the bare seed condition"
-        (any (\case ReservedFamily "seed" _ "seed" -> True; _ -> False) (typeCheck (world1 p)))
-
-  , testCase "a schedule-rule body reading seed is flagged (read-site coverage)" $ do
-      let rule = ScheduleRule "peek" 1 [ ([ Match "seed!S" ], []) ]
-          w = setSchedule [rule] emptyState
-      assertBool "ReservedFamily seed from a schedule rule body condition"
-        (any (\case ReservedFamily "seed" _ "seed!S" -> True; _ -> False) (typeCheck w))
-
-  , testCase "the die's own compiled shapes typecheck clean (THE EXEMPTION PIN)" $ do
+  , testCase "SeedlessDraw: an unseeded world with a draw is flagged" $ do
       let p = practice
             { practiceId = "gambler"
             , actions = [ action "[Actor]: roll" [] (draw 1 2 [] [ Insert "hit.Actor" ]) ] }
-          w = runOutcomes (world1 p) (rngSetup 7)
-      typeCheck w @?= []
+      assertBool "SeedlessDraw flagged for an unseeded draw"
+        (any (\case SeedlessDraw -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "SeedlessDraw: seedDie clears it" $ do
+      let p = practice
+            { practiceId = "gambler"
+            , actions = [ action "[Actor]: roll" [] (draw 1 2 [] [ Insert "hit.Actor" ]) ] }
+      assertBool "cleared once the die is seeded"
+        (not (any (\case SeedlessDraw -> True; _ -> False)
+                  (typeCheck (seedDie 7 (world1 p)))))
+
+  , testCase "SeedlessDraw: a draw nested under a ForEach is still found" $ do
+      let p = practice
+            { practiceId = "gambler2"
+            , actions = [ action "[Actor]: roll all" []
+                            [ ForEach [ Match "here.X" ] (draw 1 2 [] [ Insert "hit.X" ]) ] ] }
+      assertBool "SeedlessDraw flagged through a ForEach"
+        (any (\case SeedlessDraw -> True; _ -> False) (typeCheck (world1 p)))
 
   , testCase "an authored sceneEntered write is flagged" $ do
       let p = practice
