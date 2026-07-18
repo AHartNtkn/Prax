@@ -5,7 +5,7 @@ import           Test.Tasty (TestTree, testGroup)
 import           Test.Tasty.HUnit (testCase, assertBool, (@?=))
 
 import           Prax.Types
-import           Prax.Engine (definePractices, defineFunctions, performOutcome, setAxioms, setDesires, setCharacters, seedDie)
+import           Prax.Engine (definePractices, defineFunctions, performOutcome, setAxioms, setDesires, setCharacters, seedDie, setSchedule)
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Derive (Axiom (..), axiom)
 import           Prax.Rng (draw)
@@ -301,6 +301,15 @@ tests = testGroup "Prax.TypeCheck"
                             [ ForEach [ Match "here.X" ] (draw 1 2 [] [ Insert "hit.X" ]) ] ] }
       assertBool "SeedlessDraw flagged through a ForEach"
         (any (\case SeedlessDraw -> True; _ -> False) (typeCheck (world1 p)))
+
+  , testCase "SeedlessDraw: a draw in a schedule rule body is found (v50 T1 review M2)" $ do
+      let r = ScheduleRule
+                { srName = "storms"
+                , srPeriod = 3
+                , srBody = [ ([], draw 1 2 [] [ Insert "storm.here" ]) ] }
+      assertBool "SeedlessDraw flagged for an unseeded schedule-rule draw"
+        (any (\case SeedlessDraw -> True; _ -> False)
+             (typeCheck (setSchedule [r] (world1 practice))))
 
   , testCase "an authored sceneEntered write is flagged" $ do
       let p = practice
