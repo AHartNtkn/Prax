@@ -341,16 +341,23 @@ probedArithmeticTests = testGroup "probed arithmetic: spontaneous confession, bl
       fmap gaLabel (pickAction 2 w (member w "wade"))
         @?= Just "wade: hold your tongue"
 
-  , testCase "blackmail defense: a high price against a mild secret -- the victim confesses" $ do
+  , testCase "blackmail defense: a high price against a mild secret -- the victim confesses (property 4, ordering)" $ do
       let w = blackmailWorld 30 3
           threatened = doAct "mel" "threaten vic" w
           scores = scoreActions 2 threatened (member threatened "vic")
-      -- confess STRICTLY dominates defy/wait now (conscience relief), not a
-      -- tie broken by the alphabet.
-      scoreOf scores "confess to cora about the loaf" @?= (-16.259999999999998)
-      scoreOf scores "defy mel"                        @?= (-25.259999999999998)
-      scoreOf scores "wait"                            @?= (-25.259999999999998)
-      scoreOf scores "buy mel's silence"               @?= (-120.06)
+          confess_ = scoreOf scores "confess to cora about the loaf"
+          defy     = scoreOf scores "defy mel"
+          wait_    = scoreOf scores "wait"
+          comply   = scoreOf scores "buy mel's silence"
+      -- The v49 contract is the ORDERING: confess STRICTLY dominates the
+      -- defy/wait tie (conscience relief, not an alphabetical tie-break), and
+      -- paying the steep price is dead last. v30 baselines, reproduced
+      -- identically under the re-founding: confess -16.26, defy = wait -25.26,
+      -- comply -120.06.
+      assertBool ("confess must strictly dominate; had confess=" ++ show confess_
+                  ++ " defy=" ++ show defy ++ " wait=" ++ show wait_
+                  ++ " comply=" ++ show comply)
+        (confess_ > defy && defy == wait_ && wait_ > comply)
       fmap gaLabel (pickAction 2 threatened (member threatened "vic"))
         @?= Just "vic: confess to cora about the loaf"
 
@@ -364,17 +371,23 @@ probedArithmeticTests = testGroup "probed arithmetic: spontaneous confession, bl
         (not (any (\ga -> "expose" `isInfixOf` gaLabel ga) (possibleActions confessed "mel")))
       map gaLabel (possibleActions confessed "mel") @?= ["mel: wait"]
 
-  , testCase "blackmail defense: the converse -- a cheap price against a severe fear -- complies" $ do
+  , testCase "blackmail defense: the converse -- a cheap price against a severe fear -- complies (property 4, ordering)" $ do
       let w = blackmailWorld 1 30
           threatened = doAct "mel" "threaten vic" w
           scores = scoreActions 2 threatened (member threatened "vic")
-      -- comply STRICTLY beats confess here too, even with the same
-      -- conscience relief on offer -- the price is cheap enough that paying
-      -- it beats spending the secret.
-      scoreOf scores "buy mel's silence"               @?= (-159.81)
-      scoreOf scores "confess to cora about the loaf" @?= (-162.60000000000002)
-      scoreOf scores "defy mel"                        @?= (-171.60000000000002)
-      scoreOf scores "wait"                            @?= (-171.60000000000002)
+          comply   = scoreOf scores "buy mel's silence"
+          confess_ = scoreOf scores "confess to cora about the loaf"
+          defy     = scoreOf scores "defy mel"
+          wait_    = scoreOf scores "wait"
+      -- comply STRICTLY beats confess here, even with the same conscience
+      -- relief on offer -- the price is cheap enough that paying it beats
+      -- spending the secret; confess in turn beats the defy/wait tie. v30
+      -- baselines, reproduced: comply -159.81, confess -162.60, defy = wait
+      -- -171.60.
+      assertBool ("comply must strictly dominate; had comply=" ++ show comply
+                  ++ " confess=" ++ show confess_ ++ " defy=" ++ show defy
+                  ++ " wait=" ++ show wait_)
+        (comply > confess_ && confess_ > defy && defy == wait_)
       fmap gaLabel (pickAction 2 threatened (member threatened "vic"))
         @?= Just "vic: buy mel's silence"
   ]

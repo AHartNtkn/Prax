@@ -106,8 +106,12 @@ scrupulous :: Trait
 scrupulous = Trait "scrupulous"
   -- more than the discounted future value of the debt this deters (rex's
   -- identical want, undeterred, still nets his threat positive), less than
-  -- everything: a real cost, not a prohibition.
-  [ Desire "qualms" (Want [ Match "Owner.extorted.vic.took.vic.gem" ] (-20)) ]
+  -- everything: a real cost, not a prohibition. Priced on the SUBTREE mark
+  -- @Owner.extorted.vic@ (v49): the mechanism now tails the extorted mark by
+  -- the coercion id (@Owner.extorted.vic.defiance@), not the evidence pattern,
+  -- and this subtree Match captures "having extorted vic" regardless of which
+  -- coercion — the more faithful deterrence semantics.
+  [ Desire "qualms" (Want [ Match "Owner.extorted.vic" ] (-20)) ]
 
 deterrenceWorld :: PraxState
 deterrenceWorld =
@@ -176,17 +180,26 @@ tests = testGroup "Prax.Blackmail"
           (exists "threatened.defiance.mel.vic" (db st))
         assertBool "the motive-belief deposit: vic hears mel's professed punitive intent"
           (exists "vic.believes.desires.mel.punishes-defiance.heard.mel" (db st))
-        assertBool "the extorted mark: mel's own memory of having extorted vic"
-          (exists "mel.extorted.vic.took.vic.gem" (db st))
+        assertBool "the extorted mark: mel's own memory of having extorted vic, tailed by the coercion id (v49)"
+          (exists "mel.extorted.vic.defiance" (db st))
     ]
 
   , testGroup "two onlookers: the victim complies"
-    [ testCase "with two heads of exposure risk, compliance beats waiting and defiance" $ do
+    [ testCase "with two heads of exposure risk, compliance dominates waiting and defiance (property 2, ordering)" $ do
         let threatened = doAct "mel" "threaten vic" twoOnlookerWorld
             scores = scoreActions 2 threatened (member threatened "vic")
-        scoreOf scores "vic: buy mel's silence" @?= (-63.84)
-        scoreOf scores "vic: wait"              @?= (-71.84)
-        scoreOf scores "vic: defy mel"          @?= (-75.80000000000001)
+            comply = scoreOf scores "vic: buy mel's silence"
+            wait_  = scoreOf scores "vic: wait"
+            defy   = scoreOf scores "vic: defy mel"
+        -- The v49 contract is the ORDERING, not the decimals: two heads of
+        -- exposure risk make compliance cheapest and defiance dearest. The
+        -- v30 baselines (comply -63.84, wait -71.84, defy -75.80) reproduce
+        -- identically under the re-founding — the punitive want and the scored
+        -- state are byte-for-byte the same — but the pin no longer depends on
+        -- that.
+        assertBool ("comply must dominate the ordering; had comply=" ++ show comply
+                    ++ " wait=" ++ show wait_ ++ " defy=" ++ show defy)
+          (comply > wait_ && wait_ > defy)
         fmap gaLabel (pickAction 2 threatened (member threatened "vic"))
           @?= Just "vic: buy mel's silence"
 
@@ -202,12 +215,19 @@ tests = testGroup "Prax.Blackmail"
     ]
 
   , testGroup "one onlooker: the victim rationally defies (both sides of the arithmetic)"
-    [ testCase "with a single head of exposure risk, defiance ties waiting and beats compliance" $ do
+    [ testCase "with a single head of exposure risk, defiance ties waiting and both beat compliance (property 2, ordering)" $ do
         let threatened = doAct "mel" "threaten vic" oneOnlookerWorld
             scores = scoreActions 2 threatened (member threatened "vic")
-        scoreOf scores "vic: defy mel"          @?= (-54.2)
-        scoreOf scores "vic: wait"              @?= (-54.2)
-        scoreOf scores "vic: buy mel's silence" @?= (-63.84)
+            comply = scoreOf scores "vic: buy mel's silence"
+            wait_  = scoreOf scores "vic: wait"
+            defy   = scoreOf scores "vic: defy mel"
+        -- The v49 contract: the defy/wait pair ties EXACTLY, and both dominate
+        -- comply. v30 baselines (defy = wait = -54.2, comply -63.84) reproduce
+        -- identically here.
+        defy @?= wait_
+        assertBool ("defy/wait must dominate comply; had defy=" ++ show defy
+                    ++ " comply=" ++ show comply)
+          (defy > comply)
         fmap gaLabel (pickAction 2 threatened (member threatened "vic"))
           @?= Just "vic: defy mel"
 
