@@ -269,53 +269,29 @@ sortErrors st
 
 -- Check 5 (generalized, v45): engine-owned fact families ---------------------
 
--- Only compiled mechanism may touch these families (spec v45). WritesForbidden
--- families (@turn@, @contradiction@) have NO legitimate authored writer at
--- all — reads stay free (turn is the documented time interface; a
--- contradiction read cannot corrupt). MachineryShapeOnly families are
--- machinery in BOTH polarities: the only legal touch is the mechanism's own
--- compiled shape — every name after the family head a Prax-namespaced
--- variable. An authored literal, plain variable, or bare subtree pattern on
--- the family is a loud error: each mechanism assumes it is its family's sole
--- accessor, so an authored touch corrupts it silently otherwise.
---
--- No family is currently MachineryShapeOnly: the v50 residence moves retired
--- the two that were (the die's seed into the engine, the scene-entry stamp
--- into the expiry schedule). The law stays as the general v45 capability; the
--- patience-marker family that replaced the stamp is a literal-tailed compiler
--- fact the shape passkey cannot express, so it is protected at its own layer
--- ('Prax.Script.compile' rejects an authored @scenePatience@ touch) not here.
-data FamilyLaw = WritesForbidden | MachineryShapeOnly
-
-reservedFamilies :: [(String, FamilyLaw)]
-reservedFamilies =
-  [ (turnPath,        WritesForbidden)
-  , ("contradiction", WritesForbidden)
-  ]
+-- Only compiled mechanism may write these families (spec v45): @turn@ and
+-- @contradiction@ have NO legitimate authored writer at all — reads stay free
+-- (turn is the documented time interface; a contradiction read cannot
+-- corrupt). Engine-owned families that are machinery in BOTH polarities do
+-- not appear here: they are unrepresentable outright (the die's stream, v50)
+-- or rejected by their own compiler ('Prax.Script.compile' rejects an
+-- authored @scenePatience@ touch — a literal-tailed compiler fact this
+-- table's write scan cannot distinguish from the compiler's own insert).
+reservedFamilies :: [String]
+reservedFamilies = [ turnPath, "contradiction" ]
 
 reservedFamilyErrors :: PraxState -> [TypeError]
 reservedFamilyErrors st =
      [ ReservedFamily fam loc s
      | (loc, os) <- writeSites st, o <- os, s <- writesOf o
-     , Just (fam, law) <- [familyOf s], violatesWrite law s ]
+     , Just fam <- [familyOf s] ]
   ++ [ ReservedFamily fam "axiom" h
      | ax <- axioms st, h <- axiomThen ax
-     , Just (fam, law) <- [familyOf h], violatesWrite law h ]
-  ++ [ ReservedFamily fam loc s
-     | (loc, cs) <- readSites st, s <- condSents cs
-     , not (machineryShaped s), Just (fam, MachineryShapeOnly) <- [familyOf s] ]
+     , Just fam <- [familyOf h] ]
   where
     familyOf s = case pathNames s of
-      (h : _) -> (,) h <$> lookup h reservedFamilies
-      []      -> Nothing
-    violatesWrite WritesForbidden    _ = True
-    violatesWrite MachineryShapeOnly s = not (machineryShaped s)
-    -- The unforgeable signature: a non-empty tail, every name of which is a
-    -- Prax-namespaced VARIABLE (authors cannot write those — v40).
-    machineryShaped s = case pathNames s of
-      (_ : rest@(_ : _)) -> all isPraxMachineryVar rest
-      _                  -> False
-    isPraxMachineryVar n = isVariable n && isPraxVar n
+      (h : _) | h `elem` reservedFamilies -> Just h
+      _                                   -> Nothing
     writesOf o = case o of
       Insert s      -> [s]
       InsertFor _ s -> [s]
@@ -334,28 +310,6 @@ writeSites st =
      | f <- worldFns st, c <- fnCases f ]
   ++ [ ("schedule " ++ srName r, outs) | r <- schedule st, (_, outs) <- srBody r ]
   where ps = Map.elems (practiceDefs st)
-
--- The authored read sites, with labels: action/fn-case conditions, ForEach
--- guards nested anywhere in a write site's outcomes, axiom bodies, desires'
--- and characters' want conditions, and schedule rule bodies' conditions.
-readSites :: PraxState -> [(String, [Condition])]
-readSites st =
-     [ (practiceId p ++ " / " ++ actionName a, actionConditions a) | p <- ps, a <- actions p ]
-  ++ [ ("fn " ++ fnName f, caseConditions c)
-     | f <- worldFns st, c <- fnCases f ]
-  ++ [ (loc ++ " (effect guard)", gs) | (loc, os) <- writeSites st, gs <- outcomeGuards os ]
-  ++ [ ("axiom", axiomWhen ax) | ax <- axioms st ]
-  ++ [ ("desire " ++ desireName d, wantConditions (desireWant d)) | d <- desires st ]
-  ++ [ ("want of " ++ charName c, wantConditions w) | c <- characters st, w <- charWants c ]
-  ++ [ ("schedule " ++ srName r, conds) | r <- schedule st, (conds, _) <- srBody r ]
-  where ps = Map.elems (practiceDefs st)
-
--- ForEach guards, recursively, in a list of outcomes (the write-effect side of
--- the read scan — a draw's, or the scene stamp's, own guard is a read too).
-outcomeGuards :: [Outcome] -> [[Condition]]
-outcomeGuards outs = concat $
-     [ conds : outcomeGuards os | ForEach conds os <- outs ]
-  ++ [ conds : outcomeGuards os | Roll _ _ conds os <- outs ]
 
 -- Check 6: draws need a seeded die ------------------------------------------
 
