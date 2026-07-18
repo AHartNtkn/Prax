@@ -27,7 +27,9 @@ bookkeeping lives. Divergence = a residence-move bug, BLOCK and trace.
 
 ## 1. The die becomes engine state
 
-- `PraxState` gains `rngSeed :: Maybe Int` (`Nothing` = unseeded). `Prax.Rng` keeps
+- `PraxState` gains `rngSeed :: Maybe Integer` (`Nothing` = unseeded; Integer
+  because the db's Calc arithmetic runs in Integer — byte-identity requires the
+  same domain [plan review M3]). `Prax.Rng` keeps
   `draw`'s signature and guards; `rngSetup` DIES — worlds call
   `seedDie :: Int -> PraxState -> PraxState` (Village's one call site swaps).
 - `draw num den conds outs` compiles to a new outcome form — `Roll num den conds
@@ -54,8 +56,13 @@ bookkeeping lives. Divergence = a residence-move bug, BLOCK and trace.
   missing arm is a partial function AND stops namespace-checking draw bodies),
   `outcomeCondReads` (Relevance.hs:297 — the READ-anchor side; skipping it
   under-approximates reads, the direction that sleeps through an arc),
+  `outcomeRef` (TypeCheck.hs:185-194 — catch-all `_ -> []`: without an arm, a
+  dangling function/practice reference inside a draw body silently stops being
+  flagged; the plan review's Critical — the enumeration itself had a gap),
   `inserts` (TypeCheck.hs:212), `outcomeGuards` (:347), `forEachGuards` (:434),
-  the sent-walks (:483-490), `cookedOutcomeAtoms`, `outcomeDeltaAnchors`, and
+  the sent-walks (:483-490), `cookedOutcomeAtoms`, `outcomeDeltaAnchors`,
+  `outcomeUses` (TypeCheck.hs:111-118 — no wildcard, so merely loud, but listed:
+  the checklist is checked by name, not by warning), and
   `FromJSON Outcome` (Script/Json.hs:133-142 — `<|>`-chained, a missing arm fails
   at PARSE time with no warning; the arm is totality, not an authoring surface
   [D-M4]).

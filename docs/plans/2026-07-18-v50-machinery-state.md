@@ -23,8 +23,9 @@ forces Persist v4; and the fence that guarded the fact dies with the fact.
   (same shape as the `ForEach` arm).
 - `Prax.Rng` rewritten: `seedPath`/`rngSetup` DIE. Exports become `draw`,
   `rollStep`, `seedBounds` (whatever minimal names fit): the module keeps ALL die
-  math — `lehmerA`/`lehmerM`, `rollStep :: Integer -> (Integer, Integer)` (the
-  advanced seed and the advanced value — one Lehmer step), and the seed-domain
+  math — `lehmerA`/`lehmerM`, `rollStep :: Integer -> Integer` (one Lehmer step —
+  just the advanced seed; the roll basis IS the advanced seed, a pair would carry
+  a dead duplicate [review M2]), and the seed-domain
   bounds check. `draw num den conds outs` keeps its two guards verbatim (odds
   bounds; `authoredVarClash [] conds outs` — v40 hygiene stands even though the
   splice motive is gone) and compiles to `[ Roll num den conds outs ]`.
@@ -32,39 +33,51 @@ forces Persist v4; and the fence that guarded the fact dies with the fact.
   `emptyState` — Integer, matching today's Calc arithmetic domain exactly).
   `seedDie :: Integer -> PraxState -> PraxState` beside the other state setters
   (`setSchedule`/`defineFunctions` precedent), loud on out-of-domain via Rng's
-  bounds. `cookOutcome`/`groundOutcome`/`groundCookedOutcome`/`writesOf` gain
-  their arms (body treated as `ForEach`'s is). `performCooked` gains `CRoll num
-  den conds outs`:
+  bounds. `groundOutcome` (Engine.hs:333), `outcomeDeltaAnchors` (Engine.hs:498),
+  and `cookOutcome`/`groundCookedOutcome` (Cooked.hs:34/46) gain their arms (body
+  treated as `ForEach`'s is) [module homes corrected per review M5].
+  `performCooked` (Engine.hs:352, `CookedOutcome -> PraxState -> PraxState`)
+  gains `CRoll num den conds outs`:
 
   ```haskell
   CRoll num den conds outs -> case rngSeed st of
     Nothing -> error "Prax.Engine: Roll executed on an unseeded die \
                      \(a draw in a world that never called seedDie)"
     Just s  ->
-      let s' = fst (rollStep s)          -- the frozen-die law: spent, hit or miss
-          st1 = st { rngSeed = Just s' }
+      let s' = rollStep s                -- the frozen-die law: spent, hit or miss
+        st1 = st { rngSeed = Just s' }
       in if s' `mod` fromIntegral den < fromIntegral num
-           then perform st1 (CForEach conds outs)   -- same snapshot semantics
+           then performCooked (CForEach conds outs) st1  -- same snapshot semantics
            else st1
   ```
 
-  (Exact shapes to match the existing `performCooked` idiom; the byte-identity
-  argument — roll on the ADVANCED value, guards inside the hit body — is the
-  panel-verified mapping of today's two-ForEach compile.)
+  (The byte-identity mapping is review-confirmed against Rng.hs:57-65: today's
+  advance-ForEach evicts the old seed via `!` exclusion, so the roll-ForEach
+  binds the ADVANCED value; roll = advanced `mod` den; guards inside the hit
+  body; a miss still advanced.)
 - `Prax.Relevance`: `outcomeCondReads` (:297) gains the `CRoll` arm (conds read
   like `CForEach`'s — the READ side the first draft missed [C-C2]);
-  `cookedOutcomeAtoms`/`outcomeDeltaAnchors` gain write-side arms (body counts,
+  `cookedOutcomeAtoms` (Relevance.hs:120) gains the write-side arm (body counts,
   the roll may hit).
-- `Prax.TypeCheck`: `inserts` (:212), `outcomeGuards` (:347), `forEachGuards`
-  (:434), the sent-walks (:483-490) each gain the arm — these are the SILENT
-  ones; the reviewer checks each by name. The seed reserved-table row (:283) and
+- `Prax.TypeCheck`: `outcomeUses` (:111-118 — loud non-exhaustive, listed
+  anyway: the checklist goes by name, not by warning [review I1]), `outcomeRef`
+  (:185-194 — SILENT catch-all `_ -> []`; without the arm, a dangling
+  function/practice reference inside a draw body stops being flagged — the plan
+  review's Critical; arm mirrors the ForEach recursion), `inserts` (:212),
+  `writesOf` (:311), `outcomeGuards` (:347), `forEachGuards` (:434), the
+  sent-walks (:483-490) each gain the arm — the reviewer checks each BY NAME.
+  (`Schedule.hs:34 lasts` needs no arm — its catch-all rejects loudly, which is
+  correct for a non-Insert there.) The seed reserved-table row (:283) and
   `outcomeUsesSeed` DIE; `SeedlessDraw` becomes structural: any `Roll` reachable
   in authored outcomes (practices + schedule) with `rngSeed st == Nothing` flags;
   its `app/Main.hs:88` report text re-worded (no `rngSetup` mention).
 - `Prax.Script/Json`: `ToJSON`/`FromJSON` `Outcome` arms for `Roll` (totality,
   not authoring [D-M4]; the `FromJSON` `<|>` chain is one of the silent sites).
 - `Prax.Persist`: header → `prax-state v4`; a `rngseed <n>` line emitted iff
-  `Just`, parsed back; v3 joins the rejection ladder.
+  `Just`, parsed back — AND `"rngseed "` joins the `labelled` prefix list at
+  Persist.hs:102, or the line lands in `factLines` and corrupts the reload
+  [review M4]; v3 joins the rejection pin set (`deserializeState` rejects any
+  non-current tag structurally, :113-116 — the pin is test-side).
 - `Prax.Worlds.Village`: `rngSetup villageSeed` in setup → `seedDie villageSeed`
   wrapping the state build (the one call site).
 
@@ -85,11 +98,15 @@ save has no line, v3-rejection row, and the die's mid-stream save/resume pin
 
 **Why each piece exists:** the charter kills `sceneEntered`; a timed junction
 still needs "n boundaries after entry," which v44's expiry already expresses —
-so entry emits a patience marker instead of a stamp; markers per (scene,
-junction) force nothing new (junction names are already unique per scene at
-compile); compiler-owned markers force the authored-touch rejection [D-I1]
-because the v45 table structurally cannot hold them; and the n=0 divergence
-forces the n ≥ 1 compile guard [D-I2].
+so entry emits a patience marker instead of a stamp; markers keyed per (scene,
+junction-name) force a NEW loud per-scene junction-name uniqueness guard in
+`compile` [review I2 — no such check exists today, and today's per-clause
+`Cmp` tolerates same-name timed junctions where the marker form would collapse
+them to one path; the guard covers ALL junctions, timed or not: two same-named
+junctions in one scene is authored ambiguity regardless of the marker];
+compiler-owned markers force the authored-touch rejection [D-I1] because the
+v45 table structurally cannot hold them; and the n=0 divergence forces the
+n ≥ 1 compile guard [D-I2].
 
 - `Prax.Script`:
   - `sceneEnteredPath`, `clockReached`, `stampsSceneEntry`, and `setupOf`'s
@@ -105,15 +122,21 @@ forces the n ≥ 1 compile guard [D-I2].
   - `storyClause`: `maybe [] clockReached (junctionAfter j)` becomes
     `maybe [] (\_ -> [ Not (scenePatiencePath sid (junctionName j)) ])
     (junctionAfter j)` (the `currentScene!sid` gate is already in the clause).
-  - `compile` gains two loud guards, at the consumption point (uniform over
+  - `compile` gains three loud guards, at the consumption point (uniform over
     smart-ctor / raw / JSON construction, per the existing hygiene-guard
-    precedent stated in `compile`'s own haddock): (1) `junctionAfter j == Just n`
-    with `n < 1` → error (a zero-delay timed junction is a plain junction — and
-    n=0 is where the marker form diverges from the old arithmetic [D-I2]);
-    (2) any authored condition or outcome `compile` consumes (sceneSetup, beat
-    conditions/effects, junctionWhen — every authored list it already sweeps for
-    hygiene) touching a path headed `scenePatience` (either polarity) → error
-    naming the site (the collision hole [D-I1]).
+    precedent stated in `compile`'s own haddock): (1) duplicate junction names
+    within a scene → error naming scene and junction [review I2 — the marker
+    key's uniqueness must be ENFORCED, not assumed]; (2) `junctionAfter j ==
+    Just n` with `n < 1` → error (a zero-delay timed junction is a plain
+    junction — and n=0 is where the marker form diverges from the old
+    arithmetic [D-I2]); (3) any authored condition or outcome touching a path
+    headed `scenePatience` (either polarity) → error naming the site (the
+    collision hole [D-I1]). Guard (3)'s sweep is enumerated, NOT inherited
+    [review I3 — the existing v40 hygiene sweep covers ONLY sceneSetup and
+    junctionWhen; beats compile via `compileBeat` outside it]: sceneSetup,
+    junctionWhen, beat conditions, beat effects, and cast-desire conditions —
+    every authored condition/outcome list `compile` consumes, three of them
+    NEWLY swept for this guard.
 - `Prax.TypeCheck`: the `sceneEntered` reserved row (:284) dies; import gone.
 - Persist: NOTHING — the marker is an ordinary fact, its pending retract rides
   v44's due serialization (Persist.hs:88) [C-I3]; the pin below proves it.
@@ -126,8 +149,12 @@ emitting from transitions only, observing boundary-1 firing, then GREEN via
 `setupOf`); a timed `after` goto fires at its boundary [C-I2]; re-entry resets
 (leave, re-enter, times out n from the LAST entry); early exit harmless (leave
 before expiry; no stray firing later); two timed junctions on one scene with
-distinct delays fire independently; `after`/`timeout` with n=0 rejected loud;
-authored `scenePatience` touch rejected both polarities; mid-scene save/resume
+distinct NAMES and distinct delays fire independently [review I2: same-name is
+now rejected, so the pin's junctions must be distinctly named]; duplicate
+junction names in one scene rejected loud; `after`/`timeout` with n=0 rejected
+loud; authored `scenePatience` touch rejected both polarities INCLUDING from a
+beat effect and a cast-desire condition (the newly-swept lists [review I3]);
+mid-scene save/resume
 reaches the SAME timeout boundary (the persistence-symmetry pin [C-I3]).
 TypeCheckSpec: sceneEntered fence pins deleted. Full-suite green; Audience/story
 goldens unchanged.
