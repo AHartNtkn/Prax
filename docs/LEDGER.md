@@ -1925,9 +1925,11 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   error corrected in the record.** The `complied` marker is permanent per
   (id, extorter, victim): one purchase per coercion, ever, until serial extortion is
   deliberately designed. Authority: v48 constraint 2 (a demand-independent marker) and
-  the LEDGER's own v30 bank item — "Repeat / serial extortion" (this file, the v30
-  row's narrative at line 251 and the bank entry at lines 2191–2196, which names "a
-  threat that renews" as a real future mechanic). The spec's design-lens panel flagged
+  the LEDGER's own v30 bank item — "Repeat / serial extortion" (this file: the v30
+  legend row's narrative, and the like-named bank entry, which names "a threat that
+  renews" as a real future mechanic; cited by name — this row's own insertion moved
+  the bank entry's line number, the final review caught the stale pointer, and a
+  citation inside a fabrication-refutation passage of all places must not dangle). The spec's design-lens panel flagged
   that citation as fabricated (HIGH) — checked, and found wrong: the item lives in
   exactly those two places, and the panel had read only the v30 SPEC's §5, not this
   LEDGER. Both the original citation and the panel's mistaken challenge to it are
