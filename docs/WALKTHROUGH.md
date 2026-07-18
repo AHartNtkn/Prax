@@ -603,9 +603,11 @@ cabal run prax -- audience
   (`concernedWith [("favor", …)]`) and a trait (`ambitious`). That concern compiles to a want, so he
   **courts the king unbidden** (*"duke: flatter the king"*) exactly once, then rests.
 - **A timed junction.** If you **dawdle** (press `m`), the audience runs out of patience and ends
-  **`dismissed`** once the scene clock passes its bound. **Flatter, then present your petition** in
-  time and it ends **`granted`**. Time passes via a passive scene clock, added only because this
-  script uses a timed junction.
+  **`dismissed`** once its deadline passes. **Flatter, then present your petition** in time and it
+  ends **`granted`**. Entering the scene arms a **patience marker** whose lifetime is the delay; the
+  engine's expiry schedule retracts it that many rounds later, and the junction fires the moment the
+  patience has run out — the whole timer is one insertion on the schedule every scheduled effect
+  already rides.
 
 → code: `Prax.Script` (compilation), `Prax.Worlds.Audience`; asserted in `Prax.ScriptSpec`.
 

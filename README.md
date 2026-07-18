@@ -70,8 +70,10 @@ utility. See the design writeups:
   a *faithful* recasting of `Prax.Worlds.Intrigue` — same cast, affordances (confide, poison,
   warn, self-poison, romance), and endings — as a two-scene play in ~25% fewer authored lines,
   *plus* the scene transition and flow-chart the layer supplies for free. The scene layer also
-  compiles **timed junctions** (`after`/`timeout` — a scene transition/ending after N turns, via
-  a passive scene clock) and **character sketches** (`concernedWith` turns concerns into desires;
+  compiles **timed junctions** (`after`/`timeout` — a scene transition/ending N rounds after entry:
+  entering the scene arms a **patience marker** the engine's expiry schedule retracts on the
+  deadline, firing the junction once the patience runs out) and **character sketches**
+  (`concernedWith` turns concerns into desires;
   `withTraits` records personality as queryable facts) from Prompter's authoring constructs
   (v18). (Prompter's **memories** — one-shot exposition fired the first time a trigger holds —
   were also built at v18 but REMOVED at v46: omniscient narration with no speaker is a

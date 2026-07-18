@@ -2024,6 +2024,114 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   identities were theorems and stand unchanged by this reassessment.
   Queue: **v49 coercion** complete — the original audit queue CLOSES.
   **v50 machinery state** next, opening the extension.
+- **v50** — **machinery state leaves the db: the die into the engine, the scene stamp into
+  nothing**
+  (`Prax.Rng`; `Prax.Types`; `Prax.Engine`; `Prax.Cooked`; `Prax.Relevance`; `Prax.TypeCheck`;
+  `Prax.Persist`; `Prax.Script`; `Prax.Query`; `Prax.Script.Json`; `Prax.Worlds.Village`;
+  `app/Main.hs`; spec `docs/specs/2026-07-18-v50-machinery-state.md` (`cc24d41`, panel-amended);
+  plan `docs/plans/2026-07-18-v50-machinery-state.md` (`687fe97`, amended `181e75f`); code
+  `998b6cd` (T1: the die becomes engine state) + `cf027c0` (T1 fix: the schedule-rule draw pin) +
+  `844749b` (T2: the stamp dies) + `bdef505` (T2 fix: the zero-member law excised)). First of the
+  two extension rounds the queue-wide byte-identity assessment produced (v50 → v51), opening the
+  extension past the original audit queue. Executes the v45 finding the assessment ruled out of
+  order: `seed!N` and `sceneEntered!N` are engine mechanism living as queryable world facts, which
+  v45 FENCED (access guards) instead of fixing — both now leave the world, both v45 fences deleted.
+
+  **The classification, stated first (the v49 lesson).** This round moves the STATE RESIDENCE of
+  two mechanisms whose SEMANTICS are approved and stay: the RNG's Lehmer stream (v38) and the timed
+  junction's fire-at-entry-plus-n fiction (v46). Byte-identical behavior is therefore the fidelity
+  EVIDENCE, not a constraint bending a design — the same stream advances at the same events, the
+  same junctions fire at the same boundaries. And it held: **no fiction golden moved** (GoldenDrive,
+  AnalysisTable, Audience byte-identical, checked rather than assumed), so the only pins that moved
+  are the ones that INSPECTED the dying state, itemized in the spec's Exactness section, not
+  discovered.
+
+  **The die becomes engine state.** `PraxState` gains `rngSeed :: Maybe Integer` (`Nothing` =
+  unseeded; `Integer` matching the db's Calc domain, so the move off the fact base is
+  byte-identical). `Prax.Rng` keeps all the die math (Park & Miller MINSTD, `rollStep` — one Lehmer
+  step, the advanced value that IS the roll basis; `seedBounds`) but `rngSetup`, `seedPath`, and the
+  `seed!N` fact family DIE: `draw num den conds outs` now compiles to a first-class `Roll` outcome
+  (cooked `CRoll`) that `performCooked` executes against the engine seed — advance the stream
+  UNCONDITIONALLY (the frozen-die law: every draw spends one step, hit or miss), roll on the
+  advanced value, apply the body as a `ForEach` on a hit. `Prax.Engine.seedDie` installs the seed
+  (loud out-of-domain via `seedBounds`; Village's one `rngSetup` call site swaps to it); an unseeded
+  `Roll` is a loud error, statically impossible because `SeedlessDraw` became STRUCTURAL — any
+  `Roll` reachable in authored outcomes (practices AND schedule rules) with `rngSeed == Nothing`
+  flags, stronger than the dead seed-family-pattern sniffing. **The `seed!*` family is now
+  UNCONSTRUCTABLE — strictly stronger than the v45 fence that guarded it, which dies with it.**
+
+  **The walker checklist, and the plan review's Critical inside it.** A fact-free die forces a new
+  constructor, and a new constructor forces an arm in EVERY `Outcome`/`CookedOutcome` walker —
+  several are silent list-comps under a cabal that is `-Wall` WITHOUT `-Werror`, so the spec's
+  enumeration is the checklist, checked by name not left to warnings. Every walker got its arm (the
+  codec's `ToJSON`/`FromJSON`, `groundOutcome`/`cookOutcome`/`groundCookedOutcome`, `performCooked`,
+  `outcomeDeltaAnchors`, and the silent walks — `outcomeVars`, `outcomeCondReads`,
+  `cookedOutcomeAtoms`, `outcomeUses`, `inserts`, `writesOf`, `forEachGuards`, the sent-walks).
+  **The plan review's own Critical was a gap in that enumeration**: `outcomeRef`
+  (`TypeCheck.hs`'s catch-all `_ -> []`) was missing — without its arm a dangling
+  function/practice reference inside a draw body silently stops being flagged; the plan was amended
+  (`181e75f`) to fold it into the silent-walker list before code was written. Persist bumps to
+  `prax-state v4` with an `rngseed <n>` line emitted ONLY for a seeded state (unseeded saves gain no
+  line and reload as `Nothing`), `"rngseed "` joined to the `labelled` prefix list so the line does
+  not corrupt the fact reload, and v3 joined the rejection ladder — the stream position was
+  db-carried state and must survive saves.
+
+  **The scene stamp dies ENTIRELY — not moved.** The elegant discovery: `sceneEntered` never needed
+  to move, it needed to not exist. A timed junction means "fire n boundaries after entry," and the
+  engine already owns exactly that shape — EXPIRY (v44). So scene entry (`setupOf`) arms a
+  **patience marker**, `InsertFor n scenePatience.<sid>.<jname>` — a plain literal insert whose
+  lifetime IS the delay, retracted n boundaries later by the v44 expiry schedule (expiries fire
+  BEFORE rules, so the timeout clause is first eligible at entry+n, byte-identical to the old
+  `turn − entered ≥ n`). The clause fires when the patience has RUN OUT: its condition becomes
+  `Not scenePatience.<sid>.<jname>`. `sceneEnteredPath`, `clockReached`, `stampsSceneEntry`, and the
+  stamp `ForEach` all die. **The three-lens panel's one Critical**: the only shipped timed junction,
+  Audience's `timeout "dismissed" 5`, sits on a START scene entered at compile time with no
+  transition — emitting the marker from transitions only would fire it at boundary 1. The fix rides
+  `setupOf`, which ALL THREE entry paths already thread through (compile-time start via `setup`,
+  transitions via `storyClause`, re-entry via the same); re-entry refresh falls out of v44's
+  supersession law for free. The panel corrected the first draft's category claim: `scenePatience`
+  is COMPILER MACHINERY, not fiction — produced only by `setupOf`, read only by the story rule.
+
+  **Three loud compile guards, at the consumption point.** Markers keyed per (scene, junction-name)
+  make name uniqueness load-bearing, and a compiler-owned family makes an authored touch a silent
+  corruption hole — so `compile` gained, uniform over smart-constructor / raw / JSON construction:
+  (1) per-scene junction-name uniqueness (covers ALL junctions, timed or not — no such check existed
+  before); (2) a timed delay `n ≥ 1` (a zero-delay "timed" junction is a plain junction — and n=0 is
+  exactly where the marker form diverges from the old arithmetic, so the divergent case becomes
+  unrepresentable); (3) an authored condition or outcome headed `scenePatience` (either polarity)
+  rejected, over an ENUMERATED five-list sweep — `sceneSetup`, `junctionWhen`, beat conditions, beat
+  effects, cast-desire conditions — the last three newly swept, NOT inherited from the v40 hygiene
+  sweep, which covers only the first two.
+
+  **The v45 postscript: both fences down, then the zero-member law itself excised.** BOTH
+  `MachineryShapeOnly` fences are deleted as obsolete — the design fix makes the guards unnecessary
+  rather than load-bearing, per the assessment's charge. T2 first left `MachineryShapeOnly` standing
+  as the general v45 capability with zero members (documented); the T2 review flagged that as a
+  borderline dead-code residue, and the fix (`bdef505`) **excised the law itself** —
+  `reservedFamilies` is now a plain `[String]` write-forbidden list (`turn`, `contradiction`), the
+  `FamilyLaw` type and the orphaned read-side scan (`readSites`, `outcomeGuards`) deleted with it.
+  The patience-marker family that replaced the stamp is a literal-tailed compiler fact the table's
+  write scan cannot distinguish from the compiler's own insert, so it is protected at its own layer
+  (`Prax.Script.compile` rejects an authored `scenePatience` touch), not in the reserved table.
+
+  **Two record-honesty items.** (1) The T2 implementer died without reporting — no RED evidence, no
+  deviation flags. An isolated adversarial review substituted (git show + live tree + full-suite
+  execution), verdict APPROVE, and adjudicated the three out-of-plan files the plan's T2 list did
+  not name: `Engine.hs` (comment-only — the `setCompilerSchedule` haddock reworded off the dead
+  stamp), and `Query.hs`/`Types.hs`, which received VERBATIM moves of `condSents`/`outcomeSents` out
+  of `TypeCheck.hs` to their principled homes beside `conditionVars`/`outcomeVars` — forced because
+  guard (3) needs `Script` to sweep authored sentences, `Script` cannot import `TypeCheck` (a cycle),
+  and duplicating would violate the no-duplication edict. Recorded here for plan-to-diff
+  traceability, since a future reader reconciling the plan text alone will not find the move in it.
+  (2) The T1 commit message (`998b6cd`) reads "666 green"; the count observed at that commit was 667
+  — a cosmetic message error, corrected in this record.
+
+  Suite: 667 (T1, `998b6cd` — the message's "666" corrected above) → 668 (T1 fix, `cf027c0`: the
+  schedule-rule draw pin, RED-observed by neutering the schedule leg) → 678 (T2, `844749b`: +14 new,
+  −4 deleted) → **678** final (`bdef505`, net-unchanged — the law excision moved no pins; observed
+  directly, 678/678, `cabal test`). Goldens byte-identical throughout; `-Wall` clean. Deaths
+  grep-proof: `rngSetup|seedPath|sceneEntered|clockReached|MachineryShapeOnly` → **zero** across
+  `src/` and `app/`. Queue: the extension opens; **v51 — lifting leaves the engine** next and last.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
