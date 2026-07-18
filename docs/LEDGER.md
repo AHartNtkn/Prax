@@ -2131,7 +2131,17 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   −4 deleted) → **678** final (`bdef505`, net-unchanged — the law excision moved no pins; observed
   directly, 678/678, `cabal test`). Goldens byte-identical throughout; `-Wall` clean. Deaths
   grep-proof: `rngSetup|seedPath|sceneEntered|clockReached|MachineryShapeOnly` → **zero** across
-  `src/` and `app/`. Queue: the extension opens; **v51 — lifting leaves the engine** next and last.
+  `src/` and `app/`.
+
+  Banked (the final review's one Important, non-blocking): the `scenePatience` rejection lives in
+  `Prax.Script.compile` only — a write injected via raw `definePractices`/`setSchedule` onto an
+  already-compiled Script state is unflagged and would corrupt a live timeout. Structurally forced
+  (the family's literal tail fails the reserved table's machinery-shape passkey, and a
+  write-forbidden row would trip the compiler's own story-rule insert) and unreachable in every
+  shipped world (none mixes compiled Script with raw practice registration) — but mixed-layer
+  composition is thereby UNSUPPORTED, not merely unguarded. Future fix: reserved-family protection
+  for literal-tailed compiler families, or a loud rejection of the mixed composition itself.
+  Queue: the extension opens; **v51 — lifting leaves the engine** next and last.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now

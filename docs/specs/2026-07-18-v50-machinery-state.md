@@ -31,7 +31,7 @@ bookkeeping lives. Divergence = a residence-move bug, BLOCK and trace.
   because the db's Calc arithmetic runs in Integer — byte-identity requires the
   same domain [plan review M3]). `Prax.Rng` keeps
   `draw`'s signature and guards; `rngSetup` DIES — worlds call
-  `seedDie :: Int -> PraxState -> PraxState` (Village's one call site swaps).
+  `seedDie :: Integer -> PraxState -> PraxState` (Village's one call site swaps).
 - `draw num den conds outs` compiles to a new outcome form — `Roll num den conds
   outs` / cooked `CRoll` — which `performCooked` executes against the engine state:
   advance the stream UNCONDITIONALLY (the frozen-die law: every draw spends one
@@ -86,7 +86,8 @@ retracts n boundaries later. This covers `timeout` (ending) and `after` (timed g
 alike: both ride the same junction expansion, gated per-junction [C-I2]. The timeout
 clause's conditions become `currentScene!sid ∧ Not (scenePatience.<sid>.<J>)`: the
 junction fires when the patience has RUN OUT (the fiction says itself). Timed delays
-are guarded n ≥ 1 at the combinators, loud [D-I2: at n=0 today's `≥` fires
+are guarded n ≥ 1 at `compile` — the consumption point, covering raw and JSON
+construction alike, not just the combinators — loud [D-I2: at n=0 today's `≥` fires
 same-boundary in a cascade while the marker form waits one boundary — a zero-delay
 "timed" junction is a plain junction, and the divergent case becomes
 unrepresentable rather than silently different]. `clockReached`, the `sceneEntered`
