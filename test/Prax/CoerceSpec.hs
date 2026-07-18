@@ -13,6 +13,7 @@ import           Prax.Engine (definePractices, performOutcome, possibleActions, 
                               setDesires, setCharacters)
 import           Prax.Planner (pickAction, scoreActions)
 import           Prax.Debt (owe, owes)
+import           Prax.Witness (CoPresence, asRole)
 import           Prax.Coerce (Coercion (..), coerce)
 
 -- A protection racket, the SECOND instance of the leverage skeleton (blackmail
@@ -23,16 +24,17 @@ import           Prax.Coerce (Coercion (..), coerce)
 -- plain victim name @V@; 'coerce' lifts it to @PraxD@ (the rename law).
 racket :: Coercion
 racket = Coercion
-  { coId          = "racket"
-  , coVictim      = "V"
-  , coTrigger     = [ Match "barn.V" ]
-  , coDemandLabel = "[Actor]: do [E]'s favor"
-  , coDemand      = owe "E" "Actor" "favor"
-  , coPunishLabel = "[Actor]: burn [V]'s barn"
-  , coPunishWhen  = [ Match "barn.V", Not "burned.barn.V" ]
-  , coPunishOuts  = [ Insert "burned.barn.V" ]
-  , coKernel      = [ Match "burned.barn.V" ]
-  , coWeight      = 9
+  { coId            = "racket"
+  , coVictim        = "V"
+  , coTrigger       = [ Match "barn.V" ]
+  , coThreatenLabel = "[Actor]: threaten [V]"
+  , coDemandLabel   = "[Actor]: do [E]'s favor"
+  , coDemand        = owe "E" "Actor" "favor"
+  , coPunishLabel   = "[Actor]: burn [V]'s barn"
+  , coPunishWhen    = [ Match "barn.V", Not "burned.barn.V" ]
+  , coPunishOuts    = [ Insert "burned.barn.V" ]
+  , coKernel        = [ Match "burned.barn.V" ]
+  , coWeight        = 9
   }
 
 -- A kernel with TWO fresh quantifiers beyond the victim — for pinning that the
@@ -85,6 +87,59 @@ racketWorld = mkWorld True
 noWantWorld :: PraxState
 noWantWorld = mkWorld False
 
+-- Regression fixture (v49 Task 1 fix wave): a BLACKMAIL-SHAPED coercion built
+-- straight through 'coerce' — an evidence trigger naming @Actor@ (the
+-- extorter's own frame variable), a debt-shaped demand, and an expose-shaped
+-- punish, exactly the shape 'Prax.Blackmail.shakedown' will be re-founded on
+-- in Task 2 (plan @2026-07-17-v49-coercion.md:112@: @trigger = Match
+-- (beliefAbout "Actor" pat) : asRole victim copresence@). This is the shape
+-- that exposed the Critical finding: the extorter's evidence-holding
+-- ("Actor.believes.stole.V.loaf") is a legitimate frame reference in
+-- threaten's own query (Actor IS the extorter there), not a capture — so it
+-- must construct without error and its threaten must actually fire.
+court :: CoPresence
+court = [ Match "at.Actor!P", Match "at.Witness!P" ]
+
+blackmailShaped :: Coercion
+blackmailShaped = Coercion
+  { coId            = "leverage"
+  , coVictim        = "V"
+  , coTrigger       = Match "Actor.believes.stole.V.loaf" : asRole "V" court
+  , coThreatenLabel = "[Actor]: threaten [V] with what you know"
+  , coDemandLabel   = "[Actor]: buy [E]'s silence"
+  , coDemand        = owe "E" "Actor" "silence"
+  , coPunishLabel   = "[Actor]: expose [V] to [Hearer]"
+  , coPunishWhen    = Match "Actor.believes.stole.V.loaf" : Neq "Hearer" "V" : asRole "Hearer" court
+  , coPunishOuts    = [ Insert "Hearer.believes.stole.V.loaf" ]
+  , coKernel        = [ Match "W.believes.stole.V.loaf" ]
+  , coWeight        = 6
+  }
+
+leverageThreaten, leverageComply, leverageDefy, leveragePunish :: Action
+(leverageThreaten, leverageComply, leverageDefy, leveragePunish) = case snd (coerce blackmailShaped) of
+  [t, c, d, p] -> (t, c, d, p)
+  acts -> error ("coerce produced " ++ show (length acts) ++ " actions, expected 4")
+
+courtPractice :: Practice
+courtPractice = practice
+  { practiceId = "court", roles = ["R"]
+  , actions = [ leverageThreaten, leverageComply, leverageDefy, leveragePunish ] }
+
+leverageWorld :: PraxState
+leverageWorld =
+  setDesires [ fst (coerce blackmailShaped) ]
+    (foldl (flip performOutcome) base setup)
+  where
+    base = setCharacters
+             [ (character "mel") { charWants = [], charDesires = ["punishes-leverage"] }
+             , character "vic" ]
+             (definePractices [courtPractice] emptyState)
+    setup =
+      [ Insert "practice.court.here"
+      , Insert "mel.believes.stole.vic.loaf"
+      , Insert "at.mel.court"
+      , Insert "at.vic.court" ]
+
 member :: PraxState -> String -> Character
 member st n = case [ c | c <- characters st, charName c == n ] of
   (c : _) -> c
@@ -123,9 +178,34 @@ tests = testGroup "Prax.Coerce"
         r <- try (evaluate (length (show (coerce racket))))
         assertBool "an ordinary victim variable is fine" (not (isLeft (r :: Either ErrorCall Int)))
 
-    , testCase "a trigger naming the extorter's Actor role errors loudly" $ do
-        r <- try (evaluate (length (show (coerce racket { coTrigger = [ Match "spy.Actor" ] }))))
-        assertBool "Actor is mechanism-owned in the threaten query" (isLeft (r :: Either ErrorCall Int))
+    , testCase "a trigger naming a Prax-namespaced variable errors loudly (the v40 law, frame-independent)" $ do
+        r <- try (evaluate (length (show (coerce racket { coTrigger = [ Match "spy.PraxW" ] }))))
+        assertBool "a Prax var in the trigger is rejected" (isLeft (r :: Either ErrorCall Int))
+    ]
+
+  , testGroup "regression: the trigger guard must not forbid Actor (blackmail-shaped evidence, v49 Task 1 fix wave)"
+    [ testCase "a blackmail-shaped Coercion whose trigger names Actor (the extorter's own evidence) constructs without error" $ do
+        r <- try (evaluate (length (show (coerce blackmailShaped))))
+        assertBool "Actor is bound in threaten's own frame, not a capture" (not (isLeft (r :: Either ErrorCall Int)))
+
+    , testCase "threaten is offered and fires, depositing the threat marker" $ do
+        assertBool "threaten offered"
+          (any (\ga -> "threaten" `isInfixOf` gaLabel ga) (possibleActions leverageWorld "mel"))
+        let st = doAct "mel" "threaten" leverageWorld
+        assertBool "the threatened fact" (exists "threatened.leverage.mel.vic" (db st))
+
+    -- Important finding: the boundary table lists "label" in threaten's
+    -- CONTENT column, same as comply/punish, but the record had no
+    -- coThreatenLabel field to carry it — so BlackmailSpec:171's pinned
+    -- "mel: threaten vic with what you know" (the evidence-flavor suffix)
+    -- could never be reproduced through the primitive. Task 2 needs this
+    -- EXACT shape producible; pin it here with the flagship's own names so
+    -- Task 2 inherits it proven.
+    , testCase "the authored threaten label surfaces exactly (BlackmailSpec:171's pinned shape, proven producible)" $
+        (case [ gaLabel ga | ga <- possibleActions leverageWorld "mel", "threaten" `isInfixOf` gaLabel ga ] of
+           (l : _) -> l
+           []      -> error "no threaten action offered")
+          @?= "mel: threaten vic with what you know"
     ]
 
   , testGroup "the rename law"

@@ -54,20 +54,21 @@ import           Prax.Beliefs (beliefAbout)
 
 -- | A coercion: the leverage skeleton with its content in named fields.
 data Coercion = Coercion
-  { coId          :: String       -- ^ single path segment; scopes this coercion's facts
-  , coVictim      :: String       -- ^ the victim role variable (see the reserved set)
-  , coTrigger     :: [Condition]  -- ^ what makes threatening available, INCLUDING how
-                                  -- the victim is reached (co-presence, a letter, …).
-                                  -- Must BIND the victim.
-  , coDemandLabel :: String       -- ^ display template for the comply action
-  , coDemand      :: [Outcome]    -- ^ what compliance does
-  , coPunishLabel :: String       -- ^ display template for the punish action
-  , coPunishWhen  :: [Condition]  -- ^ EXTRA punish availability (the core gate is
-                                  -- mechanism-owned: a standing threat or a defiance)
-  , coPunishOuts  :: [Outcome]    -- ^ what punishment does
-  , coKernel      :: [Condition]  -- ^ what the extorter VALUES about the punished
-                                  -- state, authored with plain variable names
-  , coWeight      :: Int          -- ^ the extorter's punitive weight
+  { coId            :: String       -- ^ single path segment; scopes this coercion's facts
+  , coVictim        :: String       -- ^ the victim role variable (see the reserved set)
+  , coTrigger       :: [Condition]  -- ^ what makes threatening available, INCLUDING how
+                                    -- the victim is reached (co-presence, a letter, …).
+                                    -- Must BIND the victim.
+  , coThreatenLabel :: String       -- ^ display template for the threaten action
+  , coDemandLabel   :: String       -- ^ display template for the comply action
+  , coDemand        :: [Outcome]    -- ^ what compliance does
+  , coPunishLabel   :: String       -- ^ display template for the punish action
+  , coPunishWhen    :: [Condition]  -- ^ EXTRA punish availability (the core gate is
+                                    -- mechanism-owned: a standing threat or a defiance)
+  , coPunishOuts    :: [Outcome]    -- ^ what punishment does
+  , coKernel        :: [Condition]  -- ^ what the extorter VALUES about the punished
+                                    -- state, authored with plain variable names
+  , coWeight        :: Int          -- ^ the extorter's punitive weight
   }
 
 -- | @coerce coercion@ generates the threaten\/comply\/defy\/punish protocol
@@ -83,7 +84,11 @@ data Coercion = Coercion
 --     derive-and-filter design left open: a victim named @Actor@ would have
 --     produced an unsatisfiable @Neq Actor Actor@ threaten, silently.
 --   * the v40 splice guards on every authored field, each forbidding the
---     mechanism names that would capture in that field's own generated query.
+--     names that would CAPTURE in that field's own generated query — which is
+--     frame-relative, not uniform: the trigger's own frame already binds
+--     Actor to the extorter, so the trigger may name Actor (an
+--     evidence-holding condition on the extorter, say); the Prax namespace
+--     is reserved on every field regardless of frame.
 coerce :: Coercion -> (Desire, [Action])
 coerce co
   | any (`elem` (".!" :: String)) sid =
@@ -97,10 +102,11 @@ coerce co
              ++ " pick another name for the victim")
   | (bad : _) <- triggerClash =
       error ("coerce: trigger names " ++ show bad
-             ++ ", but Actor (the threatening extorter) and E (the victim's"
-             ++ " frame in comply/defy) are mechanism-owned in the threaten"
-             ++ " query; the trigger may name the victim (" ++ show victim
-             ++ ") and its own variables only")
+             ++ ", but the Prax namespace is reserved for the mechanism's own"
+             ++ " post-rename output; the trigger may name Actor (the extorter"
+             ++ " — its own frame variable, e.g. an evidence-holding condition),"
+             ++ " the victim (" ++ show victim ++ "), or any of its own"
+             ++ " fresh variables")
   | (bad : _) <- demandClash =
       error ("coerce: demand names " ++ show bad
              ++ ", but in the comply query the victim is Actor and the extorter"
@@ -121,10 +127,18 @@ coerce co
     victim = coVictim co
 
     -- Each authored field forbids exactly the mechanism names that would
-    -- capture in its OWN generated query: threaten binds Actor (extorter),
-    -- comply/defy bind Actor (victim) and E (extorter), punish binds Actor
-    -- (extorter) and the literal victim, the desire binds Owner and PraxD.
-    triggerClash = authoredVarClash ["Actor", "E"] (coTrigger co) []
+    -- CAPTURE (silently unify with a name the author didn't intend) in its
+    -- OWN generated query. The trigger is the one field where Actor is
+    -- already the author's own frame variable (the extorter performing
+    -- threaten) rather than something the mechanism binds out from under
+    -- them, so naming it — e.g. an evidence-holding condition on the
+    -- extorter — is a legitimate frame reference, not a capture; E never
+    -- appears in the threaten query at all, so forbidding it would be inert.
+    -- Only the Prax namespace (checked automatically by 'authoredVarClash')
+    -- is reserved here. comply/defy bind Actor (victim) and E (extorter),
+    -- punish binds Actor (extorter) and the literal victim, the desire binds
+    -- Owner and PraxD — those guards forbid the frame-unbound names below.
+    triggerClash = authoredVarClash [] (coTrigger co) []
     demandClash  = authoredVarClash [victim] [] (coDemand co)
     punishClash  = authoredVarClash ["E"] (coPunishWhen co) (coPunishOuts co)
     kernelClash  = authoredVarClash ["Actor", "E"] (coKernel co) []
@@ -139,7 +153,7 @@ coerce co
     -- Actor is the extorter. The threat IS the communication of conditional
     -- intent: the ordinary marker, the motive-belief deposit (over the same
     -- channel confiding and lying ride), and the extorter's own mark.
-    threaten = action ("[Actor]: threaten [" ++ victim ++ "]")
+    threaten = action (coThreatenLabel co)
       ( coTrigger co
         ++ [ Neq victim "Actor"
            , Not (threatPath "Actor" victim) ] )
