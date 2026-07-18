@@ -223,7 +223,12 @@ utility. See the design writeups:
   one-shot liar, retelling v25's "honest villager launders the lie" finding under a forced
   continuation once free play alone can no longer reach it. Found by the planner's own lookahead,
   not designed for: an unguarded repeat threat could re-extract silence indefinitely, banking
-  serial extortion as a real future mechanic once guarded shut.
+  serial extortion as a real future mechanic once guarded shut. Re-founded in v49: `shakedown`
+  became a thin instance of `Prax.Coerce`, a content-agnostic threaten/comply/defy/punish
+  primitive with evidence made optional (a protection racket burning a barn is the other
+  instance) — the arithmetic above still reproduces byte-for-byte, but the tested contract is
+  now design properties (stalling never dominates, repeat extraction stays impossible, …), not
+  those decimals.
 - `Prax.Faction` + `Prax.Kin` (v31) — **one membership spine, two generators**: two backlog rows
   folded because they share one primitive. `member.<who>!<faction>` is a base, single-slot fact —
   joining, defecting, and marrying-in are all the same `!` exclusion overwrite. `comrades` derives

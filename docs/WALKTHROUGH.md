@@ -1661,9 +1661,22 @@ leverage (carol never needed to know or care what eve whispered, only that she d
 fuller mechanic v25 parked — nobody can yet catch what a lie actually claimed, only that a
 lying-shaped act occurred.
 
-→ code: `Prax.Debt` (`owe`/`settle`/`owes`), `Prax.Blackmail` (`shakedown`), `Prax.Worlds.Village`
-(`villageP`'s `Scene` role, `whisperShakedown`, eve's threshold-fear want, the `slanderer` standing);
-asserted in `Prax.DebtSpec`, `Prax.BlackmailSpec`, `Prax.VillageSpec`, `Prax.GoldenDriveSpec`.
+**Re-founded on a general primitive (v49).** The four-action protocol, the motive-belief deposit,
+and the punitive `Desire` described above are no longer blackmail's own — they belong to
+`Prax.Coerce`'s `Coercion`/`coerce`, a content-agnostic leverage skeleton with evidence made
+optional (a protection racket burning a barn is the primitive's other instance, evidence-free).
+`Prax.Blackmail.shakedown` keeps its exact v30 signature and composes one `Coercion`: the evidence
+trigger, the debt demand, the exposure punishment, and a believers-of-the-evidence kernel are all it
+supplies; threaten/comply/defy/punish, the markers, and the punitive want are the primitive's. The
+compliance arithmetic above still reproduces byte-for-byte, but is no longer what's pinned — the
+re-founding's own test contract is six design properties (stalling never dominates, audience scales
+fear, repeat extraction stays impossible, …), with the old decimals kept only as comparison
+baselines, a shift from asserting exact scores to asserting the shape of the decision they produce.
+
+→ code: `Prax.Debt` (`owe`/`settle`/`owes`), `Prax.Blackmail` (`shakedown`, v49: an instance of
+`Prax.Coerce`), `Prax.Coerce` (`Coercion`/`coerce`, v49), `Prax.Worlds.Village` (`villageP`'s `Scene`
+role, `whisperShakedown`, eve's threshold-fear want, the `slanderer` standing); asserted in
+`Prax.DebtSpec`, `Prax.BlackmailSpec`, `Prax.CoerceSpec`, `Prax.VillageSpec`, `Prax.GoldenDriveSpec`.
 
 ---
 

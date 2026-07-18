@@ -1858,6 +1858,170 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   well-formed on all 7 worlds.
   Queue: **v48 generality bundle** complete; **v49 leverage** next — the last of the
   four audit-queued rounds. The queue closes after it.
+- **v49** — **coercion: the leverage skeleton becomes a primitive; blackmail its thin
+  instance**
+  (`Prax.Coerce` new; `Prax.Blackmail`; `test/Prax/CoerceSpec.hs` new;
+  `test/Prax/BlackmailSpec.hs`; `test/Prax/ConfessionSpec.hs`; spec
+  `docs/specs/2026-07-17-v49-coercion.md` (`4dcc908`, panel-rewritten `94afb84`,
+  property-contract amendment `7a02e6e`); plan `docs/plans/2026-07-17-v49-coercion.md`
+  (`9eeb2f2`); code `2a3a96e` (Task 1: the primitive) + `4613b9c` (Task 1's fix wave) +
+  `0f98f6e` (Task 2: blackmail re-founded) + `fa2e281` (the T2 review's Minors closed)).
+  Last of the four audit-queued rounds — v45 protected families → v46 the narrator dies
+  → v47 function registry → v48 generality bundle → **v49** (this row), closing the
+  queue. **The first design-replacement round**: the audit judged v30's leverage design
+  unprincipled and this round REPLACES it, rather than re-plumbing an implementation
+  behind a design the audit approved — a classification the user corrected at the gate
+  after the spec's amended draft still measured itself against v30's pinned decimals.
+
+  **The panel's Critical, and its resolution.** The spec's first draft (`4dcc908`)
+  shipped a kernel whose variable contract was self-contradictory: the v40 law bars
+  `Prax`-namespaced variables from every authored field, yet blackmail's kernel is
+  *constituted* by `PraxW`/`PraxD`, its own flagship instance unexpressable under the
+  rule as written. Three resolutions were weighed: (a) reusing `renameVictim`'s
+  victim-only rename, ruled necessary but insufficient alone (it namespaces the victim
+  but not the believer or any other fresh quantifier); (b) a compiler-door bypass
+  exempting module-defined instances,
+  ruled unsound (worlds call `coerce` from raw Haskell exactly as mechanism modules do,
+  so at runtime a bypass either cannot distinguish `Prax.Blackmail`'s calls from a
+  world's own, or exempts every world-authored instance from the guard entirely); (c)
+  mechanism-provided systematic renaming — the author writes the kernel in plain names,
+  `coerce` alpha-renames ALL of it INTO the namespace, not just the victim — chosen and
+  shipped as `namespaceKernel`.
+  The rewrite (`94afb84`) also decided delivery-as-content (co-presence moved from
+  mechanism to trigger content — a letter coerces in absentia) and stated the permanence
+  decision (below) as a decision rather than an oversight.
+
+  **The contract is design properties, not v30's decimals** (`7a02e6e`, the user's
+  correction). Compiled shapes were EXPECTED to differ once a judged-unprincipled design
+  is replaced; the block condition became six properties the v30 probe actually
+  validated — stalling never dominates, audience scales fear (comparative, not decimal),
+  repeat extraction is impossible, confession kills exposure leverage, credibility is
+  self-motivation (both kernels), the deterrence trait still deters — with any surviving
+  v30 decimals recorded as comparison baselines, never requirements.
+
+  **The primitive.** `Prax.Coerce`'s `Coercion` record (`coId`/`coVictim`/`coTrigger`/
+  `coThreatenLabel`/`coDemandLabel`/`coDemand`/`coPunishLabel`/`coPunishWhen`/
+  `coPunishOuts`/`coKernel`/`coWeight`) and `coerce :: Coercion -> (Desire, [Action])`
+  generate threaten/comply/defy/punish plus the punitive `Desire`, mechanism-owning what
+  every instance shares: the markers (`threatened.<sid>.<E>.<V>`, `defied.<sid>.<V>.<E>`,
+  the PERMANENT `complied.<sid>.<E>.<V>`, and `<E>.extorted.<V>.<sid>` — its tail now the
+  coercion id, not the evidence content, a stated expressiveness change: the mark records
+  WHICH coercion, not WHAT was threatened); the punish availability core,
+  `Or [standing threat, defied]` (stalling never safe); and the CONSTRUCTED punitive want
+  (name `punishes-<sid>`, conditions `Or [defied, threat] : namespaceKernel victim
+  coKernel` — deposit and desire share one generated name and trigger by construction,
+  so the name-identity half of credibility can't drift). The kernel rename law
+  (`namespaceKernel`) moves the victim to `PraxD` and every other author-introduced free
+  variable to `PraxW`, `PraxW2`, … in first-appearance order, op-preservingly — a binder
+  and its interior uses move together (renaming is by name through every `Condition`
+  constructor, including `Subquery`'s find-variables), and `Match`/`Not` sentences
+  round-trip through `tokens`/`tokensToSentence` so a segment's `.`/`!` operator survives
+  the rename. The victim reserved set (`{Actor, E, Owner, Hearer}` ∪ `Prax*`) closes a
+  hole no version of this design had caught before: a victim named `Actor` would have
+  compiled threaten's own `Neq victim Actor` clash into an unsatisfiable `Neq Actor
+  Actor`, silently — now a loud construction-time error, pinned directly.
+
+  **The permanence decision, both authorities cited — and the panel's own citation
+  error corrected in the record.** The `complied` marker is permanent per
+  (id, extorter, victim): one purchase per coercion, ever, until serial extortion is
+  deliberately designed. Authority: v48 constraint 2 (a demand-independent marker) and
+  the LEDGER's own v30 bank item — "Repeat / serial extortion" (this file, the v30
+  row's narrative at line 251 and the bank entry at lines 2191–2196, which names "a
+  threat that renews" as a real future mechanic). The spec's design-lens panel flagged
+  that citation as fabricated (HIGH) — checked, and found wrong: the item lives in
+  exactly those two places, and the panel had read only the v30 SPEC's §5, not this
+  LEDGER. Both the original citation and the panel's mistaken challenge to it are
+  recorded at the spec's own site, not silently resolved.
+
+  **The review arc's headline: the panel's own Critical class, reborn.** Task 1's
+  review (of `2a3a96e`) found the identical defect shape relocated from the kernel to
+  the trigger guard: `triggerClash` forbade `Actor` in `coTrigger`, but threaten's own
+  generated query legitimately binds `Actor` as the extorter's frame variable — exactly
+  the name blackmail's trigger must name (`Match (beliefAbout "Actor" pat)`). It slipped
+  because Task 1's own racket fixture is evidence-free (`Match "barn.V"`), so nothing in
+  the primitive's own test world ever exercised the one instance the guard broke. Repl-
+  verified before any fix: a blackmail-shaped `Coercion` naming `Actor` in its trigger
+  was rejected outright — `coerce: trigger names "Actor", but Actor (the threatening
+  extorter) and E (the victim's frame in comply/defy) are mechanism-owned in the
+  threaten query; …`. Fixed frame-correctly, not patched around: `triggerClash` emptied
+  to forbid nothing beyond the `Prax` namespace
+  (`E` dropped too — it never appears in threaten's generated query at all, so
+  forbidding it was inert; the kernel's own namespace ban is untouched, since the kernel
+  frame really is where `Actor`/`E` would capture). The repro — `blackmailShaped` in
+  `CoerceSpec.hs`, built straight through `coerce` with an evidence trigger naming
+  `Actor` — is now the standing blackmail-shaped regression pin. The same review's
+  Important finding, fixed in the same commit (`4613b9c`): threaten's label was
+  mechanism-hardcoded even though the boundary table lists label as threaten's own
+  content column; `coThreatenLabel` was added and proven — pre-migration, before Task 2
+  ever touched `Blackmail.hs` — to reproduce `BlackmailSpec`'s exact pinned string,
+  `"mel: threaten vic with what you know"`.
+
+  **Blackmail re-founded** (`0f98f6e`): `shakedown` keeps its v30 signature, builds one
+  `Coercion`, returns `coerce` of it — composition, not a wrapper. `renameVictim`,
+  `punitiveName`, and `debtPath` die from `Prax.Blackmail` outright. The instance's own
+  secondary-variable guard narrows `{Owner, Actor, Hearer}` → `{Owner, Hearer}`: `Actor`
+  and `E` are now caught by the primitive's own `kernelClash`, a coverage fact that
+  holds only because `pat` flows into `coKernel` — documented LOAD-BEARING at its site
+  (the T2 review's M1) rather than left implicit. Two mark fixtures move, both
+  mechanical: the extorted-mark assertion's tail moves from the evidence pattern to the
+  coercion id (`mel.extorted.vic.took.vic.gem` → `mel.extorted.vic.defiance`), and the
+  `scrupulous` trait's qualms want re-points from the full path
+  `Owner.extorted.vic.took.vic.gem` to the subtree `Owner.extorted.vic` — verified more
+  faithful, not merely compatible: a subtree `Match` deters on "having extorted the
+  victim" regardless of which coercion, which is the semantics the trait actually wants.
+  The kernel's believer is authored as plain `Believer`, not `W`, so a same-named
+  secondary evidence variable can never merge with it under the rename — keeping v40's
+  usability-win pins semantically faithful, not just non-erroring.
+
+  **Every v30 decimal reproduced byte-for-byte, unrequested.** Under the property
+  contract, decimals were never the block condition — but the re-founded compilation
+  reproduced every one of v30's pinned scores exactly anyway (two-onlooker comply
+  −63.84 / wait −71.84 / defy −75.80; one-onlooker defy = wait −54.2 / comply −63.84;
+  `ConfessionSpec`'s defense arcs −16.26/−25.26/−120.06 and −159.81/−162.60/−171.60),
+  recorded now as comment baselines rather than asserted equalities — a fidelity note,
+  not a requirement met by luck. `GoldenDriveSpec`: zero movement (3/3). `AnalysisTable`
+  and every shipped world: unaffected, checked rather than assumed.
+
+  **The racket: a spec-only fixture executing the audit's second-application test.**
+  `CoerceSpec`'s own world — evidence-FREE trigger (`Match "barn.V"`), a favor demand, a
+  barn-burning punish, a vengeance kernel valuing anyone's burned barn once threatened
+  or defied — is the coercion the v49 fork was chosen to make expressible at all ("dig
+  my field or I burn your barn"), ships in no world, and drives the mechanism end-to-end:
+  threaten deposits the marker, the motive-belief, and the (now sid-tailed) extorted
+  mark; punish fires against a STANDING threat with no defiance; a re-threat after
+  compliance extracts nothing (the permanent marker holds). The vengeance
+  self-motivation is pinned via `pickAction`, both directions, not driven: holding the
+  punitive want, mob's depth-2 scores are threaten **15.39** > bide **7.29** and
+  threaten is chosen; without the want, threaten **0.0** = bide **0.0** and the tie
+  breaks by label ("mob: bide" sorts before "mob: threaten vic," the v34 tie-break
+  discipline) — bide wins, threaten is NOT chosen. The base-less, selfNext-only payoff
+  (the barn isn't burned when mob merely threatens; threaten's value comes entirely from
+  the lookahead ply where mob later punishes) is the exact analogue of `BlackmailSpec`'s
+  own exposure-kernel pin, on the path where the two kernels diverge most.
+
+  Suite: 643 → 657 (Task 1 initial, `2a3a96e`) → 660 (Task 1's fix wave, `4613b9c`: the
+  Critical + `coThreatenLabel`) → 660 (Task 2, `0f98f6e`, net-unchanged — pins converted
+  in place, not added) → 662 (`fa2e281`, closing the T2 review's three Minors: the
+  `pat∈coKernel` load-bearing note stated at its site, `took.V.by.E`/`.Actor` secondary
+  pins, and the instance-side re-threat pin). Zero golden or `AnalysisTable` movement
+  anywhere in the round. Zero warnings, hlint clean, `prax check` well-formed on all 7
+  worlds.
+
+  **Queue closes; the extension stands.** v49 completes the original audit queue: v45
+  protected families → v46 the narrator dies → v47 function registry → v48 generality
+  bundle → v49 coercion. Recorded here with it, from the queue-wide byte-identity
+  assessment that closed v48 (this file, the v48 row above): the queue EXTENDS past its
+  original four, user-directed, into **v50** — machinery state leaves the db (`seed` and
+  `sceneEntered` become `PraxState` fields; the v45 fences DELETED as obsolete, the v45
+  deferral finally executed rather than fenced around) — and **v51** — lifting leaves
+  the engine (`Prax.Derive` gains a general axiom-transformer seam; `Prax.Deontic` owns
+  the `□`-lift; v48's detection becomes Deontic's own registration act). The assessment
+  of record: the queue's byte-identity posture bent two fixes along the way (v45 fenced
+  a hole instead of fixing it; v48 means-tested the tax without moving the responsibility
+  that produces it) and distorted the framing of both rows — v46/v47/v48's own golden
+  identities were theorems and stand unchanged by this reassessment.
+  Queue: **v49 coercion** complete — the original audit queue CLOSES.
+  **v50 machinery state** next, opening the extension.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
