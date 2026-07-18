@@ -124,7 +124,12 @@ shakedown sid copresence pat price w
       , coPunishOuts    = [ Insert (beliefAbout "Hearer" pat ++ ".heard.Actor") ]
         -- believers of the evidence, authored plain; coerce lifts Believer ->
         -- PraxW and the victim -> PraxD (a descriptive name, so a secondary
-        -- evidence variable never collides with the believer under the rename)
+        -- evidence variable never collides with the believer under the rename).
+        -- LOAD-BEARING for the instance guard (v49 review M1): pat flowing
+        -- into coKernel is what makes the primitive's kernel guard reject a
+        -- secondary evidence variable named Actor or E — the instance list
+        -- below adds only Owner/Hearer. If pat ever stops flowing here, the
+        -- Actor/E coverage goes with it.
       , coKernel        = [ Match (beliefAbout "Believer" pat) ]
       , coWeight        = w
       }

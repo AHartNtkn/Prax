@@ -155,6 +155,13 @@ tests = testGroup "Prax.Blackmail"
         r2 <- try (evaluate (length (show (shakedown "x" [] "took.V.by.PraxW" "favor" 1))))
         assertBool "PraxW is reserved for the punitive desire's own believer variable"
           (isLeft (r2 :: Either ErrorCall Int))
+    , testCase "a secondary evidence variable named Actor or E is rejected (via the kernel flow — v49 review M2)" $ do
+        r1 <- try (evaluate (length (show (shakedown "x" [] "took.V.by.E" "favor" 1))))
+        assertBool "E is the comply/defy frame's extorter; a secondary named E merges"
+          (isLeft (r1 :: Either ErrorCall Int))
+        r2 <- try (evaluate (length (show (shakedown "x" [] "took.V.by.Actor" "favor" 1))))
+        assertBool "Actor is every generated frame's actor; a secondary named Actor merges"
+          (isLeft (r2 :: Either ErrorCall Int))
     , testCase "a secondary evidence variable named Owner collides with the desire's Owner" $ do
         r <- try (evaluate (length (show (shakedown "x" [] "took.V.for.Owner" "favor" 1))))
         assertBool "Owner is reserved for the desire's own Owner-templated variable"
@@ -212,6 +219,19 @@ tests = testGroup "Prax.Blackmail"
         assertBool "the threat is gone" (not (exists "threatened.defiance.mel.vic" (db complied)))
         assertBool "expose is no longer offered against vic (no standing threat, no defiance)"
           (not (any (\ga -> "expose vic" `isInfixOf` gaLabel ga) (possibleActions complied "mel")))
+
+    , testCase "a renewed threat after compliance extracts nothing (property 3 at the instance — v49 review M3)" $ do
+        -- Property 3's primitive pin lives in CoerceSpec; this is the same
+        -- law observed through blackmail's own shapes: mel may threaten
+        -- again, but the permanent complied marker keeps buy off the table.
+        let complied   = doAct "vic" "buy mel's silence"
+                           (doAct "mel" "threaten vic" twoOnlookerWorld)
+            rethreated = doAct "mel" "threaten vic" complied
+        assertBool "the complied marker stands"
+          (exists "complied.defiance.mel.vic" (db rethreated))
+        assertBool "buy is not offered again under the renewed threat"
+          (not (any (\ga -> "buy mel's silence" `isInfixOf` gaLabel ga)
+                    (possibleActions rethreated "vic")))
     ]
 
   , testGroup "one onlooker: the victim rationally defies (both sides of the arithmetic)"
