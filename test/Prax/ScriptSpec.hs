@@ -15,6 +15,7 @@ import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, performOutcome, roundBoundary)
 import           Prax.Core (adjustScore)
 import           Prax.Loop (advance, npcAct)
+import           Prax.Persist (serializeState, deserializeState)
 import           Prax.Script
 import           Prax.Worlds.Play (playScript, playWorld)
 import           Prax.Worlds.Audience (audienceWorld)
@@ -166,53 +167,165 @@ tests = testGroup "Prax.Script"
           st = roundBoundary (performOutcome (Insert "go") (compile sc))
       currentSceneOf st @?= Just "c"          -- traversed a->b->c in one boundary
 
-    -- v40 hygiene: the entry-stamp machinery's Prax-namespaced variables ------
-    -- Guarded at 'compile', not at 'goto' itself: a constructor-level guard is
-    -- bypassable through any authoring surface that builds a 'Junction'
-    -- without going through 'goto' (JsonSpec pins the JSON route below), so
-    -- the check runs uniformly at the actual consumption point instead.
-  , testCase "compile rejects a goto whose condition reuses the entry-stamp's PraxNow" $ do
+    -- Timed-junction / patience-marker compile guards (spec v50 T2) -----------
+    -- The marker keys per (scene, junction-name), so junction names must be
+    -- unique within a scene; a zero-delay "timed" junction is a plain junction
+    -- and is where the marker form would diverge; and the compiler-owned
+    -- scenePatience family is closed to authors (the collision hole).
+  , testCase "compile rejects two junctions with the same name in one scene" $ do
       let sc = Script
             { scriptStart = "a", scriptCast = [ player "p" ]
             , scriptScenes =
-                [ (scene "a")
-                    { sceneJunctions = [ goto "go" "b" [ Match "chapter!PraxNow" ] ] }
-                , (scene "b") { sceneJunctions = [] }
-                ]
-            }
+                [ (scene "a") { sceneJunctions =
+                    [ ending "dup" [ Match "x" ], ending "dup" [ Match "y" ] ] } ] }
       r <- try (evaluate (currentSceneOf (compile sc)))
-      assertBool "the Prax namespace in a goto condition is rejected at compile"
+      assertBool "duplicate junction names in one scene are rejected at compile"
         (isLeft (r :: Either ErrorCall (Maybe String)))
 
-  , testCase "an author's own \"Now\" in a goto condition no longer collides with the stamp" $ do
-      -- The exact scenario that demonstrated the bug pre-fix: an author
-      -- condition binding "Now" for its own unrelated purpose (here,
-      -- "chapter!99") used to pre-substitute into the entry-stamp's ForEach
-      -- and silently leave the destination scene's sceneEntered stale. Now
-      -- that the machinery uses PraxNow, the author's own Now is unrestricted
-      -- and the stamp captures the live turn correctly. v46: the goto fires
-      -- silently at the round boundary (the clock advances 7 -> 8 first), and
-      -- 'go' precedes the co-enabled 'gaveUp' timeout in authored order, so it
-      -- wins and its currentScene eviction masks the timeout.
+  , testCase "compile rejects a timeout with a zero delay (n=0 is a plain junction)" $ do
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes = [ (scene "a") { sceneJunctions = [ timeout "now" 0 ] } ] }
+      r <- try (evaluate (currentSceneOf (compile sc)))
+      assertBool "an n=0 timeout is rejected at compile"
+        (isLeft (r :: Either ErrorCall (Maybe String)))
+
+  , testCase "compile rejects an 'after' goto with a zero delay" $ do
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes = [ (scene "a") { sceneJunctions = [ after "toB" 0 "b" ] }
+                             , scene "b" ] }
+      r <- try (evaluate (currentSceneOf (compile sc)))
+      assertBool "an n=0 after is rejected at compile"
+        (isLeft (r :: Either ErrorCall (Maybe String)))
+
+  , testCase "compile rejects an authored scenePatience read in a junction condition" $ do
       let sc = Script
             { scriptStart = "a", scriptCast = [ player "p" ]
             , scriptScenes =
-                [ (scene "a")
-                    { sceneJunctions =
-                        [ goto "go" "b" [ Match "chapter!Now" ]
-                        , timeout "gaveUp" 3 ] }
-                , (scene "b") { sceneJunctions = [ timeout "gaveUpB" 3 ] }
-                ]
-            }
-          base0 = compile sc
-          base1 = performOutcome (Insert "turn!7") base0
-          base  = performOutcome (Insert "chapter!99") base1
-          stampOf st = [ v | b <- unify "sceneEntered.E" (db st) Map.empty
-                            , Just v <- [valToString <$> Map.lookup (intern "E") b] ]
-      stampOf base @?= ["0"]      -- scene a's compile-time stamp: turn was 0 then
-      let st2 = roundBoundary base            -- clock 7 -> 8; the story rule fires 'go'
-      currentSceneOf st2 @?= Just "b"
-      stampOf st2 @?= ["8"]       -- the live turn at boundary time, not the stale 0
+                [ (scene "a") { sceneJunctions =
+                    [ ending "e" [ Match "scenePatience.a.foo" ] ] } ] }
+      r <- try (evaluate (currentSceneOf (compile sc)))
+      assertBool "an authored scenePatience read (Match) is rejected at compile"
+        (isLeft (r :: Either ErrorCall (Maybe String)))
+
+  , testCase "compile rejects an authored scenePatience write in a scene setup" $ do
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes = [ (scene "a") { sceneSetup = [ Insert "scenePatience.a.foo" ] } ] }
+      r <- try (evaluate (currentSceneOf (compile sc)))
+      assertBool "an authored scenePatience write (Insert) is rejected at compile"
+        (isLeft (r :: Either ErrorCall (Maybe String)))
+
+  , testCase "compile rejects an authored scenePatience touch in a beat effect \
+             \(a newly-swept list)" $ do
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes =
+                [ (scene "a") { sceneBeats =
+                    [ beat "meddle" [] [ Delete "scenePatience.a.foo" ] ] } ] }
+      r <- try (evaluate (currentSceneOf (compile sc)))
+      assertBool "an authored scenePatience touch in a beat effect (Delete) is rejected"
+        (isLeft (r :: Either ErrorCall (Maybe String)))
+
+  , testCase "compile rejects an authored scenePatience touch in a beat condition \
+             \(a newly-swept list)" $ do
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes =
+                [ (scene "a") { sceneBeats =
+                    [ beat "peek" [ Match "scenePatience.a.foo" ] [] ] } ] }
+      r <- try (evaluate (currentSceneOf (compile sc)))
+      assertBool "an authored scenePatience read in a beat condition is rejected"
+        (isLeft (r :: Either ErrorCall (Maybe String)))
+
+  , testCase "compile rejects an authored scenePatience touch in a cast-desire \
+             \condition (a newly-swept list, absence polarity)" $ do
+      let sc = Script
+            { scriptStart = "a"
+            , scriptCast = [ player "p"
+                           , member "d" `wanting` [ Want [ Not "scenePatience.a.foo" ] 5 ] ]
+            , scriptScenes = [ scene "a" ] }
+      r <- try (evaluate (currentSceneOf (compile sc)))
+      assertBool "an authored scenePatience touch in a cast-desire condition (Not) is rejected"
+        (isLeft (r :: Either ErrorCall (Maybe String)))
+
+    -- v50: timed junctions ride patience markers (the scene stamp is gone) ----
+    -- Each behaviour is driven boundary-by-boundary with 'roundBoundary' (the
+    -- pure timing harness: nobody acts, the markers just expire on the clock).
+  , testCase "the audience: 'dismissed' fires at boundary 5, not before (the fidelity pin)" $ do
+      -- Byte-identical to the pre-move stamp: entry at boundary 0, timeout 5,
+      -- so the patience runs out exactly at boundary 5. Exercises the START-scene
+      -- entry path (the panel's Critical: marker emission must ride scene entry).
+      let steps = iterate roundBoundary audienceWorld
+      endingOf (steps !! 4) @?= Nothing              -- patience still holds
+      endingOf (steps !! 5) @?= Just "dismissed"     -- boundary 5: it ran out
+
+  , testCase "a timed 'after' goto fires at its delay boundary" $ do
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes = [ (scene "a") { sceneJunctions = [ after "toB" 3 "b" ] }
+                             , scene "b" ] }
+          steps = iterate roundBoundary (compile sc)
+      currentSceneOf (steps !! 2) @?= Just "a"       -- not yet
+      currentSceneOf (steps !! 3) @?= Just "b"       -- boundary 3: hands off
+
+  , testCase "re-entry resets a timed junction: it times out n from the LAST entry" $ do
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes =
+                [ (scene "a") { sceneJunctions =
+                    [ goto "leave" "b" [ Match "leaveNow" ], timeout "out" 3 ] }
+                , (scene "b") { sceneJunctions =
+                    [ goto "back" "a" [ Match "backNow" ] ] } ] }
+          w0  = compile sc
+          w1  = roundBoundary w0                                    -- dawdle at a
+          atB = roundBoundary (performOutcome (Insert "leaveNow") w1)  -- leave before timeout
+          reA = roundBoundary (performOutcome (Insert "backNow")
+                                 (performOutcome (Delete "leaveNow") atB))  -- re-enter a
+      currentSceneOf atB @?= Just "b"
+      currentSceneOf reA @?= Just "a"
+      -- from the LAST entry the clock runs a fresh 3 boundaries, not from the first
+      endingOf (roundBoundary (roundBoundary reA))                 @?= Nothing
+      endingOf (roundBoundary (roundBoundary (roundBoundary reA))) @?= Just "out"
+
+  , testCase "early exit is harmless: a pending patience marker fires no stray junction" $ do
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes =
+                [ (scene "a") { sceneJunctions =
+                    [ goto "leave" "b" [ Match "leaveNow" ], timeout "out" 3 ] }
+                , scene "b" ] }
+          w0  = compile sc
+          w1  = roundBoundary w0                                    -- dawdle at a (marker mid-life)
+          atB = roundBoundary (performOutcome (Insert "leaveNow") w1)  -- leave before the timeout
+      currentSceneOf atB @?= Just "b"
+      -- drive past the original due (boundary 3): the stale marker expires in 'b'
+      -- with the currentScene gate false, so 'out' never fires
+      endingOf (iterate roundBoundary atB !! 5) @?= Nothing
+
+  , testCase "two timed junctions on one scene fire independently at their own delays" $ do
+      -- distinct names (same-name is now rejected) and distinct delays; the
+      -- shorter fires at ITS boundary, proving the markers are keyed separately
+      -- (a collapsed single marker would delay 'quick' to 'slow's boundary).
+      let sc = Script
+            { scriptStart = "a", scriptCast = [ player "p" ]
+            , scriptScenes = [ (scene "a") { sceneJunctions =
+                                 [ after "quick" 2 "b", after "slow" 4 "c" ] }
+                             , scene "b", scene "c" ] }
+          steps = iterate roundBoundary (compile sc)
+      currentSceneOf (steps !! 1) @?= Just "a"       -- boundary 1: neither yet
+      currentSceneOf (steps !! 2) @?= Just "b"       -- boundary 2: 'quick' (delay 2) fired
+
+  , testCase "mid-scene save/resume reaches the same timeout boundary (persistence symmetry)" $ do
+      -- The patience marker is an ordinary fact; its pending expiry rides v44's
+      -- due serialization, so a save partway through a timed scene resumes to the
+      -- SAME dismissal boundary with no Persist code change.
+      let mid     = iterate roundBoundary audienceWorld !! 2       -- boundary 2, patience pending
+          resumed = deserializeState (serializeState mid) audienceWorld
+      endingOf mid @?= Nothing
+      endingOf (iterate roundBoundary resumed !! 2) @?= Nothing        -- boundary 4
+      endingOf (iterate roundBoundary resumed !! 3) @?= Just "dismissed"  -- boundary 5
 
   , testCase "a character sketch compiles concerns to wants and traits to facts" $ do
       let cm = member "vain" `concernedWith` [ ("beauty", 50) ] `withTraits` [ "proud" ]

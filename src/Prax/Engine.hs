@@ -265,10 +265,11 @@ seedDie s st
   where (lo, hi) = seedBounds
 
 -- | The COMPILER-LEVEL door onto the engine schedule (spec v46): register rules
--- that authoring code could not. The compiled "Prax.Script" story rule carries
--- Prax-namespaced machinery (the timed junction's clock arithmetic, the
--- @sceneEntered@ stamp) that 'setSchedule''s v40 splice-hygiene guard rightly
--- rejects on authored rules. This door omits ONLY that guard: its caller is
+-- that authoring code could not. The compiled "Prax.Script" story rule is
+-- compiler-generated, not authored — its clauses carry compiler-owned
+-- mechanics ('Prax.Script.compile' has already hygiene-checked the verbatim
+-- author fragments it splices in) — so it registers here rather than through
+-- 'setSchedule'. This door omits ONLY the v40 splice guard: its caller is
 -- compiler-level code ('Prax.Script.compile'), squarely inside v45's
 -- threat model (the family of reserved-namespace writes that only mechanism may
 -- make), so it carries no authoring guard BY DESIGN. It is deliberately NOT

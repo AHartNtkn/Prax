@@ -60,16 +60,14 @@ module Prax.Script
   , currentSceneOf
   , compile
   , flowChart
-  , sceneEnteredPath
   ) where
 
 import           Data.Char (isAlphaNum)
-import           Data.List (find, stripPrefix)
-import           Data.Maybe (isJust)
+import           Data.List (find, group, sort, stripPrefix)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (unify, valToString)
-import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..))
+import           Prax.Db (pathNames, unify, valToString)
+import           Prax.Query (Condition (..), CmpOp (..), condSents)
 import           Prax.Sym (intern)
 import           Prax.Types
 import           Prax.Engine (definePractices, defineFunctions, performOutcome, setCharacters, registerEngineRules)
@@ -131,10 +129,10 @@ data Beat = Beat
 -- validate it uniformly with the same v40 hygiene guard 'sceneSetup' gets,
 -- regardless of how the 'Junction' was built (Haskell smart constructor, raw
 -- constructor, or decoded from JSON — see "Prax.Script.Json"'s @FromJSON
--- Junction@, the module's documented external-authoring surface). The
--- timeout machinery ('clockReached') lives entirely in 'storyClause',
--- expanded from 'junctionAfter' at compile time, so it never appears in
--- author-visible data at all.
+-- Junction@, the module's documented external-authoring surface). The timeout
+-- machinery — the patience marker ('scenePatiencePath') 'setupOf' arms and
+-- 'storyClause' reads as @Not@ — is expanded from 'junctionAfter' at compile
+-- time, so it never appears in author-visible data at all.
 data Junction = Junction
   { junctionName  :: String
   , junctionTo    :: Maybe String
@@ -203,24 +201,19 @@ goto name to conds = Junction name (Just to) conds Nothing
 ending :: String -> [Condition] -> Junction
 ending name conds = Junction name Nothing conds Nothing
 
--- | The scene epoch family — engine-written; v45-reserved (the only legal
--- touch is compiled mechanism's own Prax-namespaced shape; see
--- @Prax.TypeCheck@'s @ReservedFamily@ check).
-sceneEnteredPath :: String
-sceneEnteredPath = "sceneEntered"
+-- | The patience-marker family (spec v50): a timed junction @j@ of scene
+-- @sid@ carries the fact @scenePatience.\<sid\>.\<j\>@, inserted with lifetime
+-- @n@ on scene entry ('setupOf') and retracted @n@ boundaries later by the
+-- v44 expiry schedule. The junction fires when its patience has RUN OUT (the
+-- marker is absent). Compiler machinery, not fiction: produced only by
+-- 'setupOf', read only by the story rule. Authors may not touch it — 'compile'
+-- rejects any authored condition or outcome headed here (the collision hole).
+scenePatienceFamily :: String
+scenePatienceFamily = "scenePatience"
 
--- At least @n@ engine rounds have elapsed since the current scene was
--- entered (spec v44 — the scene clock is a stamp against the live engine
--- clock, not a scene-local ticker). Expanded by 'storyClause' (not by
--- 'after'/'timeout') from 'junctionAfter', so this machinery never appears
--- in a 'Junction'\'s author-visible 'junctionWhen' — it splices into
--- 'storyClause'\'s condition list beside 'setupOf'\'s own machinery in
--- the SAME story-rule clause. Its bound names are Prax-namespaced (v40
--- hygiene).
-clockReached :: Int -> [Condition]
-clockReached n =
-  [ Match (sceneEnteredPath ++ "!PraxE"), Match (turnPath ++ "!PraxNow")
-  , Calc "PraxD" Sub "PraxNow" "PraxE", Cmp Gte "PraxD" (show n) ]
+-- | The patience marker for timed junction @jname@ of scene @sid@.
+scenePatiencePath :: String -> String -> String
+scenePatiencePath sid jname = scenePatienceFamily ++ "." ++ sid ++ "." ++ jname
 
 -- | A __timed transition__: @after name n toScene@ — hand off to @toScene@ once
 -- @n@ rounds have elapsed in the current scene (Prompter's timeout transition).
@@ -248,26 +241,71 @@ currentSceneOf st =
     (s : _) -> Just s
     []      -> Nothing
 
--- | Compile a 'Script' into a ready-to-run 'PraxState'. Loud if any scene's
--- @sceneSetup@, or any junction's @junctionWhen@, authors a Prax-namespaced
--- variable: both splice into the SAME story-rule clause as spliced machinery
--- (the entry stamp, and — for a timed junction — 'clockReached' too), so the
--- v40 hygiene guard runs here, uniformly, over every 'Junction' regardless of
--- how it was built (smart constructor, raw 'Junction' constructor, or
--- decoded from JSON — the actual consumption point, not any one authoring
--- surface).
+-- | Compile a 'Script' into a ready-to-run 'PraxState'. Loud at the consumption
+-- point (uniformly over every construction route — Haskell smart constructor,
+-- raw constructor, or JSON decode) on five authoring faults:
+--
+--   * two junctions sharing a name within one scene — each timed junction keys
+--     its own patience marker ('scenePatiencePath'), so names must be unique
+--     (and same-named junctions are authored ambiguity regardless);
+--   * a timed junction with @junctionAfter (Just n)@ and @n < 1@ — a zero-delay
+--     \"timed\" junction is a plain junction (spec v50 §2);
+--   * an authored condition or outcome headed 'scenePatienceFamily', in any of
+--     the five lists 'compile' consumes ('sceneSetup', 'junctionWhen', beat
+--     conditions, beat effects, cast-desire conditions) — the family is
+--     compiler-owned (the collision hole);
+--   * a 'sceneSetup' or 'junctionWhen' authoring a Prax-namespaced variable
+--     (the v40 hygiene boundary; these splice into the story rule).
 compile :: Script -> PraxState
 compile scr
+  | (sid, jn) : _ <- duplicateJunctionNames =
+      error ("Prax.Script.compile: scene " ++ show sid ++ " has two junctions named "
+             ++ show jn ++ " -- junction names must be unique within a scene "
+             ++ "(each timed junction keys its own patience marker)")
+  | (sid, jn, n) : _ <- zeroDelayJunctions =
+      error ("Prax.Script.compile: scene " ++ show sid ++ "'s junction " ++ show jn
+             ++ " has a timed delay of " ++ show n
+             ++ " -- a timed junction needs at least one round (n=0 is a plain junction)")
+  | (site, s) : _ <- scenePatienceOffenders =
+      error ("Prax.Script.compile: " ++ site ++ " authors " ++ show s
+             ++ " -- the " ++ show scenePatienceFamily
+             ++ " family is reserved for the timed-junction machinery")
   | (sid, v) : _ <- sceneSetupOffenders =
       error ("Prax.Script.compile: scene " ++ show sid ++ "'s setup authors " ++ show v
-             ++ " -- the Prax namespace is reserved for the entry-stamp machinery")
+             ++ " -- the Prax namespace is reserved for engine machinery")
   | (sid, jn, v) : _ <- junctionWhenOffenders =
       error ("Prax.Script.compile: scene " ++ show sid ++ "'s junction " ++ show jn
              ++ " authors " ++ show v
-             ++ " -- the Prax namespace is reserved for the entry-stamp/timeout machinery")
+             ++ " -- the Prax namespace is reserved for engine machinery")
   | otherwise = foldl (flip performOutcome) (registerEngineRules [storyRule] base) setup
   where
     scenes = scriptScenes scr
+    duplicateJunctionNames =
+      [ (sceneId s, jn) | s <- scenes, jn <- repeated (map junctionName (sceneJunctions s)) ]
+    zeroDelayJunctions =
+      [ (sceneId s, junctionName j, n)
+      | s <- scenes, j <- sceneJunctions s, Just n <- [junctionAfter j], n < 1 ]
+    scenePatienceOffenders =
+      [ (site, s) | (site, ss) <- authoredSentenceSites
+      , s <- ss, headSegment s == Just scenePatienceFamily ]
+    -- Every authored condition/outcome list 'compile' consumes, labelled — the
+    -- scenePatience sweep is ENUMERATED here, not inherited from the v40
+    -- hygiene sweep below (which covers only sceneSetup + junctionWhen); beat
+    -- conditions, beat effects, and cast-desire conditions are the three lists
+    -- newly swept for the patience-family guard.
+    authoredSentenceSites =
+         [ ("scene " ++ show (sceneId s) ++ "'s setup", outcomeSents (sceneSetup s))
+         | s <- scenes ]
+      ++ [ ("scene " ++ show (sceneId s) ++ "'s junction " ++ show (junctionName j) ++ " condition"
+           , condSents (junctionWhen j)) | s <- scenes, j <- sceneJunctions s ]
+      ++ [ ("scene " ++ show (sceneId s) ++ "'s beat " ++ show (beatLabel b) ++ " condition"
+           , condSents (beatConds b)) | s <- scenes, b <- sceneBeats s ]
+      ++ [ ("scene " ++ show (sceneId s) ++ "'s beat " ++ show (beatLabel b) ++ " effect"
+           , outcomeSents (beatEffects b)) | s <- scenes, b <- sceneBeats s ]
+      ++ [ ("cast member " ++ show (castName c) ++ "'s desire", condSents (wantConditions w))
+         | c <- scriptCast scr, w <- castDesires c ]
+    repeated xs = [ x | (x : _ : _) <- group (sort xs) ]
+    headSegment s = case pathNames s of { (h : _) -> Just h; [] -> Nothing }
     sceneSetupOffenders =
       [ (sceneId s, v) | s <- scenes, v <- authoredVarClash [] [] (sceneSetup s) ]
     junctionWhenOffenders =
@@ -293,17 +331,22 @@ compile scr
     -- later-declared scene's own junction firing in the same boundary —
     -- including an ending right after a cross-scene transition — but never
     -- into an earlier-declared scene's clause, whose turn in the fold has
-    -- already passed. Carries Prax-namespaced machinery (the entry stamp, and
-    -- — for a timed junction — 'clockReached'), so it registers through the
-    -- engine door, not 'setSchedule'.
+    -- already passed. Carries Prax-namespaced machinery ('setupOf''s scene
+    -- entry — the patience markers a timed destination arms), so it registers
+    -- through the engine door, not 'setSchedule'.
     storyRule = ScheduleRule "story" 1
       [ storyClause (sceneId s) j | s <- scenes, j <- sceneJunctions s ]
 
+    -- A timed junction fires when its patience has RUN OUT: the marker that
+    -- 'setupOf' armed on scene entry (lifetime n) has expired, so 'Not' the
+    -- marker path holds. The v44 boundary order (expiries before rules)
+    -- retracts the marker at entry+n exactly when this clause first becomes
+    -- eligible.
     storyClause sid j =
       ( [ Match ("currentScene!" ++ sid)
         , Absent [ Match "ending.E" ] ]
         ++ junctionWhen j
-        ++ maybe [] clockReached (junctionAfter j)
+        ++ maybe [] (\_ -> [ Not (scenePatiencePath sid (junctionName j)) ]) (junctionAfter j)
       , case junctionTo j of
           Just next -> Insert ("currentScene!" ++ next) : setupOf next
           Nothing   -> [ Insert ("ending!" ++ junctionName j) ] )
@@ -329,19 +372,19 @@ compile scr
                         Just rest -> spk ++ go rest
                         Nothing   -> c : go cs
 
-    -- Only scripts with a timed junction need the entry stamp at all
-    -- (unchanged beyond the universal clock every world now carries).
-    stampsSceneEntry = any (any timed . sceneJunctions) scenes
-      where timed j = isJust (junctionAfter j)
-
-    -- Scene entry stamps the LIVE engine clock (spec v44): a plain Insert
-    -- can't capture a live value, so this queries the clock fact fresh and
-    -- binds it locally via ForEach — the single-slot "!" exclusion means a
-    -- later scene's entry evicts the earlier stamp.
-    setupOf sid =
-      [ ForEach [ Match (turnPath ++ "!PraxNow") ] [ Insert (sceneEnteredPath ++ "!PraxNow") ]
-      | stampsSceneEntry ]
-      ++ maybe [] sceneSetup (find ((== sid) . sceneId) scenes)
+    -- Scene entry arms one patience marker per timed junction of the scene
+    -- (spec v50): @InsertFor n scenePatience.<sid>.<j>@ — a plain literal
+    -- insert whose lifetime IS the delay, retracted n boundaries later by the
+    -- v44 expiry schedule. Re-entry refreshes the marker (v44's supersession
+    -- law resets the clock, as re-stamping did). Runs on all three entry paths
+    -- (compile-time start, transition, re-entry) because every path threads
+    -- through 'setupOf'.
+    setupOf sid = case find ((== sid) . sceneId) scenes of
+      Nothing -> []
+      Just s  ->
+        [ InsertFor n (scenePatiencePath sid (junctionName j))
+        | j <- sceneJunctions s, Just n <- [junctionAfter j] ]
+        ++ sceneSetup s
 
     castChars = [ (character (castName c)) { charWants = castDesires c }
                 | c <- scriptCast scr ]

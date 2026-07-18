@@ -9,8 +9,8 @@
 -- It adds no logic engine — just a pass over the existing sentence structure.
 -- One 'TypeError' constructor per check, seven in all — the four below plus
 -- declared-sort conflicts ('SortConflict', the opt-in sort pass), an authored
--- touch of an engine-owned fact family ('ReservedFamily', spec v45 — @turn@,
--- @sceneEntered@, @contradiction@), and an unseeded die ('SeedlessDraw').
+-- touch of an engine-owned fact family ('ReservedFamily', spec v45 — @turn@
+-- and @contradiction@), and an unseeded die ('SeedlessDraw').
 --
 --   * __Unbound variables__ — a variable used in an outcome (or an axiom head) that
 --     no precondition, role, or @Actor@ can bind is ungroundable: it silently
@@ -36,9 +36,8 @@ import           Data.Maybe (isJust, isNothing)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences)
-import           Prax.Query (Condition (..), CookedCondition (..))
+import           Prax.Query (Condition (..), CookedCondition (..), condSents)
 import           Prax.Relevance (mayUnifySyms, producibleAtoms)
-import           Prax.Script (sceneEnteredPath)
 import           Prax.Sym (symName, symIsVar)
 import           Prax.Types
 import           Prax.Derive (Axiom (..))
@@ -273,20 +272,25 @@ sortErrors st
 -- Only compiled mechanism may touch these families (spec v45). WritesForbidden
 -- families (@turn@, @contradiction@) have NO legitimate authored writer at
 -- all — reads stay free (turn is the documented time interface; a
--- contradiction read cannot corrupt). MachineryShapeOnly families
--- (@sceneEntered@) are machinery in BOTH polarities: the only legal touch is
--- the mechanism's own compiled shape — every name after the family head a
--- Prax-namespaced variable. An authored literal, plain variable, or bare
--- subtree pattern on the family is a loud error: each mechanism assumes it is
--- its family's sole accessor, so an authored touch corrupts it silently
--- otherwise.
+-- contradiction read cannot corrupt). MachineryShapeOnly families are
+-- machinery in BOTH polarities: the only legal touch is the mechanism's own
+-- compiled shape — every name after the family head a Prax-namespaced
+-- variable. An authored literal, plain variable, or bare subtree pattern on
+-- the family is a loud error: each mechanism assumes it is its family's sole
+-- accessor, so an authored touch corrupts it silently otherwise.
+--
+-- No family is currently MachineryShapeOnly: the v50 residence moves retired
+-- the two that were (the die's seed into the engine, the scene-entry stamp
+-- into the expiry schedule). The law stays as the general v45 capability; the
+-- patience-marker family that replaced the stamp is a literal-tailed compiler
+-- fact the shape passkey cannot express, so it is protected at its own layer
+-- ('Prax.Script.compile' rejects an authored @scenePatience@ touch) not here.
 data FamilyLaw = WritesForbidden | MachineryShapeOnly
 
 reservedFamilies :: [(String, FamilyLaw)]
 reservedFamilies =
-  [ (turnPath,         WritesForbidden)
-  , (sceneEnteredPath, MachineryShapeOnly)
-  , ("contradiction",  WritesForbidden)
+  [ (turnPath,        WritesForbidden)
+  , ("contradiction", WritesForbidden)
   ]
 
 reservedFamilyErrors :: PraxState -> [TypeError]
@@ -477,23 +481,3 @@ sentencesByScope st =
     fnSents f =
       concatMap (\c -> condSents (caseConditions c) ++ outcomeSents (caseOutcomes c)) (fnCases f)
 
-condSents :: [Condition] -> [String]
-condSents = concatMap go
-  where
-    go (Match s)        = [s]
-    go (Not s)          = [s]
-    go (Absent cs)      = condSents cs
-    go (Exists cs)      = condSents cs
-    go (Or clauses)     = concatMap condSents clauses
-    go (Subquery _ _ w) = condSents w
-    go _                = []
-
-outcomeSents :: [Outcome] -> [String]
-outcomeSents = concatMap go
-  where
-    go (Insert s)          = [s]
-    go (Delete s)          = [s]
-    go (InsertFor _ s)     = [s]
-    go (Call _ _)          = []
-    go (ForEach conds outs) = condSents conds ++ outcomeSents outs
-    go (Roll _ _ conds outs) = condSents conds ++ outcomeSents outs

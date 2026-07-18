@@ -17,6 +17,7 @@ module Prax.Types
   , action
   , Outcome(..)
   , outcomeVars
+  , outcomeSents
   , authoredVarClash
   , authoredPatClash
   , isPraxVar
@@ -46,7 +47,7 @@ import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
 import           Prax.Db (Bindings, Db, emptyDb, exists, insert, isVariable, pathNames)
-import           Prax.Query (Condition, CookedCondition, conditionVars)
+import           Prax.Query (Condition, CookedCondition, conditionVars, condSents)
 import           Prax.Derive (Axiom, CookedRule)
 import           Prax.Sym (Sym, intern)
 
@@ -124,6 +125,21 @@ outcomeVars o = case o of
   Call _ as      -> as
   ForEach cs os  -> concatMap conditionVars cs ++ concatMap outcomeVars os
   Roll _ _ cs os -> concatMap conditionVars cs ++ concatMap outcomeVars os
+
+-- | Every /sentence string/ an outcome list mentions — the raw authored paths
+-- it inserts, deletes, or reads (a 'ForEach'\/'Roll' guard's own conditions
+-- via 'condSents', its body recursively). The write-side companion to
+-- "Prax.Query"'s 'condSents'; the shared home for path-family checks that need
+-- the head segment of every path an outcome touches.
+outcomeSents :: [Outcome] -> [String]
+outcomeSents = concatMap go
+  where
+    go (Insert s)            = [s]
+    go (Delete s)            = [s]
+    go (InsertFor _ s)       = [s]
+    go (Call _ _)            = []
+    go (ForEach conds outs)  = condSents conds ++ outcomeSents outs
+    go (Roll _ _ conds outs) = condSents conds ++ outcomeSents outs
 
 -- | Names an author-supplied fragment MUST NOT use when a combinator splices
 -- it into generated conditions (the v40 hygiene boundary). Two sources of

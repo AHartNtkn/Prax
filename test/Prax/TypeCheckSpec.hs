@@ -9,7 +9,6 @@ import           Prax.Engine (definePractices, defineFunctions, performOutcome, 
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Derive (Axiom (..), axiom)
 import           Prax.Rng (draw)
-import           Prax.Script (sceneEnteredPath)
 import           Prax.TypeCheck
 import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
@@ -310,22 +309,6 @@ tests = testGroup "Prax.TypeCheck"
       assertBool "SeedlessDraw flagged for an unseeded schedule-rule draw"
         (any (\case SeedlessDraw -> True; _ -> False)
              (typeCheck (setSchedule [r] (world1 practice))))
-
-  , testCase "an authored sceneEntered write is flagged" $ do
-      let p = practice
-            { practiceId = "epochsmith"
-            , actions = [ action "[Actor]: fake entry" [] [ Insert (sceneEnteredPath ++ "!5") ] ] }
-      assertBool "ReservedFamily sceneEntered on the authored write"
-        (any (\case ReservedFamily "sceneEntered" _ s -> s == sceneEnteredPath ++ "!5"; _ -> False)
-             (typeCheck (world1 p)))
-
-  , testCase "an authored sceneEntered read is flagged" $ do
-      let p = practice
-            { practiceId = "epochreader"
-            , actions = [ action "[Actor]: peek epoch" [ Match (sceneEnteredPath ++ "!E") ] [] ] }
-      assertBool "ReservedFamily sceneEntered on the authored read"
-        (any (\case ReservedFamily "sceneEntered" _ s -> s == sceneEnteredPath ++ "!E"; _ -> False)
-             (typeCheck (world1 p)))
 
   , testCase "an authored Insert of contradiction is flagged" $ do
       let p = practice

@@ -25,6 +25,7 @@ module Prax.Query
   , implies
   , groundCondition
   , conditionVars
+  , condSents
   , query
   , satisfies
   , countSatisfying
@@ -140,6 +141,23 @@ conditionVars c = case c of
   Cmp _ a b        -> [a, b]
   Calc v _ a b     -> [v, a, b]
   Count v s        -> [v, s]
+
+-- | Every /sentence string/ a condition list mentions — the raw authored paths
+-- ('Match'\/'Not' operands, recursing through 'Absent'\/'Exists'\/'Or'\/
+-- 'Subquery'), as opposed to 'conditionVars''s split-and-flattened names. The
+-- shared home for path-family checks that must inspect the head segment (e.g.
+-- 'Prax.TypeCheck''s reserved-family scan and 'Prax.Script''s patience-marker
+-- namespace guard).
+condSents :: [Condition] -> [String]
+condSents = concatMap go
+  where
+    go (Match s)        = [s]
+    go (Not s)          = [s]
+    go (Absent cs)      = condSents cs
+    go (Exists cs)      = condSents cs
+    go (Or clauses)     = concatMap condSents clauses
+    go (Subquery _ _ w) = condSents w
+    go _                = []
 
 -- | The cooked mirror of 'Condition': every operand is pre-interned to a
 -- 'Sym' at cook time — 'Match'\/'Not''s sentence is pre-split
