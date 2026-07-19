@@ -1,0 +1,33 @@
+# The Rust rewrite workspace (R-series). Lives at rust/ until cut-over, when it
+# is promoted to the repo root and the Haskell tree is deleted (docs/rewrite/PLAN.md).
+[workspace]
+resolver = "3"
+members = [
+    "prax-core",
+    "prax-vocab",
+    "prax-script",
+    "prax-worlds",
+    "prax-cli",
+    "prax-oracle",
+    "conformance",
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "BSD-3-Clause"
+authors = ["ahart"]
+
+# Pinned once here; each member opts in with `dep = { workspace = true }` as the
+# stage that needs it lands. The engine's chosen substrate (PLAN.md, Architecture):
+# smallvec (trie children / cooked token vectors), rustc-hash (interner &
+# binding maps), thiserror (WorldError construction guards), serde + serde_json
+# (the save format and the oracle's JSON surface), proptest (the law suites and
+# the incremental==naive view net).
+[workspace.dependencies]
+smallvec = "1.13"
+rustc-hash = "2.0"
+thiserror = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+proptest = "1.5"

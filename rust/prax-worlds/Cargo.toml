@@ -1,0 +1,12 @@
+[package]
+name = "prax-worlds"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "The six shipped storyworlds, composed from prax-vocab combinators over the prax-core engine."
+
+[dependencies]
+prax-core = { path = "../prax-core" }
+prax-vocab = { path = "../prax-vocab" }
+prax-script = { path = "../prax-script" }

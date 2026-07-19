@@ -1,0 +1,9 @@
+[package]
+name = "prax-core"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "The Prax engine: interner, exclusion-logic DB, closure, query, planner, and turn loop."
+
+[dependencies]

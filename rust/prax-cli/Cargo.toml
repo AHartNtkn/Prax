@@ -1,0 +1,17 @@
+[package]
+name = "prax-cli"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "The `prax` command-line player: play/resume a world, plus stress, check, flow, and dump-play."
+
+[[bin]]
+name = "prax"
+path = "src/main.rs"
+
+[dependencies]
+prax-core = { path = "../prax-core" }
+prax-vocab = { path = "../prax-vocab" }
+prax-script = { path = "../prax-script" }
+prax-worlds = { path = "../prax-worlds" }

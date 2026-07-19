@@ -1,0 +1,10 @@
+[package]
+name = "prax-script"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "The Prompter authoring layer: scene/act scripts compiled to engine schedule rules, and their serde format."
+
+[dependencies]
+prax-core = { path = "../prax-core" }

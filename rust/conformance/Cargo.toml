@@ -1,0 +1,17 @@
+[package]
+name = "conformance"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Cross-module and world conformance: fixture replay, the meta-gate pin accounting, and the // H: pin corpus."
+
+[dependencies]
+prax-core = { path = "../prax-core" }
+prax-vocab = { path = "../prax-vocab" }
+prax-script = { path = "../prax-script" }
+prax-worlds = { path = "../prax-worlds" }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+proptest = { workspace = true }

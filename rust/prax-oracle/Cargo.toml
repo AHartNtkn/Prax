@@ -1,0 +1,15 @@
+[package]
+name = "prax-oracle"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "The Rust differential comparator: record-by-record state comparison against the Haskell oracle JSONL."
+
+[[bin]]
+name = "prax-oracle"
+path = "src/main.rs"
+
+[dependencies]
+prax-core = { path = "../prax-core" }
+prax-worlds = { path = "../prax-worlds" }

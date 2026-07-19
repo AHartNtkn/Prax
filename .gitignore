@@ -15,6 +15,10 @@ dist/
 cabal.project.local
 cabal.project.local~
 
+# Rust / Cargo build artifacts (the workspace lives at rust/ until cut-over)
+target/
+rust/target/
+
 # Editor / OS
 *~
 .DS_Store
