@@ -80,6 +80,17 @@ executable prax
                     , bytestring
                     , prax
 
+executable prax-oracle
+    import:           warnings
+    hs-source-dirs:   oracle
+    main-is:          TraceMain.hs
+    default-language: Haskell2010
+    build-depends:    base
+                    , containers
+                    , bytestring
+                    , aeson
+                    , prax
+
 test-suite prax-test
     import:           warnings
     type:             exitcode-stdio-1.0
