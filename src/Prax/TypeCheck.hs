@@ -7,10 +7,12 @@
 -- sentence a world authors ('practiceDefs' + 'axioms' + facts), each of which
 -- flags only unambiguous bugs (no false positives, so the report is trustworthy).
 -- It adds no logic engine — just a pass over the existing sentence structure.
--- One 'TypeError' constructor per check, seven in all — the four below plus
+-- One 'TypeError' constructor per check, eight in all — the four below plus
 -- declared-sort conflicts ('SortConflict', the opt-in sort pass), an authored
--- touch of an engine-owned fact family ('ReservedFamily', spec v45 — @turn@
--- and @contradiction@), and an unseeded die ('SeedlessDraw').
+-- touch of an engine-owned fact family ('ReservedFamily', spec v45\/v53 —
+-- @turn@, @contradiction@, @scenePatience@, and @currentScene@), an unseeded
+-- die ('SeedlessDraw'), and an undeclared obligation closure ('DeonticUnclosed',
+-- spec v51).
 --
 --   * __Unbound variables__ — a variable used in an outcome (or an axiom head) that
 --     no precondition, role, or @Actor@ can bind is ungroundable: it silently
@@ -42,6 +44,7 @@ import           Prax.Deontic (obligedHead, obligedLift, obligedLiftPrefix)
 import           Prax.Sym (intern, symName, symIsVar)
 import           Prax.Types
 import           Prax.Derive (Axiom (..))
+import           Prax.Script (scenePatienceFamily, currentScenePath)
 
 -- | A well-formedness problem found in a world.
 data TypeError
@@ -54,11 +57,15 @@ data TypeError
   | SortConflict { teWhere :: String, teDetail :: String }
     -- ^ a position/variable (@teWhere@) is inferred to have two sorts (@teDetail@).
   | ReservedFamily { teFamily :: String, teWhere :: String, teSentence :: String }
-    -- ^ an authored definition touches the engine-owned family @teFamily@
-    -- (spec v45): its facts are machinery — written (and for some families
-    -- read) only by compiled mechanism, whose accesses carry Prax-namespaced
-    -- value variables no author can write (the v40 namespace ban makes the
-    -- shape unforgeable).
+    -- ^ an authored definition touches the engine-owned family @teFamily@ (spec
+    -- v45, extended v53): its facts are machinery — written (and for some
+    -- families read) only by compiled mechanism. Two protection stories coexist:
+    -- @turn@\/@contradiction@ carry Prax-namespaced value variables no author
+    -- can write (the v40 namespace ban makes the shape unforgeable), while the
+    -- literal-tailed compiler families (@scenePatience.\<sid\>.\<j\>@,
+    -- @currentScene!\<id\>@) carry no such variable at all — what marks THEIR one
+    -- legitimate writer is PROVENANCE: the engine door records its rules in
+    -- 'engineRuleNames' and the reserved scan exempts exactly those (spec v53).
   | SeedlessDraw
     -- ^ a world's authored outcomes contain a 'Roll' (a compiled
     -- 'Prax.Rng.draw') reachable anywhere — practices or schedule, nested
@@ -274,18 +281,36 @@ sortErrors st
       [] -> key
       ns -> intercalate "." ns
 
--- Check 5 (generalized, v45): engine-owned fact families ---------------------
+-- Check 5 (generalized, v45; v53 adds the literal-tailed compiler families) ---
 
--- Only compiled mechanism may write these families (spec v45): @turn@ and
--- @contradiction@ have NO legitimate authored writer at all — reads stay free
--- (turn is the documented time interface; a contradiction read cannot
--- corrupt). Engine-owned families that are machinery in BOTH polarities do
--- not appear here: they are unrepresentable outright (the die's stream, v50)
--- or rejected by their own compiler ('Prax.Script.compile' rejects an
--- authored @scenePatience@ touch — a literal-tailed compiler fact this
--- table's write scan cannot distinguish from the compiler's own insert).
+-- Only compiled mechanism may write these families. Two protection stories sit
+-- here:
+--
+--   * @turn@ and @contradiction@ (v45) — NO legitimate authored writer at all;
+--     reads stay free (turn is the documented time interface; a contradiction
+--     read cannot corrupt). Their machinery accesses carry Prax-namespaced
+--     value variables no author can write, so the shape alone is unforgeable.
+--   * @scenePatience@ and @currentScene@ (v53) — "Prax.Script"'s
+--     compiler-emitted, literal-tailed families, each with exactly one
+--     legitimate writer (the compiled @"story"@ rule's transitions and
+--     'Prax.Script.compile''s start-scene setup). These carry no Prax-namespaced
+--     variable at all, so shape cannot distinguish machinery from an authored
+--     forgery — PROVENANCE does: the engine door records its rules in
+--     'engineRuleNames' and 'writeSites' exempts exactly those (machinery may
+--     write reserved families — v45's charter). Before v53 they could not join
+--     the table because the story rule lives in the same flat 'schedule' list
+--     the scan polices, so reserving the family would trip the compiler's own
+--     insert; the recorded provenance dissolves that impasse.
+--
+-- @ending@ is deliberately EXCLUDED — by evidence, not omission:
+-- "Prax.Worlds.Intrigue" raw-authors @Insert "ending!…"@ from ordinary practice
+-- actions (Intrigue.hs:71\/:83\/:93), the raw layer's legitimate
+-- story-termination idiom. @ending@ is therefore shared world-facing vocabulary
+-- with two sanctioned writer classes (raw authored actions; Script's compiled
+-- junctions), not a mechanism's private state — reserving it would flag a
+-- shipped world's correct design.
 reservedFamilies :: [String]
-reservedFamilies = [ turnPath, "contradiction" ]
+reservedFamilies = [ turnPath, "contradiction", scenePatienceFamily, currentScenePath ]
 
 reservedFamilyErrors :: PraxState -> [TypeError]
 reservedFamilyErrors st =
@@ -307,15 +332,22 @@ reservedFamilyErrors st =
       Roll _ _ _ os -> concatMap writesOf os
       Call _ _      -> []
 
--- The authored write sites, with labels: practice action/init/function-case
--- outcomes and every schedule rule body's outcomes.
+-- The AUTHORED write sites, with labels: practice action/init/function-case
+-- outcomes and every AUTHORED schedule rule body's outcomes. Schedule rules
+-- installed through the compiler door ('Prax.Engine.registerEngineRules',
+-- recorded in 'engineRuleNames') are dropped WHOLE — machinery is the
+-- sanctioned writer of the reserved compiler families (spec v53), and the
+-- reserved scan is this function's one consumer, so the exemption lives HERE
+-- rather than on 'schedule st', which 'seedlessDrawErrors' and the
+-- dead-condition lint still read directly (they correctly see engine rules).
 writeSites :: PraxState -> [(String, [Outcome])]
 writeSites st =
      [ (practiceId p ++ " (init)", initOutcomes p) | p <- ps ]
   ++ [ (practiceId p ++ " / " ++ actionName a, actionOutcomes a) | p <- ps, a <- actions p ]
   ++ [ ("fn " ++ fnName f, caseOutcomes c)
      | f <- worldFns st, c <- fnCases f ]
-  ++ [ ("schedule " ++ srName r, outs) | r <- schedule st, (_, outs) <- srBody r ]
+  ++ [ ("schedule " ++ srName r, outs)
+     | r <- schedule st, srName r `notElem` engineRuleNames st, (_, outs) <- srBody r ]
   where ps = Map.elems (practiceDefs st)
 
 -- Check 6: draws need a seeded die ------------------------------------------

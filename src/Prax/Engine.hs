@@ -265,8 +265,17 @@ seedDie s st
 -- invariant still holds (single-segment names, positive periods, no duplicate
 -- names ACROSS BOTH DOORS, dues seeded one period out) — the shared
 -- 'addScheduleRules' core.
+--
+-- Beyond installing the rules, this door RECORDS which names it installed in
+-- 'engineRuleNames' — the provenance the reserved-family scan ('Prax.TypeCheck')
+-- consults so machinery may write reserved compiler families (spec v53). The
+-- record update forces 'addScheduleRules' to WHNF, so its duplicate-name guard
+-- still fires loudly BEFORE any name is recorded (a duplicate is never silently
+-- exempted).
 registerEngineRules :: [ScheduleRule] -> PraxState -> PraxState
-registerEngineRules = addScheduleRules
+registerEngineRules rules st =
+  (addScheduleRules rules st)
+    { engineRuleNames = engineRuleNames st ++ map srName rules }
 
 -- | Install schedule rules onto the world, APPENDING to any already registered
 -- (both doors write the one globally-keyed rule table): store the declarations,

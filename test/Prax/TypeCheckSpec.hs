@@ -325,6 +325,76 @@ tests = testGroup "Prax.TypeCheck"
             , actions = [ action "[Actor]: check logic" [ Match "contradiction" ] [] ] }
       typeCheck (world1 p) @?= []
 
+    -- The literal-tailed compiler families (v53): scenePatience + currentScene --
+  , testCase "an authored practice-action Insert of scenePatience is flagged" $ do
+      let p = practice
+            { practiceId = "meddler"
+            , actions = [ action "[Actor]: forge patience" [] [ Insert "scenePatience.x.y" ] ] }
+      assertBool "ReservedFamily scenePatience on the authored insert"
+        (any (\case ReservedFamily "scenePatience" _ "scenePatience.x.y" -> True; _ -> False)
+             (typeCheck (world1 p)))
+
+  , testCase "an authored InsertFor of scenePatience in a practice init is flagged" $ do
+      let p = practice
+            { practiceId = "meddler2"
+            , initOutcomes = [ InsertFor 3 "scenePatience.a.b" ] }
+      assertBool "ReservedFamily scenePatience on the init InsertFor"
+        (any (\case ReservedFamily "scenePatience" _ "scenePatience.a.b" -> True; _ -> False)
+             (typeCheck (world1 p)))
+
+  , testCase "an authored function-case write of scenePatience is flagged" $ do
+      let f = Function "meddle" [] [ FnCase [] [ Insert "scenePatience.f.g" ] ]
+          w = defineFunctions [f] emptyState
+      assertBool "ReservedFamily scenePatience sited at the function"
+        (any (\case ReservedFamily "scenePatience" _ "scenePatience.f.g" -> True; _ -> False)
+             (typeCheck w))
+
+  , testCase "an authored setSchedule rule body writing scenePatience is flagged" $ do
+      let r = ScheduleRule "meddle" 2 [([], [Insert "scenePatience.s.t"])]
+          w = setSchedule [r] emptyState
+      assertBool "ReservedFamily scenePatience on the authored schedule rule"
+        (any (\case ReservedFamily "scenePatience" _ "scenePatience.s.t" -> True; _ -> False)
+             (typeCheck w))
+
+  , testCase "an axiom head deriving scenePatience is flagged" $ do
+      let w = setAxioms [ Axiom [ Match "trigger.X" ] [ "scenePatience.X.j" ] ] emptyState
+      assertBool "ReservedFamily scenePatience on the axiom head"
+        (any (\case ReservedFamily "scenePatience" "axiom" "scenePatience.X.j" -> True; _ -> False)
+             (typeCheck w))
+
+  , testCase "an authored Delete of scenePatience is flagged (a delete is a write)" $ do
+      let p = practice
+            { practiceId = "wrecker"
+            , actions = [ action "[Actor]: cancel patience" [] [ Delete "scenePatience.x.y" ] ] }
+      assertBool "ReservedFamily scenePatience on the authored delete"
+        (any (\case ReservedFamily "scenePatience" _ "scenePatience.x.y" -> True; _ -> False)
+             (typeCheck (world1 p)))
+
+  , testCase "an authored write to the currentScene family is flagged" $ do
+      let p = practice
+            { practiceId = "director"
+            , actions = [ action "[Actor]: seize the stage" [] [ Insert "currentScene!banquet" ] ] }
+      assertBool "ReservedFamily currentScene on the authored insert"
+        (any (\case ReservedFamily "currentScene" _ "currentScene!banquet" -> True; _ -> False)
+             (typeCheck (world1 p)))
+
+  , testCase "a practice injected onto compiled Audience writing its patience marker flags loudly (the v50 door)" $ do
+      -- The exact mixed-layer door v50 left open: 'Prax.Script.compile''s guard
+      -- cannot see a practice injected through the raw 'definePractices' door
+      -- onto an already-compiled world. Audience's timed 'dismissed' junction
+      -- keys scenePatience.audience.dismissed; a raw write to it silently
+      -- refreshes a live timeout. The provenance-scoped reserved scan now
+      -- catches it (Audience's own 'story' rule stays exempt, so the world is
+      -- clean until this practice is added).
+      let meddler = practice
+            { practiceId = "meddler"
+            , actions = [ action "[Actor]: reset the clock" []
+                            [ Insert "scenePatience.audience.dismissed" ] ] }
+          w = definePractices [meddler] Audience.audienceWorld
+      assertBool "ReservedFamily scenePatience on the injected practice"
+        (any (\case ReservedFamily "scenePatience" _ "scenePatience.audience.dismissed" -> True; _ -> False)
+             (typeCheck w))
+
   , testCase "a sightedWithin-shaped authored condition is clean (turn reads free)" $ do
       let p = practice
             { practiceId = "watcher"

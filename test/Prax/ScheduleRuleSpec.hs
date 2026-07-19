@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Prax.ScheduleRuleSpec (tests) where
 
 import           Control.Exception (ErrorCall, evaluate, try)
@@ -10,7 +11,7 @@ import           Prax.Db (exists)
 import           Prax.Query (Condition (..))
 import           Prax.Types
 import           Prax.Engine (performOutcome, setSchedule, registerEngineRules, roundBoundary, definePractices)
-import           Prax.TypeCheck (typeCheck)
+import           Prax.TypeCheck (TypeError (..), typeCheck)
 import           Prax.Schedule (gathering)
 import           Prax.Worlds.Play (playWorld)
 
@@ -182,5 +183,32 @@ tests = testGroup "Prax.ScheduleRule"
                 (setSchedule [ScheduleRule "story" 2 []] engineFirst)))))
         assertBool "authoring door rejected: 'story' already registered by the engine"
           (isLeft (r2 :: Either ErrorCall Int))
+    ]
+
+  , testGroup "engine-rule provenance exempts the reserved-family scan (v53)"
+    [ testCase "registerEngineRules records the rule name; setSchedule does not" $ do
+        engineRuleNames (registerEngineRules [ScheduleRule "story" 1 []] emptyState) @?= ["story"]
+        engineRuleNames (setSchedule [ScheduleRule "auth" 1 []] emptyState)         @?= []
+
+    , testCase "an authored rule writing a reserved family is flagged; the SAME body through the engine door is exempt" $ do
+        -- The provenance pin, made non-vacuous: the rule body EXPLICITLY writes
+        -- scenePatience.a.b (which no shipped story rule exercises). Same shape,
+        -- opposite verdict — provenance, not the rule's shape, is what differs.
+        let body = [([], [Insert "scenePatience.a.b"])]
+            authored = setSchedule       [ScheduleRule "story" 1 body] emptyState
+            engine   = registerEngineRules [ScheduleRule "story" 1 body] emptyState
+        assertBool "authored rule flags ReservedFamily scenePatience"
+          (any (\case ReservedFamily "scenePatience" _ _ -> True; _ -> False) (typeCheck authored))
+        typeCheck engine @?= []          -- machinery may write reserved families (v45's charter)
+
+    , testCase "a duplicate name through the engine door alone still errors loudly (the record-update forces the guard)" $ do
+        -- The laziness question: registerEngineRules now record-updates
+        -- engineRuleNames onto addScheduleRules' result. A record update forces
+        -- its base to WHNF, so the duplicate-name guard still fires BEFORE any
+        -- name is silently recorded. Forcing engineRuleNames alone must error.
+        r <- try (evaluate (length (show (engineRuleNames
+               (registerEngineRules [ScheduleRule "dup" 1 [], ScheduleRule "dup" 1 []] emptyState)))))
+        assertBool "rejected: duplicate engine-door names share one due key"
+          (isLeft (r :: Either ErrorCall Int))
     ]
   ]

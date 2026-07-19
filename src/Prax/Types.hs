@@ -429,6 +429,15 @@ data PraxState = PraxState
     -- ^ Authored recurring-rule declarations (spec v44); declaration order is
     -- firing order. Default none. Cooked into 'cookedSchedule' by
     -- 'Prax.Engine.retable'.
+  , engineRuleNames :: [String]
+    -- ^ The names of the schedule rules installed through the compiler door
+    -- ('Prax.Engine.registerEngineRules') rather than the authoring door
+    -- ('Prax.Engine.setSchedule') — provenance the reserved-family scan
+    -- ('Prax.TypeCheck') consults to exempt them: machinery MAY write reserved
+    -- families ("Prax.Script"'s @"story"@ rule writes @currentScene@), which is
+    -- v45's charter (the family of reserved-namespace writes only mechanism may
+    -- make). Written only by the engine door; dup-free because rule names are
+    -- globally unique across both doors ('addScheduleRules''s guard).
   , cookedSchedule :: [CookedScheduleRule]
     -- ^ 'schedule' compiled ('Prax.Cooked.cookScheduleRule'), maintained by
     -- 'Prax.Engine.retable'. Its own cooked surface, NOT in 'cookedDefs'.
@@ -495,7 +504,7 @@ emptyState = PraxState
   , cookedWants = Map.empty, cookedDesires = Map.empty, cursor = -1
   , caresAbout = Map.empty, intentions = Map.empty
   , axioms = [], cookedRules = [], sorts = [], desires = [], predictionScope = []
-  , schedule = [], cookedSchedule = [], scheduleDues = Map.empty, expiries = Map.empty
+  , schedule = [], engineRuleNames = [], cookedSchedule = [], scheduleDues = Map.empty, expiries = Map.empty
   , improvables = [], liveness = Map.empty, footprint = []
   , axiomHeads = [[intern "contradiction"]]
   , negFootprint = [], contMonotone = True

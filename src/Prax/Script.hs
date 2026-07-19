@@ -60,6 +60,9 @@ module Prax.Script
   , currentSceneOf
   , compile
   , flowChart
+    -- * Compiler-owned fact families (reserved by "Prax.TypeCheck", spec v53)
+  , scenePatienceFamily
+  , currentScenePath
   ) where
 
 import           Data.Char (isAlphaNum)
@@ -233,10 +236,20 @@ scriptPlayer scr = case [ castName c | c <- scriptCast scr, castPlayable c ] of
   (p : _) -> p
   []      -> error "Prax.Script.scriptPlayer: no playable cast member"
 
+-- | The current-scene fact family (spec v46): the single-slot fact
+-- @currentScene!\<id\>@ names the active scene. The compiler's one home for the
+-- literal — every @currentScene@ site in this module (and the two raw reads in
+-- @app/Main.hs@) routes through it. Compiler-emitted and literal-tailed with
+-- exactly one legitimate writer (the @"story"@ rule's transition inserts, and
+-- 'compile''s start-scene setup), so 'Prax.TypeCheck' reserves it (spec v53):
+-- no authored surface may write it.
+currentScenePath :: String
+currentScenePath = "currentScene"
+
 -- | The id of the currently-active scene, if any.
 currentSceneOf :: PraxState -> Maybe String
 currentSceneOf st =
-  case [ v | b <- unify "currentScene.S" (db st) Map.empty
+  case [ v | b <- unify (currentScenePath ++ ".S") (db st) Map.empty
            , Just v <- [valToString <$> Map.lookup (intern "S") b] ] of
     (s : _) -> Just s
     []      -> Nothing
@@ -343,12 +356,12 @@ compile scr
     -- retracts the marker at entry+n exactly when this clause first becomes
     -- eligible.
     storyClause sid j =
-      ( [ Match ("currentScene!" ++ sid)
+      ( [ Match (currentScenePath ++ "!" ++ sid)
         , Absent [ Match "ending.E" ] ]
         ++ junctionWhen j
         ++ maybe [] (\_ -> [ Not (scenePatiencePath sid (junctionName j)) ]) (junctionAfter j)
       , case junctionTo j of
-          Just next -> Insert ("currentScene!" ++ next) : setupOf next
+          Just next -> Insert (currentScenePath ++ "!" ++ next) : setupOf next
           Nothing   -> [ Insert ("ending!" ++ junctionName j) ] )
 
     compileBeats s = map (compileBeat (sceneId s)) (sceneBeats s)
@@ -359,7 +372,7 @@ compile scr
     -- rendered label is unchanged, since "[Actor]" would render to the speaker
     -- anyway. Speaker-less beats keep their label verbatim.
     compileBeat sid b = action (maybe id bakeActor (beatSpeaker b) (beatLabel b))
-      ( [ Match ("currentScene!" ++ sid), Match "character.Actor" ]
+      ( [ Match (currentScenePath ++ "!" ++ sid), Match "character.Actor" ]
         ++ maybe [] (\spk -> [Eq "Actor" spk]) (beatSpeaker b)
         ++ beatConds b )
       (beatEffects b)
@@ -394,7 +407,7 @@ compile scr
       ++ [ Insert ("character." ++ castName c) | c <- scriptCast scr ]
       ++ [ Insert ("trait." ++ castName c ++ "." ++ t)
          | c <- scriptCast scr, t <- castTraits c ]
-      ++ [ Insert ("currentScene!" ++ scriptStart scr) ]
+      ++ [ Insert (currentScenePath ++ "!" ++ scriptStart scr) ]
       ++ setupOf (scriptStart scr)
 
 -- Tooling ---------------------------------------------------------------------

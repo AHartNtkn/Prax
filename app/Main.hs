@@ -23,7 +23,7 @@ import           Prax.Loop (advance, npcAct)
 import           Prax.Stress
 import           Prax.Persist (saveState, loadState)
 import           Prax.TypeCheck (TypeError (..), typeCheck)
-import           Prax.Script (Script, compile, flowChart, scriptPlayer)
+import           Prax.Script (Script, compile, flowChart, scriptPlayer, currentScenePath)
 import           Prax.Script.Json (encodeScript, loadScript)
 import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
@@ -54,7 +54,7 @@ worldNamed _                = ("a night at the bar", Bar.barWorld, Bar.playerNam
 runStress :: [String] -> IO ()
 runStress args = do
   let (name, world, _) = worldNamed args
-      r = stressTest 200 50 (Just "currentScene") world
+      r = stressTest 200 50 (Just currentScenePath) world
   putStrLn ("stress-testing " ++ name ++ " — 200 random runs, cap 50 turns")
   putStrLn ("  endings:   " ++ show (Map.toList (srEndings r)))
   putStrLn ("  coverage:  " ++ show (Set.size (srCoverage r)) ++ " distinct actions fired")
@@ -300,7 +300,7 @@ renderScene st =
     -- the current act, in a play-script world
     act =
       [ "the scene: " ++ s
-      | b <- rows "currentScene.S", Just s <- [val "S" b] ]
+      | b <- rows (currentScenePath ++ ".S"), Just s <- [val "S" b] ]
 
     locations =
       [ who ++ " is at the " ++ place
