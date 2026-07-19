@@ -2278,6 +2278,77 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   Suite: 679 → **687** (T1, `5c1c8f1`: +8 = ProjectSpec re-founded on the eight-property contract,
   15 testCases replacing 7, RED-first per property) → **688** (T1 fix, `02d9186`: +1, the
   parallel-prediction pin). `-Wall` clean.
+- **v53** — **engine-rule provenance: the mixed-layer door closes, and the compiler's own families
+  join the reserved table**
+  (`Prax.Types`; `Prax.Engine`; `Prax.Script`; `Prax.TypeCheck`; `app/Main.hs`; `Prax.TypeCheckSpec`;
+  `Prax.ScheduleRuleSpec`; spec `docs/specs/2026-07-19-v53-engine-rule-provenance.md` (`922034a`,
+  panel-amended `f550f34`, probe-corrected `dfbe3cb`); plan `docs/plans/2026-07-19-v53-engine-rule-provenance.md`
+  (`9ecb163`, amended `909a7fe`); code `7c02d72`). **This is the design round the v50-banked
+  mixed-layer item awaited, and it closes that bank SHIPPED — scoped honestly.**
+
+  **The bank, restated.** v50 filed it as one door: the `scenePatience` rejection lives only in
+  `Prax.Script.compile`, so a write injected through the RAW doors (`definePractices`/`setSchedule`)
+  onto an already-compiled Script state is unflagged and silently corrupts a live timeout. v50
+  adjudicated the family's exclusion from the v45 reserved table as structurally FORCED: the
+  compiler's OWN story rule lives in the same flat `schedule` list the reserved scan polices, so a
+  write-forbidden row would trip the compiler's own insert.
+
+  **The insight: the blocker is missing PROVENANCE, not the table's shape.** The engine already has
+  two doors with different contracts — `setSchedule` (authored, v40-guarded) and
+  `registerEngineRules` (the compiler door, unguarded by design, v44) — but the distinction was
+  spent at call time and never recorded. One door-stamped fact dissolves the impasse:
+  `PraxState` gains `engineRuleNames :: [String]`, written ONLY by `registerEngineRules` (which
+  stops being a bare alias of `addScheduleRules` and record-updates the name list onto its result),
+  and `writeSites`'s schedule leg drops rules whose name is recorded there. The exemption is
+  WHOLESALE and lives in `writeSites` alone — its one consumer is the reserved scan, while
+  `seedlessDrawErrors` and the dead-condition lint scan `schedule st` directly and correctly still
+  see engine rules; the axiom leg stays unfiltered (no engine door for axioms). Machinery may write
+  reserved families — v45's charter — while every authored surface may not.
+
+  **The panel's Q4 catch, and the probe's correction.** The first-draft spec reserved only
+  `scenePatience` and declared "out of scope: any other family" — the design lens named this
+  MEANS-TESTING by which bank item happened to be filed: `currentScene` and `ending` sit in
+  structurally the same position (compiler-emitted, literal-tailed, single-legitimate-writer,
+  corruptible through the same raw doors). The panel grew the scope to THREE families; then a probe
+  corrected it to TWO — `ending` is EXCLUDED by EVIDENCE, not a category argument:
+  `Prax.Worlds.Intrigue` raw-authors `Insert "ending!…"` from ordinary practice actions
+  (Intrigue.hs:71/:83/:93), the raw layer's legitimate story-termination idiom. `ending` is
+  therefore shared world-facing vocabulary with two sanctioned writer classes (raw authored
+  actions; Script's compiled junctions), not a mechanism's private state — reserving it would flag a
+  shipped world's correct design. So `reservedFamilies = [turn, contradiction, scenePatience,
+  currentScene]`, and `currentScenePath` gets a named home in `Prax.Script` (exported alongside
+  `scenePatienceFamily`), through which every `currentScene` literal in the module — and the two raw
+  reads in `app/Main.hs` — now routes; "one home" made true beyond the module.
+
+  **The net's teeth, located honestly.** Every shipped world stays `typeCheck == []` — but that pin
+  is NON-VACUOUS only where an engine-door rule actually writes a reserved family. PLAY is the real
+  net: its `goto` transition puts `currentScene!banquet` in the compiled `"story"` rule's body, so
+  neutering the `writeSites` filter flags PLAY (observed: `ReservedFamily currentScene "schedule
+  story" "currentScene!banquet"`). AUDIENCE is vacuous for the filter — its junctions are both
+  endings (unreserved), and its patience marker rides PERFORMED `InsertFor` setup at compile (state,
+  not a scanned schedule-rule body) — so a neuter-and-watch-Audience RED would be FALSE. The
+  `scenePatience` half is netted by a ScheduleRuleSpec provenance pin whose engine-door rule body
+  EXPLICITLY writes `scenePatience.a.b`, so "authored flags / engine-door exempt" is non-vacuous
+  (neutering flags it too: `ReservedFamily scenePatience "schedule story" "scenePatience.a.b"`).
+
+  **Doc surfaces corrected with the code** (the round's exactness clause): the `ReservedFamily`
+  constructor haddock (its v40-namespace grounding is FALSE for the literal-tailed families —
+  provenance, not namespace, protects them); the `reservedFamilies` comment block (which had argued
+  `scenePatience`'s EXCLUSION — exactly the reasoning this round reverses — now carries the
+  provenance story and `ending`'s evidence-based exclusion, citing Intrigue); and the module
+  haddock's check enumeration (constructor count corrected 7 → 8, stale since v51 added
+  `DeonticUnclosed`, and the family examples extended to `scenePatience`/`currentScene`).
+
+  **The laziness question, verified empirically.** `registerEngineRules` record-updates
+  `engineRuleNames` onto `addScheduleRules`' result; a record update forces its base to WHNF, so the
+  cross-door duplicate-name guard still fires loudly BEFORE any name is recorded — a duplicate is
+  never silently exempted. Pinned directly (a duplicate through the engine door alone errors), and
+  the existing cross-door collision pins (ScheduleRuleSpec, both directions) stay green.
+
+  Nothing moves: no fiction transcript, score, or analysis row; the golden specs stay byte-identical.
+  Suite: 688 → **699** (T1, `7c02d72`: +11 = eight `ReservedFamily` pins one per authored site + the
+  mixed-composition repro; three ScheduleRuleSpec provenance pins). `-Wall` clean; deaths none (this
+  round only adds).
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
