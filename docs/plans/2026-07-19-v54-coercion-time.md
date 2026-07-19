@@ -56,13 +56,18 @@ compositional fictions instead of asserting them.
     where registered = map desireName (desires st)
   ```
 
+  `writesOf` is today a `where`-local of `reservedFamilyErrors`
+  (TypeCheck.hs:327-333) — HOIST it to a top-level binding shared by both
+  checks [plan review I1]; behavior unchanged.
+
   (Rides `writeSites` — authored definitions only, engine rules exempt by
   v53's provenance, which is correct: `coerce`'s output IS authored practice
   content and IS scanned. The prefix key is the mechanism's generated-name
   convention with one exported home, not a heuristic. `-Wall`: the new
   constructor forces the `app/Main.hs` describe arm — the v51 precedent.)
-- CoerceSpec: all THREE local literals (racket :26, twoQuantRacket :43,
-  blackmailShaped :104) gain Nothing/Nothing.
+- CoerceSpec: the two FULL literals (racket :26, blackmailShaped :104) gain
+  Nothing/Nothing; twoQuantRacket (:43) is a record UPDATE of racket and
+  inherits the fields [plan review M — the first draft miscounted it].
 
 **New fixtures/pins (all in CoerceSpec unless noted; RED observed per
 behavior; the expiry harness DRIVES `roundBoundary` explicitly — the
@@ -97,10 +102,14 @@ ScheduleSpec idiom — or the pins are vacuous [C-C2]):**
    coercion-free worlds are clean; every shipped world stays
    `typeCheck == []`. RED: pins pre-wire, observe absent-flag, wire, GREEN.
 7. **The table turns** (new small world in CoerceSpec): mob extorts vic
-   (sid1); vic's counter-Coercion (sid2) triggers on
-   `Match ("mob.extorted.vic." ++ sid1)`-shaped leverage, kernel + registered
-   + held `punishes-<sid2>`; vic's pickAction reaches counter-threaten; both
-   threats stand. Composition blocked anywhere = BLOCK and surface.
+   (sid1); vic's counter-Coercion (sid2) has `coVictim = "M"` and
+   `coTrigger = [ Match ("M.extorted.vic." ++ sid1) ]` — the extorter slot is
+   a VARIABLE so the trigger BINDS the counter's victim to whoever extorted
+   vic [plan review I2: a literal "mob" there binds nothing and the
+   counter-threaten is malformed — the trigger must bind coVictim, per the
+   primitive's own contract]; kernel + registered + held `punishes-<sid2>`;
+   vic's pickAction reaches counter-threaten; both threats stand. Composition
+   blocked anywhere = BLOCK and surface.
 8. **Mid-racket save/resume** (PersistSpec or CoerceSpec — implementer's
    call, note where): save with the complied-expiry due pending, reload,
    drive boundaries, the cycle resumes on schedule.
