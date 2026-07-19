@@ -23,7 +23,7 @@ tests = testGroup "Prax.Relevance"
         (u "Hearer.believes.took.Culprit.gem.heard.Actor"
            "oz.believes.took.kit.gem")
       assertBool "distinct constants do not unify"
-        (not (u "regards.W.carol.thief" "practice.earnBread.Owner.done.S"))
+        (not (u "regards.W.carol.thief" "practice.earnBread.Owner.did.P"))
 
   , testCase "the village table: conscience live, spite and pursuit live" $ do
       let tbl = improvableDesires villageWorld
@@ -52,7 +52,7 @@ tests = testGroup "Prax.Relevance"
       -- spites-carol counts DERIVED regards facts (standingUnless's head):
       -- conservatively improvable, so eve's predicted whisper stays live.
       assertBool "spites-carol is improvable" ("spites-carol" `elem` tbl)
-      -- pursuit counts base done-facts the stage actions Insert.
+      -- pursuit counts base did-facts the part actions Insert.
       assertBool "pursues-earnBread is improvable"
         ("pursues-earnBread" `elem` tbl)
 
@@ -157,8 +157,8 @@ tests = testGroup "Prax.Relevance"
       let tbl = liveness villageWorld
       tbl Map.! "clean-conscience" @?= FloorCheck
       tbl Map.! "conscience-remembers" @?= FloorCheck
-      -- pursues-earnBread's condition is a done-fact every stage action
-      -- inserts (practice.earnBread.Owner.done.S) -- action-insertable, so
+      -- pursues-earnBread's condition is a did-fact every part action
+      -- inserts (practice.earnBread.Owner.did.P) -- action-insertable, so
       -- no conjunct qualifies as a gate.
       tbl Map.! "pursues-earnBread" @?= AlwaysLive
       -- spites-carol's condition (regards.W.carol.thief) is standingUnless's

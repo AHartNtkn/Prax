@@ -248,7 +248,7 @@ tests = testGroup "Prax.Worlds.Village"
       -- above (it deletes stall.loaf AND atoned.bob); the loaf bob holds is
       -- the one he earned:
       assertBool "the loaf he holds is the one he earned"
-        (exists "practice.earnBread.bob.done.s3" (db st))
+        (exists "practice.earnBread.bob.did.bake" (db st))
       -- and the sharpest check: a re-steal at ANY point would have revoked
       -- the atonement and revived his notoriety (three believers never
       -- forgot); the derived view stays clear of it.
@@ -359,7 +359,7 @@ tests = testGroup "Prax.Worlds.Village"
       -- errand completes -- re-verified against the live trace, not assumed.
       let st = freePlayAt 34
       assertBool "bob undertook the endeavor" (exists "practice.earnBread.bob" (db st))
-      assertBool "and finished it" (exists "practice.earnBread.bob.done.s3" (db st))
+      assertBool "and finished it" (exists "practice.earnBread.bob.did.bake" (db st))
       assertBool "he holds a loaf" (exists "holding.bob.loaf" (db st))
       assertBool "the stall's loaf untouched" (exists "stall.loaf" (db st))
       assertBool "no one believes any theft by bob"
@@ -416,7 +416,7 @@ tests = testGroup "Prax.Worlds.Village"
                     (doAct "bob" "Go to mill"
                     (doAct "bob" "sweep the square"
                     (doAct "bob" "take up honest work" villageWorld)))))
-      assertBool "the project is complete" (exists "practice.earnBread.bob.done.s3" (db stBaked))
+      assertBool "the project is complete" (exists "practice.earnBread.bob.did.bake" (db stBaked))
       assertBool "he holds the loaf" (exists "holding.bob.loaf" (db stBaked))
       -- not hungry: eating is not even offered (hunger is a physical
       -- precondition of the affordance, not merely a utility factor) --

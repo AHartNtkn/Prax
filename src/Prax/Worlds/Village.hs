@@ -80,23 +80,25 @@ worldP = practice
   }
 
 -- Honest work: the lawful path to bread. Progress itself satisfies (+3 a
--- stage — real, but no substitute for bread in hand); the final stage earns
--- the loaf bob's +10 want has stared at since v19. Sweeping is public —
+-- part — real, but no substitute for bread in hand); the culminating part
+-- earns the loaf bob's +10 want has stared at since v19. Sweeping is public —
 -- honest work is done in the open — so watching bob work teaches the
--- village his purpose (the inference axiom below).
+-- village his purpose (the inference axiom below). The three parts form a
+-- chain (fetch after sweep, bake after fetch): these two edges ARE the
+-- transcript-identity claim — omitting one would make the parts parallel.
 earnBreadTake :: Action
 earnBreadP :: Practice
 earnBreadPursuit :: Desire
 (earnBreadTake, earnBreadP, earnBreadPursuit) =
   endeavor "earnBread" 3 "[Actor]: take up honest work at the stall"
     [ Match "practice.world.world.at.Actor!square" ]
-    [ Stage "[Actor]: sweep the square"
+    [ Part "sweep" "[Actor]: sweep the square" []
         [ Match "practice.world.world.at.Actor!square" ]
         [ witnessed together "swept.Actor" ]
-    , Stage "[Actor]: fetch flour from the mill"
+    , Part "fetch" "[Actor]: fetch flour from the mill" ["sweep"]
         [ Match "practice.world.world.at.Actor!mill" ]
         [ Insert "carrying.Actor.flour" ]
-    , Stage "[Actor]: bake and earn the loaf"
+    , Part "bake" "[Actor]: bake and earn the loaf" ["fetch"]
         [ Match "practice.world.world.at.Actor!square"
         , Match "carrying.Actor.flour" ]
         [ Delete "carrying.Actor.flour"
@@ -126,8 +128,8 @@ villageSeed :: Integer
 villageSeed = 1988
 
 -- Hunger, when it arrives, outranks pride and larder both: eating spends
--- the +10 loaf AND forfeits the finished endeavor's +9 stage credit (3
--- stages x 3, torn down by the eat), so the relief must beat 19 -- at -22,
+-- the +10 loaf AND forfeits the finished endeavor's +9 part credit (3
+-- parts x 3, torn down by the eat), so the relief must beat 19 -- at -22,
 -- a hungry bob eats (net +3) and the emptied hand re-opens the earn cycle.
 -- Side effect to expect in the golden: a hungry, breadless bob weighs the
 -- stall's loaf again -- hunger pressure re-opens the village's original
@@ -382,10 +384,13 @@ villageP = practice
           [ Match "hungry.Actor", Match "holding.Actor.loaf" ]
           [ Delete "hungry.Actor", Delete "holding.Actor.loaf"
             -- eating ends the finished bread-project: the endeavor instance
-            -- (stage counter included) is torn down, so undertake's own
-            -- Not-gate re-opens and the work can begin again. Without this,
-            -- 'endeavor' is one-shot and the cycle dies at one loaf. A no-op
-            -- for eaters who never baked (Delete on a missing path).
+            -- is torn down, so undertake's own Not-gate re-opens and the work
+            -- can begin again. Delete on the instance path reaps the whole
+            -- ledger subtree (every 'did.<part>' fact) in one stroke -- the
+            -- re-open contract rests on 'Prax.Db.retract' pruning the named
+            -- subtree, not on enumerating parts. Without this, 'endeavor' is
+            -- one-shot and the cycle dies at one loaf. A no-op for eaters who
+            -- never baked (Delete on a missing path).
           , Delete "practice.earnBread.Actor" ]
 
       , threatenWhisper
