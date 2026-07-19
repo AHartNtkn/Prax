@@ -143,9 +143,14 @@ Our engine already realises the EL substrate. To add a *faithful* deontic layer:
 ### Gaps at v14, all closed by v15 (`Prax.EL` + `Prax.Derive`)
 These were the honest limitations when the deontic layer (v14) first shipped. The
 derivation layer (v15) closed them by implementing the paper's machinery for real:
-- **Closure under implication (property 1) — DONE.** `Prax.Derive` forward-chains
-  domain rules to a fixpoint (`m(X)`), and every rule auto-lifts under `□`, so
-  `Ob.P` + `P→Q` now yields `Ob.Q`.
+- **Closure under implication (property 1) — DONE, by authored declaration.**
+  `Prax.Derive` forward-chains domain rules to a fixpoint (`m(X)`); the `□`-lift
+  itself is an authored declaration in `Prax.Deontic` (`obligedClose` lifts each
+  all-`Match` rule under `□`), so a deontic world writes `setAxioms (obligedClose
+  axs)` and `Ob.P` + `P→Q` yields `Ob.Q`. (v15 shipped the lift as an automatic
+  engine step; v51 moved it out of the general engine into the world's own
+  declaration — the checker flags a world that can invoke an obligation yet omits
+  the closure, `Prax.TypeCheck.DeonticUnclosed`.)
 - **Incompatibility detection — DONE, faithfully.** `Prax.Db` retains the `!`/`.`
   labels (the world state is a real Exclusion-Logic model), so `Prax.EL.meet`
   detects `□P∧□Q ⇒ ⊥` from either side of the clash — no silent overwrite, and no

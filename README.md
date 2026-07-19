@@ -104,7 +104,9 @@ utility. See the design writeups:
   a faithful Exclusion-Logic lattice (`Prax.EL`: `meet`/`leq`, exact `⊥` on contradiction). Reads go
   through a **defeasible closed view** (`readView`): derivations are recomputed from the base, never
   persisted, so retracting a premise dissolves its conclusions — and it is opt-in (`axioms = []`
-  leaves a world untouched). Domain rules **auto-lift under `□`**, giving obligation-closure for free.
+  leaves a world untouched). Obligation-closure under `□` (DEON property 1) is an **authored declaration** a
+  deontic world opts into (`Prax.Deontic.obligedClose`), not an engine automatism — the checker flags a world
+  that can invoke an obligation yet forgets to declare it.
   `Prax.Worlds.Feud` (`prax feud`) is the demo: from *one* authored wrong and a handful of rules, a
   whole feud emerges (people who never met come to resent someone through the alliance network) and
   dissolves the moment amends are made. (v31 folds a fourth rule in — see `Prax.Faction` below —

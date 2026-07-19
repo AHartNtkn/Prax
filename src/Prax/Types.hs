@@ -409,7 +409,12 @@ data PraxState = PraxState
     -- reconsideration semantics, spec 2026-07-13-v35). Runtime state like
     -- 'cursor': starts empty (every character's first turn deliberates),
     -- never derived, never touched by 'Prax.Engine.retable'.
-  , axioms       :: [Axiom]       -- ^ domain rules; reads see their forward-chained closure (default none)
+  , axioms       :: [Axiom]
+    -- ^ The axiom list the world DECLARED — closure included, not merely the
+    -- authored rules. 'Prax.Engine.setAxioms' stores exactly what it is passed;
+    -- a deontic world passes 'Prax.Deontic.obligedClose' of its rules, so the
+    -- □-lifted twins live here as ordinary members alongside the authored ones.
+    -- Reads see the forward-chained closure of this set ('readView'); default none.
   , cookedRules  :: [CookedRule]
     -- ^ 'axioms' precompiled ('Prax.Derive.cookAxioms') — bodies pattern-
     -- split, heads pre-tokenized. Whatever □-lifted rules a deontic world

@@ -2142,6 +2142,72 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   composition is thereby UNSUPPORTED, not merely unguarded. Future fix: reserved-family protection
   for literal-tailed compiler families, or a loud rejection of the mixed composition itself.
   Queue: the extension opens; **v51 — lifting leaves the engine** next and last.
+- **v51** — **lifting leaves the engine: the □-lift is content, the census is the checker's
+  net**
+  (`Prax.Deontic`; `Prax.Derive`; `Prax.Engine`; `Prax.Relevance`; `Prax.TypeCheck`;
+  `Prax.Types`; `Prax.Worlds.Village`; `app/Main.hs`; spec
+  `docs/specs/2026-07-19-v51-lifting.md` (`dc221f1`, panel-rewritten `f28384e`); plan
+  `docs/plans/2026-07-19-v51-lifting.md` (`ba28adc`, amended `d3fcc1a`); code `f093ee9`
+  (T1: the move) + `1a9a5a5` (T1 fix: the build-order pin re-anchored to the db leg)).
+  **The audit arc closes here — this is its last row.** The whole arc is the original
+  audit queue (v45 protected families → v46 the narrator dies → v47 function registry →
+  v48 generality bundle → v49 coercion, which closed the queue) plus the two extension
+  rounds the queue-wide byte-identity assessment produced (v50 machinery-state → **v51**,
+  this row). v45 → v51, done.
+
+  **Classification: a responsibility move of preserved semantics.** What the deontic layer
+  MEANS does not change — the □-lift's semantics are v15's, verbatim; only their HOME
+  moves, out of the general derivation engine and into the world's own declaration.
+  Byte-identity is therefore the fidelity evidence, and it held: no fiction golden, no
+  `feudPin`, and no `AnalysisTable` decision field appears in either code diff — the two
+  diffs touch exactly `Prax.{Deontic,Derive,Engine,Relevance,TypeCheck,Types}`,
+  `Worlds.Village`, `app/Main`, and four test-spec files (checked, not assumed) — so
+  Village's declared set equals its v48-gated set and Feud's undeclared set equals its
+  census-false set.
+
+  **The design.** □-closure becomes an authored declaration: a deontic world writes
+  `setAxioms (obligedClose axs)` (`Prax.Deontic.obligedClose axs = axs ++ mapMaybe
+  obligedLift axs`), and `Prax.Worlds.Village` is the LONE declaring world (its one call
+  site, `Village.hs:434`). The general engine `Prax.Derive` is now deontics-free — the word
+  "obliged" does not occur in it (`grep -c obliged src/Prax/Derive.hs` = 0; `liftObliged`
+  and `obligedHead` deleted, `cookAxioms` lost its `Bool`). The lift lives as composition
+  in `Prax.Deontic` (`obligedHead` the one home for the head literal; `obligedLift` the
+  verbatim old `Derive.liftObliged`), chosen over the spec draft's transformer-list setter
+  seam. **The census moves to `Prax.TypeCheck` as a net.** v48's producer census
+  (`Relevance.deonticProducible`, recomputed on every retable) relocates verbatim as
+  `deonticInvokable`, feeding a new `DeonticUnclosed` `TypeError`: a world that can produce
+  `obliged.*` facts but whose axioms omit a liftable rule's declared twin is a LOUD error
+  naming the axiom and the fix (`Deontic.obligedClose`). v48's guarantee — no world
+  silently invokes obligation without its closure — is preserved exactly, as a check rather
+  than an automatism. **The BUILD-ORDER INVARIANT dies.** v48's census ran at set time,
+  forcing every axiom-world to build `setAxioms`-outermost; the lint now runs on the
+  FINISHED world (`typeCheck`), so no setter-order sensitivity remains. The T1 review found
+  the first build-order-death pin under-powered — it forced census-true via a practice in
+  both builds, so it could not fail if a db-consulting gate were reintroduced; `1a9a5a5`
+  re-anchored it to the db leg specifically (the sole `obliged` producer is a db fact,
+  `setAxioms`-first vs producer-first) and RED-observed it against a mutation that
+  reintroduces the db-consulting gate.
+
+  **Record honesty (all in `.superpowers/sdd/v51-spec-review-*.md`, `v51-plan-review.md`).**
+  The round's first spec draft mis-censused Feud as a lifter — the SAME has-axioms/can-
+  produce conflation the v48 panel corrected once already (Feud holds kin/feud axioms but
+  produces no `obliged.*` fact and has no wild `Call`, so its census is FALSE and its
+  `feudPin` documents the withheld lifted rows). This time it was caught independently by
+  TWO panel lenses (soundness S-C1 and completeness C2). The design lens (D-C1) replaced
+  the transformer-list seam — `setAxioms :: [Axiom -> Maybe Axiom] -> …`, which would tax
+  ~15 non-deontic call sites with `[]` noise — with plain composition, leaving `setAxioms`
+  at `[Axiom] -> PraxState -> PraxState`. The plan review then caught two more: the verbatim
+  census move omitted the two Relevance exports it needs (`cookedFnPool`,
+  `cookedOutcomeAtoms`, both unexported), and the T1 death list named deletions that do not
+  exist (`RelevanceSpec`/`ViewInvariantSpec` carry zero census testCases — only
+  ViewInvariantSpec's haddock prose changes). Both folded before code (`d3fcc1a`).
+
+  Suite: 678 → **678** (T1, `f093ee9`: net-zero — `EngineSpec` −8 (the census/
+  setter-coherence group), `DeonticSpec` +4 (the `obligedLift`/`obligedClose` pins at their
+  new home), `TypeCheckSpec` +4 (the `DeonticUnclosed` rows); `DeriveSpec` ±0, re-pointed)
+  → **678** final (`1a9a5a5`, the pin re-anchor moved no count). `-Wall` clean; deaths
+  grep-proof: `liftObliged|deonticProducible` → zero across `src/` and `app/`; `obligedHead`
+  zero in `Prax.Derive`. The audit arc, v45 → v51, is closed.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
@@ -2174,7 +2240,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 14 | Constitutive affordances (only available in-practice) | v1 | P§VIII | |
 | 15 | Norms: violation-marking postconditions + norm desires | v3 | P§VIII-D | `Prax.Reactions` `markViolation`/`violationOf`; strong-negative want ⇒ planner avoids |
 | 16 | Reactions as practices (spawned by an action's outcomes) | v3 | P§X | `Prax.Reactions` `spawnReaction`/`endReaction`; `disapprovalP`; response chains |
-| 17 | Conditional effects / domain axioms in the action language | v15 | P§VIII | `Prax.Derive`: domain rules `body → head` forward-chained to a fixpoint (the paper's `m(X)`) over `Prax.EL`, by **semi-naive** evaluation (fire only on newly-derived facts — ~8× faster than naive at scale); reads see the closed **view** (`readView`), which is defeasible (derivations recompute from the base) and opt-in (`axioms=[]` ⇒ unchanged). Auto-`□`-lift gives obligation-closure (DEON property 1). Exact `⊥` detection. Demo: `Prax.Worlds.Feud` (`bigFeud n` scales it) |
+| 17 | Conditional effects / domain axioms in the action language | v15 | P§VIII | `Prax.Derive`: domain rules `body → head` forward-chained to a fixpoint (the paper's `m(X)`) over `Prax.EL`, by **semi-naive** evaluation (fire only on newly-derived facts — ~8× faster than naive at scale); reads see the closed **view** (`readView`), which is defeasible (derivations recompute from the base) and opt-in (`axioms=[]` ⇒ unchanged). Obligation-closure (DEON property 1) is an authored declaration, not an engine auto-lift: a deontic world passes `Prax.Deontic.obligedClose axs` to `setAxioms`, and the engine forward-chains the declared □-lifted twins like any other rule — the engine holds no deontic vocabulary (v51 moved the lift out of `Prax.Derive`; a producible world that omits the closure is flagged by #8's `DeonticUnclosed`). Exact `⊥` detection. Demo: `Prax.Worlds.Feud` (`bigFeud n` scales it) |
 
 ## Agents & action selection
 
@@ -2206,7 +2272,7 @@ Paper = Evans & Short 2014 (see `docs/research/versu-notes.md`). "P§" = its sec
 | 31 | Player as DM | v13 | P§XI | `Prax.Worlds.Bar` `barDirectorWorld`: the human is bound to the metalevel `direct` practice (stir a rivalry / kindle warmth / cast a pall) and steers an autonomous cast; the CLI offers a bound player only its practice's affordances (via `candidateActions`). `prax dm` |
 | 32 | Readable serialization for play-scripts (JSON) | v12 | P§VII-VIII | `Prax.Script.Json`: round-trips a `Script` to/from JSON — an editable authoring/exchange format with no bespoke grammar to maintain; `prax play <file.json>`, `prax dump-play`, `examples/play.json`. (Chosen over a custom `.prompter` parser.) |
 | 33 | Prompter-style play-script front end (scene/beat/junction → practices) | v12,18 | P§XII | `Prax.Script`: CAST + scene-graph eDSL, `compile`, auto `flowChart`; a bodiless narrator fires junctions. **v18** adds the deferred compilation features: **memories** (`memory` — one-shot exposition on first-trigger), **timed junctions** (`after`/`timeout` — a passive scene clock), and **character sketches** (`concernedWith` → wants, `withTraits` → facts). Scene *parameters/bounds* are subsumed (affordances are already scene-local). The readable text surface is deliberately omitted — JSON (#32) stands in. |
-| 34 | Deontic `should` / obligation operator; norm-conflict resolution | v14 | DEON 2010 | `Prax.Deontic`: `□φ` = fact `obliged.<who>.<φ>` (the paper's `Ob:φ` sugar, no semantic change); conflict *detection* via `!`-exclusion collapse (property 2); breach reuses `violated.…`; contrary-to-duty (`□□`) via nested obligations; behavioural coupling by Wants, planner unchanged. Resolution is *emergent* (utility) — explicit priority is a documented extension. Gaps: no entailment-closure (property 1), no `m(X)`/LRT (that's #8). Grounding: `docs/research/deon-notes.md` |
+| 34 | Deontic `should` / obligation operator; norm-conflict resolution | v14 | DEON 2010 | `Prax.Deontic`: `□φ` = fact `obliged.<who>.<φ>` (the paper's `Ob:φ` sugar, no semantic change); conflict *detection* via `!`-exclusion collapse (property 2); breach reuses `violated.…`; contrary-to-duty (`□□`) via nested obligations; behavioural coupling by Wants, planner unchanged. Resolution is *emergent* (utility) — explicit priority is a documented extension. Entailment-closure (property 1) is now Deontic's own (v51): `obligedClose`/`obligedLift` lift each all-`Match` domain rule under `□`, declared by the world via `setAxioms (obligedClose axs)` and forward-chained by #17; the checker flags a producible world that omits it (`DeonticUnclosed`). Remaining gap: no `m(X)`/LRT machinery of its own (that's #8). Grounding: `docs/research/deon-notes.md` |
 
 ## Runtime, tooling, UX
 

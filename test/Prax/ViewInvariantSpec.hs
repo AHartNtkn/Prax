@@ -16,14 +16,14 @@ import           Prax.Worlds.Feud (feudWorld)
 -- The round's core invariant: the cached view IS the closure of the base
 -- under the axioms — label-faithfully, whatever construction path built it.
 --
--- Since v48 this ALSO doubles as the □-lift gate's soundness net. The gated
--- cooked path ('Prax.Engine.reclose' via 'Prax.Engine.retable') omits the
--- □-lifted rules for a world it judges cannot produce an @obliged.*@ fact; the
--- string reference ('closure', below) always lifts, ungated. The two agree
--- exactly when the gated-out rules are unfireable — so if the gate ever WRONGLY
--- skips a producible world, a lifted derivation the reference makes goes missing
--- from 'readView' and this check fires. Feud (gate off) and Village (gate on)
--- both exercise it below.
+-- The two implementations it cross-checks are the cooked path
+-- ('Prax.Engine.reclose' via 'Prax.Engine.retable', over 'cookedRules') and the
+-- independent string 'closure' (below) — both closing over the SAME declared
+-- axiom set ('axioms st', with 'Prax.Deontic.obligedClose' already applied at
+-- declaration time). There is no lift DECISION left to cross-check: v51 moved the
+-- □-lift into the world's own declaration, so a deontic world's lifted twins are
+-- ordinary members of 'axioms' that both paths derive alike. Feud (undeclared)
+-- and Village (declaring 'obligedClose') both exercise it below.
 viewConsistent :: PraxState -> Bool
 viewConsistent st =
   dbToLabeledSentences (readView st) == dbToLabeledSentences recomputed
