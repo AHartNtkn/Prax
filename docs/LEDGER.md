@@ -2153,7 +2153,15 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   audit queue (v45 protected families → v46 the narrator dies → v47 function registry →
   v48 generality bundle → v49 coercion, which closed the queue) plus the two extension
   rounds the queue-wide byte-identity assessment produced (v50 machinery-state → **v51**,
-  this row). v45 → v51, done.
+  this row). v45 → v51, done — with ONE audit finding banked rather than shipped, named
+  here because the final review caught this row claiming otherwise: the audit's [LOW]
+  "Project's `done.sN` shadow accumulator" (`Prax.Project` stages insert
+  `<inst>.Owner.done.s<k>` markers and the pursuit want matches `done.S` — a
+  counter-shaped fact family standing in for progress the stage slot already encodes)
+  was never dispositioned by v48's hardcoding pass and is hereby BANKED by name: it is
+  bookkeeping-in-fiction's-clothes at LOW blast radius (Project-internal, one reader),
+  awaiting a design round of its own. An arc-closure claim that silently absorbed it
+  would have been the same overclaim this arc existed to purge.
 
   **Classification: a responsibility move of preserved semantics.** What the deontic layer
   MEANS does not change — the □-lift's semantics are v15's, verbatim; only their HOME
@@ -2207,7 +2215,11 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   new home), `TypeCheckSpec` +4 (the `DeonticUnclosed` rows); `DeriveSpec` ±0, re-pointed)
   → **678** final (`1a9a5a5`, the pin re-anchor moved no count). `-Wall` clean; deaths
   grep-proof: `liftObliged|deonticProducible` → zero across `src/` and `app/`; `obligedHead`
-  zero in `Prax.Derive`. The audit arc, v45 → v51, is closed.
+  zero in `Prax.Derive`. Two final-review Minors closed pre-push at 679: the lifted-shape
+  prefix gets one home (`Deontic.obligedLiftPrefix` — the checker's already-lifted
+  detection can no longer desync from the lift) and the partial-closure pin (each missing
+  twin flags individually; RED observed against an all-or-nothing mutation). The audit
+  arc, v45 → v51, is closed — one banked item (`done.sN`, above) carried by name.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now

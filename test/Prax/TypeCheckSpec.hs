@@ -361,6 +361,16 @@ tests = testGroup "Prax.TypeCheck"
       -- census-false: no obliged.* producer anywhere, so its axioms owe no
       -- closure (Feud's own withheld lifted rows are the shipping example)
       typeCheck (setAxioms [ axiom [ Match "a.X" ] [ "b.X" ] ] emptyState) @?= []
+
+  , testCase "partial closure flags each missing twin individually (v51 final review M2)" $ do
+      -- two liftable rules, only the first one's twin declared: the check is
+      -- per-axiom, so exactly the second rule flags — an all-or-nothing
+      -- regression (any twin present ⇒ clean) would let it slip through.
+      let a1 = axiom [ Match "a.X" ] [ "b.X" ]
+          a2 = axiom [ Match "c.X" ] [ "d.X" ]
+          w  = setAxioms (obligedClose [a1] ++ [a2])
+                         (definePractices [obligeProducer] emptyState)
+      typeCheck w @?= [ DeonticUnclosed "d.X" ]
   ]
   where
     words' = words . map (\c -> if c == ',' then ' ' else c)

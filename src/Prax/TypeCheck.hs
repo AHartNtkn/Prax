@@ -38,7 +38,7 @@ import qualified Data.Map.Strict as Map
 import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, dbToSentences)
 import           Prax.Query (Condition (..), CookedCondition (..), condSents)
 import           Prax.Relevance (mayUnifySyms, producibleAtoms, cookedFnPool, cookedOutcomeAtoms)
-import           Prax.Deontic (obligedHead, obligedLift)
+import           Prax.Deontic (obligedHead, obligedLift, obligedLiftPrefix)
 import           Prax.Sym (intern, symName, symIsVar)
 import           Prax.Types
 import           Prax.Derive (Axiom (..))
@@ -427,12 +427,14 @@ deonticUnclosedErrors st =
       []      -> ""
 
 -- An axiom that IS already a □-form owes no twin: every body condition a Match
--- and every body/head sentence starting @obliged.Obligor.@. This stops the
--- check demanding lifts-of-lifts (a lifted twin is itself all-Match liftable).
+-- and every body/head sentence carrying 'obligedLiftPrefix' (the lift's own
+-- shape constant, so this detection cannot desync from 'obligedLift'). This
+-- stops the check demanding lifts-of-lifts (a lifted twin is itself all-Match
+-- liftable).
 alreadyLifted :: Axiom -> Bool
 alreadyLifted (Axiom body heads) = all bodyLifted body && all lifted heads
   where
-    lifted s            = (obligedHead ++ ".Obligor.") `isPrefixOf` s
+    lifted s            = obligedLiftPrefix `isPrefixOf` s
     bodyLifted (Match s) = lifted s
     bodyLifted _         = False
 

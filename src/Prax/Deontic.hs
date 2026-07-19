@@ -53,6 +53,7 @@ module Prax.Deontic
   ( -- * Fact convention
     obligationPath
   , obligedHead
+  , obligedLiftPrefix
     -- * Entailment closure (□ property 1)
   , obligedLift
   , obligedClose
@@ -97,6 +98,13 @@ obligedHead = "obliged"
 obligationPath :: String -> String -> String
 obligationPath who content = obligedHead ++ "." ++ who ++ "." ++ content
 
+-- | The prefix every □-lifted sentence carries ('obligedLift' prepends it to
+-- each body match and head) — the full lifted-shape convention in one place:
+-- "Prax.TypeCheck"'s already-lifted detection matches on THIS, so the checker
+-- and the lift cannot desync.
+obligedLiftPrefix :: String
+obligedLiftPrefix = obligedHead ++ ".Obligor."
+
 -- Entailment closure (□ property 1) --------------------------------------------
 
 -- | Lift a purely-conjunctive domain rule under the obligation operator: prefix
@@ -112,7 +120,7 @@ obligedLift (Axiom body heads)
     isMatch _         = False
     liftCond (Match s) = Match (liftSent s)
     liftCond c         = c
-    liftSent s = obligedHead ++ ".Obligor." ++ s
+    liftSent s = obligedLiftPrefix ++ s
 
 -- | Close a world's axioms under the obligation operator (DEON property 1): the
 -- authored rules plus the □-lifted twin of every all-'Match' rule. A deontic
