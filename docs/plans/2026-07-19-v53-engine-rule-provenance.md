@@ -61,7 +61,13 @@ authored endings prove it is shared vocabulary, not machinery.
   families — provenance protects them), the `reservedFamilies` comment block
   (today it argues scenePatience's EXCLUSION — replaced by the provenance
   story and `ending`'s evidence-based exclusion), and the module haddock's
-  check enumeration (also fixing the count stale since v51).
+  check enumeration — which [review I2] both extends the family-example
+  clause (turn, contradiction, scenePatience, currentScene) AND corrects the
+  constructor count, stale since v51 added `DeonticUnclosed` (8 today, v53
+  adds none).
+- `app/Main.hs` [review M1]: the two raw `currentScene` literals (:57, :303)
+  route through the exported constant — "one home" is claimed, so it is made
+  true beyond the Script module.
 
 **Tests (RED observed per behavior; reserved pins in TypeCheckSpec, provenance
 pins in ScheduleRuleSpec [C-M]):**
@@ -74,16 +80,23 @@ pins in ScheduleRuleSpec [C-M]):**
 - The mixed-composition repro, end-to-end [the bank's exact door]: a practice
   added via `definePractices` onto COMPILED AUDIENCE writing
   `scenePatience.<sid>.<j>` flags loudly. RED: observed before the rows land.
-- No self-trip: Audience AND Play [C-I4] and every shipped world stay
-  `typeCheck == []` (the existing all-worlds pin is the net; observed with
-  the rows live).
+- No self-trip: every shipped world stays `typeCheck == []` (the existing
+  all-worlds pin, observed with the rows live). The net's teeth [review I1]:
+  PLAY is the exemption's real shipped net — its story rule writes
+  `currentScene!banquet`; the neutered-filter RED is observed on PLAY (not
+  Audience, whose story rule writes only unreserved `ending` — a
+  neuter-and-watch-Audience RED would be FALSE).
 - Intrigue stays `typeCheck == []` — the `ending`-exclusion's standing pin
   (it raw-authors `ending!` at Intrigue.hs:71/:83/:93).
 - Provenance mechanics (ScheduleRuleSpec): the same-shaped rule through each
-  door — authored flags, engine-door does not (RED: neuter the writeSites
-  filter and observe the engine-door rule flagging); `registerEngineRules`
-  records names, `setSchedule` does not; a `setSchedule` rule named "story"
-  onto compiled Audience is a LOUD duplicate-name error [S-I1].
+  door, its body EXPLICITLY writing `scenePatience.a.b` [review I1 — this
+  nets the scenePatience half of the exemption, which no shipped story rule
+  exercises] — authored flags, engine-door does not (RED: neuter the
+  writeSites filter; observe BOTH the test rule and Play flag);
+  `registerEngineRules` records names, `setSchedule` does not. The
+  duplicate-name safety condition [S-I1] is ALREADY pinned at
+  ScheduleRuleSpec:164-179 both directions [review M2] — verified green, not
+  re-added.
 - The v50 Script-layer guard pins: untouched, re-observed green.
 
 Suite green at end (baseline 688; report the delta). `-Wall` clean. Commit

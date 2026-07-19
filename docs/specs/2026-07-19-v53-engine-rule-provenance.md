@@ -126,9 +126,16 @@ enumeration (also stale on count since v51).
 - The mixed-composition repro from the bank, pinned end-to-end: a practice
   added via `definePractices` ONTO COMPILED AUDIENCE writing a `scenePatience`
   path flags loudly (the exact door v50 left open).
-- No self-trip: Audience AND Play and every shipped world stay
-  `typeCheck == []` with the families reserved (the story rule is engine-door,
-  exempt; compile's performed setup is db state, not a definition).
+- No self-trip: every shipped world stays `typeCheck == []` — and the net's
+  TEETH are located honestly [plan review I1]: PLAY is the real exemption net
+  (its `goto` transition puts `currentScene!banquet` in its story rule's body
+  — the one shipped engine-door write of a reserved family; unfilter the scan
+  and Play flags). Audience is vacuous for the filter (its junctions are both
+  endings; its patience marker rides performed setup, which the scan never
+  reads) — it pins only the general no-regression surface. The `scenePatience`
+  half of the exemption is netted by the ScheduleRuleSpec provenance pin,
+  whose engine-door rule body EXPLICITLY writes a reserved family so
+  "authored flags / engine-door does not" is non-vacuous.
 - Provenance mechanics (home: ScheduleRuleSpec [C-M]): `registerEngineRules`
   records names; `setSchedule` does not; the scan polices exactly the
   difference (a same-shaped rule through each door — authored flags, engine
