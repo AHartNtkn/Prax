@@ -1,0 +1,849 @@
+test/Prax/AnalysisTableSpec.hs	Prax.AnalysisTable
+test/Prax/AnalysisTableSpec.hs	audience
+test/Prax/AnalysisTableSpec.hs	bar
+test/Prax/AnalysisTableSpec.hs	bar-director
+test/Prax/AnalysisTableSpec.hs	feud
+test/Prax/AnalysisTableSpec.hs	intrigue
+test/Prax/AnalysisTableSpec.hs	play
+test/Prax/AnalysisTableSpec.hs	village
+test/Prax/ArcSpec.hs	Prax.Arc
+test/Prax/ArcSpec.hs	arcSentence / arcIs build the expected fact
+test/Prax/ArcSpec.hs	enterArc records the stage
+test/Prax/ArcSpec.hs	entering a new stage overrides the old (single-slot)
+test/Prax/BarSpec.hs	Prax.Worlds.Bar (feature integration)
+test/Prax/BarSpec.hs	a believed grudge suppresses friendliness (a false belief drives behaviour)
+test/Prax/BarSpec.hs	a character's arc advances to belonging once it feels at home
+test/Prax/BarSpec.hs	a firing at 0 drinks leaves 0 (the Gte 1 guard never goes negative)
+test/Prax/BarSpec.hs	a gossip quip transmits a (possibly-false) belief in conversation
+test/Prax/BarSpec.hs	a grudge lets you plant a (possibly-false) rumour
+test/Prax/BarSpec.hs	a patron at 2 drinks is tipsy; one dry metabolism firing (2 -> 1) clears it
+test/Prax/BarSpec.hs	an onlooker's disapproval-annoyance fades on its own lifetime
+test/Prax/BarSpec.hs	being served spawns a tip obligation; tipping respects the norm
+test/Prax/BarSpec.hs	cross bartenders may pour, and won't: the gate is gone, the reluctance is priced (both halves)
+test/Prax/BarSpec.hs	drinking again before the firing (3 -> 2) keeps you tipsy through it
+test/Prax/BarSpec.hs	drinking two beers makes you tipsy (init/Call/Calc/Cmp)
+test/Prax/BarSpec.hs	evidence of warmth dispels a false belief
+test/Prax/BarSpec.hs	friends can strike up a chat; quips stay on topic and shift feeling
+test/Prax/BarSpec.hs	greeting spawns a response reaction the greeted party can take
+test/Prax/BarSpec.hs	leaving the tab is a violation that draws the bartender's disapproval
+test/Prax/BarSpec.hs	the against-desires transformation is offered but the planner refuses it
+test/Prax/BarSpec.hs	the bell requires two customers (Subquery/Count/Cmp)
+test/Prax/BarSpec.hs	the buy-a-drink affordance is gated on relationship warmth
+test/Prax/BarSpec.hs	the director (story manager) has nothing to do in a placid room
+test/Prax/BarSpec.hs	the director injects a rivalry between two warm friends
+test/Prax/BarSpec.hs	the metabolism due re-arms: the second firing is only a full period later
+test/Prax/BeliefsSpec.hs	Prax.Beliefs
+test/Prax/BeliefsSpec.hs	a belief can be false — diverging from the shared world
+test/Prax/BeliefsSpec.hs	a new value for an issue overrides the old (single-slot)
+test/Prax/BeliefsSpec.hs	beliefSentence / beliefAbout build the expected paths
+test/Prax/BeliefsSpec.hs	beliefs are per-agent: two agents can disagree
+test/Prax/BeliefsSpec.hs	believe records a belief; believesThat matches it
+test/Prax/BeliefsSpec.hs	forget drops the belief
+test/Prax/BlackmailSpec.hs	Prax.Blackmail
+test/Prax/BlackmailSpec.hs	a dotted id errors loudly
+test/Prax/BlackmailSpec.hs	a renewed threat after compliance extracts nothing (property 3 at the instance — v49 review M3)
+test/Prax/BlackmailSpec.hs	a scrupulous extorter declines; an unprincipled twin with the same motive still threatens
+test/Prax/BlackmailSpec.hs	a secondary evidence variable authoring the Prax namespace collides with the punitive desire's own machinery
+test/Prax/BlackmailSpec.hs	a secondary evidence variable named Actor collides with the generated actions' own actor
+test/Prax/BlackmailSpec.hs	a secondary evidence variable named Actor or E is rejected (via the kernel flow — v49 review M2)
+test/Prax/BlackmailSpec.hs	a secondary evidence variable named Hearer collides with expose's own hearer
+test/Prax/BlackmailSpec.hs	a secondary evidence variable named Owner collides with the desire's Owner
+test/Prax/BlackmailSpec.hs	an evidence pattern naming no one errors loudly
+test/Prax/BlackmailSpec.hs	bearing endows the extorter with the qualm by name
+test/Prax/BlackmailSpec.hs	complying leaves a debt and its obligation, and the threat is gone
+test/Prax/BlackmailSpec.hs	defiance leaves the defied fact and clears the threat
+test/Prax/BlackmailSpec.hs	guards
+test/Prax/BlackmailSpec.hs	one onlooker: the victim rationally defies (both sides of the arithmetic)
+test/Prax/BlackmailSpec.hs	the extorter threatens at depth 2, holding the punitive desire via charDesires
+test/Prax/BlackmailSpec.hs	the stall-tie: scoreActions gives wait and defy the SAME score under a standing threat
+test/Prax/BlackmailSpec.hs	the usability win: a secondary evidence variable named D or W no longer collides (v40 moved the punitive desire's own machinery to the Prax namespace)
+test/Prax/BlackmailSpec.hs	the victim's model predicts mel's exposure after defiance
+test/Prax/BlackmailSpec.hs	threaten: the extorter is motivated to threaten, and the threat deposits
+test/Prax/BlackmailSpec.hs	threatening deposits the ordinary fact, the motive-belief, and the extorted mark
+test/Prax/BlackmailSpec.hs	trait-priced deterrence (v25 composition)
+test/Prax/BlackmailSpec.hs	two onlookers: the victim complies
+test/Prax/BlackmailSpec.hs	with a single head of exposure risk, defiance ties waiting and both beat compliance (property 2, ordering)
+test/Prax/BlackmailSpec.hs	with two heads of exposure risk, compliance dominates waiting and defiance (property 2, ordering)
+test/Prax/CoerceSpec.hs	Prax.Coerce
+test/Prax/CoerceSpec.hs	a DEFIED threat's punish survives expiry (the defied marker is permanent)
+test/Prax/CoerceSpec.hs	a blackmail-shaped Coercion whose trigger names Actor (the extorter's own evidence) constructs without error
+test/Prax/CoerceSpec.hs	a dotted id errors loudly
+test/Prax/CoerceSpec.hs	a save carrying the pending complied-expiry reloads and the cycle resumes on schedule
+test/Prax/CoerceSpec.hs	a trigger naming a Prax-namespaced variable errors loudly (the v40 law, frame-independent)
+test/Prax/CoerceSpec.hs	after compliance, a renewed threat offers no re-buy (the permanent complied marker)
+test/Prax/CoerceSpec.hs	after n boundaries an unanswered threat stops offering punish and stops pressuring comply
+test/Prax/CoerceSpec.hs	an authored kernel naming a Prax variable errors loudly (no author writes one)
+test/Prax/CoerceSpec.hs	an authored plain-var kernel lifts the victim to PraxD
+test/Prax/CoerceSpec.hs	defied, the genuine extorter picks punish; the bluffer (holding no want) does not
+test/Prax/CoerceSpec.hs	during the bought period the extorter's punish-vs-bide goes where the vengeance utilities point
+test/Prax/CoerceSpec.hs	guards
+test/Prax/CoerceSpec.hs	once extorted, the victim reaches a standing counter-threat from pure content over the shipped surface
+test/Prax/CoerceSpec.hs	one purchase per bought period; the marker expires and the extorter extracts again
+test/Prax/CoerceSpec.hs	property 1: stalling never dominates
+test/Prax/CoerceSpec.hs	property 3: repeat extraction is impossible
+test/Prax/CoerceSpec.hs	property 5: credibility is self-motivation (the vengeance, base-less kernel)
+test/Prax/CoerceSpec.hs	punish fires against a STANDING threat, with no defiance
+test/Prax/CoerceSpec.hs	regression: the trigger guard must not forbid Actor (blackmail-shaped evidence, v49 Task 1 fix wave)
+test/Prax/CoerceSpec.hs	the authored threaten label surfaces exactly (BlackmailSpec:171's pinned shape, proven producible)
+test/Prax/CoerceSpec.hs	the extorter CHOOSES to threaten at depth 2, holding the punitive want
+test/Prax/CoerceSpec.hs	the racket's compiled threaten and comply carry Insert for both markers, no InsertFor
+test/Prax/CoerceSpec.hs	the rename law
+test/Prax/CoerceSpec.hs	the reserved set: a legal victim passes
+test/Prax/CoerceSpec.hs	the reserved set: victim Actor errors (the previously-latent hole)
+test/Prax/CoerceSpec.hs	the reserved set: victim PraxV errors
+test/Prax/CoerceSpec.hs	the victim's comply/defy decision is IDENTICAL (the fear resolves on the registered vocabulary)
+test/Prax/CoerceSpec.hs	threaten deposits and the punish gate
+test/Prax/CoerceSpec.hs	threaten is offered and fires, depositing the threat marker
+test/Prax/CoerceSpec.hs	threatening deposits the marker, the motive-belief, and the extorted mark
+test/Prax/CoerceSpec.hs	two fresh quantifiers get distinct names (PraxW, PraxW2), first-appearance order
+test/Prax/CoerceSpec.hs	under a standing threat, bide never strictly beats both comply and defy
+test/Prax/CoerceSpec.hs	v54 property 1: Nothing is today (the default markers compile to permanent Inserts)
+test/Prax/CoerceSpec.hs	v54 property 2: the racket cycles under an expiring complied marker
+test/Prax/CoerceSpec.hs	v54 property 3: a stale threat is spent, but a defied threat's punish survives
+test/Prax/CoerceSpec.hs	v54 property 5: the bluff pair — registered-not-held vs registered-and-held
+test/Prax/CoerceSpec.hs	v54 property 7: the table turns — counter-coercion is composition
+test/Prax/CoerceSpec.hs	v54: mid-racket save/resume (home: CoerceSpec — it exercises the racket's own cycle)
+test/Prax/CoerceSpec.hs	v54: the deal economics, as observed (the no-fiat ruling — no marker enforces the deal)
+test/Prax/CoerceSpec.hs	without the punitive want, the same choice collapses to doing nothing
+test/Prax/ConfessionSpec.hs	Prax.Confession
+test/Prax/ConfessionSpec.hs	a planted incorrigibility regard blocks the affordance (refusal)
+test/Prax/ConfessionSpec.hs	a trait pricing lied at -6 and confessed at 0: the relief in evaluate/selfWants
+test/Prax/ConfessionSpec.hs	absolution: grant, refusal, gossip gate, double-grant
+test/Prax/ConfessionSpec.hs	absolve rejects a subject-less event pattern
+test/Prax/ConfessionSpec.hs	absolve rejects an event pattern reserving Actor
+test/Prax/ConfessionSpec.hs	absolve rejects non-single-segment defeater/label
+test/Prax/ConfessionSpec.hs	absolved, then re-offending snaps the defeater away
+test/Prax/ConfessionSpec.hs	blackmail defense: a high price against a mild secret -- the victim confesses (property 4, ordering)
+test/Prax/ConfessionSpec.hs	blackmail defense: after confessing, mel's expose deposits nothing new (dead)
+test/Prax/ConfessionSpec.hs	blackmail defense: the converse -- a cheap price against a severe fear -- complies (property 4, ordering)
+test/Prax/ConfessionSpec.hs	confess rejects a deposit pattern reserving Hearer
+test/Prax/ConfessionSpec.hs	confess rejects a dotted discharge verb
+test/Prax/ConfessionSpec.hs	confess rejects a dotted mark kind
+test/Prax/ConfessionSpec.hs	confess rejects a mark pattern reserving H/Hearer/Actor
+test/Prax/ConfessionSpec.hs	confess rejects an ungroundable deposit variable
+test/Prax/ConfessionSpec.hs	confessing converts exactly the confessed deed's mark; a second lied-mark survives
+test/Prax/ConfessionSpec.hs	confessing converts the content-mark and deposits the ACT, not the content
+test/Prax/ConfessionSpec.hs	confession deposits the hearer's sourced belief (the ordinary hearsay channel)
+test/Prax/ConfessionSpec.hs	conversion mechanics
+test/Prax/ConfessionSpec.hs	double-absolution is blocked while the defeater stands
+test/Prax/ConfessionSpec.hs	gossip-sourced belief does not qualify (heard from a non-doer)
+test/Prax/ConfessionSpec.hs	granting inserts the world's defeater
+test/Prax/ConfessionSpec.hs	guards
+test/Prax/ConfessionSpec.hs	incorrigibility: threshold, gossip, independence, permanence
+test/Prax/ConfessionSpec.hs	incorrigible rejects a deed variable colliding with the witness-naming convention
+test/Prax/ConfessionSpec.hs	incorrigible rejects a dotted label
+test/Prax/ConfessionSpec.hs	incorrigible rejects a pattern authoring the Prax namespace
+test/Prax/ConfessionSpec.hs	incorrigible rejects a pattern naming no offender
+test/Prax/ConfessionSpec.hs	incorrigible rejects a single-variable pattern (no deed variables to count)
+test/Prax/ConfessionSpec.hs	incorrigible: the usability win -- W/Ds/N are ordinary variables now (v40 moved the axiom's own machinery to the Prax namespace)
+test/Prax/ConfessionSpec.hs	k believed deeds -- one via gossip -- derive the regard
+test/Prax/ConfessionSpec.hs	k-1 believed deeds derive nothing
+test/Prax/ConfessionSpec.hs	per-absolver independence: one fed up, one fresh, from the same facts
+test/Prax/ConfessionSpec.hs	permanence: an absolution elsewhere does not retract the regard
+test/Prax/ConfessionSpec.hs	probed arithmetic: spontaneous confession, blackmail defense
+test/Prax/ConfessionSpec.hs	re-offense deletes the defeater (v21 idiom)
+test/Prax/ConfessionSpec.hs	spontaneous confession: a mild stake makes conscience relief worth it
+test/Prax/ConfessionSpec.hs	spontaneous confession: an expensive stake makes it NOT worth it
+test/Prax/ConfessionSpec.hs	the converted deed is not re-offered; the surviving one still is
+test/Prax/ConfessionSpec.hs	the deposit is decoupled from the mark's own content
+test/Prax/ConversationSpec.hs	Prax.Conversation
+test/Prax/ConversationSpec.hs	a quip applies its effect, is one-shot, and passes the turn
+test/Prax/ConversationSpec.hs	beginConversation sets speaker, listener and topic
+test/Prax/ConversationSpec.hs	changing the subject switches the active topic
+test/Prax/ConversationSpec.hs	ending the conversation removes the instance
+test/Prax/ConversationSpec.hs	only the current speaker may quip, and only on the current topic
+test/Prax/CookedSpec.hs	Prax.Cooked
+test/Prax/CookedSpec.hs	groundCookedCondition matches groundCondition for every remaining construct
+test/Prax/CookedSpec.hs	groundCookedOutcome matches groundOutcome for every remaining construct
+test/Prax/CookedSpec.hs	grounding cooked matches grounding strings (incl. '!' outcomes)
+test/Prax/CookedSpec.hs	queryCooked equals the string evaluator on every fixture case
+test/Prax/CoreSpec.hs	Prax.Core
+test/Prax/CoreSpec.hs	a negative delta cools the relationship
+test/Prax/CoreSpec.hs	adjustScore seeds on first use, then accumulates
+test/Prax/CoreSpec.hs	evaluations are asymmetric
+test/Prax/CoreSpec.hs	public bond (symmetric)
+test/Prax/CoreSpec.hs	relationships (numeric, asymmetric, with reason)
+test/Prax/CoreSpec.hs	setBond writes both directions
+test/Prax/DbSpec.hs	INSTANCE PERSISTENCE: an asserted instance survives its transient children draining to nothing
+test/Prax/DbSpec.hs	Prax.Db
+test/Prax/DbSpec.hs	REGRESSION: re-asserting an ! parent preserves its existing subtree
+test/Prax/DbSpec.hs	a sentence ending in ! is a loud construction-time error
+test/Prax/DbSpec.hs	a sentence ending in . is a loud construction-time error
+test/Prax/DbSpec.hs	a sentence with no trailing operator is unaffected
+test/Prax/DbSpec.hs	an interior ! (not trailing) is unaffected
+test/Prax/DbSpec.hs	basic multi-valued facts
+test/Prax/DbSpec.hs	bound variable descends deterministically
+test/Prax/DbSpec.hs	constant that is absent yields no bindings
+test/Prax/DbSpec.hs	dot under an ! child accumulates
+test/Prax/DbSpec.hs	exclusion clears siblings when the ! child changes
+test/Prax/DbSpec.hs	exclusion replaces the old single value (x.age!32 then x.age!33)
+test/Prax/DbSpec.hs	ground
+test/Prax/DbSpec.hs	groundTokens
+test/Prax/DbSpec.hs	groundTokens substitutes bindings segment-wise, preserving operators
+test/Prax/DbSpec.hs	insert / dbToSentences
+test/Prax/DbSpec.hs	internTokens / unifySyms (the Sym-level cores unify/unifyNames delegate to)
+test/Prax/DbSpec.hs	internTokens interns tokens' segment names, preserving operators
+test/Prax/DbSpec.hs	labeled: an asserted interior node with children round-trips exactly (marks included)
+test/Prax/DbSpec.hs	plain: a mark-bearing db rebuilds identically from its flattened sentences
+test/Prax/DbSpec.hs	re-asserted scaffold: an explicitly asserted prefix survives its deep leaf retract
+test/Prax/DbSpec.hs	removes a subtree by prefix
+test/Prax/DbSpec.hs	retract
+test/Prax/DbSpec.hs	retracting a missing path is a no-op
+test/Prax/DbSpec.hs	serialization round-trips assertedness
+test/Prax/DbSpec.hs	set-valued binding renders as opaque marker
+test/Prax/DbSpec.hs	sibling and shared ancestors survive retracting the other sibling
+test/Prax/DbSpec.hs	substitutes bound vars, preserves ! and .
+test/Prax/DbSpec.hs	tokens: trailing-operator rejection (v43 -- a trailing op would set a leaf's exclusion flag nothing ever reads)
+test/Prax/DbSpec.hs	two-sentence join binds shared variable
+test/Prax/DbSpec.hs	unbound var grounds to its own name
+test/Prax/DbSpec.hs	unify
+test/Prax/DbSpec.hs	unifyNames
+test/Prax/DbSpec.hs	unifyNames is unify with the parse hoisted out
+test/Prax/DbSpec.hs	unifySyms agrees with unifyNames (Bindings is Sym-keyed natively)
+test/Prax/DbSpec.hs	unifySyms branches unbound variables in name order, not id (encounter) order
+test/Prax/DbSpec.hs	v38 repro: retracting the last targeted leaf prunes the drained `toward` ancestor
+test/Prax/DebtSpec.hs	Prax.Debt
+test/Prax/DebtSpec.hs	a dotted creditor name errors loudly
+test/Prax/DebtSpec.hs	a punctuated debtor name errors loudly
+test/Prax/DebtSpec.hs	a witnessed default derives deadbeat standing for the witness
+test/Prax/DebtSpec.hs	an unwitnessed default derives no third-party regard
+test/Prax/DebtSpec.hs	debtPath is debt.<creditor>.<debtor>.<content>
+test/Prax/DebtSpec.hs	demand -> deadbeat: belief-gated standing, defeated by settling
+test/Prax/DebtSpec.hs	fact conventions
+test/Prax/DebtSpec.hs	guards
+test/Prax/DebtSpec.hs	lifecycle: owe creates BOTH facts; settle removes BOTH
+test/Prax/DebtSpec.hs	owe asserts the debt fact and Deontic's oblige, in one call
+test/Prax/DebtSpec.hs	owe inserts the debt fact and the obligation; settle removes both
+test/Prax/DebtSpec.hs	owes matches the debt fact
+test/Prax/DebtSpec.hs	settle retracts the debt fact and Deontic's discharge
+test/Prax/DebtSpec.hs	settling (atoned-shaped) defeats the standing; the witness's memory persists
+test/Prax/DeceitSpec.hs	Prax.Deceit
+test/Prax/DeceitSpec.hs	a concealer waits for privacy, then acts, and no one knows
+test/Prax/DeceitSpec.hs	a gate authoring the Prax namespace is a loud construction-time error
+test/Prax/DeceitSpec.hs	a lie can fabricate a MOTIVE: desires.* patterns work like deed patterns
+test/Prax/DeceitSpec.hs	a lie marks the liar's own memory (marks, not records)
+test/Prax/DeceitSpec.hs	a lie plants sourced hearsay the liar never had evidence for
+test/Prax/DeceitSpec.hs	a subject-less pattern errors loudly
+test/Prax/DeceitSpec.hs	an event pattern authoring the Prax namespace is a loud construction-time error
+test/Prax/DeceitSpec.hs	conceal is the nobody-believes want
+test/Prax/DeceitSpec.hs	conceal rejects a variable-bearing event loudly
+test/Prax/DeceitSpec.hs	hearing your own lie back turns it into gossip
+test/Prax/DeceitSpec.hs	lying to the same hearer twice is not offered
+test/Prax/DeceitSpec.hs	the fabrication conditions authoring the Prax namespace is a loud construction-time error
+test/Prax/DeceitSpec.hs	the shipped lie fixture (an ordinary gate, fabrication, and pattern) is not rejected
+test/Prax/DeceitSpec.hs	the subject of the lie is never the hearer
+test/Prax/DeceitSpec.hs	truthful gossip leaves no lie-mark
+test/Prax/DeceitSpec.hs	v43: the missing namespace guard (previously latent: an authored gate, fabrication, or event pattern had no guard at all)
+test/Prax/DeceitSpec.hs	you cannot frame yourself (a lie about yourself is a confession)
+test/Prax/DeonticSpec.hs	Prax.Deontic
+test/Prax/DeonticSpec.hs	a content does not conflict with itself
+test/Prax/DeonticSpec.hs	an agent avoids an action that would breach a duty
+test/Prax/DeonticSpec.hs	an agent pursues the action that fulfils its obligation
+test/Prax/DeonticSpec.hs	behavioural coupling (planner unchanged)
+test/Prax/DeonticSpec.hs	breach records a violation matched by inBreach
+test/Prax/DeonticSpec.hs	compatible: multi-valued siblings coexist
+test/Prax/DeonticSpec.hs	conflict detection (paper property 2)
+test/Prax/DeonticSpec.hs	conflicting duties: planner fulfils the higher-valued; the other is foreclosed
+test/Prax/DeonticSpec.hs	contrary-to-duty (iterated box)
+test/Prax/DeonticSpec.hs	entailment closure (□ property 1)
+test/Prax/DeonticSpec.hs	fact conventions
+test/Prax/DeonticSpec.hs	fulfilled needs the obligation AND its content (ought is not is)
+test/Prax/DeonticSpec.hs	inBreach is a violation (breach reuses the norm machinery)
+test/Prax/DeonticSpec.hs	incompatible: exclusive values of one slot collapse
+test/Prax/DeonticSpec.hs	incompatiblePairs finds exactly the incompatible pair
+test/Prax/DeonticSpec.hs	introspection
+test/Prax/DeonticSpec.hs	isObliged matches the obligation fact
+test/Prax/DeonticSpec.hs	obligation lifecycle
+test/Prax/DeonticSpec.hs	obligationPath is obliged.<who>.<content>
+test/Prax/DeonticSpec.hs	obligationsOf lists an agent's current duties
+test/Prax/DeonticSpec.hs	oblige asserts, discharge retracts
+test/Prax/DeonticSpec.hs	obligeReparative nests the obligation (square-square)
+test/Prax/DeonticSpec.hs	obligedClose = the base rules plus the lifted twin of each all-Match rule
+test/Prax/DeonticSpec.hs	obligedHead is the shared vocabulary constant
+test/Prax/DeonticSpec.hs	obligedLift lifts an all-Match rule to the obliged.Obligor shape
+test/Prax/DeonticSpec.hs	obligedLift refuses a rule whose body uses a non-Match condition
+test/Prax/DeonticSpec.hs	two exclusive locations for one agent conflict
+test/Prax/DeonticSpec.hs	unrelated slots never conflict
+test/Prax/DeriveSpec.hs	Prax.Derive (m(X) closure)
+test/Prax/DeriveSpec.hs	a single domain rule derives a consequence
+test/Prax/DeriveSpec.hs	axiomFootprint collects bodies (any polarity) and heads; obligedClose adds the lifted forms
+test/Prax/DeriveSpec.hs	axiomNegPatterns collects exactly the negated interiors
+test/Prax/DeriveSpec.hs	closure is a VIEW: base untouched, so derivation is defeasible
+test/Prax/DeriveSpec.hs	closure reaches a multi-step (transitive) fixpoint
+test/Prax/DeriveSpec.hs	closureFrom continues a closed model exactly as a from-scratch closure
+test/Prax/DeriveSpec.hs	consistent exclusive derivation is fine (no false ⊥)
+test/Prax/DeriveSpec.hs	monotoneAxioms accepts the count-threshold shape and rejects anti-monotone
+test/Prax/DeriveSpec.hs	no axioms ⇒ the base is returned unchanged
+test/Prax/DeriveSpec.hs	obligedClose: a domain rule (written once) also closes under obligation
+test/Prax/DeriveSpec.hs	relational join with variable binding (grandparent)
+test/Prax/DeriveSpec.hs	⊥ DETECTED: rules forcing one exclusive slot to two values contradict
+test/Prax/DeriveSpec.hs	⊥ from EITHER side: a derived multi value clashes with a base EXCLUSIVE fact
+test/Prax/DirectorSpec.hs	Prax.Worlds.Bar (player-as-DM)
+test/Prax/DirectorSpec.hs	a DM nudge opens a new affordance for an autonomous character
+test/Prax/DirectorSpec.hs	a DM nudge reshapes the world without the DM embodying anyone
+test/Prax/DirectorSpec.hs	the drama manager is offered only metalevel affordances
+test/Prax/ELSpec.hs	Prax.EL (exclusion-logic lattice)
+test/Prax/ELSpec.hs	a conflict deep in the tree propagates to ⊥
+test/Prax/ELSpec.hs	a specific label entails the general (Excl ≤ Multi)
+test/Prax/ELSpec.hs	an exclusive claim vs a different multi child is still ⊥ (either side)
+test/Prax/ELSpec.hs	assertedness in the lattice (v39): the mark extends pointwise
+test/Prax/ELSpec.hs	compatible multi facts conjoin
+test/Prax/ELSpec.hs	disjoint slots conjoin freely
+test/Prax/ELSpec.hs	everything entails the empty model
+test/Prax/ELSpec.hs	exclusive slot forced to two values is ⊥
+test/Prax/ELSpec.hs	fewer facts do NOT entail more
+test/Prax/ELSpec.hs	information order ≤ (Def 6): a ≤ b means a entails b
+test/Prax/ELSpec.hs	meet preserves an assertion (a ⊓ scaffold ≤ a): forces OR, not AND
+test/Prax/ELSpec.hs	meet ⊓ (Def 8) and incompatibility ⊥ (Def 7)
+test/Prax/ELSpec.hs	more facts entail fewer
+test/Prax/ELSpec.hs	the general does NOT entail the specific (Multi ⋠ Excl)
+test/Prax/ELSpec.hs	the same exclusive fact is idempotent
+test/Prax/ELSpec.hs	two multi children never conflict
+test/Prax/ELSpec.hs	≤ consults the mark: an asserted fact entails its scaffold, not conversely
+test/Prax/EmotionSpec.hs	Prax.Emotion
+test/Prax/EmotionSpec.hs	angry at carol and afraid of bob coexist independently
+test/Prax/EmotionSpec.hs	both feelings gone after the lifetime lapses; feeling again is possible
+test/Prax/EmotionSpec.hs	candidateActions is identical with and without every feeling
+test/Prax/EmotionSpec.hs	coexisting feelings
+test/Prax/EmotionSpec.hs	feeling matches a targeted instance (Match sees subtrees)
+test/Prax/EmotionSpec.hs	feeling/feelingToward
+test/Prax/EmotionSpec.hs	feelingToward requires the specific target
+test/Prax/EmotionSpec.hs	feelings fade
+test/Prax/EmotionSpec.hs	the invariant: feelings never gate action availability
+test/Prax/EmotionSpec.hs	unfeel discharges the whole feeling, targets included
+test/Prax/EmotionSpec.hs	unfeeling one leaves the other standing
+test/Prax/EmotionSpec.hs	untargeted and targeted instances of the same emotion coexist
+test/Prax/EngineSpec.hs	ForEach applies its outcomes for every binding
+test/Prax/EngineSpec.hs	ForEach grounds the enclosing action's bindings first
+test/Prax/EngineSpec.hs	ForEach nests: outer bindings ground the inner quantifier
+test/Prax/EngineSpec.hs	ForEach snapshot holds for Delete: removing a member mid-fold still visits all
+test/Prax/EngineSpec.hs	ForEach snapshots its bindings: mutations cannot extend the quantification
+test/Prax/EngineSpec.hs	ForEach with no conditions applies its outcomes exactly once
+test/Prax/EngineSpec.hs	ForEach with zero bindings is a no-op
+test/Prax/EngineSpec.hs	Prax.Engine
+test/Prax/EngineSpec.hs	a function name already registered by an EARLIER defineFunctions call is a loud error
+test/Prax/EngineSpec.hs	a world that does NOT declare its closure carries no lifted twin
+test/Prax/EngineSpec.hs	axiomHeads: fireable heads and the contradiction witness
+test/Prax/EngineSpec.hs	build-order death: setAxioms-first equals setAxioms-outermost (cookedRules and typeCheck)
+test/Prax/EngineSpec.hs	call into a guarded function applies its calc effect
+test/Prax/EngineSpec.hs	collision guards (v43, re-expressed against the v47 registry): action names and registered function names must each be unique
+test/Prax/EngineSpec.hs	cookedDefs mirrors practiceDefs' keys after definePractices
+test/Prax/EngineSpec.hs	declared □-closure (spec v51): the lift is content the world declares
+test/Prax/EngineSpec.hs	definePractice inserts static data under practiceData
+test/Prax/EngineSpec.hs	distinct function names across two calls register cleanly (accumulation)
+test/Prax/EngineSpec.hs	greet: affordance appears, and performing it consumes the instance
+test/Prax/EngineSpec.hs	groundedDeltaAnchors: bounded effects, shadows, spawn opacity, Call resolution
+test/Prax/EngineSpec.hs	groundedDeltaAnchors: safe ForEach binders bound; unsafe heads stay opaque
+test/Prax/EngineSpec.hs	obligedClose lets a world close an obliged context (□a ⊢ □b)
+test/Prax/EngineSpec.hs	setAxioms re-derives the cached view on a built state
+test/Prax/EngineSpec.hs	spawning runs init once; only the whose-turn actor can strike
+test/Prax/EngineSpec.hs	tendBar: walk up -> order -> fulfill delivers the drink
+test/Prax/EngineSpec.hs	two actions with the same name in one practice is a loud construction-time error
+test/Prax/EngineSpec.hs	two functions with the same name within ONE defineFunctions batch is a loud error
+test/Prax/FactionSpec.hs	Prax.Faction
+test/Prax/FactionSpec.hs	comrades: X<>Y guard — no self-alliance
+test/Prax/FactionSpec.hs	comrades: cross-faction negative — no shared house, no alliance
+test/Prax/FactionSpec.hs	comrades: shared membership derives allied, both directions
+test/Prax/FactionSpec.hs	defection un-derives: joining a new faction overwrites the old, retracting stale allied pairs
+test/Prax/FactionSpec.hs	factionStanding: a believed offense moves co-members only
+test/Prax/FactionSpec.hs	factionStanding: a pattern authoring the Prax namespace errors loudly
+test/Prax/FactionSpec.hs	factionStanding: a pattern naming fewer than two variables errors loudly
+test/Prax/FactionSpec.hs	factionStanding: an unbelieved offense moves no one
+test/Prax/FactionSpec.hs	factionStanding: defection dissolves the regard (retraction's sharpest case)
+test/Prax/FactionSpec.hs	factionStanding: the usability win -- W and F are ordinary variables now (v40 moved the axiom's own join variables to the Prax namespace)
+test/Prax/FactionSpec.hs	factionStanding: the victim's own belief of the offense against them derives their regard too
+test/Prax/FactionSpec.hs	memberPath: an empty or separator-bearing name errors loudly
+test/Prax/FactionSpec.hs	memberPath: single-slot exclusion fact
+test/Prax/FeudSpec.hs	DEFEASIBLE: making amends retracts the wrong and dissolves the whole feud
+test/Prax/FeudSpec.hs	Prax.Worlds.Feud (emergent sandbox)
+test/Prax/FeudSpec.hs	a derived fact GATES an affordance: Carol may shun Alice, Alice may shun no one
+test/Prax/FeudSpec.hs	enmity is DERIVED, not authored: Alice's wrong spreads through the network
+test/Prax/FeudSpec.hs	pre-wedding: esme is inert to the feud — her own house, no resentment, no kestrel ties
+test/Prax/FeudSpec.hs	the driven beat: after the wedding, esme (a grudgeBearer) shuns alice unprompted
+test/Prax/FeudSpec.hs	the feud scales: bigFeud turns every ally in the chain against Alice
+test/Prax/FeudSpec.hs	the wedding: wed moves esme's membership; the derived world flips
+test/Prax/FeudSpec.hs	with Alice passive, the network shuns her on its own (emergent behaviour)
+test/Prax/GateSpec.hs	Prax.Gate
+test/Prax/GateSpec.hs	a Prax-namespaced variable in a Subquery's free-variable list is caught
+test/Prax/GateSpec.hs	a Prax-namespaced variable in the top-level conditions is caught
+test/Prax/GateSpec.hs	a Prax-namespaced variable in the top-level outcomes is caught
+test/Prax/GateSpec.hs	a Prax-namespaced variable nested inside a ForEach outcome's own conditions is caught
+test/Prax/GateSpec.hs	catches a Prax-namespaced token inside a quoted literal
+test/Prax/GateSpec.hs	catches more than one offender, in order
+test/Prax/GateSpec.hs	ignores ordinary quoted literals with no Prax-shaped token
+test/Prax/GateSpec.hs	ignores unquoted text (imports, comments) even if Prax-shaped
+test/Prax/GateSpec.hs	no world source file authors a Prax-namespaced variable in a quoted literal
+test/Prax/GateSpec.hs	sanity: an ordinary fragment (no Prax namespace) is accepted
+test/Prax/GateSpec.hs	the scanner (mutation evidence: it must actually discriminate)
+test/Prax/GateSpec.hs	the shared guard (Prax.Types.authoredVarClash), pinned through a real combinator
+test/Prax/GoldenDriveSpec.hs	Prax.GoldenDrive (decision-sequence exactness)
+test/Prax/GoldenDriveSpec.hs	bar: 12 turns, decision for decision
+test/Prax/GoldenDriveSpec.hs	intrigue: 12 turns, decision for decision
+test/Prax/GoldenDriveSpec.hs	village: 21 turns of free play, decision for decision
+test/Prax/IntrigueSpec.hs	Prax.Worlds.Intrigue (a dramatic slice)
+test/Prax/IntrigueSpec.hs	a leaked motive changes who can see the plan
+test/Prax/IntrigueSpec.hs	an idle player lets the plot run to the betrayal ending; the victim dies
+test/Prax/IntrigueSpec.hs	once an ending is reached, the drama freezes (no further plot moves)
+test/Prax/IntrigueSpec.hs	the confidant can foresee the poisoning; the victim cannot
+test/Prax/IntrigueSpec.hs	the inspector explains why an action is (un)available
+test/Prax/IntrigueSpec.hs	the inspector handles an instantiated zero-role practice
+test/Prax/IntrigueSpec.hs	the player can commit the murder themselves (complicity ending)
+test/Prax/IntrigueSpec.hs	the player can romance the conspirator
+test/Prax/IntrigueSpec.hs	the schemer confides, then Marcus learns the plot
+test/Prax/IntrigueSpec.hs	warning the patron reaches the loyalty ending, and he lives
+test/Prax/KinSpec.hs	Prax.Kin
+test/Prax/KinSpec.hs	dissolution: retracting married un-derives in-laws but leaves membership UNCHANGED
+test/Prax/KinSpec.hs	grandparent negative: no parent chain, no grandparent fact
+test/Prax/KinSpec.hs	grandparent: parent-of-parent derives grandparent
+test/Prax/KinSpec.hs	inLaw (sibling's spouse) negative: siblings without a marriage derive no in-law
+test/Prax/KinSpec.hs	inLaw (sibling's spouse): married.A.B + sibling.A.S derives inLaw.S.B
+test/Prax/KinSpec.hs	inLaw (spouse's parent) negative: no marriage, no in-law via that parent
+test/Prax/KinSpec.hs	inLaw (spouse's parent): married.A.B + parent.P.A derives inLaw.P.B
+test/Prax/KinSpec.hs	marriage symmetry negative: an unmarried pair derives no symmetric fact
+test/Prax/KinSpec.hs	marriage symmetry: married.A.B derives married.B.A
+test/Prax/KinSpec.hs	sibling negative: no shared parent, no sibling fact
+test/Prax/KinSpec.hs	sibling: shared parent, X<>Y, derives sibling both ways
+test/Prax/KinSpec.hs	succession: a performed claim overwrites the slot and closes the affordance for the other child
+test/Prax/KinSpec.hs	succession: guards forced — office names must be single path segments
+test/Prax/KinSpec.hs	succession: not offered while the holder lives
+test/Prax/KinSpec.hs	succession: only children may claim, once the holder is dead
+test/Prax/KinSpec.hs	wed: guards forced — joiner and spouse must be single path segments
+test/Prax/KinSpec.hs	wed: inserts the marriage fact and overwrites the joiner's membership
+test/Prax/KinSpec.hs	wed: the membership overwrite un-derives the joiner's old alliances (Faction composition)
+test/Prax/LoopSpec.hs	25-turn NPC replay matches the golden narration
+test/Prax/LoopSpec.hs	Prax.Loop
+test/Prax/LoopSpec.hs	a NON-bearing template appearing does not reconsider (irrelevant comings and goings)
+test/Prax/LoopSpec.hs	a dead character is skipped in turn-taking
+test/Prax/LoopSpec.hs	a quiet character acts their standing intention — even when fresh deliberation would differ
+test/Prax/LoopSpec.hs	a schedule rule killing a character mid-wrap: the dead take no turn
+test/Prax/LoopSpec.hs	a single-survivor cast wraps every turn (i == cursor), firing the boundary
+test/Prax/LoopSpec.hs	a standing action that is no longer offered forces re-deliberation
+test/Prax/LoopSpec.hs	each trigger reconsiders: options, satisfaction, live drive, learned motive
+test/Prax/LoopSpec.hs	no boundary fires before round 1 (cursor -1 selects index 0, no wrap)
+test/Prax/LoopSpec.hs	the emergent + director-driven outcomes hold after the replay
+test/Prax/LoopSpec.hs	the v37 wake, end to end: a standing intention holds through quiet rounds, the market's open flips the live-desire set and wakes fresh deliberation to the square, the close disperses it
+test/Prax/LoopSpec.hs	the wrap skips a dead character and still fires the boundary
+test/Prax/MindsSpec.hs	Prax.Minds
+test/Prax/MindsSpec.hs	a conventional desire is presumed of everyone — even non-holders
+test/Prax/MindsSpec.hs	a profession derives presumed motive-beliefs across the cast
+test/Prax/MindsSpec.hs	believedWants reads any provenance, and only believed desires
+test/Prax/MindsSpec.hs	gossip about a motive flips a third party's prediction
+test/Prax/MindsSpec.hs	selfWants = unnamed wants + own named desires, instantiated
+test/Prax/MindsSpec.hs	setCharacters retables cookedWants; retable tracks cookedDesires
+test/Prax/MindsSpec.hs	the profession is defeasible
+test/Prax/MindsSpec.hs	wantFor grounds the Owner variable
+test/Prax/PersistSpec.hs	Prax.Persist
+test/Prax/PersistSpec.hs	a due naming a rule the reloaded world does not declare is a loud error
+test/Prax/PersistSpec.hs	a header with no cursor line is a loud, malformed-save error
+test/Prax/PersistSpec.hs	a reloaded session continues identically (Marcus can still warn)
+test/Prax/PersistSpec.hs	a reloaded standing intention is served without re-deliberating
+test/Prax/PersistSpec.hs	a save with no header at all is a loud, malformed-save error
+test/Prax/PersistSpec.hs	a seeded, mid-stream state round-trips its rngseed exactly
+test/Prax/PersistSpec.hs	an unseeded state emits no rngseed line
+test/Prax/PersistSpec.hs	an unsupported format version (prax-state v0) is a loud, version-mismatch error
+test/Prax/PersistSpec.hs	mid-stream save/resume continues the stream identically
+test/Prax/PersistSpec.hs	populated dues and expiries survive save/load; dues re-associate by name
+test/Prax/PersistSpec.hs	save/load round-trips an asserted interior node with transient children (marks included)
+test/Prax/PersistSpec.hs	save/load round-trips standing intentions exactly
+test/Prax/PersistSpec.hs	save/load round-trips the fact database and cursor exactly
+test/Prax/PersistSpec.hs	the immediately-prior format version (prax-state v2) is rejected under v46's v3 bump
+test/Prax/PersistSpec.hs	the immediately-prior format version (prax-state v3) is rejected under v50's v4 bump
+test/Prax/PersistSpec.hs	the previous format version (prax-state v1) is now rejected loudly
+test/Prax/PersistSpec.hs	the serialized form is human-readable, label-faithful facts
+test/Prax/PersistSpec.hs	the serialized form's first line is the format version tag
+test/Prax/PersistSpec.hs	v43: the save-format version header (previously latent: a save from another era misparsed silently)
+test/Prax/PersistSpec.hs	v44: the schedule's runtime half (per-rule dues + the expiry queue) round-trips
+test/Prax/PersistSpec.hs	v50: the drama die's stream position (rngseed) round-trips
+test/Prax/PersonaSpec.hs	Prax.Persona
+test/Prax/PersonaSpec.hs	a believed conscience nets against a believed motive in prediction
+test/Prax/PersonaSpec.hs	a conscience with a memory: each mark costs again, and forgetting relieves
+test/Prax/PersonaSpec.hs	bearing endows a character with the trait's desires by name
+test/Prax/PersonaSpec.hs	cast assembles the roster and the facts transparent reads
+test/Prax/PersonaSpec.hs	cast rejects a borne trait missing from the vocabulary
+test/Prax/PersonaSpec.hs	cast rejects a dotted trait name loudly
+test/Prax/PersonaSpec.hs	personaVocabulary rejects duplicate desire names loudly
+test/Prax/PersonaSpec.hs	temperament is legible: everyone presumes a bearer's valuations
+test/Prax/PersonaSpec.hs	the conduct-valuation core: the temptation splits the twins
+test/Prax/PlannerSpec.hs	Prax.Planner
+test/Prax/PlannerSpec.hs	a false belief predicts a move the mover would never take
+test/Prax/PlannerSpec.hs	a mid-round death silences the rest of the imagined round
+test/Prax/PlannerSpec.hs	a universally-quantified desire drives the planner to complete it
+test/Prax/PlannerSpec.hs	deadNow (conservative): an axiom-derivable gate candidate never skips
+test/Prax/PlannerSpec.hs	deadNow (floor): a markless conscience skips; one lied-mark goes live
+test/Prax/PlannerSpec.hs	deadNow (gate): absent hunger skips; the hunger fact goes live
+test/Prax/PlannerSpec.hs	deadNow gates the SKIP, never the model: a mixed model evaluates in FULL, dead deterrent included
+test/Prax/PlannerSpec.hs	evaluate sums utility over satisfying instantiations
+test/Prax/PlannerSpec.hs	lookahead: walking up is worthless immediately but valuable at depth 1
+test/Prax/PlannerSpec.hs	motiveSignature: options, satisfaction, live desires, known motives
+test/Prax/PlannerSpec.hs	pickAction chooses the want-satisfying order over the alternatives
+test/Prax/PlannerSpec.hs	predictMove is belief-relative: no belief, no prediction
+test/Prax/PlannerSpec.hs	predictMove with a believed motive is the mover's motivated best
+test/Prax/PlannerSpec.hs	prediction reuse: a DERIVED-fact flip (the cone) is recomputed, not reused
+test/Prax/PlannerSpec.hs	prediction reuse: a base-fact delta that enables the mover is recomputed, not reused
+test/Prax/PlannerSpec.hs	prediction reuse: a mid-path death is recomputed (the dead anchor)
+test/Prax/PlannerSpec.hs	prediction scope gates participation
+test/Prax/PlannerSpec.hs	the dead are predicted to do nothing
+test/Prax/PlannerSpec.hs	the round is sequential: the second prediction sees the first's effects
+test/Prax/PlannerSpec.hs	the round-walk credits a predicted enabling world (secret coordination)
+test/Prax/PlannerSpec.hs	top-scoring order beats the others; non-cider orders score 0
+test/Prax/ProjectSpec.hs	Prax.Project
+test/Prax/ProjectSpec.hs	a Prax-namespace variable in partNeeds errors loudly
+test/Prax/ProjectSpec.hs	a believed pursuit predicts among PARALLEL parts (v52 T1 review M1)
+test/Prax/ProjectSpec.hs	a dangling dependency edge errors loudly
+test/Prax/ProjectSpec.hs	a dotted part name errors loudly
+test/Prax/ProjectSpec.hs	a dotted project id errors loudly
+test/Prax/ProjectSpec.hs	a self-edge errors loudly (unreachable by the reachability fixpoint)
+test/Prax/ProjectSpec.hs	a threshold culmination fires at three of five, not two
+test/Prax/ProjectSpec.hs	a two-cycle errors loudly (both participants unreachable)
+test/Prax/ProjectSpec.hs	an endeavor with no parts errors loudly
+test/Prax/ProjectSpec.hs	an optional part: the culmination fires with it undone, and it still pays +w
+test/Prax/ProjectSpec.hs	dependency gating: an unmet edge blocks; the met edge offers
+test/Prax/ProjectSpec.hs	duplicate part names error loudly
+test/Prax/ProjectSpec.hs	each part fires once; the subtree delete re-opens the endeavor
+test/Prax/ProjectSpec.hs	parallel parts: both edge-free parts are offered; the un-chosen one survives
+test/Prax/ProjectSpec.hs	the horizon regression: a four-part chain pursued to completion at depth 2
+test/Prax/ProjectSpec.hs	the pursuit: exact shape, dormant (zero utility, no prediction), live once undertaken
+test/Prax/QuerySpec.hs	Absent is ¬∃ over a compound (no male leader)
+test/Prax/QuerySpec.hs	Exists is boolean ∃ — satisfiable without leaking witnesses
+test/Prax/QuerySpec.hs	Or binds via either clause (disjunction)
+test/Prax/QuerySpec.hs	Or deduplicates overlapping clauses
+test/Prax/QuerySpec.hs	Prax.Query
+test/Prax/QuerySpec.hs	bare sentence unifies and binds
+test/Prax/QuerySpec.hs	chained calc: mul then sub yields -20
+test/Prax/QuerySpec.hs	cookedReadAnchors
+test/Prax/QuerySpec.hs	cookedReadAnchors walks every polarity, including subquery internals
+test/Prax/QuerySpec.hs	count dancers other than the actor equals 2
+test/Prax/QuerySpec.hs	eq / neq
+test/Prax/QuerySpec.hs	eq binds an unbound variable to a constant
+test/Prax/QuerySpec.hs	eq of two differing bound values drops the binding
+test/Prax/QuerySpec.hs	eq of two equal bound values keeps the binding
+test/Prax/QuerySpec.hs	eq on the count filters out the wrong actor
+test/Prax/QuerySpec.hs	first-order connectives (∨, ¬compound, ∃, ∀, →)
+test/Prax/QuerySpec.hs	forAll: every patron has a drink (flips when one lacks it)
+test/Prax/QuerySpec.hs	groundCondition
+test/Prax/QuerySpec.hs	groundCondition substitutes bindings through every constructor
+test/Prax/QuerySpec.hs	gt fails then passes across an exclusion update
+test/Prax/QuerySpec.hs	implies: A → B truth table
+test/Prax/QuerySpec.hs	match / not
+test/Prax/QuerySpec.hs	mod binds 17 mod 5 = 2
+test/Prax/QuerySpec.hs	mod on a negative left operand follows Haskell semantics: -3 mod 5 = 2
+test/Prax/QuerySpec.hs	negation as failure drops binding when present
+test/Prax/QuerySpec.hs	negation as failure keeps binding when absent
+test/Prax/QuerySpec.hs	neq keeps distinct, drops equal
+test/Prax/QuerySpec.hs	neq with an unbound operand drops the binding (tie-game reliance)
+test/Prax/QuerySpec.hs	numeric: cmp / calc  (port of tests.js math block)
+test/Prax/QuerySpec.hs	subquery / count  (port of tests.js subquery block)
+test/Prax/ReactionsSpec.hs	Prax.Reactions
+test/Prax/ReactionsSpec.hs	a response can spawn a further reaction
+test/Prax/ReactionsSpec.hs	an agent avoids an action that violates a norm it wants to respect
+test/Prax/ReactionsSpec.hs	chaining
+test/Prax/ReactionsSpec.hs	disapproval reaction
+test/Prax/ReactionsSpec.hs	disapproving cools the relationship and consumes the reaction
+test/Prax/ReactionsSpec.hs	forgiving also consumes the reaction (no cooling)
+test/Prax/ReactionsSpec.hs	markViolation records the fact
+test/Prax/ReactionsSpec.hs	norm violations
+test/Prax/ReactionsSpec.hs	path helpers
+test/Prax/ReactionsSpec.hs	reactionPath builds practice.<id>.<parts>
+test/Prax/ReactionsSpec.hs	spawning offers the response only to the onlooker
+test/Prax/ReactionsSpec.hs	violationOf builds the expected match
+test/Prax/RelevanceSpec.hs	Prax.Relevance
+test/Prax/RelevanceSpec.hs	action-insertable facts still never gate; the schedule cannot launder them
+test/Prax/RelevanceSpec.hs	an exclusion insert counts as evicting ANY sibling on the delete side
+test/Prax/RelevanceSpec.hs	delta relevance against the village's axioms
+test/Prax/RelevanceSpec.hs	eviction covers the WHOLE displaced subtree, not just the shadow's shape
+test/Prax/RelevanceSpec.hs	livenessOf: a Subquery-bearing want is AlwaysLive (uncertainty always wins)
+test/Prax/RelevanceSpec.hs	livenessOf: a negative desire is FloorCheck unconditionally
+test/Prax/RelevanceSpec.hs	livenessOf: a positive desire with a ticker-only conjunct gates on it alone
+test/Prax/RelevanceSpec.hs	livenessOf: a weight-0 desire is AlwaysLive (defensive; screened statically first)
+test/Prax/RelevanceSpec.hs	livenessOf: an axiom-derivable candidate gate never qualifies (conservative)
+test/Prax/RelevanceSpec.hs	mayUnifySyms: variables are wildcards, prefixes are compatible
+test/Prax/RelevanceSpec.hs	monotone-insert classification against the village
+test/Prax/RelevanceSpec.hs	moverReadAnchors: scope, believes, death, affordances, desires — grounded to the pair
+test/Prax/RelevanceSpec.hs	schedule-moved facts are environment gates (the schedule is not a mover)
+test/Prax/RelevanceSpec.hs	the state carries the table and setDesires rebuilds it
+test/Prax/RelevanceSpec.hs	the village hunger want-shape regains its gate under the reclassification
+test/Prax/RelevanceSpec.hs	the village table: conscience live, spite and pursuit live
+test/Prax/RelevanceSpec.hs	the village's liveness field: floors for consciences, classes for the rest
+test/Prax/ReputeSpec.hs	Prax.Repute
+test/Prax/ReputeSpec.hs	a deed pattern with no variable errors loudly
+test/Prax/ReputeSpec.hs	a defeater variable outside the deed pattern errors loudly
+test/Prax/ReputeSpec.hs	a derived-standing-gated affordance appears and disappears
+test/Prax/ReputeSpec.hs	evidence derives per-observer standing (seen and heard alike)
+test/Prax/ReputeSpec.hs	notoriety holds at the threshold, not below
+test/Prax/ReputeSpec.hs	regardedAs is the standing condition
+test/Prax/ReputeSpec.hs	standing: a deed pattern authoring Regarder (the axiom's own observer variable) errors loudly
+test/Prax/ReputeSpec.hs	standing: a deed pattern authoring the Prax namespace errors loudly
+test/Prax/ReputeSpec.hs	standingUnless: Regarder is reserved through the same guard (both entry points funnel through it)
+test/Prax/ReputeSpec.hs	the deed pattern's FIRST variable is the subject
+test/Prax/ReputeSpec.hs	the defeater dissolves standing while memory persists
+test/Prax/RngSpec.hs	Prax.Rng
+test/Prax/RngSpec.hs	a hit applies outs (seed 2, odds 1/2 -> rollStep 2 is even)
+test/Prax/RngSpec.hs	a miss advances: the SAME position, drawn twice, diverges on the next draw
+test/Prax/RngSpec.hs	a miss does not apply outs (seed 1, odds 1/2 -> rollStep 1 is odd)
+test/Prax/RngSpec.hs	an in-domain seed is accepted
+test/Prax/RngSpec.hs	an unseeded die is loud
+test/Prax/RngSpec.hs	draw's authoring guards (surviving pins, re-pointed to the Roll form)
+test/Prax/RngSpec.hs	executing a Roll with rngSeed == Nothing is a loud error
+test/Prax/RngSpec.hs	hit / miss
+test/Prax/RngSpec.hs	num == 0 is rejected
+test/Prax/RngSpec.hs	num == den is rejected (certainty is not a chance)
+test/Prax/RngSpec.hs	num > den is rejected
+test/Prax/RngSpec.hs	ordinary variables S/S2/S3/R are unremarkable authoring names
+test/Prax/RngSpec.hs	rollStep is one Park-Miller step, and each draw advances the seed exactly once
+test/Prax/RngSpec.hs	seedDie domain guard
+test/Prax/RngSpec.hs	seedDie rejects a negative seed
+test/Prax/RngSpec.hs	seedDie rejects a seed at or above the modulus
+test/Prax/RngSpec.hs	seedDie rejects a seed of 0
+test/Prax/RngSpec.hs	sequential multi-draw (Village.hs's two-arm shape)
+test/Prax/RngSpec.hs	the Prax namespace in the caller's conditions is rejected
+test/Prax/RngSpec.hs	the Prax namespace in the caller's outcomes is rejected
+test/Prax/RngSpec.hs	the domain bounds are the open interval (0, modulus)
+test/Prax/RngSpec.hs	the frozen-die law
+test/Prax/RngSpec.hs	the stream (engine state, v50)
+test/Prax/RngSpec.hs	two draws off one stream roll on successive values and advance twice
+test/Prax/RngSpec.hs	two draws with unsatisfiable guards still advance the seed twice
+test/Prax/RumorSpec.hs	Prax.Rumor
+test/Prax/RumorSpec.hs	a gate authoring the Prax namespace is a loud construction-time error
+test/Prax/RumorSpec.hs	a hearer who saw the event is not told (no news value)
+test/Prax/RumorSpec.hs	a pattern with no variable errors loudly
+test/Prax/RumorSpec.hs	a second teller adds a second heard edge (corroboration)
+test/Prax/RumorSpec.hs	an event pattern authoring the Prax namespace is a loud construction-time error
+test/Prax/RumorSpec.hs	heard is a boolean exists (no per-source bindings leak)
+test/Prax/RumorSpec.hs	hearsay can be retold (rumor chains)
+test/Prax/RumorSpec.hs	in a multi-variable pattern only the FIRST variable is the subject
+test/Prax/RumorSpec.hs	no evidence, nothing to tell
+test/Prax/RumorSpec.hs	retelling to the same hearer is not offered (one-shot per teller)
+test/Prax/RumorSpec.hs	telling plants hearsay with the teller as source
+test/Prax/RumorSpec.hs	the shipped tell fixture (an ordinary gate and pattern) is not rejected
+test/Prax/RumorSpec.hs	the subject of the rumor is never offered as hearer
+test/Prax/RumorSpec.hs	the world's gate closes the channel
+test/Prax/RumorSpec.hs	v43: the missing namespace guard (previously latent: an authored gate or event pattern had no guard at all)
+test/Prax/ScheduleRuleSpec.hs	Prax.ScheduleRule
+test/Prax/ScheduleRuleSpec.hs	a body authoring Actor is a loud error (a schedule rule has no actor)
+test/Prax/ScheduleRuleSpec.hs	a body authoring the Prax namespace is a loud error
+test/Prax/ScheduleRuleSpec.hs	a duplicate name through the engine door alone still errors loudly (the record-update forces the guard)
+test/Prax/ScheduleRuleSpec.hs	a late fire (clock jumped past the due) re-arms FROM the boundary it fires at
+test/Prax/ScheduleRuleSpec.hs	a multi-segment rule name is a loud construction-time error
+test/Prax/ScheduleRuleSpec.hs	a rule does not fire before its due
+test/Prax/ScheduleRuleSpec.hs	a rule fires at its due, covering every binding
+test/Prax/ScheduleRuleSpec.hs	a schedule world is well-formed
+test/Prax/ScheduleRuleSpec.hs	a zero period is a loud error
+test/Prax/ScheduleRuleSpec.hs	adding an authored 'story' rule to a compiled script world is a loud collision
+test/Prax/ScheduleRuleSpec.hs	an authored 'story' rule blocks the engine door, and vice versa
+test/Prax/ScheduleRuleSpec.hs	an authored rule writing a reserved family is flagged; the SAME body through the engine door is exempt
+test/Prax/ScheduleRuleSpec.hs	closes at period + duration (the expiry queue tears it down)
+test/Prax/ScheduleRuleSpec.hs	duplicate rule names are a loud construction-time error (one due key each)
+test/Prax/ScheduleRuleSpec.hs	duration == 0 is a loud construction-time error
+test/Prax/ScheduleRuleSpec.hs	duration == period is a loud construction-time error
+test/Prax/ScheduleRuleSpec.hs	engine-rule provenance exempts the reserved-family scan (v53)
+test/Prax/ScheduleRuleSpec.hs	gathering (open fires; the fact expires -- no close rule)
+test/Prax/ScheduleRuleSpec.hs	opens at period, not before
+test/Prax/ScheduleRuleSpec.hs	recurs: opens again a full period later
+test/Prax/ScheduleRuleSpec.hs	registerEngineRules records the rule name; setSchedule does not
+test/Prax/ScheduleRuleSpec.hs	registerEngineRules seeds a due exactly like setSchedule (one period out)
+test/Prax/ScheduleRuleSpec.hs	the compiler-level door shares the global rule-name table (v46)
+test/Prax/ScheduleRuleSpec.hs	the due re-arms period boundaries from now
+test/Prax/ScheduleRuleSpec.hs	the usability win: D/D2/Now are ordinary variables, not reserved
+test/Prax/ScheduleRuleSpec.hs	two rules with different periods fire on their own schedules
+test/Prax/ScheduleSpec.hs	Prax.Schedule
+test/Prax/ScheduleSpec.hs	law 1: an InsertFor fact holds for n boundaries and is gone at the nth
+test/Prax/ScheduleSpec.hs	law 2: re-InsertFor before due refreshes — survives the old due, dies at the new
+test/Prax/ScheduleSpec.hs	law 3: a bare re-insert cancels the timer — the fact never expires
+test/Prax/ScheduleSpec.hs	law 4: an authored delete purges the subtree's timers — no later ghost retract
+test/Prax/ScheduleSpec.hs	law 5: a !-eviction leaves the displaced timer queued, and its firing is a harmless no-op
+test/Prax/ScheduleSpec.hs	law 6: a lifetime on an interior path takes its descendants at expiry
+test/Prax/ScheduleSpec.hs	law 7 (ghost observation): expiries fire BEFORE rules — a period-1 rule does not see an expiring fact
+test/Prax/ScheduleSpec.hs	law 8a (late fire): re-arm is FROM the boundary it fires at, not the stale due
+test/Prax/ScheduleSpec.hs	law 8a: a due rule re-arms period boundaries FROM NOW (fires at 1 and 3, not 2)
+test/Prax/ScheduleSpec.hs	law 8b: due rules fire in declaration order within a boundary
+test/Prax/ScheduleSpec.hs	the clock advances one per boundary
+test/Prax/ScheduleSpec.hs	the expiry queue
+test/Prax/ScheduleSpec.hs	the round boundary
+test/Prax/Script/JsonSpec.hs	Prax.Script.Json
+test/Prax/Script/JsonSpec.hs	a ForEach outcome round-trips through JSON
+test/Prax/Script/JsonSpec.hs	a Roll outcome (the drama die, v50) round-trips through JSON
+test/Prax/Script/JsonSpec.hs	a play-script round-trips through JSON exactly
+test/Prax/Script/JsonSpec.hs	a scene JSON carrying a removed \"memories\" field is rejected loudly, not silently ignored
+test/Prax/Script/JsonSpec.hs	a timed junction's \"after\" field round-trips through JSON
+test/Prax/Script/JsonSpec.hs	an InsertFor outcome round-trips through JSON
+test/Prax/Script/JsonSpec.hs	decoding+compiling the reviewer's JSON repro rejects the Prax-namespaced goto condition (guard-trigger, at the JSON authoring surface FromJSON Junction decodes straight into)
+test/Prax/Script/JsonSpec.hs	every CalcOp round-trips through JSON, Mod included
+test/Prax/Script/JsonSpec.hs	malformed JSON reports an error rather than failing silently
+test/Prax/Script/JsonSpec.hs	the decoded script still compiles to a runnable world
+test/Prax/Script/JsonSpec.hs	the shipped examples/play.json decodes and compiles
+test/Prax/ScriptSpec.hs	Prax.Script
+test/Prax/ScriptSpec.hs	a beat fires only in its scene and applies its effects
+test/Prax/ScriptSpec.hs	a character sketch compiles concerns to wants and traits to facts
+test/Prax/ScriptSpec.hs	a concern actually drives behaviour
+test/Prax/ScriptSpec.hs	a timed 'after' goto fires at its delay boundary
+test/Prax/ScriptSpec.hs	a timed junction times out after N turns of inaction
+test/Prax/ScriptSpec.hs	a transition junction fires silently at the round boundary (no story manager)
+test/Prax/ScriptSpec.hs	an ending masks every later clause in the same boundary
+test/Prax/ScriptSpec.hs	authored order, not alphabetical label order, resolves a simultaneous enable
+test/Prax/ScriptSpec.hs	compile rejects a timeout with a zero delay (n=0 is a plain junction)
+test/Prax/ScriptSpec.hs	compile rejects an 'after' goto with a zero delay
+test/Prax/ScriptSpec.hs	compile rejects an authored scenePatience read in a junction condition
+test/Prax/ScriptSpec.hs	compile rejects an authored scenePatience touch in a beat condition (a newly-swept list)
+test/Prax/ScriptSpec.hs	compile rejects an authored scenePatience touch in a beat effect (a newly-swept list)
+test/Prax/ScriptSpec.hs	compile rejects an authored scenePatience touch in a cast-desire condition (a newly-swept list, absence polarity)
+test/Prax/ScriptSpec.hs	compile rejects an authored scenePatience write in a scene setup
+test/Prax/ScriptSpec.hs	compile rejects two junctions with the same name in one scene
+test/Prax/ScriptSpec.hs	compile: the start scene is active and the cast is present
+test/Prax/ScriptSpec.hs	cross-scene cascade: a pass-through scene traverses in one boundary (documented eager semantics)
+test/Prax/ScriptSpec.hs	early exit is harmless: a pending patience marker fires no stray junction
+test/Prax/ScriptSpec.hs	flowChart names every scene and junction
+test/Prax/ScriptSpec.hs	idle player: the plot runs to betrayal across two scenes
+test/Prax/ScriptSpec.hs	mid-scene save/resume reaches the same timeout boundary (persistence symmetry)
+test/Prax/ScriptSpec.hs	re-entry resets a timed junction: it times out n from the LAST entry
+test/Prax/ScriptSpec.hs	same-labelled quips by different speakers dispatch to their own effects
+test/Prax/ScriptSpec.hs	same-scene co-enabled junctions: first in authored order fires, the eviction masks the second
+test/Prax/ScriptSpec.hs	the audience: 'dismissed' fires at boundary 5, not before (the fidelity pin)
+test/Prax/ScriptSpec.hs	the audience: dawdling lets the clock run out to 'dismissed'
+test/Prax/ScriptSpec.hs	the audience: flatter then petition reaches 'granted'
+test/Prax/ScriptSpec.hs	the audience: the Duke's concern moves him (once)
+test/Prax/ScriptSpec.hs	the player can romance the conspirator (as in Intrigue)
+test/Prax/ScriptSpec.hs	the player can strike first: ending complicity
+test/Prax/ScriptSpec.hs	the player can warn: ending loyalty
+test/Prax/ScriptSpec.hs	two timed junctions on one scene fire independently at their own delays
+test/Prax/SightSpec.hs	Prax.Sight
+test/Prax/SightSpec.hs	Seer/Seen/Spot remain legal -- they are the contract, not forbidden
+test/Prax/SightSpec.hs	a sighting persists after separation, and a new one overwrites it
+test/Prax/SightSpec.hs	a sighting template authoring Actor is a loud construction-time error
+test/Prax/SightSpec.hs	a sighting template authoring the Prax namespace is a loud construction-time error
+test/Prax/SightSpec.hs	co-presence deposits sightings, both ways; the absent see nothing
+test/Prax/SightSpec.hs	sightedWithin is a window over the stamp
+test/Prax/SightSpec.hs	the fixture world is well-formed
+test/Prax/SightSpec.hs	the round boundary advances the world turn
+test/Prax/SightSpec.hs	the schedule setter guards the sighting template (re-homed from the v40/v43 sightP guard)
+test/Prax/StressSpec.hs	Prax.Stress
+test/Prax/StressSpec.hs	a move-less scene with a pending transition is not a stress-harness false positive: the dead-end detector must give the round boundary's wrap its turn before declaring deadlock (v46 review finding 4)
+test/Prax/StressSpec.hs	coverage family generalizes past Script's currentScene: the village's marketDay family is tracked when named, proving the second application
+test/Prax/StressSpec.hs	random play of the episode: no dead ends, both active branches reached
+test/Prax/StressSpec.hs	scene coverage: random play reaches both scenes and every ending
+test/Prax/StressSpec.hs	the bar survives random play with no dead ends and broad coverage
+test/Prax/SymSpec.hs	Prax.Sym
+test/Prax/SymSpec.hs	distinct names get distinct symbols
+test/Prax/SymSpec.hs	distinct symbols have distinct ids
+test/Prax/SymSpec.hs	intern/symName round-trips and is idempotent
+test/Prax/SymSpec.hs	symId/symOfId round-trip (Prax.Db's IntMap-keying escape hatch)
+test/Prax/SymSpec.hs	symName forces its argument before touching the pool (fresh, unforced Sym thunk)
+test/Prax/SymSpec.hs	variable-ness is packed into parity
+test/Prax/TypeCheckSpec.hs	ForEach sub-inserts join the cardinality corpus
+test/Prax/TypeCheckSpec.hs	Prax.TypeCheck
+test/Prax/TypeCheckSpec.hs	SeedlessDraw: a draw in a schedule rule body is found (v50 T1 review M2)
+test/Prax/TypeCheckSpec.hs	SeedlessDraw: a draw nested under a ForEach is still found
+test/Prax/TypeCheckSpec.hs	SeedlessDraw: an unseeded world with a draw is flagged
+test/Prax/TypeCheckSpec.hs	SeedlessDraw: seedDie clears it
+test/Prax/TypeCheckSpec.hs	a Call to an undefined function is caught
+test/Prax/TypeCheckSpec.hs	a coercion-free world names no punitive belief and is clean (v54)
+test/Prax/TypeCheckSpec.hs	a constant declared in two sorts is caught
+test/Prax/TypeCheckSpec.hs	a correct little practice is well-formed
+test/Prax/TypeCheckSpec.hs	a dangling Call or spawn inside ForEach is caught
+test/Prax/TypeCheckSpec.hs	a dead ForEach guard is caught, sited as an effect guard
+test/Prax/TypeCheckSpec.hs	a dead action conjunct (typo'd predicate) is caught
+test/Prax/TypeCheckSpec.hs	a dead axiom body is not flagged (axiom bodies are out of scope)
+test/Prax/TypeCheckSpec.hs	a dead desire and a dead character want are each caught
+test/Prax/TypeCheckSpec.hs	a dead pattern inside a Subquery interior is not flagged
+test/Prax/TypeCheckSpec.hs	a dead positive inside Exists is caught
+test/Prax/TypeCheckSpec.hs	a fully unanchored pattern (every segment a variable) is not flagged
+test/Prax/TypeCheckSpec.hs	a genuinely unbound variable inside ForEach is flagged
+test/Prax/TypeCheckSpec.hs	a half-dead Or clause is not flagged
+test/Prax/TypeCheckSpec.hs	a negation over a never-produced family is not flagged
+test/Prax/TypeCheckSpec.hs	a performOutcome clock-jump is NOT flagged (typeCheck sees no authored write)
+test/Prax/TypeCheckSpec.hs	a position given values of two sorts is caught
+test/Prax/TypeCheckSpec.hs	a practice injected onto compiled Audience writing its patience marker flags loudly (the v50 door)
+test/Prax/TypeCheckSpec.hs	a relation used as both ! and . is caught
+test/Prax/TypeCheckSpec.hs	a reserved write NESTED under a ForEach is still flagged (v53 final review M-2)
+test/Prax/TypeCheckSpec.hs	a sightedWithin-shaped authored condition is clean (turn reads free)
+test/Prax/TypeCheckSpec.hs	a threaten-shaped deposit for an UNREGISTERED punitive name flags CoercionUnmotivated, naming the name (v54)
+test/Prax/TypeCheckSpec.hs	a variable bound by ForEach conditions is not unbound
+test/Prax/TypeCheckSpec.hs	a variable used in two different sorts is caught
+test/Prax/TypeCheckSpec.hs	a wild world (undefined Call) silences the lint, not the ref check
+test/Prax/TypeCheckSpec.hs	a world that can produce obliged.* but omits its □-closure is flagged, naming the axiom
+test/Prax/TypeCheckSpec.hs	a world with liftable axioms that CANNOT invoke obligation is clean (the Feud shape)
+test/Prax/TypeCheckSpec.hs	an authored Delete of scenePatience is flagged (a delete is a write)
+test/Prax/TypeCheckSpec.hs	an authored Delete of turn is flagged (the strengthening)
+test/Prax/TypeCheckSpec.hs	an authored Insert of contradiction is flagged
+test/Prax/TypeCheckSpec.hs	an authored InsertFor of scenePatience in a practice init is flagged
+test/Prax/TypeCheckSpec.hs	an authored Match on contradiction is clean (reads free)
+test/Prax/TypeCheckSpec.hs	an authored function-case write of scenePatience is flagged
+test/Prax/TypeCheckSpec.hs	an authored practice-action Insert of scenePatience is flagged
+test/Prax/TypeCheckSpec.hs	an authored setSchedule rule body writing scenePatience is flagged
+test/Prax/TypeCheckSpec.hs	an authored write to the currentScene family is flagged
+test/Prax/TypeCheckSpec.hs	an authored write to the engine clock is flagged
+test/Prax/TypeCheckSpec.hs	an axiom head deriving scenePatience is flagged
+test/Prax/TypeCheckSpec.hs	an axiom head deriving the clock family is flagged
+test/Prax/TypeCheckSpec.hs	an axiom head variable absent from the body is caught
+test/Prax/TypeCheckSpec.hs	an axiomless world that can invoke obligation is clean (nothing to close)
+test/Prax/TypeCheckSpec.hs	an outcome variable bound by nothing is caught
+test/Prax/TypeCheckSpec.hs	an unbound variable in a registered function's case is caught, sited at fn <name>
+test/Prax/TypeCheckSpec.hs	every shipped world is well-formed
+test/Prax/TypeCheckSpec.hs	no sort declarations ⇒ no sort errors
+test/Prax/TypeCheckSpec.hs	partial closure flags each missing twin individually (v51 final review M2)
+test/Prax/TypeCheckSpec.hs	registering the punitive desire clears it — genuine (held) and bluff (not-held) are the SAME clean result (v54)
+test/Prax/TypeCheckSpec.hs	spawning an undefined practice is caught
+test/Prax/TypeCheckSpec.hs	the corrected twin of the typo is well-formed
+test/Prax/TypeCheckSpec.hs	the same world declared via obligedClose is well-formed
+test/Prax/ViewInvariantSpec.hs	Prax.ViewInvariant (readView == recomputed closure)
+test/Prax/ViewInvariantSpec.hs	bar: 12 turns, invariant after every turn
+test/Prax/ViewInvariantSpec.hs	feud: 20 turns, invariant after every turn
+test/Prax/ViewInvariantSpec.hs	intrigue: 12 turns, invariant after every turn
+test/Prax/ViewInvariantSpec.hs	the checker catches a deliberately doctored stale view
+test/Prax/ViewInvariantSpec.hs	village: 3 rounds of free play, invariant after every turn
+test/Prax/VillageSpec.hs	Prax.Worlds.Village
+test/Prax/VillageSpec.hs	THE INVARIANT at world scale: carol's candidateActions is identical angry or calm
+test/Prax/VillageSpec.hs	a secret keeps: bob will not steal while the square watches
+test/Prax/VillageSpec.hs	a told-about spite predicts eve's whisper but not gale's
+test/Prax/VillageSpec.hs	absolution inserts the defeater; slanderer regards dissolve; every belief persists
+test/Prax/VillageSpec.hs	amends is only offered under someone's regard
+test/Prax/VillageSpec.hs	an atoned thief is deterred: the planner sees the snap-back
+test/Prax/VillageSpec.hs	anger drives the confrontation: the smoulder discharged, feeling gone
+test/Prax/VillageSpec.hs	atonement dissolves standing while memory persists
+test/Prax/VillageSpec.hs	carol's shakedown: eve complies -- the debt exists, the threat is gone, no exposure happened
+test/Prax/VillageSpec.hs	carol's shakedown: the reputation stack is undisturbed for uninvolved parties
+test/Prax/VillageSpec.hs	carol's shakedown: the threat fires once she holds eyewitness evidence
+test/Prax/VillageSpec.hs	confessing to gale converts the mark and deposits the ACT, self-sourced, not the content
+test/Prax/VillageSpec.hs	confronting cools the witness toward the thief, once
+test/Prax/VillageSpec.hs	convergence: attendees with no stronger stake converge on the square while the market holds
+test/Prax/VillageSpec.hs	deterrence plus opportunity yields industry: watched bob earns his loaf
+test/Prax/VillageSpec.hs	dispersal: a villager with no stronger stake leaves once the market closes; the cycle recurs
+test/Prax/VillageSpec.hs	fade catches the unvented (lifetime expiry)
+test/Prax/VillageSpec.hs	free-play preservation: eve does not confess or get absolved unprompted
+test/Prax/VillageSpec.hs	hearsay licenses suspicion, not confrontation
+test/Prax/VillageSpec.hs	incorrigibility: gale, now knowing two distinct instances, refuses further absolution
+test/Prax/VillageSpec.hs	movement is not news (undeclared actions deposit nothing)
+test/Prax/VillageSpec.hs	no appetite, no hunger: gale and carol never seed hungry, however long free play runs
+test/Prax/VillageSpec.hs	only a witness can confront the thief
+test/Prax/VillageSpec.hs	onset arms across seeds: the same shun hits under one seed, misses under another
+test/Prax/VillageSpec.hs	out of sight, out of mind: an unsighted mover is not predicted
+test/Prax/VillageSpec.hs	percolation: a fact witnessed at market reaches more believers than the same fact witnessed on a quiet day
+test/Prax/VillageSpec.hs	re-offense revokes atonement: standing snaps back from memory
+test/Prax/VillageSpec.hs	re-offense: a fresh whisper snaps the defeater away, standing returns
+test/Prax/VillageSpec.hs	same spite, different temperaments: eve whispers, gale never does
+test/Prax/VillageSpec.hs	seen suppresses suspicion even alongside hearsay
+test/Prax/VillageSpec.hs	temperament is legible from t=0: the village presumes gale's conscience
+test/Prax/VillageSpec.hs	the arc completes on its own: dana eventually eyes bob
+test/Prax/VillageSpec.hs	the arithmetic pin: a hungry bob with bread and a finished project eats; a sated one does not
+test/Prax/VillageSpec.hs	the distrust gate closes the village's gossip channel
+test/Prax/VillageSpec.hs	the frame-up: eve's whisper becomes reputation and shunning
+test/Prax/VillageSpec.hs	the framed have no amends: carol is offered no return
+test/Prax/VillageSpec.hs	the golden's own beat: dana's shun of carol draws a hit at the shipped seed
+test/Prax/VillageSpec.hs	the hunger rule: absent at turn 2, present exactly at turn 3; the next firing re-hungers a fed bob
+test/Prax/VillageSpec.hs	the liveness pin: smoulders is FloorCheck
+test/Prax/VillageSpec.hs	the opportunism stays honest: an empty square mid-project still tempts
+test/Prax/VillageSpec.hs	the perfect crime: alone, bob steals and no one ever knows
+test/Prax/VillageSpec.hs	the rumor spreads on its own: carol carries the news to the mill
+test/Prax/VillageSpec.hs	the theft is witnessed by the square, not the mill
+test/Prax/VillageSpec.hs	the trait arm: short-tempered carol reaches where an un-tempered control does not
+test/Prax/VillageSpec.hs	the village keeps a perception clock and sightings
+test/Prax/VillageSpec.hs	the whole arc runs itself: notoriety tips bob; forgiveness follows
+test/Prax/VillageSpec.hs	three regards make notoriety; standing has teeth
+test/Prax/VillageSpec.hs	threshold fear leaves eve's free-play whispering unchanged: still rational below the brink
+test/Prax/VillageSpec.hs	watching him work teaches the village his purpose
+test/Prax/WitnessSpec.hs	Prax.Witness
+test/Prax/WitnessSpec.hs	a co-present character comes to believe the event; an absent one doesn't
+test/Prax/WitnessSpec.hs	observable only appends; the action's own effects are untouched
+test/Prax/WitnessSpec.hs	saw is the seen-provenance belief condition
+test/Prax/WitnessSpec.hs	the actor is not their own witness
+test/Prax/WitnessSpec.hs	the seen deposit is multi-valued: other evidence survives beside it
+test/Spec.hs	prax
