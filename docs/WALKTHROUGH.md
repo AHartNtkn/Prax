@@ -1516,8 +1516,12 @@ bought twice, and the recursive lookahead discovered it could — a renewed thre
 re-extracts, and the *prospect* of repeat extraction inflated the very first buy decision's own
 score to −51.24, against the guarded, canonical −63.84. The fix mirrors the probe exactly (`comply`
 now requires no debt already standing); the finding — the planner discovering repeat extortion on
-its own before anyone designed for it — banks **escalating / serial extortion** as a real future
-mechanic in `docs/LEDGER.md`, not a hypothetical one.
+its own before anyone designed for it — banked **escalating / serial extortion** as a real future
+mechanic in `docs/LEDGER.md`, not a hypothetical one. **That bank is now discharged at v54**: a
+`coComplianceLasts = Just n` lifetime expires the `complied` marker and the racket cycles — one
+purchase per bought period, then the extorter extracts again — with no new logic, the permanence
+here becoming the `Nothing` case. Buying protects the purse, never the person (the no-fiat ruling):
+betrayal-vs-wait is emergent `pickAction` scoring, enforced by no marker.
 
 **The village demo blocked twice before it shipped.** Both drafted arcs failed on measured traces:
 per-head fear can't be low enough to let eve keep whispering before a guaranteed witness *and* high
@@ -1653,8 +1657,9 @@ falsehood travels through her anyway, indistinguishable from truth on her end be
 truth — including carrying it straight back to the woman who invented it. (An incidental find while
 probing this, outside anything pinned or asserted: carol, once she regains eyewitness evidence of a
 *second* whisper this way, independently rediscovers grounds to shake eve down again — a live,
-unscripted echo of the repeat-extortion question banked above, not a claim this round builds on or
-tests.) `Prax.VillageSpec`'s "same spite, different temperaments" test carries exactly this
+unscripted echo of the repeat-extortion question banked above, now BUILT as a first-class mechanic
+at v54 via `coComplianceLasts`, though this village instance stays free-play, not a claim this round
+builds on or tests.) `Prax.VillageSpec`'s "same spite, different temperaments" test carries exactly this
 retelling: the free-play assertions that still hold (the frame-up, eve's own mark, gale never lying)
 are kept and sharpened with "exactly one whisper, ever"; the laundering assertion moves to the forced
 continuation above, so v25's mechanism stays pinned rather than silently going untested.
