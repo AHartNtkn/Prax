@@ -5,10 +5,11 @@ the scope grew on the design lens's charge — `currentScene` and `ending` sit i
 STRUCTURALLY the same position as `scenePatience` (compiler-emitted,
 literal-tailed, single-legitimate-writer, corruptible through the same raw doors),
 and my "out of scope: any other family" was means-testing by which bank item
-happened to be filed [D-Q4]. All three families reserve; the blast-radius
-directive (v44's "do not limit blast radius — segregating what can use the same
-mechanism is asking for cleanup later") decides the fork the panel left open.
-Remaining findings folded with [S]/[D]/[C] citations.
+happened to be filed [D-Q4]. The blast-radius directive decided the fork toward
+reserving — and then the probe corrected the scope AGAIN: `currentScene` reserves
+alongside `scenePatience`, but `ending` is excluded by EVIDENCE (Intrigue
+raw-authors it — shared vocabulary, not compiler bookkeeping; the exclusion is
+argued below, not omitted). Remaining findings folded with [S]/[D]/[C] citations.
 
 The v50 bank item opens: the `scenePatience` rejection lives only in
 `Prax.Script.compile`, so a write injected through the RAW doors
@@ -57,23 +58,32 @@ what it installed, the reserved scan polices exactly the authored remainder.
   the v44/v45 threat model [D-Q2]. The scan's axiom leg stays UNFILTERED —
   there is no engine door for axioms, and that asymmetry is intentional, not
   an incomplete scoping [C-I5].
-- **THREE families join `reservedFamilies`** [D-Q4]: `scenePatience`,
-  `currentScene`, and `ending` — each compiler-emitted, literal-tailed, with
+- **TWO families join `reservedFamilies`** [D-Q4, then corrected by evidence]:
+  `scenePatience` and `currentScene` — compiler-emitted, literal-tailed, with
   exactly one legitimate writer (the story rule / compile's setup, both
-  engine-side: transitions and endings ride the engine-door rule, and the
-  start scene's inserts are PERFORMED into the db at compile, which is state,
-  not a definition surface [S — the highest-risk trace: no second self-trip
-  door exists]). Same law as `turn`/`contradiction`: WRITES forbidden at every
+  engine-side: transitions ride the engine-door rule, and the start scene's
+  inserts are PERFORMED into the db at compile, which is state, not a
+  definition surface [S — the highest-risk trace: no second self-trip door
+  exists]). Same law as `turn`/`contradiction`: WRITES forbidden at every
   authored site (practices, functions, authored schedule rules, axiom heads;
   a delete is a write). READS stay free at the raw layer (the `turn`
-  precedent: reads couple but cannot corrupt, and gating a beat on the current
-  scene or a reached ending is legitimate authoring; the read-scan machinery
-  died with v50's zero-member law and is not resurrected). TypeCheck imports
-  the family names from `Prax.Script` — which must EXPORT them
-  ([C-C1]: `scenePatienceFamily` is defined but unexported today, and
-  `currentScene`/`ending` get named constants as their one home). Plan-time
-  verification: no shipped authored definition writes any of the three — if
-  one does, that is a bug this round FIXES, not accommodates.
+  precedent: reads couple but cannot corrupt, and gating a beat on the
+  current scene is legitimate authoring; the read-scan machinery died with
+  v50's zero-member law and is not resurrected). TypeCheck imports the family
+  names from `Prax.Script` — which must EXPORT them ([C-C1]:
+  `scenePatienceFamily` is defined but unexported today; `currentScene` gets
+  a named constant as its one home).
+- **`ending` is EXCLUDED — by evidence, not silence** [D-Q4's requirement,
+  answered with a probe rather than a category argument]: Intrigue
+  raw-authors `Insert "ending!…"` from ordinary practice actions
+  (Intrigue.hs:71/:83/:93) — the raw layer's legitimate story-termination
+  idiom, predating and independent of Script. `ending` is therefore SHARED
+  world-facing vocabulary with two sanctioned writer classes (raw authored
+  actions; Script's compiled junctions), not compiler bookkeeping — an
+  authored `ending` write is exercising the surface, not corrupting a
+  mechanism's private state. Reserving it would flag a shipped world's
+  correct design. The design lens's "visible fiction-state" category is
+  REAL for this family, demonstrated rather than asserted.
 - **The Script-layer guard is UNCHANGED and stricter** (both polarities
   rejected in scripted content, site-named errors at the surface that can see
   who's asking) — two layers, each policing the surface it owns, neither a
@@ -110,8 +120,9 @@ enumeration (also stale on count since v51).
 
 - A raw practice action inserting `scenePatience.x.y` flags `ReservedFamily`;
   same for a function case, an authored `setSchedule` rule body, an axiom
-  head, an `InsertFor`, and a `Delete` (a delete is a write); `currentScene`
-  and `ending` writes each pinned at a representative site.
+  head, an `InsertFor`, and a `Delete` (a delete is a write); a `currentScene`
+  write pinned at a representative site; Intrigue (the authored-`ending`
+  world) stays `typeCheck == []` — the exclusion's standing pin.
 - The mixed-composition repro from the bank, pinned end-to-end: a practice
   added via `definePractices` ONTO COMPILED AUDIENCE writing a `scenePatience`
   path flags loudly (the exact door v50 left open).
