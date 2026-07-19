@@ -2346,9 +2346,18 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   the existing cross-door collision pins (ScheduleRuleSpec, both directions) stay green.
 
   Nothing moves: no fiction transcript, score, or analysis row; the golden specs stay byte-identical.
-  Suite: 688 → **699** (T1, `7c02d72`: +11 = eight `ReservedFamily` pins one per authored site + the
-  mixed-composition repro; three ScheduleRuleSpec provenance pins). `-Wall` clean; deaths none (this
-  round only adds).
+  Suite: 688 → **699** → **700** (T1, `7c02d72`: +11 = eight `ReservedFamily` pins — seven authored
+  sites plus the mixed-composition repro — and three ScheduleRuleSpec provenance pins; then the
+  final review's nesting pin, +1: a reserved write nested under a `ForEach` is still flagged,
+  locking `writesOf`'s recursion as a pinned property rather than an unpinned correctness).
+  `-Wall` clean; code deaths none (this round only adds).
+
+  Record honesty (the v51 precedent): the T1 implementer died without reporting — no RED evidence
+  delivered, the laziness verification unreported. The isolated task review substituted and
+  verified BOTH empirically (every pin re-neutered mentally and the filter's load-bearing status
+  confirmed against Play; the duplicate-through-the-engine-door path forced in the REPL — the
+  record update evaluates its base to WHNF, so the guard fires before any silent record). The
+  final review then re-verified the key claims independently rather than trusting the substitute.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now

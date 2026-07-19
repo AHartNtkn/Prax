@@ -334,6 +334,17 @@ tests = testGroup "Prax.TypeCheck"
         (any (\case ReservedFamily "scenePatience" _ "scenePatience.x.y" -> True; _ -> False)
              (typeCheck (world1 p)))
 
+  , testCase "a reserved write NESTED under a ForEach is still flagged (v53 final review M-2)" $ do
+      let p = practice
+            { practiceId = "meddler9"
+            , initOutcomes = [ Insert "mark.here" ]
+            , actions = [ action "[Actor]: forge patience for everyone" []
+                            [ ForEach [ Match "mark.M" ]
+                                [ Insert "scenePatience.n.M" ] ] ] }
+      assertBool "ReservedFamily scenePatience through the ForEach recursion"
+        (any (\case ReservedFamily "scenePatience" _ "scenePatience.n.M" -> True; _ -> False)
+             (typeCheck (world1 p)))
+
   , testCase "an authored InsertFor of scenePatience in a practice init is flagged" $ do
       let p = practice
             { practiceId = "meddler2"
