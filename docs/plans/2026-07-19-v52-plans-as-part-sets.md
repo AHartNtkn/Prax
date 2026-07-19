@@ -29,40 +29,73 @@ the ledger entry as a stated boundary [D-I2].
 
   endeavor :: String -> Int -> String -> [Condition] -> [Part]
            -> (Action, Practice, Desire)
-  endeavor pid w ulabel gate parts
-    -- guards, all loud, construction-time:
-    --   null parts                                   (an endeavor is work)
-    --   pid contains '.' or '!'                      (existing guard)
-    --   any partName contains '.' or '!'             (it is a path segment)
-    --   duplicate partNames                          (the ledger key)
-    --   any partAfter name ∉ map partName parts      (dangling edge [D-C1])
-    --   a part listing itself in partAfter           (self-edge; also covers
-    --                                                 the trivial cycle — full
-    --                                                 cycle detection is NOT
-    --                                                 built: a cycle among ≥2
-    --                                                 parts makes those parts
-    --                                                 permanently unavailable,
-    --                                                 which property pins can
-    --                                                 not distinguish from
-    --                                                 unmet needs. Flag it in
-    --                                                 the same validation pass
-    --                                                 (reachability from the
-    --                                                 edge-free parts) — a
-    --                                                 part unreachable by
-    --                                                 topology alone is a
-    --                                                 LOUD error.)
   ```
 
-  Generated pieces: undertake action unchanged in shape. The practice:
-  `initOutcomes = []` (the stage!0 seed DIES — instance enumeration rides the
-  undertake fact [S-verified]); part k's action =
-  `action (partLabel p)
-     ([ Eq "Actor" "Owner", Match instanceFact, Not (ledger p) ]
-      ++ [ Match (ledger q) | q <- partAfter p ] ++ partNeeds p)
-     (Insert (ledger p) : partYields p)`
-  where `ledger p = "practice." ++ pid ++ ".Owner.did." ++ partName p` is
-  PRIVATE. Pursuit: `Desire ("pursues-" ++ pid) (Want [ Match ("practice." ++
-  pid ++ ".Owner.did.P") ] w)`.
+  The full body (transcribe, don't redesign — the review pinned every guard
+  and the reachability algorithm as TRANSITIVE, a fixpoint, because a one-hop
+  check would miss `A after [B], B after [C], C after [B]`; reachability from
+  edge-free roots IS complete cycle detection — a graph with no edge-free node
+  contains a cycle, and every cycle participant or dependent is unreachable):
+
+  ```haskell
+  endeavor pid w ulabel gate parts
+    | null parts =
+        error ("endeavor: " ++ show pid ++ " has no parts (an endeavor is work)")
+    | any (`elem` (".!" :: String)) pid =
+        error ("endeavor: id " ++ show pid ++ " must be a single path segment")
+    | (n : _) <- [ n | n <- names, any (`elem` (".!" :: String)) n ] =
+        error ("endeavor " ++ show pid ++ ": part name " ++ show n
+               ++ " must be a single path segment (it keys the ledger)")
+    | (n : _) <- names \\ nub names =
+        error ("endeavor " ++ show pid ++ ": duplicate part name " ++ show n)
+    | ((p, e) : _) <- [ (partName p, e) | p <- parts
+                      , e <- partAfter p, e `notElem` names ] =
+        error ("endeavor " ++ show pid ++ ": part " ++ show p
+               ++ " depends on " ++ show e ++ ", which is not a part")
+    | (v : _) <- concat [ authoredVarClash [] (partNeeds p) (partYields p)
+                        | p <- parts ] =
+        error ("endeavor " ++ show pid ++ ": part authors " ++ show v
+               ++ " -- the Prax namespace is reserved")
+    | (n : _) <- filter (`notElem` reachable) names =
+        error ("endeavor " ++ show pid ++ ": part " ++ show n
+               ++ " is unreachable (its dependency edges form or feed a cycle)")
+    | otherwise = (undertake, proj, pursuit)
+    where
+      names = map partName parts
+      -- Transitive reachability from the edge-free roots (fixpoint).
+      reachable = go [ partName p | p <- parts, null (partAfter p) ]
+        where
+          go acc =
+            let acc' = nub (acc ++ [ partName p | p <- parts
+                                   , all (`elem` acc) (partAfter p) ])
+            in if length acc' == length acc then acc else go acc'
+      inst suffix = "practice." ++ pid ++ suffix
+      ledger n = inst (".Owner.did." ++ n)
+      undertake = action ulabel (gate ++ [ Not (inst ".Actor") ])
+                    [ Insert (inst ".Actor") ]
+      -- No instance-fact Match: instance existence and Owner's binding ride
+      -- the practice-instance ENUMERATION (the undertake fact's trie node),
+      -- exactly as they always did — the review traced that the old stage
+      -- gate never bound Owner either [review #1]. No init seed: the stage!0
+      -- cursor is dead and nothing reads the family.
+      partAction p = action (partLabel p)
+        ([ Eq "Actor" "Owner", Not (ledger (partName p)) ]
+         ++ [ Match (ledger d) | d <- partAfter p ]
+         ++ partNeeds p)
+        (Insert (ledger (partName p)) : partYields p)
+      proj = practice
+        { practiceId   = pid
+        , practiceName = "[Owner] pursues " ++ pid
+        , roles        = ["Owner"]
+        , initOutcomes = []
+        , actions      = map partAction parts }
+      pursuit = Desire ("pursues-" ++ pid)
+                  (Want [ Match (inst ".Owner.did.P") ] w)
+  ```
+
+  (The v40 `authoredVarClash` guard is NEW versus today's endeavor — the spec
+  claims "v40-guarded" and the review found neither code nor plan backing it
+  [review #7]; option (a), add it, chosen: cheap, loud, matches the spec.)
 - `src/Prax/Worlds/Village.hs` (~:91-104): the three `Stage`s become `Part`s —
   names `"sweep"`/`"fetch"`/`"bake"`, labels UNCHANGED, edges
   `fetch after ["sweep"]`, `bake after ["fetch"]`, needs/yields verbatim
@@ -74,14 +107,20 @@ the ledger entry as a stated boundary [D-I2].
   1. horizon regression re-pinned (4-part CHAIN to completion at depth 2 — the
      v24 probe, on edges);
   2. parallel parts (two edge-free parts both offered; un-chosen still offered
-     after — RED by asserting against the old cursor semantics is impossible
-     post-replacement, so RED = write the pin before the new module compiles
-     the parallel gate, per the established neuter path);
+     after). RED neuter [review #5]: compile the gate so a completed part
+     suppresses its SIBLINGS (add `Not` of every other ledger entry) — the pin
+     asserting the un-chosen edge-free part still offered FAILS, for the named
+     reason; then ship the real gate, GREEN.
   3. optional part (culmination fires with an optional part undone; the
-     optional still pays +w after — score-compared via pickAction/evaluate);
-  4. threshold success (a 5-part endeavor whose culmination needs
-     Count ≥ 3 over the ledger family fires exactly at 3 [property 4 — the
-     spec claims it, so it is pinned]);
+     optional still pays +w after — score-compared via evaluate). RED neuter:
+     compile the culmination's gate over ALL parts rather than its `partAfter`
+     list — the pin asserting it fires with the optional undone FAILS.
+  4. threshold success (a 5-part endeavor whose culminating part carries
+     `[ Subquery "Done" ["P"] [ Match ("practice.<pid>.Owner.did.P") ]
+      , Count "N" "Done", Cmp Gte "N" "3" ]` — the review traced this exact
+     shape through queryCooked, arities and semantics confirmed [review #4] —
+     fires exactly at 3 of 5). RED neuter: drop or off-by-one the `Cmp` — the
+     fires-at-3-not-2 assertion FAILS.
   5. dependency gating (unmet edge blocks; met edge offers);
   6. each-part-once + teardown re-opens (complete a part, not re-offered;
      subtree delete, undertake offered again);

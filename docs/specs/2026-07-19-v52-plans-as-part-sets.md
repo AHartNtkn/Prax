@@ -63,9 +63,12 @@ endeavor :: String -> Int -> String -> [Condition] -> [Part]
   be world-visible fiction ALSO writes a real deed via `partYields`
   (`swept.Actor`, witnessed), exactly as v24 did — the ledger and the fiction
   are separate facts with separate jobs.
-- **Each part's action**: gated on the instance (`Eq Actor Owner` + instance
-  fact), `Not` its own ledger entry, its compiled `partAfter` conditions, and
-  `partNeeds`. NO cursor — every part whose gates the world meets is
+- **Each part's action**: gated `Eq Actor Owner` (the instance's existence and
+  Owner's binding ride the practice-instance ENUMERATION itself, from the
+  undertake fact — the plan review traced this: the stage gate never bound
+  Owner, so no explicit instance match is needed and none is added), `Not` its
+  own ledger entry, its compiled `partAfter` conditions, and `partNeeds`
+  (v40-guarded at construction: `authoredVarClash` over needs and yields). NO cursor — every part whose gates the world meets is
   simultaneously available; the planner chooses among parallel parts by
   ordinary scoring. `stage!` DIES (nothing else reads the family — the
   instance-enumeration binds Owner via the undertake fact, not the seed
