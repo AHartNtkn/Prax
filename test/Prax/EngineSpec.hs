@@ -355,15 +355,18 @@ tests = testGroup "Prax.Engine"
 
     , testCase "build-order death: setAxioms-first equals setAxioms-outermost (cookedRules and typeCheck)" $ do
         -- v48's BUILD-ORDER INVARIANT is gone: cookAxioms reads only the axiom
-        -- list, so no obliged-producing setup fact need precede setAxioms. A
-        -- census-true world built setAxioms-FIRST (the order v48's invariant
-        -- forbade) is identical to the setAxioms-outermost build in both the
-        -- cooked rule set and the checker's verdict.
+        -- list, so no obliged-producing setup fact need precede setAxioms. The
+        -- db fact is the world's SOLE obliged producer (no practice — v48's
+        -- invariant was specifically the DB leg; a practice producer would make
+        -- the census true in every ordering and let a reintroduced db-consulting
+        -- gate pass this pin unseen). Built setAxioms-FIRST — the order v48
+        -- forbade, where the fact lands after the rules are fixed — the world
+        -- is identical to the setAxioms-outermost build in both the cooked rule
+        -- set and the checker's verdict.
         let axs = obligedClose [liftAx]
             producer = Insert "obliged.w.a.foo"
-            base = definePractices [obligeP] emptyState
-            outermost = setAxioms axs (performOutcome producer base)
-            first     = performOutcome producer (setAxioms axs base)
+            outermost = setAxioms axs (performOutcome producer emptyState)
+            first     = performOutcome producer (setAxioms axs emptyState)
         cookedRules first @?= cookedRules outermost
         typeCheck first   @?= typeCheck outermost
     ]
