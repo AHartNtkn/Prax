@@ -452,6 +452,27 @@ tests = testGroup "Prax.TypeCheck"
           w  = setAxioms (obligedClose [a1] ++ [a2])
                          (definePractices [obligeProducer] emptyState)
       typeCheck w @?= [ DeonticUnclosed "d.X" ]
+
+    -- CoercionUnmotivated: a threaten-shaped deposit names a registered desire --
+  , testCase "a threaten-shaped deposit for an UNREGISTERED punitive name flags CoercionUnmotivated, naming the name (v54)" $ do
+      -- The accident (spec v54 §2): a practice deposits a coercion motive
+      -- belief (…believes.desires.<E>.punishes-ghost) but no punishes-ghost
+      -- desire is registered -- believed-desire resolution dangles, the threat
+      -- is silently inert. Exactly the silent failure v49 documented.
+      typeCheck (world1 haunt) @?= [ CoercionUnmotivated "punishes-ghost" ]
+
+  , testCase "registering the punitive desire clears it — genuine (held) and bluff (not-held) are the SAME clean result (v54)" $ do
+      -- The check consults registration only, never holding: registered-and-held
+      -- (genuine) and registered-not-held (bluff) both clear the flag. One
+      -- registered desire, whose non-dead want reads the world's own barn fact.
+      let ghostDesire = Desire "punishes-ghost" (Want [ Match "barn.PraxD" ] 5)
+      typeCheck (setDesires [ghostDesire] (world1 haunt)) @?= []
+
+  , testCase "a coercion-free world names no punitive belief and is clean (v54)" $ do
+      let p = practice
+            { practiceId = "quiet", roles = ["R"]
+            , actions = [ action "[Actor]: greet [R]" [] [ Insert "greeted.Actor.R" ] ] }
+      typeCheck (world1 p) @?= []
   ]
   where
     words' = words . map (\c -> if c == ',' then ' ' else c)
@@ -459,3 +480,11 @@ tests = testGroup "Prax.TypeCheck"
     obligeProducer = practice
       { practiceId = "oblige", roles = ["R"]
       , actions = [ action "[Actor]: swear a duty" [] [ Insert "obliged.Actor.duty" ] ] }
+    -- A practice that DEPOSITS a coercion motive belief for punishes-ghost (the
+    -- threaten shape). Its init seeds a barn so neither the deposit action's
+    -- guard nor a registered kernel want is dead.
+    haunt = practice
+      { practiceId = "haunt", roles = ["V"]
+      , initOutcomes = [ Insert "barn.here" ]
+      , actions = [ action "[Actor]: menace [V]" [ Match "barn.V" ]
+                      [ Insert "V.believes.desires.Actor.punishes-ghost.heard.Actor" ] ] }

@@ -93,6 +93,11 @@ runCheck args = do
       "unclosed obligation rule \"" ++ s ++ "\": this world can invoke an"
         ++ " obligation but did not declare its □-closure -- wrap its axioms in"
         ++ " Prax.Deontic.obligedClose"
+    describe (CoercionUnmotivated n) =
+      "unmotivated coercion \"" ++ n ++ "\": a threat deposits this punitive"
+        ++ " belief but no such desire is registered, so the threat is silently"
+        ++ " inert -- register it with Prax.Engine.setDesires (hold it or not is"
+        ++ " the genuine/bluff choice)"
 
 main :: IO ()
 main = do

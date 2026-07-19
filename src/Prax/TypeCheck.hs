@@ -7,12 +7,13 @@
 -- sentence a world authors ('practiceDefs' + 'axioms' + facts), each of which
 -- flags only unambiguous bugs (no false positives, so the report is trustworthy).
 -- It adds no logic engine — just a pass over the existing sentence structure.
--- One 'TypeError' constructor per check, eight in all — the four below plus
+-- One 'TypeError' constructor per check, nine in all — the four below plus
 -- declared-sort conflicts ('SortConflict', the opt-in sort pass), an authored
 -- touch of an engine-owned fact family ('ReservedFamily', spec v45\/v53 —
 -- @turn@, @contradiction@, @scenePatience@, and @currentScene@), an unseeded
--- die ('SeedlessDraw'), and an undeclared obligation closure ('DeonticUnclosed',
--- spec v51).
+-- die ('SeedlessDraw'), an undeclared obligation closure ('DeonticUnclosed',
+-- spec v51), and a coercion whose motive belief names an unregistered punitive
+-- desire ('CoercionUnmotivated', spec v54).
 --
 --   * __Unbound variables__ — a variable used in an outcome (or an axiom head) that
 --     no precondition, role, or @Actor@ can bind is ungroundable: it silently
@@ -41,6 +42,7 @@ import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, d
 import           Prax.Query (Condition (..), CookedCondition (..), condSents)
 import           Prax.Relevance (mayUnifySyms, producibleAtoms, cookedFnPool, cookedOutcomeAtoms)
 import           Prax.Deontic (obligedHead, obligedLift, obligedLiftPrefix)
+import           Prax.Coerce (punitivePrefix)
 import           Prax.Sym (intern, symName, symIsVar)
 import           Prax.Types
 import           Prax.Derive (Axiom (..))
@@ -80,6 +82,13 @@ data TypeError
     -- yet its axiom list omits the □-lifted twin of the liftable rule whose
     -- first head is @teSentence@: DEON property 1 would silently fail. Declare
     -- the closure with 'Prax.Deontic.obligedClose' (spec v51).
+  | CoercionUnmotivated { teName :: String }
+    -- ^ an authored outcome deposits a coercion's motive belief
+    -- (@…believes.desires.\<E\>.@@teName@, @teName@ a @punishes-*@ name) for a
+    -- punitive desire absent from the registered vocabulary ('desires'): the
+    -- threat is silently inert (neither the genuine nor the bluff setting —
+    -- spec v54 §2). Register it with 'Prax.Engine.setDesires' (holding it or
+    -- not is the genuine\/bluff choice).
   deriving (Eq, Show)
 
 -- | Every well-formedness problem in a world (empty ⇒ the world is well-formed).
@@ -95,6 +104,7 @@ typeCheck st =
   ++ seedlessDrawErrors st
   ++ deadConditionErrors st
   ++ deonticUnclosedErrors st
+  ++ coercionUnmotivatedErrors st
   where ps = Map.elems (practiceDefs st)
 
 -- Variables mentioned in a sentence / condition -------------------------------
@@ -324,13 +334,19 @@ reservedFamilyErrors st =
     familyOf s = case pathNames s of
       (h : _) | h `elem` reservedFamilies -> Just h
       _                                   -> Nothing
-    writesOf o = case o of
-      Insert s      -> [s]
-      InsertFor _ s -> [s]
-      Delete s      -> [s]                    -- a delete is a write
-      ForEach _ os  -> concatMap writesOf os
-      Roll _ _ _ os -> concatMap writesOf os
-      Call _ _      -> []
+
+-- The sentences an outcome writes: insert\/insertFor\/delete (a delete is a
+-- write), recursing through 'ForEach' and 'Roll'; a 'Call' writes nothing. A
+-- top-level binding shared by 'reservedFamilyErrors' and
+-- 'coercionUnmotivatedErrors' (both scan 'writeSites').
+writesOf :: Outcome -> [String]
+writesOf o = case o of
+  Insert s      -> [s]
+  InsertFor _ s -> [s]
+  Delete s      -> [s]
+  ForEach _ os  -> concatMap writesOf os
+  Roll _ _ _ os -> concatMap writesOf os
+  Call _ _      -> []
 
 -- The AUTHORED write sites, with labels: practice action/init/function-case
 -- outcomes and every AUTHORED schedule rule body's outcomes. Schedule rules
@@ -494,6 +510,26 @@ deonticInvokable st = wild || any headProduces producerHeads
     axiomHeadsU = [ h | ax <- axioms st, s <- axiomThen ax, (h : _) <- [map intern (pathNames s)] ]
     producerHeads = insertHeads ++ dbHeads ++ axiomHeadsU
     headProduces h = h == intern obligedHead || symIsVar h
+
+-- Check 9: a deposited punitive belief names a registered desire -------------
+
+-- 'Prax.Coerce.coerce''s threaten plants the victim's fear as a mechanism-owned
+-- @…believes.desires.\<E\>.punishes-\<id\>@ deposit; the threat is credible only
+-- if that @punishes-\<id\>@ desire is REGISTERED ('desires') — held or not is
+-- the genuine\/bluff choice (spec v54 §2). An unregistered punitive name is the
+-- silent-failure accident: believed-desire resolution dangles and the threat is
+-- inert. Flag each such name. Rides 'writeSites' (authored definitions only —
+-- 'coerce''s output IS authored practice content and IS scanned; engine rules
+-- are exempt by v53's provenance). The 'punitivePrefix' key is the mechanism's
+-- generated-name convention with one exported home ("Prax.Coerce"), not a
+-- heuristic.
+coercionUnmotivatedErrors :: PraxState -> [TypeError]
+coercionUnmotivatedErrors st =
+  nub [ CoercionUnmotivated seg
+      | (_, os) <- writeSites st, o <- os, s <- writesOf o
+      , seg <- pathNames s, punitivePrefix `isPrefixOf` seg
+      , seg `notElem` registered ]
+  where registered = map desireName (desires st)
 
 -- A tiny union-find over position-key strings.
 find :: Map.Map String String -> String -> String

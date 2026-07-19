@@ -27,19 +27,32 @@
 -- @Owner@ → @PraxW@, @PraxW2@, … in first-appearance order. Only the
 -- post-rename OUTPUT is @Prax@-namespaced; no author ever writes one.
 --
--- __Registration contract.__ The returned 'Desire' is what makes the threat
--- credible: it must be REGISTERED in the world's vocabulary
--- ('Prax.Engine.setDesires') and HELD by the extorter
--- ('Prax.Types.charDesires'). The name-identity half of credibility is
--- structural — the deposited motive-belief and the desire share one generated
--- name (@punishes-\<id\>@) by construction — but an OMITTED registration still
--- yields a silently non-credible threat: the victim's round-walk
--- ("Prax.Planner") can only foresee a punishment the extorter is actually
--- modeled as wanting.
+-- __Credibility is three world states (spec v54 §2).__ 'threaten' itself
+-- plants the victim's fear (a mechanism-owned @believes.desires.\<E\>.punishes-\<id\>@
+-- deposit); what distinguishes the cases is authored world state, not a flag:
+--
+--   * __GENUINE__ — the punitive 'Desire' (@punishes-\<id\>@) is REGISTERED in
+--     the world's vocabulary ('Prax.Engine.setDesires') AND HELD by the
+--     extorter ('Prax.Types.charDesires'). The threat is self-motivated (v49's
+--     credibility): the extorter, defied, actually chooses to punish.
+--   * __BLUFF__ — registered but NOT held. Because the deposit is
+--     mechanism-owned and the victim's believed-desire resolution filters on
+--     @desires st@ (the REGISTERED vocabulary, not who holds it), the victim's
+--     fear is REAL and identical to the genuine case; the extorter, holding no
+--     punitive want, never chooses punish. Holding is the positive authoring
+--     act that separates the two — no flag needed, and both are inspectable
+--     world state.
+--   * __THE ACCIDENT__ — an UNREGISTERED punitive name is neither setting:
+--     believed-desire resolution dangles and the threat is silently inert.
+--     "Prax.TypeCheck"'s 'CoercionUnmotivated' net catches exactly this — a
+--     deposited @punishes-*@ belief for a name absent from the registered
+--     desire vocabulary — so the genuine\/bluff pair are both EARNED, not
+--     asserted over an unguarded omission.
 module Prax.Coerce
   ( Coercion(..)
   , coerce
   , namespaceKernel
+  , punitivePrefix
   ) where
 
 import           Data.List (nub)
@@ -69,6 +82,12 @@ data Coercion = Coercion
   , coKernel        :: [Condition]  -- ^ what the extorter VALUES about the punished
                                     -- state, authored with plain variable names
   , coWeight        :: Int          -- ^ the extorter's punitive weight
+  , coThreatLasts     :: Maybe Int  -- ^ Nothing = a standing threat (permanent marker);
+                                    -- @Just n@ = the threat marker retracts n boundaries
+                                    -- after threaten (the DEFIED arm is untouched).
+  , coComplianceLasts :: Maybe Int  -- ^ Nothing = bought silence stays bought (permanent
+                                    -- @complied@ marker); @Just n@ = the marker expires and
+                                    -- the racket cycles — one purchase per bought period.
   }
 
 -- | @coerce coercion@ generates the threaten\/comply\/defy\/punish protocol
@@ -148,27 +167,33 @@ coerce co
     defiedPath  v extorter = "defied." ++ sid ++ "." ++ v ++ "." ++ extorter
     compliedPath extorter v = "complied." ++ sid ++ "." ++ extorter ++ "." ++ v
 
-    punitiveName = "punishes-" ++ sid
+    punitiveName = punitivePrefix ++ sid
 
     -- Actor is the extorter. The threat IS the communication of conditional
-    -- intent: the ordinary marker, the motive-belief deposit (over the same
-    -- channel confiding and lying ride), and the extorter's own mark.
+    -- intent: the marker (lifetime = 'coThreatLasts', spec §1), the
+    -- motive-belief deposit (over the same channel confiding and lying ride),
+    -- and the extorter's own mark. The deposit and the extorted mark stay
+    -- PERMANENT: they record the attempt, not the threat's currency.
     threaten = action (coThreatenLabel co)
       ( coTrigger co
         ++ [ Neq victim "Actor"
            , Not (threatPath "Actor" victim) ] )
-      [ Insert (threatPath "Actor" victim)
+      [ lasting (coThreatLasts co) (threatPath "Actor" victim)
       , Insert (beliefAbout victim ("desires.Actor." ++ punitiveName) ++ ".heard.Actor")
       , Insert ("Actor.extorted." ++ victim ++ "." ++ sid) ]
 
     -- The victim buys off the threat: they are Actor, the extorter is E. The
-    -- complied marker is PERMANENT per (id, extorter, victim) — one purchase
-    -- per coercion, ever — so a renewed threat after compliance extracts
-    -- nothing (the planner cannot rediscover repeat extraction).
+    -- complied marker's lifetime is 'coComplianceLasts' (spec §1): Nothing
+    -- makes it PERMANENT — one purchase per (id, extorter, victim) ever, so a
+    -- renewed threat after compliance extracts nothing; @Just n@ expires it
+    -- after n boundaries, so the racket cycles and one purchase holds per
+    -- bought period. Buying protects the purse (no second extraction while it
+    -- stands), never the person — the extorter's betrayal-vs-wait is ordinary
+    -- 'Prax.Planner' scoring, enforced by no marker.
     comply = action (coDemandLabel co)
       [ Match (threatPath "E" "Actor"), Not (compliedPath "E" "Actor") ]
       ( coDemand co
-        ++ [ Insert (compliedPath "E" "Actor")
+        ++ [ lasting (coComplianceLasts co) (compliedPath "E" "Actor")
            , Delete (threatPath "E" "Actor") ] )
 
     defy = action "[Actor]: defy [E]"
@@ -192,6 +217,24 @@ coerce co
                  , [ Match (threatPath "Owner" "PraxD") ] ]
               : namespaceKernel victim (coKernel co) )
             (coWeight co))
+
+-- | The generated punitive desire's name prefix (@punishes-@). The one home
+-- both the mechanism (which builds @punishes-\<id\>@) and the well-formedness
+-- checker ("Prax.TypeCheck", which recognizes a deposited punitive belief by
+-- it) read — the v51\/v53 checker-imports-the-vocabulary precedent.
+punitivePrefix :: String
+punitivePrefix = "punishes-"
+
+-- | The marker-insert selector shared by BOTH markers (the threat and the
+-- @complied@ mark): Nothing compiles to a permanent 'Insert' (byte-identical
+-- to the shipped default — 'Outcome' derives Eq), @Just n@ to v44's
+-- boundary-exact 'InsertFor' (retraction at the nth 'Prax.Engine.roundBoundary',
+-- delete-purges-pending, persistence via dues, all inherited). @n@ is the
+-- author's fictional lifetime decision, exactly like every 'InsertFor' since
+-- v44 — not a heuristic.
+lasting :: Maybe Int -> String -> Outcome
+lasting Nothing  s = Insert s
+lasting (Just n) s = InsertFor n s
 
 -- | Alpha-rename an author-written kernel into the @Prax@ namespace,
 -- op-preservingly (generalizing 'Prax.Blackmail'\'s @renameVictim@ from one

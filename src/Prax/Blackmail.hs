@@ -15,7 +15,11 @@
 --     and the not-already-threatened gate.
 --   * __demand__ — a debt (@Prax.Debt.owe@): the victim buys silence with a
 --     favour. The re-buy guard is the primitive's permanent @complied@ marker,
---     not the debt itself.
+--     not the debt itself — permanent because 'shakedown' passes
+--     @coComplianceLasts = Nothing@ (and @coThreatLasts = Nothing@ for the
+--     threat): blackmail the instance is the fixed permanent fiction (spec
+--     v54), and a world wanting expiry or serial extraction authors its own
+--     'Prax.Coerce.Coercion' with @Just n@ lifetimes.
 --   * __punish__ — expose: plant the evidence in a co-present non-believer
 --     (Rumor's sourced-hearsay shape). The primitive prepends the
 --     standing-threat-or-defiance availability core.
@@ -132,4 +136,11 @@ shakedown sid copresence pat price w
         -- Actor/E coverage goes with it.
       , coKernel        = [ Match (beliefAbout "Believer" pat) ]
       , coWeight        = w
+        -- Blackmail the INSTANCE is a fixed fiction: permanent threats,
+        -- permanent purchase (spec v54 §"the shakedown decision"). A world
+        -- wanting an expiring or serial blackmail authors its own 'Coercion'
+        -- directly — the primitive, not the instance, is the expressiveness
+        -- home. The :17 permanence prose is true BECAUSE of this hardcode.
+      , coThreatLasts     = Nothing
+      , coComplianceLasts = Nothing
       }
