@@ -89,6 +89,10 @@ runCheck args = do
     describe (DeadCondition w s) =
       "dead condition \"" ++ s ++ "\" (" ++ w
         ++ "): no action, initial fact, or axiom head can ever produce a match"
+    describe (DeonticUnclosed s) =
+      "unclosed obligation rule \"" ++ s ++ "\": this world can invoke an"
+        ++ " obligation but did not declare its □-closure -- wrap its axioms in"
+        ++ " Prax.Deontic.obligedClose"
 
 main :: IO ()
 main = do

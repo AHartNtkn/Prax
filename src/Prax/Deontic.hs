@@ -24,14 +24,21 @@
 --
 -- __What this faithfully implements__ (paper §2.3): the /representation/ (□ = a
 -- fact), /conflict detection/ (property 2 — incompatible obligations collapse to
--- ⊥: 'conflicts'), and /behavioural coupling/ (wants over obligations drive the
--- unchanged utility planner — 'wantFulfilled'/'avoidBreach').
+-- ⊥: 'conflicts'), /behavioural coupling/ (wants over obligations drive the
+-- unchanged utility planner — 'wantFulfilled'/'avoidBreach'), and /closure under
+-- implication/ (property 1 — @Ob.P@ together with a domain rule @P→Q@ derives
+-- @Ob.Q@: 'obligedClose' lifts each all-@Match@ domain rule under the operator so
+-- an obligation closes over the consequences of its content. Which logic a world's
+-- axioms close under is an authored declaration — a deontic world writes
+-- @setAxioms (obligedClose axs)@; the general derivation engine ("Prax.Derive")
+-- neither knows the vocabulary nor decides the moment. "Prax.TypeCheck" nets the
+-- forgot-to-declare accident: a world that can invoke an obligation but omits the
+-- closure is flagged 'Prax.TypeCheck.DeonticUnclosed').
 --
--- __What it deliberately does not implement__ (documented, not hidden): closure
--- under implication (property 1 — @Ob.P@ together with @P→Q@ does /not/
--- auto-derive @Ob.Q@; our engine queries facts, it does not derive them), and the
+-- __What it deliberately does not implement__ (documented, not hidden): the
 -- LRT/@m(X)@ decision procedure (that machinery would belong to a future static
--- type checker, LEDGER #8).
+-- type checker, LEDGER #8), and priority orderings between conflicting
+-- obligations (Alchourrón–Makinson).
 --
 -- __Conflict: detection vs. resolution.__ 'conflicts' is a /predictive/ test —
 -- "are these two contents jointly satisfiable?". Two genuinely incompatible
@@ -45,6 +52,10 @@
 module Prax.Deontic
   ( -- * Fact convention
     obligationPath
+  , obligedHead
+    -- * Entailment closure (□ property 1)
+  , obligedLift
+  , obligedClose
     -- * Asserting / discharging obligations (Outcomes)
   , oblige
   , discharge
@@ -64,19 +75,51 @@ module Prax.Deontic
   ) where
 
 import           Data.List (isPrefixOf, tails)
+import           Data.Maybe (mapMaybe)
 
 import           Prax.Db (Db, insertAll, emptyDb, exists, dbToSentences)
 import           Prax.Query (Condition (..))
 import           Prax.Types (Outcome (..), Want (..))
+import           Prax.Derive (Axiom (..))
 import           Prax.Reactions (markViolation, violationOf)
 
 -- Fact convention --------------------------------------------------------------
+
+-- | The obligation operator's head literal — the ONE home for the vocabulary:
+-- 'obligationPath', 'obligationsOf', 'obligedLift', and "Prax.TypeCheck"'s
+-- declaration-completeness net all draw from it.
+obligedHead :: String
+obligedHead = "obliged"
 
 -- | The DB path of an obligation: @obliged.\<who\>.\<content\>@. @content@ is a
 -- /simple term/ (a sentence) and is kept verbatim, so an exclusion @!@ inside it
 -- survives into the trie (this is what makes 'conflicts' meaningful).
 obligationPath :: String -> String -> String
-obligationPath who content = "obliged." ++ who ++ "." ++ content
+obligationPath who content = obligedHead ++ "." ++ who ++ "." ++ content
+
+-- Entailment closure (□ property 1) --------------------------------------------
+
+-- | Lift a purely-conjunctive domain rule under the obligation operator: prefix
+-- @obliged.\<fresh\>.@ to every body match and head, so @□A ⊢ □B@ whenever
+-- @A ⊢ B@. Rules whose body uses non-'Match' conditions are not lifted (nothing
+-- sensible to place under @□@).
+obligedLift :: Axiom -> Maybe Axiom
+obligedLift (Axiom body heads)
+  | all isMatch body = Just (Axiom (map liftCond body) (map liftSent heads))
+  | otherwise        = Nothing
+  where
+    isMatch (Match _) = True
+    isMatch _         = False
+    liftCond (Match s) = Match (liftSent s)
+    liftCond c         = c
+    liftSent s = obligedHead ++ ".Obligor." ++ s
+
+-- | Close a world's axioms under the obligation operator (DEON property 1): the
+-- authored rules plus the □-lifted twin of every all-'Match' rule. A deontic
+-- world declares its closure with @setAxioms (obligedClose axs)@; the general
+-- engine ("Prax.Derive") closes over exactly the list it is given, lift included.
+obligedClose :: [Axiom] -> [Axiom]
+obligedClose axs = axs ++ mapMaybe obligedLift axs
 
 -- Asserting / discharging ------------------------------------------------------
 
@@ -148,7 +191,7 @@ incompatiblePairs cs =
 obligationsOf :: String -> Db -> [String]
 obligationsOf who d =
   [ drop (length prefix) s | s <- dbToSentences d, prefix `isPrefixOf` s ]
-  where prefix = "obliged." ++ who ++ "."
+  where prefix = obligedHead ++ "." ++ who ++ "."
 
 -- Behavioural coupling ---------------------------------------------------------
 

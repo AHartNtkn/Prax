@@ -31,14 +31,15 @@ module Prax.TypeCheck
   , typeCheck
   ) where
 
-import           Data.List (intercalate, nub)
+import           Data.List (intercalate, isPrefixOf, nub)
 import           Data.Maybe (isJust, isNothing)
 import qualified Data.Map.Strict as Map
 
-import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences)
+import           Prax.Db (isVariable, pathNames, tokens, dbToLabeledSentences, dbToSentences)
 import           Prax.Query (Condition (..), CookedCondition (..), condSents)
-import           Prax.Relevance (mayUnifySyms, producibleAtoms)
-import           Prax.Sym (symName, symIsVar)
+import           Prax.Relevance (mayUnifySyms, producibleAtoms, cookedFnPool, cookedOutcomeAtoms)
+import           Prax.Deontic (obligedHead, obligedLift)
+import           Prax.Sym (intern, symName, symIsVar)
 import           Prax.Types
 import           Prax.Derive (Axiom (..))
 
@@ -67,6 +68,11 @@ data TypeError
   | DeadCondition { teWhere :: String, teSentence :: String }
     -- ^ the positive pattern @teSentence@ (at @teWhere@) may-unifies nothing
     -- the world can ever contain: the site can never fire.
+  | DeonticUnclosed { teSentence :: String }
+    -- ^ the world can invoke an obligation (it can produce an @obliged.*@ fact)
+    -- yet its axiom list omits the □-lifted twin of the liftable rule whose
+    -- first head is @teSentence@: DEON property 1 would silently fail. Declare
+    -- the closure with 'Prax.Deontic.obligedClose' (spec v51).
   deriving (Eq, Show)
 
 -- | Every well-formedness problem in a world (empty ⇒ the world is well-formed).
@@ -81,6 +87,7 @@ typeCheck st =
   ++ reservedFamilyErrors st
   ++ seedlessDrawErrors st
   ++ deadConditionErrors st
+  ++ deonticUnclosedErrors st
   where ps = Map.elems (practiceDefs st)
 
 -- Variables mentioned in a sentence / condition -------------------------------
@@ -398,6 +405,61 @@ forEachGuards :: [CookedOutcome] -> [[CookedCondition]]
 forEachGuards outs = concat $
      [ conds : forEachGuards os | CForEach conds os <- outs ]
   ++ [ conds : forEachGuards os | CRoll _ _ conds os <- outs ]
+
+-- Check 8: a world that can invoke obligation declares its closure ------------
+
+-- A world that CAN produce an @obliged.*@ fact, yet whose axiom list contains a
+-- liftable rule whose □-lifted twin ('Prax.Deontic.obligedLift') is absent,
+-- would silently fail DEON property 1 (an obligation would not close over the
+-- consequences of its content). Flag each such rule, naming its first head; the
+-- fix is to declare the closure with 'Prax.Deontic.obligedClose' (spec v51 —
+-- the check the v48 producer census became once lifting left the engine). The
+-- lint runs on the FINISHED world, so no setter-order sensitivity remains.
+deonticUnclosedErrors :: PraxState -> [TypeError]
+deonticUnclosedErrors st =
+  [ DeonticUnclosed (renderHead a)
+  | deonticInvokable st
+  , a <- axioms st, Just twin <- [obligedLift a]
+  , not (alreadyLifted a), twin `notElem` axioms st ]
+  where
+    renderHead a = case axiomThen a of
+      (h : _) -> h
+      []      -> ""
+
+-- An axiom that IS already a □-form owes no twin: every body condition a Match
+-- and every body/head sentence starting @obliged.Obligor.@. This stops the
+-- check demanding lifts-of-lifts (a lifted twin is itself all-Match liftable).
+alreadyLifted :: Axiom -> Bool
+alreadyLifted (Axiom body heads) = all bodyLifted body && all lifted heads
+  where
+    lifted s            = (obligedHead ++ ".Obligor.") `isPrefixOf` s
+    bodyLifted (Match s) = lifted s
+    bodyLifted _         = False
+
+-- Can this world ever contain an @obliged.*@ fact? The producer census (the
+-- input the v48 □-lift gate used, relocated here). Reads the producers —
+-- practice and schedule insert atoms, db facts as of now, and axiom heads.
+-- Conservative: a variable-headed producer counts (it could ground to
+-- @obliged@), and an unresolvable 'CCall' (wild) counts too.
+deonticInvokable :: PraxState -> Bool
+deonticInvokable st = wild || any headProduces producerHeads
+  where
+    fns = cookedFnPool (cookedFns st)
+    outcomeAtoms =
+      [ cookedOutcomeAtoms fns [] o
+      | cp <- Map.elems (cookedDefs st), a <- cpActions cp, o <- caOuts a ]
+      ++ [ cookedOutcomeAtoms fns [] o | cp <- Map.elems (cookedDefs st), o <- cpInits cp ]
+      ++ [ cookedOutcomeAtoms fns [] o
+         | csr <- cookedSchedule st, (_, outs) <- csrBody csr, o <- outs ]
+    -- An unresolvable Call could produce anything: treat the world as invoking.
+    wild = Nothing `elem` outcomeAtoms
+    insertHeads = [ h | Just (ins, _) <- outcomeAtoms, (h : _) <- ins ]
+    -- An @obliged.*@ fact already in the db means the world invokes obligation,
+    -- so its propagation (DEON property 1) must be declared.
+    dbHeads     = [ h | s <- dbToSentences (db st), (h : _) <- [map intern (pathNames s)] ]
+    axiomHeadsU = [ h | ax <- axioms st, s <- axiomThen ax, (h : _) <- [map intern (pathNames s)] ]
+    producerHeads = insertHeads ++ dbHeads ++ axiomHeadsU
+    headProduces h = h == intern obligedHead || symIsVar h
 
 -- A tiny union-find over position-key strings.
 find :: Map.Map String String -> String -> String

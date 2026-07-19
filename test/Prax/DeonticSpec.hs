@@ -10,6 +10,7 @@ import           Prax.Query (Condition (..), satisfies)
 import           Prax.Types
 import           Prax.Engine (definePractices, performOutcome, possibleActions, performAction, setCharacters)
 import           Prax.Planner (pickAction)
+import           Prax.Derive (axiom)
 import           Prax.Deontic
 import           Prax.Reactions (violationOf)
 
@@ -94,6 +95,28 @@ tests = testGroup "Prax.Deontic"
     , testCase "incompatiblePairs finds exactly the incompatible pair" $
         incompatiblePairs ["at!bar", "at!entrance", "tipped.ada"]
           @?= [("at!bar", "at!entrance")]
+    ]
+
+  , testGroup "entailment closure (□ property 1)"
+    [ testCase "obligedHead is the shared vocabulary constant" $ do
+        obligedHead @?= "obliged"
+        obligationPath "bex" "settle.up" @?= obligedHead ++ ".bex.settle.up"
+
+    , testCase "obligedLift lifts an all-Match rule to the obliged.Obligor shape" $
+        obligedLift (axiom [ Match "at.W.bar" ] [ "in.W.building" ])
+          @?= Just (axiom [ Match "obliged.Obligor.at.W.bar" ]
+                          [ "obliged.Obligor.in.W.building" ])
+
+    , testCase "obligedLift refuses a rule whose body uses a non-Match condition" $
+        obligedLift (axiom [ Match "at.W.bar", Not "dead.W" ] [ "in.W.building" ])
+          @?= Nothing
+
+    , testCase "obligedClose = the base rules plus the lifted twin of each all-Match rule" $ do
+        let liftable   = axiom [ Match "a.X" ] [ "b.X" ]
+            unliftable = axiom [ Match "c.Y", Not "d.Y" ] [ "e.Y" ]
+        obligedClose [liftable, unliftable]
+          @?= [ liftable, unliftable
+              , axiom [ Match "obliged.Obligor.a.X" ] [ "obliged.Obligor.b.X" ] ]
     ]
 
   , testGroup "introspection"

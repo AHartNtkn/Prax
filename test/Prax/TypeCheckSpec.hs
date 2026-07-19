@@ -8,6 +8,7 @@ import           Prax.Types
 import           Prax.Engine (definePractices, defineFunctions, performOutcome, setAxioms, setDesires, setCharacters, seedDie, setSchedule)
 import           Prax.Query (Condition (..), CmpOp (..))
 import           Prax.Derive (Axiom (..), axiom)
+import           Prax.Deontic (obligedClose)
 import           Prax.Rng (draw)
 import           Prax.TypeCheck
 import qualified Prax.Worlds.Bar as Bar
@@ -337,5 +338,33 @@ tests = testGroup "Prax.TypeCheck"
                     , Match "turn!Now" ]
                     [] ] }
       typeCheck (world1 p) @?= []
+
+    -- DeonticUnclosed: a world that can invoke obligation declares its closure --
+  , testCase "a world that can produce obliged.* but omits its □-closure is flagged, naming the axiom" $ do
+      -- census-true (the practice inserts an obliged.* fact) with a liftable
+      -- domain rule whose lifted twin is absent: DEON property 1 would silently
+      -- fail. The flag names the rule's first head and points at obligedClose.
+      let w = setAxioms [ axiom [ Match "a.X" ] [ "b.X" ] ]
+                        (definePractices [obligeProducer] emptyState)
+      typeCheck w @?= [ DeonticUnclosed "b.X" ]
+
+  , testCase "the same world declared via obligedClose is well-formed" $ do
+      let w = setAxioms (obligedClose [ axiom [ Match "a.X" ] [ "b.X" ] ])
+                        (definePractices [obligeProducer] emptyState)
+      typeCheck w @?= []
+
+  , testCase "an axiomless world that can invoke obligation is clean (nothing to close)" $ do
+      -- the Bar shape: census-true but no axioms, so there is no unclosed rule
+      typeCheck (definePractices [obligeProducer] emptyState) @?= []
+
+  , testCase "a world with liftable axioms that CANNOT invoke obligation is clean (the Feud shape)" $ do
+      -- census-false: no obliged.* producer anywhere, so its axioms owe no
+      -- closure (Feud's own withheld lifted rows are the shipping example)
+      typeCheck (setAxioms [ axiom [ Match "a.X" ] [ "b.X" ] ] emptyState) @?= []
   ]
-  where words' = words . map (\c -> if c == ',' then ' ' else c)
+  where
+    words' = words . map (\c -> if c == ',' then ' ' else c)
+    -- A practice whose action produces an obliged.* fact (a census-true world).
+    obligeProducer = practice
+      { practiceId = "oblige", roles = ["R"]
+      , actions = [ action "[Actor]: swear a duty" [] [ Insert "obliged.Actor.duty" ] ] }

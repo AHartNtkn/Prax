@@ -41,21 +41,18 @@ import           Prax.Db
 import           Prax.Query (queryCooked, groundCondition, groundNames, CookedCondition(..), cookCondition)
 import           Prax.Types
 import           Prax.Derive (Axiom, axiomFootprint, axiomNegPatterns, axiomHeadPatterns, monotoneAxioms, cookAxioms, runCooked)
-import           Prax.Relevance (improvableDesires, livenessOf, mayUnifySyms, evictionShadowNames, bearingTemplates, deonticProducible)
+import           Prax.Relevance (improvableDesires, livenessOf, mayUnifySyms, evictionShadowNames, bearingTemplates)
 import           Prax.Cooked (cookOutcome, cookPractice, cookFunctions, cookScheduleRule, groundCookedOutcome)
 import           Prax.Rng (rollStep, seedBounds)
 import           Prax.Sym (Sym, intern, symIsVar, symName)
 
 -- | Rebuild the derived vocabulary tables. Internal: every helper that changes
 -- 'practiceDefs', 'axioms', 'desires', 'characters', 'schedule', or 'worldFns'
--- must end here. 'cookedRules' is re-homed here (spec v48): retable recooks the
--- axioms every call, gating the □-lifted forms on 'deonticProducible' of the
--- freshly-cooked state (@st@, whose producer tables — cookedDefs, cookedSchedule,
--- db, axioms — are current; it does NOT read 'cookedRules', so there is no cycle).
--- Because every producer-changing setter routes through here, the lift decision
--- is recomputed from the current producer set on each — the SETTER-COHERENCE
--- invariant. The axiom-derived tables (footprint\/axiomHeads\/negFootprint\/
--- contMonotone) then read that just-gated 'cookedRules'.
+-- must end here. 'cookedRules' is recooked from the axiom list alone
+-- ('cookAxioms', census-free) — whatever □-lifted rules a deontic world declared
+-- ("Prax.Deontic.obligedClose") are already in 'axioms', so retable does not
+-- decide any lift. The axiom-derived tables (footprint\/axiomHeads\/negFootprint\/
+-- contMonotone) then read that 'cookedRules'.
 retable :: PraxState -> PraxState
 retable st0 =
   let st = st0
@@ -67,7 +64,7 @@ retable st0 =
         , cookedDesires = Map.fromList
             [ (desireName d, map cookCondition (wantConditions (desireWant d)))
             | d <- desires st0 ] }
-      st' = st { cookedRules = cookAxioms (deonticProducible st) (axioms st0) }
+      st' = st { cookedRules = cookAxioms (axioms st0) }
   in st'
      { improvables  = improvableDesires st'
      , caresAbout   = bearingTemplates st'
@@ -204,19 +201,10 @@ applyDirect :: (Db -> Db) -> PraxState -> PraxState
 applyDirect f st = st { db = f (db st), readView = f (readView st) }
 
 -- | The only sanctioned way to change the axioms of a built state. Retable
--- FIRST (it now maintains 'cookedRules' — spec v48's re-homing — gating the
--- □-lifted forms on the world's deontic producibility), THEN reclose: reclose's
--- 'runCooked' reads the 'cookedRules' retable just set, so the cached view
--- closes under exactly the gated rule set.
---
--- BUILD-ORDER INVARIANT (the db leg of 'Prax.Relevance.deonticProducible'): the
--- gate sees only db facts present at retable time, so any @obliged.*@ setup fact
--- an author relies on to KEEP the lift must be performed before the final
--- retable that fixes 'cookedRules'. Both shipped axiom worlds build
--- setAxioms-outermost (Feud) or setDesires-outermost over setAxioms (Village) —
--- every producer is in place before the outermost retable — and a world whose
--- obliged producer is a practice\/schedule\/function needs no such care (those
--- pools are read directly, not via the db). A violation is the author's.
+-- FIRST (it maintains 'cookedRules'), THEN reclose: reclose's 'runCooked' reads
+-- the 'cookedRules' retable just set, so the cached view closes under exactly
+-- the axiom set. Order-insensitive in the axiom set itself — 'cookAxioms' reads
+-- only 'axioms', so no producer setup fact need precede this call.
 setAxioms :: [Axiom] -> PraxState -> PraxState
 setAxioms axs st = reclose (retable st { axioms = axs })
 

@@ -11,10 +11,10 @@ import           Prax.Db (dbToSentences, exists, pathNames)
 import           Prax.Query
 import           Prax.Types
 import           Prax.Engine
-import           Prax.Derive (Axiom, axiom, cookAxioms, CookedRule (..))
-import           Prax.Relevance (mayUnifySyms)
-import           Prax.Sym (intern, symName)
-import           Prax.Worlds.Feud (feudWorld)
+import           Prax.Derive (Axiom, axiom)
+import           Prax.Deontic (obligedClose)
+import           Prax.TypeCheck (typeCheck)
+import           Prax.Sym (intern)
 
 -- Practices ported from praxish demos/test/tests.js into the eDSL. --------------
 
@@ -90,41 +90,18 @@ dblFn = Function "dbl" ["M", "N"]
   [ FnCase [ Calc "R" Mul "N" "2" ]
            [ Insert "practice.math.M.n!R" ] ]
 
--- v48 □-lifting gate fixtures --------------------------------------------------
+-- v51 □-closure fixtures -------------------------------------------------------
 
 -- The liftable fixture axiom; its □-lifted twin is @obliged.Obligor.b.X@.
 liftAx :: Axiom
 liftAx = axiom [ Match "a.X" ] [ "b.X" ]
 
--- Did the world carry the □-lifted twin of 'liftAx' — i.e. did the gate lift?
-hasLifted :: PraxState -> Bool
-hasLifted st = map intern (pathNames "obliged.Obligor.b.X") `elem` axiomHeads st
-
--- A practice whose action produces an @obliged.*@ fact (literal obliged head).
+-- A practice whose action produces an @obliged.*@ fact (a census-true world: it
+-- can invoke an obligation, so its closure must be declared).
 obligeP :: Practice
 obligeP = practice
   { practiceId = "oblige", roles = ["R"]
   , actions = [ action "[Actor]: swear a duty" [] [ Insert "obliged.Actor.duty" ] ] }
-
--- A practice with only a non-obliged effect.
-plainP :: Practice
-plainP = practice
-  { practiceId = "plain", roles = ["R"]
-  , actions = [ action "[Actor]: note" [] [ Insert "noted.Actor" ] ] }
-
--- A practice that Calls a function by name — resolution decides producibility.
-callP :: Practice
-callP = practice
-  { practiceId = "caller", roles = ["R"]
-  , actions = [ action "[Actor]: invoke" [] [ Call "mk" [] ] ] }
-
--- Resolves 'callP'\'s Call to a provably non-obliged insert.
-plainFn :: Function
-plainFn = Function "mk" [] [ FnCase [] [ Insert "foo.bar" ] ]
-
--- A schedule rule that inserts an @obliged.*@ fact.
-obligeRule :: ScheduleRule
-obligeRule = ScheduleRule "swearing" 3 [ ( [], [ Insert "obliged.x.duty" ] ) ]
 
 -- Test driver: perform the first action whose label contains `needle`. ---------
 
@@ -348,95 +325,47 @@ tests = testGroup "Prax.Engine"
       -- evidence — must be opaque, not bounded.
       groundedDeltaAnchors st1 (gaOf "ada: void gesture") @?= Nothing
 
-  , testCase "axiomHeads: fireable heads, the contradiction witness, and the □-lift gate off" $ do
+  , testCase "axiomHeads: fireable heads and the contradiction witness" $ do
       let axs = [ axiom [ Match "starving.X" ] [ "hungry.X" ] ]
           st = setAxioms axs emptyState
           has s = map intern (pathNames s) `elem` axiomHeads st
       assertBool "the head"        (has "hungry.X")
       assertBool "the ⊥ witness"   (has "contradiction")
-      -- this world produces no obliged.* fact, so the v48 gate withholds the
-      -- lifted twin (unconditional pre-v48). The lifted-forms behaviour is
-      -- pinned WITH a producer in the gate group below.
-      assertBool "no lifted head (gate off)"
+      -- cookAxioms is deontics-free: a bare rule contributes no □-lifted twin.
+      -- Lifting is 'Prax.Deontic.obligedClose', which a world applies to its own
+      -- axiom list (the declaration-closure group below).
+      assertBool "no lifted head from a bare rule"
         (not (has "obliged.Obligor.hungry.X"))
 
-  , testGroup "the □-lifting gate (v48): lift iff the world can produce an obliged.* fact"
-    [ testCase "no producer: an all-Match axiom is NOT lifted" $ do
-        let st = setAxioms [liftAx] emptyState
-            has s = map intern (pathNames s) `elem` axiomHeads st
-        assertBool "base head present"     (has "b.X")
-        assertBool "lifted head withheld"  (not (hasLifted st))
-
-    , testCase "an obliged-producing practice keeps the lift, and the lifted rule FIRES" $ do
-        let st0 = setAxioms [liftAx] (definePractices [obligeP] emptyState)
-        assertBool "gate on: lifted head present" (hasLifted st0)
-        -- DEON property 1 as behaviour: an obliged context closes over the rule
-        let st1 = performOutcome (Insert "obliged.w.a.foo") st0
+  , testGroup "declared □-closure (spec v51): the lift is content the world declares"
+    [ testCase "obligedClose lets a world close an obliged context (□a ⊢ □b)" $ do
+        -- the world declares its closure with obligedClose; the engine closes
+        -- over the expanded list, so an obliged context derives the
+        -- sub-obligation (DEON property 1) — no engine gate, no census.
+        let st0 = setAxioms (obligedClose [liftAx]) emptyState
+            st1 = performOutcome (Insert "obliged.w.a.foo") st0
         assertBool "sub-obligation derived (□a ⊢ □b)"
           (exists "obliged.w.b.foo" (readView st1))
 
-    , testCase "the same fixture MINUS the oblige practice does not lift" $ do
-        let st = setAxioms [liftAx] (definePractices [plainP] emptyState)
-        assertBool "gate off: no lifted head" (not (hasLifted st))
+    , testCase "a world that does NOT declare its closure carries no lifted twin" $ do
+        let st = setAxioms [liftAx] emptyState
+            has s = map intern (pathNames s) `elem` axiomHeads st
+        assertBool "base head present" (has "b.X")
+        assertBool "no lifted twin"    (not (has "obliged.Obligor.b.X"))
 
-    , testCase "re-homing: a producer added AFTER setAxioms flips the gate on" $ do
-        let st0 = setAxioms [liftAx] emptyState
-        assertBool "before: no producer, no lift" (not (hasLifted st0))
-        let st1 = definePractices [obligeP] st0
-        assertBool "after definePractices: retable re-gates, now lifts" (hasLifted st1)
-
-    , testCase "db leg: an obliged fact performed BEFORE setAxioms keeps the lift" $ do
-        let st = setAxioms [liftAx] (performOutcome (Insert "obliged.w.duty") emptyState)
-        assertBool "db-present obliged fact detected" (hasLifted st)
-
-    , testCase "setter coherence — definePractices last leaves the decision current" $ do
-        let off = setAxioms [liftAx] emptyState
-            on  = definePractices [obligeP] off
-        assertBool "no producer: off" (not (hasLifted off))
-        assertBool "producer added: on" (hasLifted on)
-
-    , testCase "setter coherence — setSchedule last leaves the decision current" $ do
-        let off = setAxioms [liftAx] emptyState
-            on  = setSchedule [obligeRule] off
-        assertBool "no producer: off"          (not (hasLifted off))
-        assertBool "schedule obliged insert: on" (hasLifted on)
-
-    , testCase "setter coherence — defineFunctions resolving a Call leaves the decision current" $ do
-        -- an unresolvable Call is wild → conservatively lifts; resolving it to a
-        -- provably non-obliged insert flips the decision off
-        let wild = setAxioms [liftAx] (definePractices [callP] emptyState)
-        assertBool "unresolved Call is wild: lifts (conservative)" (hasLifted wild)
-        let resolved = defineFunctions [plainFn] wild
-        assertBool "resolved to non-obliged: gate off" (not (hasLifted resolved))
-
-    , testCase "setter coherence — setDesires last does not clobber the decision" $ do
-        let d   = Desire "dd" (Want [ Match "q.Owner" ] 1)
-            off = setDesires [d] (setAxioms [liftAx] emptyState)
-            on  = setDesires [d] (setAxioms [liftAx] (definePractices [obligeP] emptyState))
-        assertBool "no producer, setDesires last: off" (not (hasLifted off))
-        assertBool "producer, setDesires last: on"     (hasLifted on)
-
-    , testCase "setter coherence — setCharacters last does not clobber the decision" $ do
-        let off = setCharacters [character "z"] (setAxioms [liftAx] emptyState)
-            on  = setCharacters [character "z"]
-                    (setAxioms [liftAx] (definePractices [obligeP] emptyState))
-        assertBool "no producer, setCharacters last: off" (not (hasLifted off))
-        assertBool "producer, setCharacters last: on"     (hasLifted on)
-
-    , testCase "consumer safety: no Feud want-pattern reads a vanished □-lifted head" $ do
-        -- the gate drops Feud's obliged.Obligor.* twins from cookedRules;
-        -- axiomDerivable (improvableDesires/livenessOf) walks head patterns, so a
-        -- want unifying a dropped head would have flipped a planner decision.
-        let feud = feudWorld
-            wantPats = [ p | pats <- Map.elems (cookedWants feud)
-                           , pat <- pats, CMatch p <- pat ]
-            liftedHeads = [ map fst h
-                          | r <- cookAxioms True (axioms feud), h <- crHeads r
-                          , take 2 (map (symName . fst) h) == ["obliged", "Obligor"] ]
-        assertBool "there ARE lifted heads to check"    (not (null liftedHeads))
-        assertBool "there ARE Feud want-patterns to check" (not (null wantPats))
-        assertBool "no Feud want may-unifies a dropped lifted head"
-          (not (or [ mayUnifySyms p h | p <- wantPats, h <- liftedHeads ]))
+    , testCase "build-order death: setAxioms-first equals setAxioms-outermost (cookedRules and typeCheck)" $ do
+        -- v48's BUILD-ORDER INVARIANT is gone: cookAxioms reads only the axiom
+        -- list, so no obliged-producing setup fact need precede setAxioms. A
+        -- census-true world built setAxioms-FIRST (the order v48's invariant
+        -- forbade) is identical to the setAxioms-outermost build in both the
+        -- cooked rule set and the checker's verdict.
+        let axs = obligedClose [liftAx]
+            producer = Insert "obliged.w.a.foo"
+            base = definePractices [obligeP] emptyState
+            outermost = setAxioms axs (performOutcome producer base)
+            first     = performOutcome producer (setAxioms axs base)
+        cookedRules first @?= cookedRules outermost
+        typeCheck first   @?= typeCheck outermost
     ]
 
   , testGroup "collision guards (v43, re-expressed against the v47 registry): action names and registered function names must each be unique"

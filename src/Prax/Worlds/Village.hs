@@ -32,6 +32,7 @@ import           Prax.Types
 import           Prax.Engine (definePractices, defineFunctions, performOutcome, setAxioms, setDesires, setCharacters, setSchedule, seedDie)
 import           Prax.Core (coreFns, adjustScore)
 import           Prax.Derive (Axiom, axiom)
+import           Prax.Deontic (obligedClose)
 import           Prax.Project
 import           Prax.Witness
 import           Prax.Rumor
@@ -431,7 +432,7 @@ villageWorld =
   (setDesires ([ earnBreadPursuit, spitesCarol, punishesWhisper, suffersHunger
                  , drawnToMarket, smoulders ]
                  ++ personaVocabulary [honest])
-     (setAxioms villageAxioms (foldl (flip performOutcome) base (setup ++ personaFacts))))
+     (setAxioms (obligedClose villageAxioms) (foldl (flip performOutcome) base (setup ++ personaFacts))))
   -- an epistemic prediction scope: you credit another's predicted move only
   -- if you're with them now, or you sighted them within the last 2 ticks —
   -- one tick per round, and two rounds is roughly a square<->mill round
