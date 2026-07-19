@@ -39,11 +39,19 @@ retraction, delete-purges-pending, persistence via dues, all inherited).
   threaten re-arms on no-standing-threat, and only the permanent `complied`
   blocked the second purchase. Property 3 generalizes honestly: repeat
   EXTRACTION impossible within the bought period; permanent is the Nothing
-  case. **Scoped precisely [S-I2]: the bought period protects the victim's
-  PURSE, not their person — a still-motivated extorter can re-threaten and
-  punish during it, exactly as under today's permanent marker (the lifetime
-  introduces NO new exposure; the fixture observes and records the shipped
-  behavior rather than asserting protection the mechanism never gave).**
+  case. **Scoped precisely [S-I2], and AFFIRMED at the gate as the model**:
+  the bought period protects the victim's PURSE (no second extraction), never
+  their person — paying does not buy protection, BY DESIGN, per the user's
+  ruling: enforcing the deal would be fiat physics. An extorter is deterred
+  from betrayal only when the simulation makes continued extortion worth more
+  than punishing — and betrays exactly when it doesn't. That comparison is
+  ordinary `pickAction` scoring over the shipped wants; no mechanism touches
+  it. The fixture PINS the emergent deal both ways where the racket kernel
+  allows: the extorter's punish-vs-wait during the bought period goes
+  whichever way the utilities actually point, recorded as the deterrence
+  economics, not smoothed into a guarantee. (General principle, recorded for
+  the project: almost nothing is enforced by fiat — deals, deterrence, and
+  betrayal are emergent utility comparisons.)
 - The motive-belief deposit and the extorted mark stay PERMANENT, stated
   [C-M1]: they are records of the attempt, not currency of the threat.
 - Mid-life renewal is structurally impossible (threaten gates on no standing
