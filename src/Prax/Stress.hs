@@ -128,7 +128,8 @@ data StressReport = StressReport
 
 -- | Run @runs@ seeded random games of up to @cap@ turns and aggregate the
 -- report. @mFamily@ is the optional coverage family to track (see
--- 'familyReached'); the CLI's own callers pass @Just \"currentScene\"@.
+-- 'familyReached'); the CLI's own callers pass the current-scene family
+-- (@Just 'Prax.Script.currentScenePath'@).
 stressTest :: Int -> Int -> Maybe String -> PraxState -> StressReport
 stressTest runs cap mFamily st0 =
   foldl' tally (StressReport runs Map.empty Set.empty Map.empty 0 0)
