@@ -24,9 +24,12 @@ if ! git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
   exit 1
 fi
 
-# Compare the tag against BOTH the index and the working tree for the frozen
-# dirs. `git diff <tag> -- <paths>` covers unstaged changes; adding the index
-# via a second check catches staged-but-uncommitted edits too.
+# Two checks, both required:
+# 1. Tracked content: `git diff <tag> -- <paths>` catches any edit to a file
+#    the tag knows, staged or not.
+# 2. Untracked additions: a NEW file under a frozen dir is invisible to the
+#    diff above but just as much a freeze violation (the oracle could import
+#    it and silently alter the reference), so it is checked separately.
 if ! git diff --quiet "$TAG" -- "${FROZEN[@]}"; then
   echo "FREEZE CHECK FAILED: the frozen Haskell tree has been modified." >&2
   echo "  These paths must stay byte-identical to tag '$TAG':" >&2
@@ -38,4 +41,14 @@ if ! git diff --quiet "$TAG" -- "${FROZEN[@]}"; then
   exit 1
 fi
 
-echo "freeze OK: src/ app/ test/ byte-identical to tag '$TAG'."
+untracked=$(git ls-files --others --exclude-standard -- "${FROZEN[@]}")
+if [ -n "$untracked" ]; then
+  echo "FREEZE CHECK FAILED: new files added under the frozen Haskell tree." >&2
+  echo "  The frozen dirs admit NO additions (a new module could be imported" >&2
+  echo "  by the oracle and silently alter the reference):" >&2
+  printf '    %s\n' $untracked >&2
+  echo "  Remove them — new code belongs under oracle/, rust/, or scripts/." >&2
+  exit 1
+fi
+
+echo "freeze OK: src/ app/ test/ byte-identical to tag '$TAG' (no additions)."

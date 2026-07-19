@@ -1,0 +1,53 @@
+name: verify
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  freeze-and-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: freeze check
+        run: bash scripts/freeze-check.sh
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: rust build
+        run: cargo build --workspace --manifest-path rust/Cargo.toml
+      - name: rust clippy
+        run: cargo clippy --workspace --manifest-path rust/Cargo.toml -- -D warnings
+      - name: rust test
+        run: cargo test --workspace --manifest-path rust/Cargo.toml
+
+  haskell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: freeze check
+        run: bash scripts/freeze-check.sh
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.10'
+          cabal-version: 'latest'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: cabal-${{ runner.os }}-${{ hashFiles('prax.cabal') }}
+          restore-keys: cabal-${{ runner.os }}-
+      - name: frozen suite + oracle build
+        run: |
+          cabal update
+          cabal build all
+          cabal test
