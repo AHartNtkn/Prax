@@ -2250,9 +2250,15 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   Success is thus AUTHORED TOPOLOGY, not a completion machine: a culminating part's `partAfter`
   names the required parts, optional parts hang off the side (+w when taken, never blocking), and
   no engine change is needed — the utility path was already binding-counting. Two boundaries are
-  stated with named parks: each part fires ONCE per instance (the ledger entry doubles as the
-  once-guard — repeatable/counted parts PARKED), and +w is UNIFORM across parts (no
-  planner-visible optional-vs-required priority — per-part weights PARKED, named in the bank).
+  stated: each part fires ONCE per instance (the ledger entry doubles as the once-guard), and +w
+  is UNIFORM across parts. [The park framing corrected post-ship, on the user's challenge:
+  "repeatable parts" was never a missing capability — recurring work is the general mechanisms'
+  existing job (schedule pulse / expiring marker + want: the hunger idiom; endeavors themselves
+  repeat via teardown, in the golden), and a second home inside Project would be a dual system.
+  The once-per-instance grain is correct placement, not a gap awaiting a world. Per-part weights
+  likewise narrower than parked: differentiated VALUE already rides partYields (bake's loaf and
+  the +10 want, shipped); only a differentiated PROGRESS pulse would need the value-weighted
+  Want extension, which remains the one genuinely open question in the bank.]
 
   **The panel arc.** The first draft leaked the ledger's fact-path as an authoring surface
   (`didPart`); the design lens killed it [D-C1] — the convention stays PRIVATE (the compiler builds

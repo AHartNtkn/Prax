@@ -74,10 +74,20 @@ endeavor :: String -> Int -> String -> [Condition] -> [Part]
   instance-enumeration binds Owner via the undertake fact, not the seed
   [S-verified]).
 - **Each part fires ONCE per instance — a stated boundary, not an accident
-  [D-I2]**: the ledger entry doubles as the once-guard. Repeatable/counted
-  parts (a patrol walked nightly) are thereby inexpressible — this is v24
-  parity and the simple thing; decoupling the count-fact from the once-guard
-  is PARKED until a world needs it.
+  [D-I2]**: the ledger entry doubles as the once-guard. [CORRECTED post-ship —
+  the user rejected this paragraph's original framing, and rightly: it called
+  repeatable work "inexpressible ... PARKED until a world needs it", which was
+  false twice over. Repeatable work is ALREADY the general mechanisms' job —
+  a schedule pulse or a v44 expiring marker re-arms the condition, an ordinary
+  action satisfies it, a want prices it (the shipped hunger cycle IS this
+  idiom; even whole endeavors repeat via teardown, in the golden). A plan-part
+  is definitionally the once-per-instance grain; work that recurs is authored
+  as a recurring practice. Putting repetition inside Project would be a second
+  home for it — a dual system. And "until a world needs it" was backwards for
+  this project: worlds are demonstration fixtures built to exercise
+  mechanisms; nothing ever "needs" what doesn't exist to demonstrate. The
+  boundary stands, on the RIGHT ground: not missing capability, but correct
+  placement of an existing one.]
 - **"Not all required" is authored topology — and richer than edges [D-I3]**:
   a culminating part's `partAfter` names the REQUIRED parts; optional parts
   hang off the side, each +w when taken, never blocking. Beyond point edges,
