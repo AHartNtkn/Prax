@@ -224,6 +224,25 @@ tests = testGroup "Prax.Project"
       fmap gaLabel (predictMove live (character "pat") mia)
         @?= Just "mia: sweep the hearth"
 
+  , testCase "a believed pursuit predicts among PARALLEL parts (v52 T1 review M1)" $ do
+      -- both edge-free parts are live predictions; scoring ties (+3 each), so
+      -- the deterministic label tiebreak picks the alphabetically-first label
+      -- ("mop" < "wash") -- the point is that prediction needs no chain:
+      -- whichever part the planner would take is the prediction, and BOTH are
+      -- candidates.
+      let mia  = miaFor "chores"
+          w    = buildWorld choresEnd [ mia, character "pat" ] []
+          told = performOutcome
+                   (Insert "pat.believes.desires.mia.pursues-chores.heard.mia") w
+          live = doAct "mia" "set to the chores" told
+      fmap gaLabel (predictMove live (character "pat") mia)
+        @?= Just "mia: mop the floor"
+      -- and once the tiebreak winner is done, the prediction moves to the
+      -- OTHER parallel part -- the un-chosen sibling was a real candidate.
+      let after1 = doAct "mia" "mop the floor" live
+      fmap gaLabel (predictMove after1 (character "pat") mia)
+        @?= Just "mia: wash the dishes"
+
     -- Property 8: loud construction guards, one pin each.
   , testCase "an endeavor with no parts errors loudly" $
       errored (endeavor "idle" 1 "[Actor]: do nothing much" [] []) >>= assertBool "an endeavor is work"
