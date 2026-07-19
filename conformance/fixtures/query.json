@@ -1,0 +1,424 @@
+{
+    "cases": [
+        {
+            "conds": [
+                "Match \"char.Who\""
+            ],
+            "facts": [
+                "char.tim",
+                "char.kevin"
+            ],
+            "initial": {},
+            "name": "bare sentence unifies and binds",
+            "results": [
+                {
+                    "Who": "kevin"
+                },
+                {
+                    "Who": "tim"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Not \"isDancing.tim\""
+            ],
+            "facts": [
+                "char.tim"
+            ],
+            "initial": {},
+            "name": "negation as failure keeps binding when absent",
+            "results": [
+                {}
+            ]
+        },
+        {
+            "conds": [
+                "Not \"isDancing.tim\""
+            ],
+            "facts": [
+                "isDancing.tim"
+            ],
+            "initial": {},
+            "name": "negation as failure drops binding when present",
+            "results": []
+        },
+        {
+            "conds": [
+                "Eq \"X\" \"beer\""
+            ],
+            "facts": [],
+            "initial": {},
+            "name": "eq binds an unbound variable to a constant",
+            "results": [
+                {
+                    "X": "beer"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Eq \"X\" \"Y\""
+            ],
+            "facts": [],
+            "initial": {
+                "X": "a",
+                "Y": "a"
+            },
+            "name": "eq of two equal bound values keeps the binding",
+            "results": [
+                {
+                    "X": "a",
+                    "Y": "a"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Eq \"X\" \"Y\""
+            ],
+            "facts": [],
+            "initial": {
+                "X": "a",
+                "Y": "b"
+            },
+            "name": "eq of two differing bound values drops the binding",
+            "results": []
+        },
+        {
+            "conds": [
+                "Neq \"X\" \"Y\""
+            ],
+            "facts": [],
+            "initial": {
+                "X": "a",
+                "Y": "b"
+            },
+            "name": "neq keeps distinct",
+            "results": [
+                {
+                    "X": "a",
+                    "Y": "b"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Neq \"X\" \"Y\""
+            ],
+            "facts": [],
+            "initial": {
+                "X": "a",
+                "Y": "a"
+            },
+            "name": "neq drops equal",
+            "results": []
+        },
+        {
+            "conds": [
+                "Neq \"Actor\" \"Winner\""
+            ],
+            "facts": [],
+            "initial": {
+                "Actor": "tim"
+            },
+            "name": "neq with an unbound operand drops the binding",
+            "results": []
+        },
+        {
+            "conds": [
+                "Match \"counter.Val\"",
+                "Cmp Gt \"Val\" \"4\""
+            ],
+            "facts": [
+                "counter.0"
+            ],
+            "initial": {},
+            "name": "gt fails below the threshold",
+            "results": []
+        },
+        {
+            "conds": [
+                "Match \"counter.Val\"",
+                "Calc \"NewVal\" Add \"Val\" \"5\""
+            ],
+            "facts": [
+                "counter.0"
+            ],
+            "initial": {},
+            "name": "calc add binds the new value",
+            "results": [
+                {
+                    "NewVal": "5",
+                    "Val": "0"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Match \"counter.Val\"",
+                "Cmp Gt \"Val\" \"4\""
+            ],
+            "facts": [
+                "counter!5"
+            ],
+            "initial": {},
+            "name": "gt passes after an exclusion update",
+            "results": [
+                {
+                    "Val": "5"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Match \"counter.Val\"",
+                "Calc \"BigVal\" Mul \"Val\" \"Val\"",
+                "Cmp Lt \"Val\" \"BigVal\"",
+                "Calc \"TinyVal\" Sub \"Val\" \"BigVal\""
+            ],
+            "facts": [
+                "counter!5"
+            ],
+            "initial": {},
+            "name": "chained calc: mul then sub yields -20",
+            "results": [
+                {
+                    "BigVal": "25",
+                    "TinyVal": "-20",
+                    "Val": "5"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Calc \"R\" Mod \"17\" \"5\""
+            ],
+            "facts": [],
+            "initial": {},
+            "name": "mod binds 17 mod 5 = 2",
+            "results": [
+                {
+                    "R": "2"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Calc \"R\" Mod \"-3\" \"5\""
+            ],
+            "facts": [],
+            "initial": {},
+            "name": "mod on a negative left operand: -3 mod 5 = 2",
+            "results": [
+                {
+                    "R": "2"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Match \"char.Actor\"",
+                "Subquery {subSet = \"Dancers\", subFind = [\"Dancer\"], subWhere = [Match \"char.Dancer\",Match \"isDancing.Dancer\",Neq \"Dancer\" \"Actor\"]}",
+                "Count \"NumDancers\" \"Dancers\"",
+                "Eq \"NumDancers\" \"2\""
+            ],
+            "facts": [
+                "char.tim",
+                "char.kevin",
+                "char.james",
+                "char.jer",
+                "isDancing.tim",
+                "isDancing.kevin",
+                "isDancing.jer"
+            ],
+            "initial": {
+                "Actor": "tim"
+            },
+            "name": "count dancers other than the actor equals 2",
+            "results": [
+                {
+                    "Actor": "tim",
+                    "Dancers": "<Set(2)>",
+                    "NumDancers": "2"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Match \"char.Actor\"",
+                "Subquery {subSet = \"Dancers\", subFind = [\"Dancer\"], subWhere = [Match \"isDancing.Dancer\",Neq \"Dancer\" \"Actor\"]}",
+                "Count \"NumDancers\" \"Dancers\"",
+                "Eq \"NumDancers\" \"2\""
+            ],
+            "facts": [
+                "char.tim",
+                "char.solo",
+                "isDancing.tim"
+            ],
+            "initial": {
+                "Actor": "solo"
+            },
+            "name": "eq on the count filters out the wrong actor",
+            "results": []
+        },
+        {
+            "conds": [
+                "Or [[Match \"p.X\"],[Match \"q.X\"]]"
+            ],
+            "facts": [
+                "p.a",
+                "q.b"
+            ],
+            "initial": {},
+            "name": "Or binds via either clause",
+            "results": [
+                {
+                    "X": "a"
+                },
+                {
+                    "X": "b"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Or [[Match \"p.X\"],[Match \"q.X\"]]"
+            ],
+            "facts": [
+                "p.a",
+                "q.a"
+            ],
+            "initial": {},
+            "name": "Or deduplicates overlapping clauses",
+            "results": [
+                {
+                    "X": "a"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Absent [Match \"leader.L\",Match \"L.sex!male\"]"
+            ],
+            "facts": [
+                "leader.lucy",
+                "lucy.sex!female"
+            ],
+            "initial": {},
+            "name": "Absent holds when no male leader",
+            "results": [
+                {}
+            ]
+        },
+        {
+            "conds": [
+                "Absent [Match \"leader.L\",Match \"L.sex!male\"]"
+            ],
+            "facts": [
+                "leader.brown",
+                "brown.sex!male"
+            ],
+            "initial": {},
+            "name": "Absent fails when a male leader exists",
+            "results": []
+        },
+        {
+            "conds": [
+                "Match \"here.OK\"",
+                "Exists [Match \"char.Who\"]"
+            ],
+            "facts": [
+                "char.tim",
+                "char.kev",
+                "here.ok"
+            ],
+            "initial": {},
+            "name": "Exists is boolean and does not bind the witness",
+            "results": [
+                {
+                    "OK": "ok"
+                }
+            ]
+        },
+        {
+            "conds": [
+                "Absent [Match \"patron.P\",Absent [Match \"drink.P\"]]"
+            ],
+            "facts": [
+                "patron.tim",
+                "patron.kev",
+                "drink.tim",
+                "drink.kev"
+            ],
+            "initial": {},
+            "name": "forAll holds when every patron has a drink",
+            "results": [
+                {}
+            ]
+        },
+        {
+            "conds": [
+                "Absent [Match \"patron.P\",Absent [Match \"drink.P\"]]"
+            ],
+            "facts": [
+                "patron.tim",
+                "patron.kev",
+                "drink.tim"
+            ],
+            "initial": {},
+            "name": "forAll fails when one patron lacks a drink",
+            "results": []
+        },
+        {
+            "conds": [
+                "Or [[Absent [Match \"raining\"]],[Match \"wet\"]]"
+            ],
+            "facts": [
+                "raining",
+                "wet"
+            ],
+            "initial": {},
+            "name": "implies: A and B",
+            "results": [
+                {}
+            ]
+        },
+        {
+            "conds": [
+                "Or [[Absent [Match \"raining\"]],[Match \"wet\"]]"
+            ],
+            "facts": [
+                "raining"
+            ],
+            "initial": {},
+            "name": "implies: A and not B",
+            "results": []
+        },
+        {
+            "conds": [
+                "Or [[Absent [Match \"raining\"]],[Match \"wet\"]]"
+            ],
+            "facts": [
+                "wet"
+            ],
+            "initial": {},
+            "name": "implies: not A (vacuous)",
+            "results": [
+                {}
+            ]
+        },
+        {
+            "conds": [
+                "Or [[Absent [Match \"raining\"]],[Match \"wet\"]]"
+            ],
+            "facts": [],
+            "initial": {},
+            "name": "implies: empty world (vacuous)",
+            "results": [
+                {}
+            ]
+        }
+    ],
+    "format": 1
+}

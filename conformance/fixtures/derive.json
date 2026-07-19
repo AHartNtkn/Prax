@@ -1,0 +1,449 @@
+{
+    "format": 1,
+    "worlds": [
+        {
+            "axioms": [],
+            "base": [
+                "bex.arc!hopeful",
+                "practice.arc.bex",
+                "practice.arc.you",
+                "practice.dm.director",
+                "practice.greet.world",
+                "practice.patron.bex",
+                "practice.patron.bex.drinks!0",
+                "practice.patron.you",
+                "practice.patron.you.drinks!0",
+                "practice.tendBar.bar.ada",
+                "practice.world.world.at.ada!bar",
+                "practice.world.world.at.bex!entrance",
+                "practice.world.world.at.you!entrance",
+                "practice.world.world.connected.bar.entrance",
+                "practice.world.world.connected.entrance.bar",
+                "practiceData.tendBar.beverageType.beer!alcoholic",
+                "practiceData.tendBar.beverageType.cider!alcoholic",
+                "practiceData.tendBar.beverageType.soda!nonalcoholic",
+                "practiceData.tendBar.beverageType.water!nonalcoholic",
+                "turn!0",
+                "you.arc!hopeful"
+            ],
+            "closure": {
+                "ok": [
+                    "bex.arc!hopeful",
+                    "practice.arc.bex",
+                    "practice.arc.you",
+                    "practice.dm.director",
+                    "practice.greet.world",
+                    "practice.patron.bex",
+                    "practice.patron.bex.drinks!0",
+                    "practice.patron.you",
+                    "practice.patron.you.drinks!0",
+                    "practice.tendBar.bar.ada",
+                    "practice.world.world.at.ada!bar",
+                    "practice.world.world.at.bex!entrance",
+                    "practice.world.world.at.you!entrance",
+                    "practice.world.world.connected.bar.entrance",
+                    "practice.world.world.connected.entrance.bar",
+                    "practiceData.tendBar.beverageType.beer!alcoholic",
+                    "practiceData.tendBar.beverageType.cider!alcoholic",
+                    "practiceData.tendBar.beverageType.soda!nonalcoholic",
+                    "practiceData.tendBar.beverageType.water!nonalcoholic",
+                    "turn!0",
+                    "you.arc!hopeful"
+                ]
+            },
+            "world": "bar"
+        },
+        {
+            "axioms": [],
+            "base": [
+                "bex.arc!hopeful",
+                "cai.arc!hopeful",
+                "practice.arc.bex",
+                "practice.arc.cai",
+                "practice.direct.director",
+                "practice.greet.world",
+                "practice.patron.bex",
+                "practice.patron.bex.drinks!0",
+                "practice.patron.cai",
+                "practice.patron.cai.drinks!0",
+                "practice.tendBar.bar.ada",
+                "practice.world.world.at.ada!bar",
+                "practice.world.world.at.bex!bar",
+                "practice.world.world.at.cai!bar",
+                "practice.world.world.connected.bar.entrance",
+                "practice.world.world.connected.entrance.bar",
+                "practiceData.tendBar.beverageType.beer!alcoholic",
+                "practiceData.tendBar.beverageType.cider!alcoholic",
+                "practiceData.tendBar.beverageType.soda!nonalcoholic",
+                "practiceData.tendBar.beverageType.water!nonalcoholic",
+                "turn!0"
+            ],
+            "closure": {
+                "ok": [
+                    "bex.arc!hopeful",
+                    "cai.arc!hopeful",
+                    "practice.arc.bex",
+                    "practice.arc.cai",
+                    "practice.direct.director",
+                    "practice.greet.world",
+                    "practice.patron.bex",
+                    "practice.patron.bex.drinks!0",
+                    "practice.patron.cai",
+                    "practice.patron.cai.drinks!0",
+                    "practice.tendBar.bar.ada",
+                    "practice.world.world.at.ada!bar",
+                    "practice.world.world.at.bex!bar",
+                    "practice.world.world.at.cai!bar",
+                    "practice.world.world.connected.bar.entrance",
+                    "practice.world.world.connected.entrance.bar",
+                    "practiceData.tendBar.beverageType.beer!alcoholic",
+                    "practiceData.tendBar.beverageType.cider!alcoholic",
+                    "practiceData.tendBar.beverageType.soda!nonalcoholic",
+                    "practiceData.tendBar.beverageType.water!nonalcoholic",
+                    "turn!0"
+                ]
+            },
+            "world": "dm"
+        },
+        {
+            "axioms": [],
+            "base": [
+                "character.artus",
+                "character.cassia",
+                "character.marcus",
+                "practice.plot.cassia.artus",
+                "practice.presence.rome",
+                "turn!0"
+            ],
+            "closure": {
+                "ok": [
+                    "character.artus",
+                    "character.cassia",
+                    "character.marcus",
+                    "practice.plot.cassia.artus",
+                    "practice.presence.rome",
+                    "turn!0"
+                ]
+            },
+            "world": "intrigue"
+        },
+        {
+            "axioms": [],
+            "base": [
+                "character.artus",
+                "character.cassia",
+                "character.marcus",
+                "currentScene!confidence",
+                "practice.beats.stage",
+                "turn!0"
+            ],
+            "closure": {
+                "ok": [
+                    "character.artus",
+                    "character.cassia",
+                    "character.marcus",
+                    "currentScene!confidence",
+                    "practice.beats.stage",
+                    "turn!0"
+                ]
+            },
+            "world": "play"
+        },
+        {
+            "axioms": [
+                {
+                    "then": [
+                        "allied.Y.X"
+                    ],
+                    "when": [
+                        "Match \"allied.X.Y\""
+                    ]
+                },
+                {
+                    "then": [
+                        "resents.Y.X"
+                    ],
+                    "when": [
+                        "Match \"wronged.X.Y\""
+                    ]
+                },
+                {
+                    "then": [
+                        "resents.C.B"
+                    ],
+                    "when": [
+                        "Match \"resents.A.B\"",
+                        "Match \"allied.A.C\""
+                    ]
+                },
+                {
+                    "then": [
+                        "allied.X.Y"
+                    ],
+                    "when": [
+                        "Match \"member.X!F\"",
+                        "Match \"member.Y!F\"",
+                        "Neq \"X\" \"Y\""
+                    ]
+                },
+                {
+                    "then": [
+                        "married.B.A"
+                    ],
+                    "when": [
+                        "Match \"married.A.B\""
+                    ]
+                },
+                {
+                    "then": [
+                        "sibling.X.Y"
+                    ],
+                    "when": [
+                        "Match \"parent.P.X\"",
+                        "Match \"parent.P.Y\"",
+                        "Neq \"X\" \"Y\""
+                    ]
+                },
+                {
+                    "then": [
+                        "grandparent.G.C"
+                    ],
+                    "when": [
+                        "Match \"parent.G.P\"",
+                        "Match \"parent.P.C\""
+                    ]
+                },
+                {
+                    "then": [
+                        "inLaw.P.B"
+                    ],
+                    "when": [
+                        "Match \"married.A.B\"",
+                        "Match \"parent.P.A\""
+                    ]
+                },
+                {
+                    "then": [
+                        "inLaw.S.B"
+                    ],
+                    "when": [
+                        "Match \"married.A.B\"",
+                        "Match \"sibling.A.S\""
+                    ]
+                }
+            ],
+            "base": [
+                "member.bob!kestrel",
+                "member.carol!kestrel",
+                "member.dave!kestrel",
+                "member.esme!wren",
+                "practice.society.here",
+                "turn!0",
+                "wronged.alice.bob"
+            ],
+            "closure": {
+                "ok": [
+                    "allied.bob.carol",
+                    "allied.bob.dave",
+                    "allied.carol.bob",
+                    "allied.carol.dave",
+                    "allied.dave.bob",
+                    "allied.dave.carol",
+                    "member.bob!kestrel",
+                    "member.carol!kestrel",
+                    "member.dave!kestrel",
+                    "member.esme!wren",
+                    "practice.society.here",
+                    "resents.bob.alice",
+                    "resents.carol.alice",
+                    "resents.dave.alice",
+                    "turn!0",
+                    "wronged.alice.bob"
+                ]
+            },
+            "world": "feud"
+        },
+        {
+            "axioms": [],
+            "base": [
+                "atCourt",
+                "character.duke",
+                "character.envoy",
+                "character.king",
+                "currentScene!audience",
+                "practice.beats.stage",
+                "scenePatience.audience.dismissed",
+                "trait.duke.ambitious",
+                "turn!0"
+            ],
+            "closure": {
+                "ok": [
+                    "atCourt",
+                    "character.duke",
+                    "character.envoy",
+                    "character.king",
+                    "currentScene!audience",
+                    "practice.beats.stage",
+                    "scenePatience.audience.dismissed",
+                    "trait.duke.ambitious",
+                    "turn!0"
+                ]
+            },
+            "world": "audience"
+        },
+        {
+            "axioms": [
+                {
+                    "then": [
+                        "regards.Regarder.Culprit.thief"
+                    ],
+                    "when": [
+                        "Match \"Regarder.believes.stole.Culprit.loaf\"",
+                        "Not \"atoned.Culprit\""
+                    ]
+                },
+                {
+                    "then": [
+                        "notorious.T.thief"
+                    ],
+                    "when": [
+                        "Match \"regards.W0.T.thief\"",
+                        "Subquery {subSet = \"Rs\", subFind = [\"W\"], subWhere = [Match \"regards.W.T.thief\"]}",
+                        "Count \"N\" \"Rs\"",
+                        "Cmp Gte \"N\" \"3\""
+                    ]
+                },
+                {
+                    "then": [
+                        "Regarder.believes.desires.bob.pursues-earnBread.presumed"
+                    ],
+                    "when": [
+                        "Match \"Regarder.believes.swept.bob\""
+                    ]
+                },
+                {
+                    "then": [
+                        "P.believes.desires.M.D.presumed"
+                    ],
+                    "when": [
+                        "Match \"trait.M.T\"",
+                        "Match \"traitDesire.T.D\"",
+                        "Match \"character.P\""
+                    ]
+                },
+                {
+                    "then": [
+                        "regards.Regarder.V.slanderer"
+                    ],
+                    "when": [
+                        "Match \"Regarder.believes.whispered.V.H\"",
+                        "Not \"recanted.V\""
+                    ]
+                },
+                {
+                    "then": [
+                        "notorious.T.slanderer"
+                    ],
+                    "when": [
+                        "Match \"regards.W0.T.slanderer\"",
+                        "Subquery {subSet = \"Rs\", subFind = [\"W\"], subWhere = [Match \"regards.W.T.slanderer\"]}",
+                        "Count \"N\" \"Rs\"",
+                        "Cmp Gte \"N\" \"3\""
+                    ]
+                },
+                {
+                    "then": [
+                        "regards.PraxW.V.incorrigible"
+                    ],
+                    "when": [
+                        "Match \"PraxW.believes.whispered.V.H0\"",
+                        "Subquery {subSet = \"PraxDs\", subFind = [\"H\"], subWhere = [Match \"PraxW.believes.whispered.V.H\"]}",
+                        "Count \"PraxN\" \"PraxDs\"",
+                        "Cmp Gte \"PraxN\" \"2\""
+                    ]
+                },
+                {
+                    "then": [
+                        "obliged.Obligor.Regarder.believes.desires.bob.pursues-earnBread.presumed"
+                    ],
+                    "when": [
+                        "Match \"obliged.Obligor.Regarder.believes.swept.bob\""
+                    ]
+                },
+                {
+                    "then": [
+                        "obliged.Obligor.P.believes.desires.M.D.presumed"
+                    ],
+                    "when": [
+                        "Match \"obliged.Obligor.trait.M.T\"",
+                        "Match \"obliged.Obligor.traitDesire.T.D\"",
+                        "Match \"obliged.Obligor.character.P\""
+                    ]
+                }
+            ],
+            "base": [
+                "appetite.bob",
+                "character.bob",
+                "character.carol",
+                "character.dana",
+                "character.eve",
+                "character.gale",
+                "character.you",
+                "practice.village.here",
+                "practice.world.world.at.bob!square",
+                "practice.world.world.at.carol!square",
+                "practice.world.world.at.dana!mill",
+                "practice.world.world.at.eve!mill",
+                "practice.world.world.at.gale!mill",
+                "practice.world.world.at.you!square",
+                "practice.world.world.connected.mill.square",
+                "practice.world.world.connected.square.mill",
+                "shortTempered.carol",
+                "stall.loaf",
+                "trait.gale.honest",
+                "traitDesire.honest.clean-conscience",
+                "traitDesire.honest.conscience-remembers",
+                "turn!0"
+            ],
+            "closure": {
+                "ok": [
+                    "appetite.bob",
+                    "bob.believes.desires.gale.clean-conscience.presumed",
+                    "bob.believes.desires.gale.conscience-remembers.presumed",
+                    "carol.believes.desires.gale.clean-conscience.presumed",
+                    "carol.believes.desires.gale.conscience-remembers.presumed",
+                    "character.bob",
+                    "character.carol",
+                    "character.dana",
+                    "character.eve",
+                    "character.gale",
+                    "character.you",
+                    "dana.believes.desires.gale.clean-conscience.presumed",
+                    "dana.believes.desires.gale.conscience-remembers.presumed",
+                    "eve.believes.desires.gale.clean-conscience.presumed",
+                    "eve.believes.desires.gale.conscience-remembers.presumed",
+                    "gale.believes.desires.gale.clean-conscience.presumed",
+                    "gale.believes.desires.gale.conscience-remembers.presumed",
+                    "practice.village.here",
+                    "practice.world.world.at.bob!square",
+                    "practice.world.world.at.carol!square",
+                    "practice.world.world.at.dana!mill",
+                    "practice.world.world.at.eve!mill",
+                    "practice.world.world.at.gale!mill",
+                    "practice.world.world.at.you!square",
+                    "practice.world.world.connected.mill.square",
+                    "practice.world.world.connected.square.mill",
+                    "shortTempered.carol",
+                    "stall.loaf",
+                    "trait.gale.honest",
+                    "traitDesire.honest.clean-conscience",
+                    "traitDesire.honest.conscience-remembers",
+                    "turn!0",
+                    "you.believes.desires.gale.clean-conscience.presumed",
+                    "you.believes.desires.gale.conscience-remembers.presumed"
+                ]
+            },
+            "world": "village"
+        }
+    ]
+}

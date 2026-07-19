@@ -1,0 +1,184 @@
+{
+    "format": 1,
+    "leq": [
+        {
+            "a": [
+                "a.b",
+                "a.c"
+            ],
+            "b": [
+                "a.b"
+            ],
+            "name": "more facts entail fewer",
+            "result": true
+        },
+        {
+            "a": [
+                "a.b"
+            ],
+            "b": [
+                "a.b",
+                "a.c"
+            ],
+            "name": "fewer facts do not entail more",
+            "result": false
+        },
+        {
+            "a": [
+                "x!a"
+            ],
+            "b": [
+                "x.a"
+            ],
+            "name": "a specific label entails the general (Excl <= Multi)",
+            "result": true
+        },
+        {
+            "a": [
+                "x.a"
+            ],
+            "b": [
+                "x!a"
+            ],
+            "name": "the general does not entail the specific (Multi not<= Excl)",
+            "result": false
+        },
+        {
+            "a": [
+                "a.b"
+            ],
+            "b": [],
+            "name": "everything entails the empty model",
+            "result": true
+        },
+        {
+            "a": [
+                "a",
+                "a.b"
+            ],
+            "b": [
+                "a.b"
+            ],
+            "name": "an asserted fact entails its scaffold",
+            "result": true
+        },
+        {
+            "a": [
+                "a.b"
+            ],
+            "b": [
+                "a",
+                "a.b"
+            ],
+            "name": "a scaffold does not entail the asserted fact",
+            "result": false
+        }
+    ],
+    "meet": [
+        {
+            "a": [
+                "a.b"
+            ],
+            "b": [
+                "a.c"
+            ],
+            "name": "compatible multi facts conjoin",
+            "result": [
+                "a.b",
+                "a.c"
+            ]
+        },
+        {
+            "a": [
+                "x!a"
+            ],
+            "b": [
+                "x!a"
+            ],
+            "name": "same exclusive fact is idempotent",
+            "result": [
+                "x.a"
+            ]
+        },
+        {
+            "a": [
+                "x!a"
+            ],
+            "b": [
+                "x!b"
+            ],
+            "name": "exclusive slot forced to two values is bottom",
+            "result": null
+        },
+        {
+            "a": [
+                "x!a"
+            ],
+            "b": [
+                "x.b"
+            ],
+            "name": "exclusive vs different multi child is bottom (left)",
+            "result": null
+        },
+        {
+            "a": [
+                "x.b"
+            ],
+            "b": [
+                "x!a"
+            ],
+            "name": "exclusive vs different multi child is bottom (right)",
+            "result": null
+        },
+        {
+            "a": [
+                "x.a"
+            ],
+            "b": [
+                "x.b"
+            ],
+            "name": "two multi children never conflict",
+            "result": [
+                "x.a",
+                "x.b"
+            ]
+        },
+        {
+            "a": [
+                "p.q.r!a"
+            ],
+            "b": [
+                "p.q.r!b"
+            ],
+            "name": "a conflict deep in the tree propagates to bottom",
+            "result": null
+        },
+        {
+            "a": [
+                "at!bar"
+            ],
+            "b": [
+                "mood!happy"
+            ],
+            "name": "disjoint slots conjoin freely",
+            "result": [
+                "at.bar",
+                "mood.happy"
+            ]
+        },
+        {
+            "a": [
+                "a",
+                "a.b"
+            ],
+            "b": [
+                "a.b"
+            ],
+            "name": "meet preserves an assertion (disjunction of marks)",
+            "result": [
+                "a",
+                "a.b"
+            ]
+        }
+    ]
+}

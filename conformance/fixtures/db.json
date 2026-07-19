@@ -1,0 +1,369 @@
+{
+    "format": 1,
+    "ground": [
+        {
+            "binding": {
+                "B": "ada",
+                "Bev": "cider",
+                "C": "beth"
+            },
+            "name": "substitutes bound vars, preserves ! and .",
+            "pattern": "practice.tendBar.B.customer.C!order!Bev",
+            "result": "practice.tendBar.ada.customer.beth!order!cider"
+        },
+        {
+            "binding": {},
+            "name": "unbound var grounds to its own name",
+            "pattern": "foo.Bar",
+            "result": "foo.Bar"
+        },
+        {
+            "binding": {
+                "Dancers": "<Set(2)>"
+            },
+            "name": "set-valued binding renders as opaque marker",
+            "pattern": "all.Dancers",
+            "result": "all.<Set(2)>"
+        }
+    ],
+    "mutations": [
+        {
+            "exists": {},
+            "labeled": [
+                "foo.bar.baz",
+                "foo.bar.woof",
+                "foo.meow.woof"
+            ],
+            "name": "basic multi-valued facts",
+            "ops": [
+                {
+                    "arg": "foo.bar.baz",
+                    "op": "insert"
+                },
+                {
+                    "arg": "foo.bar.woof",
+                    "op": "insert"
+                },
+                {
+                    "arg": "foo.meow.woof",
+                    "op": "insert"
+                }
+            ],
+            "sentences": [
+                "foo.bar.baz",
+                "foo.bar.woof",
+                "foo.meow.woof"
+            ]
+        },
+        {
+            "exists": {},
+            "labeled": [
+                "x.age!33"
+            ],
+            "name": "exclusion replaces single value",
+            "ops": [
+                {
+                    "arg": "x.age!32",
+                    "op": "insert"
+                },
+                {
+                    "arg": "x.age!33",
+                    "op": "insert"
+                }
+            ],
+            "sentences": [
+                "x.age.33"
+            ]
+        },
+        {
+            "exists": {},
+            "labeled": [
+                "foo!bar.baz",
+                "foo!bar.meow"
+            ],
+            "name": "re-asserting ! parent preserves subtree",
+            "ops": [
+                {
+                    "arg": "foo!bar.baz",
+                    "op": "insert"
+                },
+                {
+                    "arg": "foo!bar.meow",
+                    "op": "insert"
+                }
+            ],
+            "sentences": [
+                "foo.bar.baz",
+                "foo.bar.meow"
+            ]
+        },
+        {
+            "exists": {},
+            "labeled": [
+                "p!b.y"
+            ],
+            "name": "exclusion clears siblings when ! child changes",
+            "ops": [
+                {
+                    "arg": "p!a.x",
+                    "op": "insert"
+                },
+                {
+                    "arg": "p!b.y",
+                    "op": "insert"
+                }
+            ],
+            "sentences": [
+                "p.b.y"
+            ]
+        },
+        {
+            "exists": {},
+            "labeled": [
+                "g!closingStar!prebeginning"
+            ],
+            "name": "dot under ! child accumulates",
+            "ops": [
+                {
+                    "arg": "g!closingStar!prebeginning",
+                    "op": "insert"
+                }
+            ],
+            "sentences": [
+                "g.closingStar.prebeginning"
+            ]
+        },
+        {
+            "exists": {},
+            "labeled": [
+                "foo.meow.woof"
+            ],
+            "name": "retract removes subtree by prefix",
+            "ops": [
+                {
+                    "arg": "foo.bar.baz",
+                    "op": "insert"
+                },
+                {
+                    "arg": "foo.meow.woof",
+                    "op": "insert"
+                },
+                {
+                    "arg": "foo.bar",
+                    "op": "retract"
+                }
+            ],
+            "sentences": [
+                "foo.meow.woof"
+            ]
+        },
+        {
+            "exists": {},
+            "labeled": [
+                "foo.bar"
+            ],
+            "name": "retract missing path is a no-op",
+            "ops": [
+                {
+                    "arg": "foo.bar",
+                    "op": "insert"
+                },
+                {
+                    "arg": "nope.nothere",
+                    "op": "retract"
+                }
+            ],
+            "sentences": [
+                "foo.bar"
+            ]
+        },
+        {
+            "exists": {
+                "practice.tendBar.bar.ada": true,
+                "practice.tendBar.bar.ada.customer.you": false
+            },
+            "labeled": [
+                "practice.tendBar.bar.ada"
+            ],
+            "name": "instance persistence: asserted instance survives its transient children draining",
+            "ops": [
+                {
+                    "arg": "practice.tendBar.bar.ada",
+                    "op": "insert"
+                },
+                {
+                    "arg": "practice.tendBar.bar.ada.customer.you!order!beer",
+                    "op": "insert"
+                },
+                {
+                    "arg": "practice.tendBar.bar.ada.customer.you!order",
+                    "op": "retract"
+                },
+                {
+                    "arg": "practice.tendBar.bar.ada.customer.you!beverage!beer",
+                    "op": "insert"
+                },
+                {
+                    "arg": "practice.tendBar.bar.ada.customer.you!beverage",
+                    "op": "retract"
+                }
+            ],
+            "sentences": [
+                "practice.tendBar.bar.ada"
+            ]
+        },
+        {
+            "exists": {
+                "eve": true,
+                "eve.lied": true,
+                "eve.lied.dana": true,
+                "eve.lied.dana.stole": true,
+                "eve.lied.dana.stole.carol": true,
+                "eve.lied.dana.stole.carol.loaf": false,
+                "eve.lied.dana.stole.carol.purse": true
+            },
+            "labeled": [
+                "eve.lied.dana.stole.carol.purse"
+            ],
+            "name": "siblings and shared ancestors survive retracting the other sibling",
+            "ops": [
+                {
+                    "arg": "eve.lied.dana.stole.carol.loaf",
+                    "op": "insert"
+                },
+                {
+                    "arg": "eve.lied.dana.stole.carol.purse",
+                    "op": "insert"
+                },
+                {
+                    "arg": "eve.lied.dana.stole.carol.loaf",
+                    "op": "retract"
+                }
+            ],
+            "sentences": [
+                "eve.lied.dana.stole.carol.purse"
+            ]
+        },
+        {
+            "exists": {
+                "carol.feels.angry": false,
+                "carol.feels.angry.toward": false
+            },
+            "labeled": [],
+            "name": "v38 repro: retracting the last targeted leaf prunes the drained toward ancestor",
+            "ops": [
+                {
+                    "arg": "carol.feels.angry.toward.bob",
+                    "op": "insert"
+                },
+                {
+                    "arg": "carol.feels.angry.toward.bob",
+                    "op": "retract"
+                }
+            ],
+            "sentences": []
+        },
+        {
+            "exists": {
+                "carol.feels.angry": true,
+                "carol.feels.angry.toward": false
+            },
+            "labeled": [
+                "carol.feels.angry"
+            ],
+            "name": "re-asserted scaffold survives its deep leaf retract",
+            "ops": [
+                {
+                    "arg": "carol.feels.angry.toward.bob",
+                    "op": "insert"
+                },
+                {
+                    "arg": "carol.feels.angry",
+                    "op": "insert"
+                },
+                {
+                    "arg": "carol.feels.angry.toward.bob",
+                    "op": "retract"
+                }
+            ],
+            "sentences": [
+                "carol.feels.angry"
+            ]
+        }
+    ],
+    "unify": [
+        {
+            "bindings": [
+                {
+                    "X": "foo",
+                    "Y": "bar"
+                },
+                {
+                    "X": "foo",
+                    "Y": "meow"
+                }
+            ],
+            "facts": [
+                "foo.bar.woof",
+                "foo.meow.woof",
+                "fizz.buzz.foo",
+                "some.other.woof"
+            ],
+            "name": "two-sentence join binds shared variable",
+            "patterns": [
+                "X.Y.woof",
+                "fizz.buzz.X"
+            ]
+        },
+        {
+            "bindings": [
+                {
+                    "Who": "kevin"
+                },
+                {
+                    "Who": "tim"
+                }
+            ],
+            "facts": [
+                "char.tim",
+                "char.kevin"
+            ],
+            "name": "bound variable descends deterministically",
+            "patterns": [
+                "char.Who"
+            ]
+        },
+        {
+            "bindings": [],
+            "facts": [
+                "char.tim"
+            ],
+            "name": "absent constant yields no bindings",
+            "patterns": [
+                "char.nobody"
+            ]
+        },
+        {
+            "bindings": [
+                {
+                    "Who": "alpha"
+                },
+                {
+                    "Who": "mu"
+                },
+                {
+                    "Who": "zeta"
+                }
+            ],
+            "facts": [
+                "at.zeta",
+                "at.alpha",
+                "at.mu"
+            ],
+            "name": "unbound variable branches in name order, not id order",
+            "patterns": [
+                "at.Who"
+            ]
+        }
+    ]
+}
