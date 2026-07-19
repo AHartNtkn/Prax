@@ -119,10 +119,11 @@ endeavor pid w ulabel gate parts
     ledger n = inst (".Owner.did." ++ n)
     undertake = action ulabel (gate ++ [ Not (inst ".Actor") ])
                   [ Insert (inst ".Actor") ]
-    -- No instance-fact Match: instance existence and Owner's binding ride the
-    -- practice-instance ENUMERATION (the undertake fact's trie node), exactly
-    -- as they always did — the old stage gate never bound Owner either. No
-    -- init seed: the linear cursor is dead and nothing reads the family.
+    -- No instance-fact Match and no init seed: instance existence and Owner's
+    -- binding ride the practice-instance ENUMERATION (the undertake fact's
+    -- trie node — 'Prax.Engine.possibleActions' unifies the practice's
+    -- instance names against it), so a part's gate needs only ownership, its
+    -- once-guard, its edges, and its needs.
     partAction p = action (partLabel p)
       ([ Eq "Actor" "Owner", Not (ledger (partName p)) ]
        ++ [ Match (ledger d) | d <- partAfter p ]
