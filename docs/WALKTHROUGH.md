@@ -774,7 +774,7 @@ in the very same round he's forced to steal:
   gale: Go to square
 ```
 
-Round 2: bob sweeps the square (`earnBread`'s first stage, public per §26); carol shuns bob outright
+Round 2: bob sweeps the square (`earnBread`'s first part, public per §26); carol shuns bob outright
 in the square:
 
 ```
@@ -1244,18 +1244,22 @@ wronged directly — without touching this one at all.
 ### 26. Industry — endeavors, purpose read from watching, honest opportunism (`prax village`) (v24)
 
 `Prax.Project` gives the village's moral arc its resolution. An authored endeavor *type*
-(`endeavor pid weight undertakeLabel gate stages`, built from `Stage`s) compiles to three things a
-world wires in once: an undertake `Action`, a staged `Practice` (one instance per owner —
-undertaking twice is never offered again), and a named pursuit `Desire` that pays `+weight` for
-every completed stage. Progress *is* the reward, so a long project needs no planner change: every
-next stage is ordinary local utility the moment it's available, never a foreseen end the lookahead
-has to plan toward. The pursuit desire is **dormant** — zero bindings, zero utility — for any
-disposed character with no instance yet; undertaking (an ordinary planner choice) is what switches
-it on. bob carries the disposition from the start (`charDesires = ["pursues-earnBread"]`), silent
-until he acts on it. `Prax.Worlds.Village`'s `earnBread` is three stages: sweep the square
-(public — `witnessed together "swept.Actor"`, `Prax.Witness`'s deposit-builder now exported as a
-first-class combinator for exactly this), fetch flour at the mill, and bake at the square for the
-loaf he'd otherwise have to steal.
+(`endeavor pid weight undertakeLabel gate parts`, built from `Part`s) compiles to three things a
+world wires in once: an undertake `Action`, a `Practice` whose parts are a *set* (one instance per
+owner — undertaking twice is never offered again), and a named pursuit `Desire` that pays
+`+weight` for every completed part. Progress *is* the reward, so a long project needs no planner
+change: every available part is ordinary local utility the moment its gates are met, never a
+foreseen end the lookahead has to plan toward. A plan is a set, not a linear chain — parts complete
+independently and in parallel, not all required for success, so the set of completed-part facts is
+the state and there is no progress cursor; a part's `partAfter` names the sibling parts that must
+finish first (a validated, structural edge), and `partNeeds` carries world resources and threshold
+gates. The pursuit desire is **dormant** — zero bindings, zero utility — for any disposed character
+with no instance yet; undertaking (an ordinary planner choice) is what switches it on. bob carries
+the disposition from the start (`charDesires = ["pursues-earnBread"]`), silent until he acts on it.
+`Prax.Worlds.Village`'s `earnBread` is three parts in a chain — sweep the square (public —
+`witnessed together "swept.Actor"`, `Prax.Witness`'s deposit-builder now exported as a first-class
+combinator for exactly this), then fetch flour at the mill (`after ["sweep"]`), then bake at the
+square (`after ["fetch"]`) for the loaf he'd otherwise have to steal.
 
 **The redemption, captured live.** A completely clean start, pressing only `m`:
 
@@ -1331,9 +1335,9 @@ dana's predicted move for bob, co-present at the mill but never told: Nothing
 
 `predictMove` is **myopic**: even carol, who both saw the sweep and holds the presumed-pursuit
 belief, predicts *nothing* while bob's still standing at the square — the model only pays off once
-the next stage is an available move (the sweep is done, the mill trip is next, and predicting
+the next part is an available move (the sweep is done, the mill trip is next, and predicting
 "stand still" would gain nothing over the model's baseline). The instant bob reaches the mill, the
-same belief resolves to the exact next stage. And prediction is **belief-relative, not
+same belief resolves to the exact next part. And prediction is **belief-relative, not
 proximity-relative**: dana, standing right next to bob at the mill the whole time, never saw the
 sweep and was never told — she predicts nothing either, even though she's more physically
 co-present with bob than carol is at that moment. The model reads the predictor's beliefs, not the
@@ -1354,14 +1358,14 @@ bob's top pick, square empty mid-project: Just "bob: steal the loaf from the sta
 ```
 
 Stealing (71.18 — concealment's +12 back in play now that nobody's watching, on top of the loaf
-itself) beats continuing toward the next stage (`Go to mill`, 50.46 — the step that leads to the
+itself) beats continuing toward the next part (`Go to mill`, 50.46 — the step that leads to the
 endeavor's comparatively modest flat `+3`) by a wide margin — the same shape of comparison the
 "perfect crime" beat of §25 shows at turn zero, here reproduced mid-project. bob is honest because
 honesty is *currently* the higher-scoring path, watched; the instant it stops being watched, the
 ranking reverts exactly as it would have before v24 existed. `VillageSpec`'s "the opportunism stays
 honest: an empty square mid-project still tempts" pins this precise comparison.
 
-→ code: `Prax.Project` (`endeavor`/`Stage`), `Prax.Witness` (`witnessed`, now exported),
+→ code: `Prax.Project` (`endeavor`/`Part`), `Prax.Witness` (`witnessed`, now exported),
 `Prax.Worlds.Village` (`earnBreadTake`/`earnBreadP`/`earnBreadPursuit`, the inference axiom);
 asserted in `Prax.ProjectSpec`, `Prax.VillageSpec`.
 
@@ -1991,7 +1995,7 @@ bar, Part I); the second is Part II, one row per world/tool.
 | Gossip / sourced hearsay (`gossip`/`heard`, multi-valued `.seen`/`.heard.<source>` provenance) | `Prax.Rumor` | `prax village`: carol tells dana what she saw; hearsay licenses suspicion, not confrontation |
 | `standing`/`standingUnless`/`regardedAs`/`notoriety` (derived reputation, base-fact atonement defeater) | `Prax.Repute` | `prax village`: three regards tip `notorious.bob.thief`; atonement dissolves every regard while the belief persists; re-offense revokes it and an atoned bob is deterred from a restocked stall |
 | Secrets & deception (`conceal`/`lie`) | `Prax.Deceit` | `prax village`: bob's concealment want still gates a watched theft (mid-project opportunism, §26; the scripted "secret keeps"/"perfect crime" tests); eve frames carol, and the lie cascades into real shunning and notoriety with no recourse for the framed |
-| Endeavors: staged practices, dormant pursuits (`endeavor`/`Stage`) | `Prax.Project` | `prax village`: bob undertakes `earnBread` unprompted at t=0, sweeps the square in public, and bakes the loaf he'd otherwise have to steal; watching him sweep is enough for the village to presume his purpose and predict his next stage |
+| Endeavors: part-set practices, dormant pursuits (`endeavor`/`Part`) | `Prax.Project` | `prax village`: bob undertakes `earnBread` unprompted at t=0, sweeps the square in public, and bakes the loaf he'd otherwise have to steal; watching him sweep is enough for the village to presume his purpose and predict his next part |
 | Temperament as conduct-valuations (`Trait`/`personaVocabulary`/`bearing`/`transparent`/`cast`); a lie marks the liar (`Actor.lied.Hearer.<event>`) | `Prax.Persona`, `Prax.Deceit` | `prax village`: gale bears `honest` and never lies despite sharing eve's exact spite; everyone presumes her conscience from t=0; a believed conscience nets against a believed motive in `predictMove`; eve's whisper deceives gale too, and (forced, since v30's threshold fear stops her reaching gale unprompted) gale spreads it onward by ordinary gossip, no mark, carrying it back to eve as "evidence" for her own fabrication |
 | Debt as a beneficiary'd obligation (`owe`/`settle`), belief-gated deadbeat standing | `Prax.Debt` | `prax village`: a witnessed default derives `regards.<W>.<debtor>.deadbeat`; the debtor himself, unavoidably co-present at his own default, always regards himself one even when no one else does; repayment defeats it by the same base-fact-defeater idiom as v21's thief |
 | Blackmail (`shakedown`: threaten/comply/defy/expose), threshold fear | `Prax.Blackmail`, `Prax.Worlds.Village` | `prax village`: a threat is a motive-belief deposit the victim's own round-walk prices; a standing threat is exposable, so stalling ties defiance; carol, holding eyewitness evidence of eve's whisper, shakes her down and buys real silence; eve's own fear of the notoriety brink also makes her a one-shot liar in free play, retelling §27's laundering under a forced continuation |
@@ -2029,9 +2033,9 @@ hearing-your-own-lie-back replacing `lie` with `gossip`, and — v25 — the lia
 (`<liar>.lied.<hearer>.<event>`), forgettable and additive, with truthful `gossip` leaving none —
 `VillageSpec`'s later cases carry the same mechanisms into the full village: a watched theft still
 fails, the perfect crime still needs a genuinely empty square, and eve's frame-up still cascades to
-shunning with no recourse), `Prax.ProjectSpec` (`endeavor`'s undertake/stage-gating/yield shape on a
+shunning with no recourse), `Prax.ProjectSpec` (`endeavor`'s undertake/part-gating/yield shape on a
 standalone oven-building fixture, the pursuit desire's exact shape and its dormant-vs-undertaken
-believability, and the horizon regression driving four stages to completion at planner depth 2 —
+believability, and the horizon regression driving four parts to completion at planner depth 2 —
 `VillageSpec`'s later cases carry the same mechanism into the full village: bob's unforced
 redemption, the watching-teaches-purpose inference feeding a belief-relative, myopic `predictMove`,
 and the mid-project opportunism beat that keeps concealment honest), and `Prax.PersonaSpec`

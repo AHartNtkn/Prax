@@ -368,7 +368,7 @@ tests = testGroup "Prax.Worlds.Village"
 
   , testCase "the opportunism stays honest: an empty square mid-project still tempts" $ do
       -- bob has undertaken and swept; then the square empties. Stealing (+10,
-      -- secret kept) beats the next +3 stage — industry under observation,
+      -- secret kept) beats the next +3 part — industry under observation,
       -- larceny in the dark.
       let st0 = doAct "bob" "sweep the square"
                   (doAct "bob" "take up honest work" villageWorld)
@@ -424,7 +424,7 @@ tests = testGroup "Prax.Worlds.Village"
       assertBool "sated: eat is not among his candidates"
         (not (any (("eat the loaf" `isInfixOf`) . gaLabel) (possibleActions stBaked "bob")))
       -- now hungry: the relief (+22) beats keeping the loaf (+10) plus the
-      -- finished endeavor's stage credit (+9, forfeit by the eat's own
+      -- finished endeavor's part credit (+9, forfeit by the eat's own
       -- tear-down) by the stated +3 margin -- pickAction takes it.
       let stReady = performOutcome (Insert "hungry.bob") stBaked
       fmap gaLabel (pickAction 2 stReady (villager "bob")) @?= Just "bob: eat the loaf"

@@ -196,13 +196,18 @@ utility. See the design writeups:
   rumor of her motive flips that. Master's own test suite dropped 5.5s → 0.8s as a side effect of
   the redesign. The true referee — v22's village suite, landed on top — bears it out: ~19s (down
   from the 621s blowup, a >30× recovery, back to the original pre-blowup order of magnitude).
-- `Prax.Project` (v24) — **endeavors**: authored project *types* (`endeavor`/`Stage`) compile to
-  an undertake action, a one-instance-per-owner staged practice, and a named pursuit desire that
-  rewards each completed stage directly, so a long project needs no planner change — every next
-  stage is ordinary local utility, and the desire sits *dormant* (zero bindings, zero utility)
-  for any disposed character until undertaking switches it on, a worked instance of "a want
-  gated on a fact is injectable by inserting the fact." Because the pursuit is a named,
-  believable desire, a witnessed stage becomes theory-of-mind content for free. bob's redemption
+- `Prax.Project` (v24) — **endeavors**: authored project *types* (`endeavor`/`Part`) compile to
+  an undertake action, a one-instance-per-owner practice whose parts are a *set*, and a named
+  pursuit desire that rewards each completed part directly, so a long project needs no planner
+  change — every available part is ordinary local utility, and the desire sits *dormant* (zero
+  bindings, zero utility) for any disposed character until undertaking switches it on, a worked
+  instance of "a want gated on a fact is injectable by inserting the fact." A plan is a set of
+  parts, not a linear chain: parts complete independently and in parallel, not all required for
+  success, so the set of completed-part facts is the state and there is no progress cursor —
+  topology is authored, `partAfter` naming sibling parts that must finish first (a validated,
+  structural edge) and `partNeeds` carrying world resources and threshold gates. Because the
+  pursuit is a named, believable desire, a witnessed part becomes theory-of-mind content for
+  free. bob's redemption
   closes the village's arc on it: deterred since v21 and concealing since v22, he takes up honest
   work unprompted, sweeps the square in the open, and earns — rather than steals — his loaf,
   while the village learns his purpose just by watching him work.

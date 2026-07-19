@@ -2220,6 +2220,64 @@ Every capability we intend `prax` to support, derived from the Versu paper and P
   detection can no longer desync from the lift) and the partial-closure pin (each missing
   twin flags individually; RED observed against an all-or-nothing mutation). The audit
   arc, v45 → v51, is closed — one banked item (`done.sN`, above) carried by name.
+- **v52** — **plans as part-sets: the endeavor loses its cursor, the completion ledger becomes the
+  state**
+  (`Prax.Project`; `Prax.Worlds.Village`; `Prax.ProjectSpec`; `Prax.RelevanceSpec`;
+  `Prax.VillageSpec`; spec `docs/specs/2026-07-19-v52-plans-as-part-sets.md` (`eac374b`,
+  panel-amended `7b95d35`); plan `docs/plans/2026-07-19-v52-plans-as-part-sets.md` (`f0df502`,
+  amended `c6bdeef`); code `5c1c8f1` (T1: the part-set replacement) + `02d9186` (T1 fix: the
+  parallel-prediction pin)). **This is the design round the v51-banked `done.sN` item awaited, and
+  it closes that bank SHIPPED.**
+
+  **The framing inversion.** The audit (v51's carried bank) called the accumulating `done.sN`
+  family a SHADOW of the `stage!` cursor — a counter-shaped fact family duplicating progress the
+  cursor already encoded. The user's parts model inverted the dependency: a plan has MANY MOVING
+  PARTS, completable independently and in parallel, NOT ALL required for success — so there is no
+  single number encoding progress, the SET of completed-part facts is the honest PRIMARY state, and
+  it is the linear CURSOR that is the redundant artifact and dies. The completion ledger is renamed
+  honestly [D-I1] — named as INFRASTRUCTURE (a progress ledger under the practice-instance subtree,
+  born and dying with the instance), not dressed as a fiction-adjacent deed; the first draft's
+  `threatened.*` analogy was the documented-divergence smell in category clothing.
+
+  **The design.** `Stage` becomes `Part` (`partName`/`partLabel`/`partAfter`/`partNeeds`/
+  `partYields`). Topology is authored two ways. `partAfter` names sibling parts as STRUCTURAL
+  dependency edges [D-C1]: `endeavor` validates every name against the actual part set — a dangling
+  or misspelled edge is a LOUD construction error — and an unreachable part or cycle flags via a
+  TRANSITIVE reachability fixpoint from the edge-free roots (a graph with no edge-free node has
+  every part unreachable, so reachability from the roots IS complete cycle detection). `partNeeds`
+  carries world resources and genuine THRESHOLD gates — `Subquery`/`Count`/`Cmp` over the ledger
+  family expresses "fire when any m of n are done" (property 4 pins it at 3-of-5, blocked at 2).
+  Success is thus AUTHORED TOPOLOGY, not a completion machine: a culminating part's `partAfter`
+  names the required parts, optional parts hang off the side (+w when taken, never blocking), and
+  no engine change is needed — the utility path was already binding-counting. Two boundaries are
+  stated with named parks: each part fires ONCE per instance (the ledger entry doubles as the
+  once-guard — repeatable/counted parts PARKED), and +w is UNIFORM across parts (no
+  planner-visible optional-vs-required priority — per-part weights PARKED, named in the bank).
+
+  **The panel arc.** The first draft leaked the ledger's fact-path as an authoring surface
+  (`didPart`); the design lens killed it [D-C1] — the convention stays PRIVATE (the compiler builds
+  the ledger conditions itself, so a typo'd edge cannot fail silently as a never-available part).
+  The plan review then DISPROVED the author's premise at the single highest-risk spot: the premise
+  held that the old `stage!(k-1)` gate BOUND Owner, so removing it would orphan the part actions —
+  but the stage gate NEVER bound Owner; the practice-instance ENUMERATION does (unifying
+  `practice.<pid>.Owner` against the trie, from the undertake fact). That cleared the `stage!0`
+  seed's death (it orphans nothing) AND dropped the redundant explicit instance `Match` the first
+  plan carried (strictly redundant with the enumeration plus `Eq Actor Owner`). The review's one
+  Minor asked for a parallel-prediction pin (the chain case alone left the "predict whichever part
+  scoring picks" prose unpinned); writing it, the tiebreak expectation was CORRECTED by observation
+  — the deterministic label tiebreak picks the alphabetically-first label, `mop` < `wash`, observed
+  not assumed (`02d9186`).
+
+  **Fidelity.** The fiction is byte-stable: GoldenDriveSpec (the village transcript) and
+  AnalysisTableSpec are ABSENT from both code diffs (`git show --stat`) and green in the 688 — the
+  shipped `earnBread` re-points to parts `sweep`/`fetch`/`bake` with the two edges (`fetch after
+  sweep`, `bake after fetch`) that ARE the transcript-identity claim, so identical offered sets and
+  utilities hold ply-by-ply. The only moved fiction-side expectations are VillageSpec's three
+  `done.s3` asserts, re-pointed to `practice.earnBread.bob.did.bake` — nothing else.
+
+  Suite: 679 → **687** (T1, `5c1c8f1`: +8 = ProjectSpec re-founded on the eight-property contract,
+  15 testCases replacing 7, RED-first per property) → **688** (T1 fix, `02d9186`: +1, the
+  parallel-prediction pin). `-Wall` clean.
 - **planned** — committed for later; well-understood from sources.
 - **research-needed** — blocked on an external dependency (an embedding model, #42) or an unsettled
   design question (#8). The DEON 2010 exclusion-logic paper that formerly blocked #34/#8 is now
