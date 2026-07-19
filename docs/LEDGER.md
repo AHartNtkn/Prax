@@ -2752,21 +2752,21 @@ Tier 2 — agent interiority for long time-spans:
   arc instantiates it for real: threshold fear (its own legend entry, above) makes a single
   witnessed whisper land two of the three regards notoriety needs, and carol's shakedown extracts
   real silence from that one witness's worth of leverage. Bluffing, threat expiry, and
-  counter-blackmail were out of scope here, banked below — and all three are now DISCHARGED at
-  **v54** (bluffing as the registered-not-held setting with its accident netted, threat expiry and
-  serial extortion as `Maybe Int` lifetime fields, counter-coercion as a proven composition; see
-  the v54 legend row and the discharged "Repeat / serial extortion" entry below).
-- **Repeat / serial extortion** *(DONE — v54; spec `docs/specs/2026-07-19-v54-coercion-time.md`)*:
-  porting the session probe into `shakedown`'s `comply` surfaced a real gap before it was guarded —
-  an unguarded repeat threat let the planner's recursive lookahead discover it could be paid off
-  again, inflating the two-onlooker buy score to −51.24 against the guarded, canonical −63.84
-  (`Prax.BlackmailSpec`). v49 closed the WITHIN-period gap (`comply`'s guard against an
-  already-standing `complied` marker). v54 builds the ACROSS-period mechanic this entry named — "a
-  threat that renews on its own clock": `coComplianceLasts = Just n` expires the `complied` marker
-  and the racket cycles with NO new logic (one purchase per bought period, then the extorter
-  extracts again). The permanence v49 shipped is now the `Nothing` case. Scoped precisely by the
-  no-fiat ruling (see the v54 legend row): the bought period protects the purse, never the person —
-  betrayal-vs-wait is emergent `pickAction` scoring, enforced by no marker.
+  counter-blackmail are out of scope, banked below. [All three DISCHARGED at **v54** — bluffing as
+  the registered-not-held setting with its accident netted, threat expiry as a lifetime field,
+  counter-coercion as a proven composition; see the v54 legend row.]
+- **Repeat / serial extortion** *(banked — v30, found by the planner's own lookahead; DONE — v54,
+  spec `docs/specs/2026-07-19-v54-coercion-time.md`)*: porting the
+  session probe into `shakedown`'s `comply` surfaced a real gap before it was guarded — an unguarded
+  repeat threat let the planner's recursive lookahead discover it could be paid off again, inflating
+  the two-onlooker buy score to −51.24 against the guarded, canonical −63.84 (`Prax.BlackmailSpec`).
+  The gap is closed for this round (`comply`'s guard against an already-standing debt, mirroring the
+  probe exactly) — but escalating, serial extortion (a debt that grows, or a threat that renews on
+  its own clock) is a real, planner-discovered future mechanic, not merely a hypothetical extension,
+  banked here rather than built. [Discharged at **v54**: `coComplianceLasts = Just n` expires the
+  `complied` marker and the racket cycles with no new logic — one PURCHASE per bought period, the
+  v49 permanence now the `Nothing` case; the bought period protects the purse, never the person
+  (the no-fiat ruling — betrayal-vs-wait is emergent `pickAction` scoring, enforced by no marker).]
 - **Counterfactual placement (per-agent world-views)** *(banked — v23 spec §4a "honest residual")*:
   a predicted in-scope mover is still simulated at their *true* position, not the predictor's
   *believed* one — imagining them where the predictor thinks they are requires giving every
