@@ -1035,4 +1035,75 @@ mod smoke {
         let after = crate::planner::REUSE_HITS.load(Ordering::Relaxed);
         assert!(after > before, "the v34 reuse gate was never reached");
     }
+
+    // The flagship reuse==live proptest [S-I4]: over generated perform-prefixes of
+    // a believed-mind world (belief provenance, hunger facts, and taunt effects
+    // varied), a depth-2 pick exercises the reuse gate for every cohort mover on
+    // its transparent Wait paths. The reuse-site debug_assert verifies reused==live
+    // on EVERY fire; here we prove the generator REACHES reuse (both arms) by
+    // asserting the hit counter strictly grows across the run. A wrong gate (reuse
+    // when the delta reaches a read) would panic the debug_assert.
+    #[cfg(debug_assertions)]
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(64))]
+        #[test]
+        fn reuse_equals_live_over_generated_prefixes(
+            told in proptest::bool::ANY,
+            hungry in proptest::bool::ANY,
+            second_mover in proptest::bool::ANY,
+            taunt_first in proptest::bool::ANY,
+        ) {
+            use std::sync::atomic::Ordering;
+            let before = crate::planner::REUSE_HITS.load(Ordering::Relaxed);
+
+            let mut p = Practice::new("mess")
+                .roles(["R"])
+                .action(
+                    Action::new("[Actor]: taunt beth")
+                        .when([neq("Actor", "beth")])
+                        .then([insert("hungry.beth")]),
+                )
+                .action(
+                    Action::new("[Actor]: eat lunch")
+                        .when([m("hungry.Actor")])
+                        .then([insert("meal.Actor")]),
+                );
+            if taunt_first {
+                p = p.action(Action::new("[Actor]: aardvark").when([m("never.here")]));
+            }
+            p = p.action(Action::new("[Actor]: idle about"));
+
+            let mut priya = Character::new("priya").want(want1("meal.beth", 10));
+            if second_mover {
+                priya = priya.want(want1("meal.carl", 3));
+            }
+            let mut cast = vec![priya.clone(), Character::new("beth")];
+            if second_mover {
+                cast.push(Character::new("carl"));
+            }
+            let mut st = State::new();
+            st.define_practices([p]).unwrap();
+            st.set_characters(cast).unwrap();
+            st.set_desires(vec![Desire::new(
+                "wants-food",
+                Want::new(vec![m("hungry.Owner"), m("meal.Owner")], 5),
+            )])
+            .unwrap();
+            st.perform_outcome(&insert("practice.mess.here")).unwrap();
+            if told {
+                st.perform_outcome(&insert(
+                    "priya.believes.desires.beth.wants-food.heard.gossip",
+                ))
+                .unwrap();
+            }
+            if hungry {
+                st.perform_outcome(&insert("hungry.beth")).unwrap();
+            }
+
+            // The debug_assert net fires on every reuse; a wrong gate panics here.
+            let _ = st.score_actions(2, &priya);
+            let after = crate::planner::REUSE_HITS.load(Ordering::Relaxed);
+            proptest::prop_assert!(after > before, "reuse gate must be reached at depth 2");
+        }
+    }
 }
