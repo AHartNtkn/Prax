@@ -926,8 +926,37 @@ impl State {
     /// build (it emits single-`Match` gates only): a silently skipped conjunct
     /// would hide a real divergence.
     pub fn liveness_rendered(&self) -> BTreeMap<String, (String, Vec<Vec<String>>)> {
+        self.render_liveness(&self.defs.compiled.liveness)
+    }
+
+    /// The dead-now recipe table RECOMPUTED from this state's own compiled
+    /// tables, rendered exactly as [`State::liveness_rendered`] renders the
+    /// cached field (`Prax.Relevance.livenessOf` applied to the state, which the
+    /// frozen `RelevanceSpec` compares against the field to prove the field is
+    /// not stale — the sibling of [`State::improvable_desires_recomputed`]). The
+    /// two must always be equal; a difference is a rebuild bug.
+    pub fn liveness_recomputed(&mut self) -> BTreeMap<String, (String, Vec<Vec<String>>)> {
+        let State { interner, defs, .. } = self;
+        let interner = Arc::make_mut(interner);
+        let comp = defs.compiled();
+        let fn_pool = crate::relevance::cooked_fn_pool(&comp.fns);
+        let tbl = crate::relevance::liveness_of(
+            interner,
+            &comp.practices,
+            &fn_pool,
+            &comp.rules,
+            &comp.desires,
+            defs.desires(),
+        );
+        self.render_liveness(&tbl)
+    }
+
+    fn render_liveness(
+        &self,
+        liveness: &BTreeMap<String, crate::relevance::Liveness>,
+    ) -> BTreeMap<String, (String, Vec<Vec<String>>)> {
         let mut out = BTreeMap::new();
-        for (name, l) in &self.defs.compiled.liveness {
+        for (name, l) in liveness {
             let entry = match l {
                 crate::relevance::Liveness::FloorCheck => ("FloorCheck".to_owned(), Vec::new()),
                 crate::relevance::Liveness::AlwaysLive => ("AlwaysLive".to_owned(), Vec::new()),

@@ -144,7 +144,7 @@ mod tests {
     // H: RelevanceSpec.hs "the village's liveness field: floors for consciences, classes for the rest"
     #[test]
     fn the_villages_liveness_field() {
-        let st = village_world();
+        let mut st = village_world();
         let tbl = st.liveness_rendered();
         assert_eq!(liveness_tag(&tbl, "clean-conscience").0, "FloorCheck");
         assert_eq!(liveness_tag(&tbl, "conscience-remembers").0, "FloorCheck");
@@ -174,6 +174,15 @@ mod tests {
                 "GateCheck".to_owned(),
                 vec![vec!["marketDay.square".to_owned()]]
             )
+        );
+        // The frozen case's closing clause: `liveness villageWorld == livenessOf
+        // villageWorld`. The cached FIELD must equal the module COMPUTATION, or
+        // the seven assertions above are pinning a stale table.
+        assert_eq!(
+            tbl,
+            st.liveness_recomputed(),
+            "the liveness field matches the module computation -- a difference \
+             means the field went stale against its own rebuild"
         );
     }
 

@@ -129,15 +129,44 @@ fn the_randtrace_walk_agrees_in_view_mode() {
 fn the_die_seed_override_agrees() {
     // [D-I6]: the walk seed is not the die seed. Overriding it moves the engine
     // stream under a fixed walk, which is the integration coverage the sweep buys.
+    //
+    // A GRID, not a row: four die seeds crossed with four walk seeds, so the
+    // override is exercised against walks that differ in their own right.
+    //
+    // The closing `assert_ne!` is the point (slice-4 review I2): agreement alone
+    // is satisfied by a BOTH-SIDES no-op — if neither engine honoured
+    // `--die-seed`, every cell here would still be clean. The Rust side alone is
+    // covered (stubbing `st.seed_die(ds)` in `rust_stream` reddens this test),
+    // but the flag doing NOTHING on both sides is only caught by showing that
+    // two die seeds actually produce different streams.
     let reg = load_register().expect("the register loads");
-    for die in [1, 12345, 2_147_483_646] {
-        let mut s = spec(Walk::Randtrace, 20, Some(2));
-        s.die_seed = Some(die);
-        s.emit = Emit::all();
-        let o = run_one(&s, &reg).expect("the run completes").outcome;
-        println!("randtrace --die-seed {die}: {}", o.cell());
-        assert!(matches!(o, Outcome::Clean { .. }), "{:?}", render(&o));
+    let mut streams: Vec<(i64, Vec<serde_json::Value>)> = Vec::new();
+    for die in [1, 7, 12345, 2_147_483_646] {
+        for seed in [2, 3, 5, 8] {
+            let mut s = spec(Walk::Randtrace, 20, Some(seed));
+            s.die_seed = Some(die);
+            s.emit = Emit::all();
+            let o = run_one(&s, &reg).expect("the run completes").outcome;
+            println!("randtrace --seed {seed} --die-seed {die}: {}", o.cell());
+            assert!(matches!(o, Outcome::Clean { .. }), "{:?}", render(&o));
+            if seed == 2 {
+                streams.push((die, crate::rust_stream(&s).expect("the rust stream")));
+            }
+        }
     }
+    let (d0, s0) = &streams[0];
+    let differing = streams
+        .iter()
+        .skip(1)
+        .find(|(_, s)| s != s0)
+        .map(|(d, _)| *d);
+    assert!(
+        differing.is_some(),
+        "no die seed among {:?} moved the record stream under walk seed 2 -- \
+         `--die-seed` is a no-op on BOTH sides, and every clean cell above is vacuous",
+        streams.iter().map(|(d, _)| *d).collect::<Vec<_>>()
+    );
+    println!("die seed {d0} vs {}: streams differ", differing.expect("checked"));
 }
 
 #[test]
