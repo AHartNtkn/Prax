@@ -115,6 +115,19 @@ pub fn path_names(interner: &Interner, path: &CompiledPath) -> Vec<String> {
         .collect()
 }
 
+/// The segment names of a raw sentence string, without interning — the pure
+/// `Prax.Db.pathNames` (`map fst . tokens`) for authoring-boundary walkers
+/// (`Prax.Query.conditionVars` and friends) that inspect authored strings
+/// before compilation exists and so must not touch the pool. Outer whitespace is
+/// trimmed (as [`tokenize`] does) and the name is split on both separators.
+pub fn segment_names(sentence: &str) -> Vec<String> {
+    let trimmed = sentence.trim_matches(|c| c == ' ' || c == '\t' || c == '\n' || c == '\r');
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+    trimmed.split(['.', '!']).map(str::to_owned).collect()
+}
+
 #[cfg(test)]
 mod tests {
     // H: DbSpec.hs "tokens: trailing-operator rejection (v43 -- a trailing op would set a leaf's exclusion flag nothing ever reads)"

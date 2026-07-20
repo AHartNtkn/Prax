@@ -27,4 +27,16 @@ pub enum WorldError {
         "Prax path {sentence:?}: {segments} segments exceeds the 32-segment exclusion-bitmask limit"
     )]
     PathTooLong { sentence: String, segments: usize },
+
+    /// A `Subquery` appears inside another `Subquery`'s where-clause. The frozen
+    /// `Prax.Query` rejects this with a runtime `error`, calling it a structural
+    /// error that "cannot depend on runtime state". Because the Rust design
+    /// compiles the whole condition family at install (the one compile choke
+    /// point), that structural check moves to its natural home — a construction
+    /// guard at [`crate::query::compile_condition`] — catching every nested
+    /// subquery whether or not the containing query is ever evaluated.
+    #[error(
+        "Prax condition: a Subquery is nested inside another Subquery's where-clause -- subqueries may not nest"
+    )]
+    NestedSubquery,
 }
