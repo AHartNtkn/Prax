@@ -131,4 +131,28 @@ pub enum WorldError {
         period: i64,
         duration: i64,
     },
+
+    /// A name a vocab combinator splices into a path it builds is not a
+    /// nonempty SINGLE path segment. The combinator writes `member.<who>!<f>`,
+    /// `married.<joiner>.<spouse>`, `office.<office>!<Actor>` — a `.`/`!` inside
+    /// the name would nest one family under another and (for the `!` slots)
+    /// move the exclusion boundary, so the frozen modules `error` on it
+    /// (`Prax.Faction.memberPath`, `Prax.Kin.wed`, `Prax.Kin.succession`).
+    /// `context` names the combinator that caught it.
+    #[error(
+        "Prax {context}: {name:?} must be a nonempty single path segment (no '.' or '!') -- it is spliced into a path this combinator builds"
+    )]
+    NotASinglePathSegment { context: String, name: String },
+
+    /// An authored PATTERN does not name the variables the combinator needs to
+    /// splice its axiom together — e.g. `Prax.Faction.factionStanding` reads the
+    /// pattern's first variable as the offender and its second as the victim, so
+    /// a pattern naming fewer than two is not a silent single-variable rule but
+    /// an authoring error. `needs` states the requirement the pattern failed.
+    #[error("Prax {context}: pattern {pattern:?} must {needs}")]
+    PatternVariables {
+        context: String,
+        pattern: String,
+        needs: String,
+    },
 }
