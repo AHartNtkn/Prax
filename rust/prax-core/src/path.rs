@@ -47,30 +47,45 @@ impl CompiledPath {
 /// is a loud [`WorldError::TrailingOperator`], matching the frozen
 /// `Prax.Db.tokens`.
 pub fn tokenize(interner: &mut Interner, sentence: &str) -> Result<CompiledPath, WorldError> {
-    let trimmed = sentence.trim_matches(|c| c == ' ' || c == '\t' || c == '\n' || c == '\r');
-
     let mut segs: SmallVec<[Sym; 6]> = SmallVec::new();
     let mut excl: u32 = 0;
+    scan_tokens(sentence, |name, op| {
+        guard_len(&segs, sentence)?;
+        let idx = segs.len();
+        let seg = interner.intern(name);
+        segs.push(seg);
+        if op == Some('!') {
+            excl |= 1u32 << idx;
+        }
+        Ok(())
+    })?;
+    Ok(CompiledPath { segs, excl })
+}
 
+/// Walk a sentence's name/separator pairs, handing each name and the operator
+/// that FOLLOWS it to `emit` — the pure shape of `Prax.Db.tokens`, and the ONE
+/// place the trailing-operator guard lives.
+///
+/// Whitespace is trimmed from both ends first (`Prax.Db.trim`); the empty
+/// sentence emits nothing. A trailing operator (`.`/`!` with no name after) is a
+/// loud [`WorldError::TrailingOperator`], raised BEFORE the preceding name is
+/// emitted, exactly where the frozen `tokens` raises it. Both [`tokenize`] and
+/// [`segment_names_checked`] go through here so the two cannot drift: a guard
+/// implemented twice is a guard that will one day be implemented once.
+fn scan_tokens(
+    sentence: &str,
+    mut emit: impl FnMut(&str, Option<char>) -> Result<(), WorldError>,
+) -> Result<(), WorldError> {
+    let trimmed = sentence.trim_matches(|c| c == ' ' || c == '\t' || c == '\n' || c == '\r');
     if trimmed.is_empty() {
-        return Ok(CompiledPath { segs, excl });
+        return Ok(());
     }
-
-    // Walk name/separator pairs. Each name gets the operator that FOLLOWS it;
-    // the sentence must end in a name (a trailing operator is rejected).
     let mut rest = trimmed;
     loop {
-        let sep_pos = rest.find(['.', '!']);
-        match sep_pos {
-            None => {
-                // Final segment: no following operator.
-                guard_len(&segs, sentence)?;
-                let seg = interner.intern(rest);
-                segs.push(seg);
-                break;
-            }
+        match rest.find(['.', '!']) {
+            // Final segment: no following operator.
+            None => return emit(rest, None),
             Some(pos) => {
-                let name = &rest[..pos];
                 let op = rest.as_bytes()[pos] as char;
                 let after = &rest[pos + 1..];
                 if after.is_empty() {
@@ -79,19 +94,11 @@ pub fn tokenize(interner: &mut Interner, sentence: &str) -> Result<CompiledPath,
                         op,
                     });
                 }
-                guard_len(&segs, sentence)?;
-                let idx = segs.len();
-                let seg = interner.intern(name);
-                segs.push(seg);
-                if op == '!' {
-                    excl |= 1u32 << idx;
-                }
+                emit(&rest[..pos], Some(op))?;
                 rest = after;
             }
         }
     }
-
-    Ok(CompiledPath { segs, excl })
 }
 
 /// Guard the segment count against the exclusion-bitmask width before pushing
@@ -115,17 +122,45 @@ pub fn path_names(interner: &Interner, path: &CompiledPath) -> Vec<String> {
         .collect()
 }
 
-/// The segment names of a raw sentence string, without interning — the pure
-/// `Prax.Db.pathNames` (`map fst . tokens`) for authoring-boundary walkers
-/// (`Prax.Query.conditionVars` and friends) that inspect authored strings
-/// before compilation exists and so must not touch the pool. Outer whitespace is
-/// trimmed (as [`tokenize`] does) and the name is split on both separators.
+/// The segment names of a raw sentence string, without interning and WITHOUT the
+/// trailing-operator guard — a plain split for the authoring-boundary walkers
+/// (`Prax.Query.conditionVars` and friends) that inspect authored strings before
+/// compilation exists, must not touch the pool, and are infallible by signature.
+/// Outer whitespace is trimmed (as [`tokenize`] does) and the name is split on
+/// both separators.
+///
+/// This is NOT `Prax.Db.pathNames`. `pathNames = map fst . tokens`, and `tokens`
+/// RAISES on a trailing operator; this function returns a trailing empty segment
+/// instead. Anything mirroring a frozen `pathNames` call in a context that can
+/// report an error must use [`segment_names_checked`] — porting a `pathNames`
+/// call site to this function silently converts a loud construction-time
+/// rejection into a malformed value that renders plausibly.
 pub fn segment_names(sentence: &str) -> Vec<String> {
     let trimmed = sentence.trim_matches(|c| c == ' ' || c == '\t' || c == '\n' || c == '\r');
     if trimmed.is_empty() {
         return Vec::new();
     }
     trimmed.split(['.', '!']).map(str::to_owned).collect()
+}
+
+/// The segment names of a raw sentence string, without interning — the pure
+/// `Prax.Db.pathNames` (`map fst . tokens`), guard and all.
+///
+/// This is the function a ported `pathNames` call site wants: it raises the same
+/// [`WorldError::TrailingOperator`] the frozen `Prax.Db.tokens` raises, at the
+/// same input, so a combinator that splices an authored pattern into a built
+/// sentence rejects a malformed pattern instead of building a malformed axiom
+/// from it.
+///
+/// # Errors
+/// [`WorldError::TrailingOperator`] if the sentence ends in `.` or `!`.
+pub fn segment_names_checked(sentence: &str) -> Result<Vec<String>, WorldError> {
+    let mut out = Vec::new();
+    scan_tokens(sentence, |name, _| {
+        out.push(name.to_owned());
+        Ok(())
+    })?;
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -186,6 +221,34 @@ mod tests {
                 op: '.',
             })
         );
+    }
+
+    #[test]
+    fn segment_names_checked_is_pathnames_guard_and_all() {
+        // `pathNames = map fst . tokens`, so it carries `tokens`' trailing-
+        // operator rejection. The unguarded split does NOT — it returns a
+        // trailing empty segment — which is why the two are separate functions
+        // and why every ported `pathNames` call site takes the checked one.
+        assert_eq!(
+            segment_names_checked("member.X!F").expect("well formed"),
+            ["member", "X", "F"]
+        );
+        for (s, op) in [("struck.A.V.", '.'), ("struck.A.V!", '!')] {
+            assert_eq!(
+                segment_names_checked(s),
+                Err(WorldError::TrailingOperator {
+                    sentence: s.to_owned(),
+                    op,
+                }),
+                "segment_names_checked must raise where Prax.Db.tokens raises"
+            );
+            assert_eq!(
+                segment_names(s).last().map(String::as_str),
+                Some(""),
+                "the unguarded split is what it is — a trailing empty segment, not an error"
+            );
+        }
+        assert!(segment_names_checked("   ").expect("empty").is_empty());
     }
 
     #[test]

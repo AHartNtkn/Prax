@@ -13,14 +13,17 @@
 
 use prax_core::error::WorldError;
 use prax_core::interner::is_variable_name;
-use prax_core::path::segment_names;
+use prax_core::path::segment_names_checked;
 use prax_core::query::{matches, neq};
 use prax_core::types::{Axiom, Outcome, authored_pat_clash, insert};
 
-/// The frozen `bad`: a name spliced into a built path must be nonempty and
-/// carry no separator. Transcribed rather than routed through
-/// [`prax_core::path::segment_names`] — that one trims whitespace first, which
-/// would reject a name the frozen guard accepts.
+/// The frozen `bad`: a name spliced into a built path must be nonempty and carry
+/// no separator (`Faction.hs:24`). Transcribed as its own predicate rather than
+/// expressed as a segment count, because the frozen guard inspects the name's
+/// CHARACTERS: it accepts `" "`, which any tokenizer-based test would reject
+/// after trimming. That reasoning is about `bad` alone — [`faction_standing`]
+/// splits an authored PATTERN, which the frozen module does with `pathNames`,
+/// and so goes through [`prax_core::path::segment_names_checked`].
 fn bad(n: &str) -> bool {
     n.is_empty() || n.contains(['.', '!'])
 }
@@ -67,7 +70,12 @@ pub fn comrades() -> Axiom {
 /// offender's OWN belief of their own act is excluded, by the believer/offender
 /// inequality).
 pub fn faction_standing(pat: &str, label: &str) -> Result<Axiom, WorldError> {
-    let names = segment_names(pat);
+    // `pathNames = map fst . tokens`, and `tokens` RAISES on a trailing operator
+    // — so a malformed `pat` is rejected here, before the arity check, exactly
+    // as the frozen `case filter isVariable (pathNames pat)` rejects it while
+    // forcing the scrutinee. The unguarded split would return a trailing empty
+    // segment and build `PraxW.believes.struck.A.V.` into a live axiom.
+    let names = segment_names_checked(pat)?;
     let vars: Vec<&String> = names.iter().filter(|n| is_variable_name(n)).collect();
     let (offender, victim) = match vars.as_slice() {
         [offender, victim, ..] => (offender, victim),
@@ -356,6 +364,41 @@ mod tests {
                 Err(WorldError::ReservedVarClash { .. })
             ),
             "an offender named PraxW collides with the axiom's own (now-namespaced) believer variable"
+        );
+    }
+
+    #[test]
+    fn faction_standing_rejects_a_trailing_operator_pattern() {
+        // The frozen `factionStanding` splits `pat` with `pathNames`, and
+        // `pathNames = map fst . tokens` — `Prax.Db.tokens` RAISES on a trailing
+        // operator ("a sentence ends in a name, not an operator"). Verified on
+        // the frozen engine at this input:
+        //
+        //   Prax.Db.tokens: trailing operator '.' in "struck.A.V."
+        //
+        // Splicing such a pattern into `PraxW.believes.<pat>` builds a live
+        // axiom around a malformed sentence — an AXIOM BUILDER's failure mode is
+        // that it renders plausibly and changes what the planner can read (§3.4).
+        // So this must be a construction-time rejection on both sides, not a
+        // difference in what gets built.
+        for pat in ["struck.A.V.", "struck.A.V!"] {
+            let got = faction_standing(pat, "brutal");
+            assert!(
+                matches!(got, Err(WorldError::TrailingOperator { .. })),
+                "faction_standing({pat:?}) must be rejected as loudly as the frozen \
+                 pathNames/tokens rejects it, got {got:?}"
+            );
+        }
+        // …and the guard fires on the SCRUTINEE, before the arity check — the
+        // frozen `case filter isVariable (pathNames pat)` forces `pathNames`
+        // first, so a pattern that is both malformed AND variable-poor reports
+        // the malformed sentence, not the missing variable.
+        assert!(
+            matches!(
+                faction_standing("struck.A.", "brutal"),
+                Err(WorldError::TrailingOperator { .. })
+            ),
+            "the tokenizer guard precedes the arity guard, as it does in the frozen case scrutinee"
         );
     }
 }
