@@ -16,6 +16,23 @@
 //! contract is compared, not `setup_db` (which sees the marker FACT but not its
 //! due).
 //!
+//! **Coverage note, measured at S8 and recorded so the next sweep does not
+//! rediscover it.** Across 100 randtrace seeds this world produces exactly TWO
+//! distinct walks, and BOTH reach `granted`; `dismissed` is not reachable by
+//! randtrace at all. That is a property of the world and of the walk driver, not
+//! a seed-range knob. `randWalk` picks for EVERY actor including the envoy, and
+//! the envoy's menu is never empty before it petitions — flatter is always
+//! offered while `Not "petitioned"` holds — so the envoy always acts, and always
+//! petitions on its second or third turn, long before the patience marker's
+//! boundary-5 due. Reaching `dismissed` requires a player who DECLINES, which
+//! the picker never produces. The route is netted differentially by the trace
+//! walk instead (`compare audience --mode trace --turns 20 --emit state --idle
+//! envoy` is clean, and `ending!dismissed` appears at t=16), and by the frozen
+//! label `the audience: dawdling lets the clock run out to 'dismissed'` in
+//! `conformance::script_spec`. The S8 design's prediction that both endings
+//! would appear in the randtrace sweep is therefore FALSE, and it is false for a
+//! reason worth keeping written down.
+//!
 //! Frozen reference: `src/Prax/Worlds/Audience.hs`.
 
 use prax_core::engine::State;
