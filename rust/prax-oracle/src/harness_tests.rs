@@ -315,11 +315,25 @@ fn rung_field_sets_cover_every_emitted_key() {
     );
 }
 
+/// Slice 4 lands the last S7 world, so the invariant this test guards flips from
+/// "an unported world refuses loudly" to "every S7 world BUILDS, and only an
+/// unknown name refuses". Both halves are asserted: a silent skip on either side
+/// is what the original test existed to prevent.
 #[test]
-fn a_world_that_is_not_ported_yet_is_a_loud_error_naming_its_slice() {
-    let e = worlds::build("village").expect_err("village is not ported in slice 0");
+fn every_s7_world_builds_and_only_an_unknown_name_is_a_loud_error() {
+    for w in worlds::S7_WORLDS {
+        assert!(
+            worlds::build(w).is_ok(),
+            "S7 world `{w}` must build now that slice 4 has landed"
+        );
+        assert!(
+            worlds::ported().contains(w),
+            "S7 world `{w}` must be listed as ported"
+        );
+    }
+    let e = worlds::build("audience").expect_err("audience is S8's, not S7's");
     println!("{e}");
-    assert!(e.contains("slice 4"), "{e}");
+    assert!(e.contains("unknown world"), "{e}");
 }
 
 #[test]
