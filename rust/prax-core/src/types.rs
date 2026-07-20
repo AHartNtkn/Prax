@@ -25,8 +25,9 @@
 
 use std::collections::BTreeMap;
 
-use crate::path::segment_names;
-use crate::query::{Condition, cond_sents, condition_vars};
+use crate::error::WorldError;
+use crate::path::segment_names_checked;
+use crate::query::{Condition, cond_sents, flat_condition_vars};
 
 // ---- the outcome language -------------------------------------------------
 
@@ -438,19 +439,30 @@ fn rename_outcome(subst: &BTreeMap<String, String>, o: &Outcome) -> Outcome {
 // ---- v40 hygiene walkers --------------------------------------------------
 
 /// Every name an outcome MENTIONS — a total walk over every constructor,
-/// `ForEach`/`Roll` recursing through both guard conditions ([`condition_vars`])
+/// `ForEach`/`Roll` recursing through both guard conditions ([`crate::query::condition_vars`])
 /// and nested outcomes (`Prax.Types.outcomeVars`). The shared home for
 /// reserved-variable guards ([`crate::engine`]'s `set_schedule`,
 /// [`crate::rng::draw`]).
-pub fn outcome_vars(o: &Outcome) -> Vec<String> {
+///
+/// Fallible for the same reason [`crate::query::condition_vars`] is: `Insert`/`Delete`/
+/// `InsertFor` go through the frozen `Prax.Db.pathNames`, which RAISES on a
+/// trailing operator.
+///
+/// # Errors
+/// [`WorldError::TrailingOperator`] if a written sentence ends in `.`/`!`.
+pub fn outcome_vars(o: &Outcome) -> Result<Vec<String>, WorldError> {
     match o {
-        Outcome::Insert(s) | Outcome::Delete(s) | Outcome::InsertFor(_, s) => segment_names(s),
-        Outcome::Call(_, args) => args.clone(),
-        Outcome::ForEach(cs, os) | Outcome::Roll(_, _, cs, os) => cs
-            .iter()
-            .flat_map(condition_vars)
-            .chain(os.iter().flat_map(outcome_vars))
-            .collect(),
+        Outcome::Insert(s) | Outcome::Delete(s) | Outcome::InsertFor(_, s) => {
+            segment_names_checked(s)
+        }
+        Outcome::Call(_, args) => Ok(args.clone()),
+        Outcome::ForEach(cs, os) | Outcome::Roll(_, _, cs, os) => {
+            let mut out = flat_condition_vars(cs)?;
+            for o in os {
+                out.extend(outcome_vars(o)?);
+            }
+            Ok(out)
+        }
     }
 }
 
@@ -486,18 +498,26 @@ pub fn is_prax_var(s: &str) -> bool {
 /// name neither Prax-prefixed nor listed is unrestricted (`[]` is "nothing extra
 /// is forbidden"). Returns the offenders; each caller raises its own contextual
 /// error.
+///
+/// # Errors
+/// The trailing-operator rejection [`crate::query::condition_vars`]/[`outcome_vars`] carry
+/// from the frozen `pathNames`: a malformed authored sentence dies here, before
+/// any hygiene verdict is reached, exactly as the frozen `authoredVarClash`
+/// does.
 pub fn authored_var_clash(
     forbidden: &[String],
     conds: &[Condition],
     outs: &[Outcome],
-) -> Vec<String> {
-    conds
-        .iter()
-        .flat_map(condition_vars)
-        .chain(outs.iter().flat_map(outcome_vars))
+) -> Result<Vec<String>, WorldError> {
+    let mut names = flat_condition_vars(conds)?;
+    for o in outs {
+        names.extend(outcome_vars(o)?);
+    }
+    Ok(names
+        .into_iter()
         .filter(|v| crate::interner::is_variable_name(v))
         .filter(|v| is_prax_var(v) || forbidden.iter().any(|f| f == v))
-        .collect()
+        .collect())
 }
 
 /// [`authored_var_clash`] for string-pattern arguments that are not
@@ -642,11 +662,43 @@ mod tests {
 
     #[test]
     fn outcome_vars_walks_every_constructor() {
-        assert_eq!(outcome_vars(&insert("at.Who!place")), ["at", "Who", "place"]);
-        assert_eq!(outcome_vars(&call("fn", vec!["A".into(), "b".into()])), ["A", "b"]);
+        let vars = |o: &Outcome| outcome_vars(o).expect("well-formed sentences");
+        assert_eq!(vars(&insert("at.Who!place")), ["at", "Who", "place"]);
+        assert_eq!(vars(&call("fn", vec!["A".into(), "b".into()])), ["A", "b"]);
         assert_eq!(
-            outcome_vars(&for_each(vec![m("g.W")], vec![insert("h.W.X")])),
+            vars(&for_each(vec![m("g.W")], vec![insert("h.W.X")])),
             ["g", "W", "h", "W", "X"]
+        );
+    }
+
+    #[test]
+    fn outcome_vars_rejects_a_trailing_operator_where_the_frozen_pathnames_raises() {
+        // Frozen: `outcomeVars (Insert "a.b.")` is `pathNames "a.b."`, which
+        // raises `Prax.Db.tokens: trailing operator '.' in "a.b."` (verified on
+        // the frozen engine). The unchecked split returns `["a", "b", ""]`.
+        for o in [insert("a.b."), delete("a.b."), insert_for(2, "a.b.")] {
+            assert_eq!(
+                outcome_vars(&o),
+                Err(WorldError::TrailingOperator {
+                    sentence: "a.b.".to_owned(),
+                    op: '.',
+                }),
+                "{o:?} must be rejected where the frozen pathNames raises"
+            );
+        }
+        assert!(
+            outcome_vars(&for_each(vec![m("g.W")], vec![insert("h!")])).is_err(),
+            "a ForEach body is walked too"
+        );
+        assert!(
+            outcome_vars(&for_each(vec![m("g.")], vec![insert("h")])).is_err(),
+            "a ForEach guard is walked through conditionVars"
+        );
+        // `Call` carries argument NAMES, not sentences — the frozen `Call _ as -> as`
+        // does not tokenize them, so nothing is rejected here.
+        assert_eq!(
+            outcome_vars(&call("fn", vec!["a.b.".into()])).expect("Call args are not paths"),
+            ["a.b."]
         );
     }
 
@@ -672,24 +724,21 @@ mod tests {
     #[test]
     fn authored_var_clash_flags_prax_and_forbidden_only() {
         let forbidden = vec!["Actor".to_owned()];
+        let clash = |f: &[String], c: &[Condition], o: &[Outcome]| {
+            authored_var_clash(f, c, o).expect("well-formed sentences")
+        };
         // Prax-namespaced var in conditions.
-        assert_eq!(
-            authored_var_clash(&[], &[m("flag.PraxD")], &[]),
-            ["PraxD"]
-        );
+        assert_eq!(clash(&[], &[m("flag.PraxD")], &[]), ["PraxD"]);
         // Prax-namespaced var in outcomes.
-        assert_eq!(
-            authored_var_clash(&[], &[], &[insert("marked.PraxW")]),
-            ["PraxW"]
-        );
+        assert_eq!(clash(&[], &[], &[insert("marked.PraxW")]), ["PraxW"]);
         // Nested ForEach guard.
         assert_eq!(
-            authored_var_clash(&[], &[], &[for_each(vec![m("y.PraxD")], vec![insert("done")])]),
+            clash(&[], &[], &[for_each(vec![m("y.PraxD")], vec![insert("done")])]),
             ["PraxD"]
         );
         // Subquery free-var list.
         assert_eq!(
-            authored_var_clash(
+            clash(
                 &[],
                 &[Condition::Subquery { set: "S".into(), find: vec!["PraxD".into()], where_: vec![m("seen.ok")] }],
                 &[]
@@ -697,10 +746,19 @@ mod tests {
             ["PraxD"]
         );
         // A forbidden splice name (Actor) is caught; an ordinary var is not.
-        assert_eq!(authored_var_clash(&forbidden, &[m("who.Actor")], &[]), ["Actor"]);
-        assert!(authored_var_clash(&forbidden, &[m("who.Other")], &[]).is_empty());
+        assert_eq!(clash(&forbidden, &[m("who.Actor")], &[]), ["Actor"]);
+        assert!(clash(&forbidden, &[m("who.Other")], &[]).is_empty());
         // Constants are never flagged.
-        assert!(authored_var_clash(&[], &[m("plain.path")], &[]).is_empty());
+        assert!(clash(&[], &[m("plain.path")], &[]).is_empty());
+        // A malformed authored sentence dies BEFORE any hygiene verdict, as the
+        // frozen walk does — the guard never gets to call it clean.
+        assert_eq!(
+            authored_var_clash(&[], &[m("who.Other.")], &[]),
+            Err(WorldError::TrailingOperator {
+                sentence: "who.Other.".to_owned(),
+                op: '.',
+            })
+        );
     }
 
     #[test]

@@ -329,3 +329,31 @@ lenses independently found the candidate-order defect.
   overstated its compared work by ~6x — and since §4 normalizes the budget on
   effective turns, the single number an operator reads off a clean run was the
   one number the normalization could not use.
+
+## 12. SLICE-2 AMENDMENTS (binding; recorded from the slice-2 review's fix wave)
+
+- **A ported `pathNames` call site takes the CHECKED split, and the rule is now
+  mechanical** [slice-2 review I2]. `Prax.Db.pathNames` is `map fst . tokens`
+  and `tokens` RAISES on a trailing operator; `path::segment_names` does not.
+  Three call sites mirrored a raising frozen counterpart through the unchecked
+  helper (`query.rs`'s `condition_vars`, `types.rs`'s `outcome_vars`,
+  `engine.rs`'s `add_schedule_rules`), which silently converted a
+  construction-time rejection into a malformed value. All three now go through
+  `segment_names_checked`, and `condition_vars`/`outcome_vars`/
+  `authored_var_clash` are fallible, as the frozen partial functions are. The
+  frozen behaviour was OBSERVED, not read, at each site:
+  `setSchedule name "tick." -> ERROR -> Prax.Db.tokens: trailing operator '.'`,
+  and likewise for a rule body and for `Prax.Rng.draw`.
+  **The rule for slice 4** (whose `Deceit`/`Blackmail`/`Confession`/`Rumor`/
+  `Repute` ports all call `pathNames`): port `pathNames` to
+  `segment_names_checked` and thread the rejection. The unchecked split is for
+  authored strings with NO frozen `pathNames` behind them, and taking it now
+  requires saying so at the call site.
+- **The standing guard**: `conformance::unchecked_split_gate` sweeps every `.rs`
+  file in the workspace and fails on any `segment_names` call that does not
+  carry an `UNCHECKED-SPLIT (frozen: …)` marker in the comment block above it.
+  This class has now appeared three times (slice-1 [C2], its fix wave, slice-2
+  [I2]); a class that recurs three times is not caught by reading. The gate is
+  mechanical about the marker, not the reasoning — it cannot read Haskell — but
+  the substitution can no longer be made SILENTLY, which is what made the first
+  three occurrences findable only by review.

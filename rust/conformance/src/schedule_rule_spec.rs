@@ -138,6 +138,50 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn a_trailing_operator_in_a_rule_name_dies_as_the_frozen_tokens_error() {
+        // No frozen spec label: the frozen guard is
+        // `filter ((/= 1) . length . pathNames . srName)` (Engine.hs:291) and
+        // `pathNames` RAISES before the length is taken. Observed on the frozen
+        // engine at this input:
+        //   setSchedule name "tick." -> ERROR ->
+        //   Prax.Db.tokens: trailing operator '.' in "tick." -- a sentence ends
+        //   in a name, not an operator
+        // so the malformed name is a MALFORMED SENTENCE, not a multi-segment one.
+        assert_eq!(
+            State::new().set_schedule(vec![ScheduleRule::new("tick.", 2)]),
+            Err(WorldError::TrailingOperator {
+                sentence: "tick.".to_owned(),
+                op: '.',
+            })
+        );
+    }
+
+    #[test]
+    fn a_trailing_operator_in_a_rule_body_dies_before_the_hygiene_verdict() {
+        // Frozen, same probe:
+        //   setSchedule body Match "a.b." -> ERROR ->
+        //   Prax.Db.tokens: trailing operator '.' in "a.b." ...
+        // The v40 splice check walks the body through `conditionVars`, which is
+        // `pathNames` on every Match/Not — so a malformed sentence dies at the
+        // door rather than being split into `["a", "b", ""]` and waved through.
+        // This is an END-TO-END statement of the error identity, not an isolation
+        // of the walk: with the walk unguarded the SAME error still arrives one
+        // step later from `path::tokenize` when the clause is compiled. The pin
+        // that isolates the walk is
+        // `types::tests::authored_var_clash_flags_prax_and_forbidden_only`, whose
+        // last assertion reddens under exactly that mutation.
+        assert_eq!(
+            State::new().set_schedule(vec![
+                ScheduleRule::new("x", 2).clause([m("a.b.")], Vec::<Outcome>::new())
+            ]),
+            Err(WorldError::TrailingOperator {
+                sentence: "a.b.".to_owned(),
+                op: '.',
+            })
+        );
+    }
+
     // H: ScheduleRuleSpec.hs "a body authoring the Prax namespace is a loud error"
     #[test]
     fn a_body_authoring_the_prax_namespace_is_a_loud_error() {

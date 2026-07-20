@@ -242,6 +242,8 @@ mod tests {
                 }),
                 "segment_names_checked must raise where Prax.Db.tokens raises"
             );
+            // UNCHECKED-SPLIT (frozen: none — this asserts what the unchecked
+            // split IS, as the contrast that makes the checked one necessary).
             assert_eq!(
                 segment_names(s).last().map(String::as_str),
                 Some(""),

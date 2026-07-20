@@ -50,7 +50,7 @@ pub fn draw(
     if num <= 0 || num >= den {
         return Err(WorldError::DrawOdds { num, den });
     }
-    if let Some(v) = authored_var_clash(&[], &conds, &outs).into_iter().next() {
+    if let Some(v) = authored_var_clash(&[], &conds, &outs)?.into_iter().next() {
         return Err(WorldError::ReservedVarClash {
             context: "Rng.draw".to_owned(),
             var: v,
@@ -134,6 +134,23 @@ mod tests {
     fn draw_accepts_ordinary_variables() {
         let r = draw(1, 2, vec![Condition::Match("flag.S".into())], vec![insert("marked.R")]);
         assert!(matches!(r.as_deref(), Ok([Outcome::Roll(1, 2, _, _)])));
+    }
+
+    #[test]
+    fn draw_rejects_a_trailing_operator_where_the_frozen_walk_raises() {
+        // No frozen spec label; the frozen behaviour was observed directly:
+        //   draw with Match "a.b." -> ERROR ->
+        //   Prax.Db.tokens: trailing operator '.' in "a.b." -- a sentence ends
+        //   in a name, not an operator
+        // `draw`'s guard is `(v : _) <- authoredVarClash [] conds outs`, and the
+        // pattern match forces the walk, which forces `pathNames` on the Match.
+        assert_eq!(
+            draw(1, 2, vec![Condition::Match("a.b.".into())], vec![]),
+            Err(WorldError::TrailingOperator {
+                sentence: "a.b.".to_owned(),
+                op: '.',
+            })
+        );
     }
 
     // ===== GateSpec's shared-guard half, pinned THROUGH a real combinator =====

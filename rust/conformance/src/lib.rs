@@ -25,4 +25,6 @@ pub mod npc_replay;
 pub mod planner_replay;
 pub mod schedule_rule_spec;
 pub mod schedule_spec;
+pub mod source_sweep;
+pub mod unchecked_split_gate;
 pub mod view_invariant;

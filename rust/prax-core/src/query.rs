@@ -27,7 +27,7 @@ use smallvec::SmallVec;
 use crate::db::{Bindings, Db, Val, val_to_sym};
 use crate::error::WorldError;
 use crate::interner::{Interner, Sym};
-use crate::path::{segment_names, tokenize};
+use crate::path::{segment_names_checked, tokenize};
 
 /// Numeric comparison operators (`lt`, `lte`, `gt`, `gte`) — `Prax.Query.CmpOp`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -474,29 +474,51 @@ fn haskell_mod(a: i64, b: i64) -> Option<i64> {
 /// over-approximation of what it binds: `Eq`/`Neq`/`Cmp`/`Calc`/`Count` operands
 /// are listed whether variable or constant. The authoring-boundary home (strings,
 /// pre-compilation) for reserved-variable guards in later stages.
-pub fn condition_vars(c: &Condition) -> Vec<String> {
+///
+/// Fallible because the frozen `conditionVars` is: `Match`/`Not` go through
+/// `Prax.Db.pathNames`, which is `map fst . tokens`, and `tokens` RAISES on a
+/// trailing operator. Every caller of this walk is a guard that reports errors,
+/// so the rejection is threaded rather than dropped.
+///
+/// # Errors
+/// [`WorldError::TrailingOperator`] if a `Match`/`Not` sentence ends in `.`/`!`.
+pub fn condition_vars(c: &Condition) -> Result<Vec<String>, WorldError> {
     match c {
-        Condition::Match(s) | Condition::Not(s) => segment_names(s),
-        Condition::Absent(cs) | Condition::Exists(cs) => {
-            cs.iter().flat_map(condition_vars).collect()
+        Condition::Match(s) | Condition::Not(s) => segment_names_checked(s),
+        Condition::Absent(cs) | Condition::Exists(cs) => flat_condition_vars(cs),
+        Condition::Or(clauses) => {
+            let mut out = Vec::new();
+            for clause in clauses {
+                out.extend(flat_condition_vars(clause)?);
+            }
+            Ok(out)
         }
-        Condition::Or(clauses) => clauses
-            .iter()
-            .flatten()
-            .flat_map(condition_vars)
-            .collect(),
         Condition::Subquery { set, find, where_ } => {
             let mut out = Vec::with_capacity(1 + find.len());
             out.push(set.clone());
             out.extend(find.iter().cloned());
-            out.extend(where_.iter().flat_map(condition_vars));
-            out
+            out.extend(flat_condition_vars(where_)?);
+            Ok(out)
         }
-        Condition::Eq(a, b) | Condition::Neq(a, b) => vec![a.clone(), b.clone()],
-        Condition::Cmp(_, a, b) => vec![a.clone(), b.clone()],
-        Condition::Calc(v, _, a, b) => vec![v.clone(), a.clone(), b.clone()],
-        Condition::Count(v, s) => vec![v.clone(), s.clone()],
+        Condition::Eq(a, b) | Condition::Neq(a, b) => Ok(vec![a.clone(), b.clone()]),
+        Condition::Cmp(_, a, b) => Ok(vec![a.clone(), b.clone()]),
+        Condition::Calc(v, _, a, b) => Ok(vec![v.clone(), a.clone(), b.clone()]),
+        Condition::Count(v, s) => Ok(vec![v.clone(), s.clone()]),
     }
+}
+
+/// [`condition_vars`] over a list, concatenated in order (the frozen
+/// `concatMap conditionVars`).
+///
+/// # Errors
+/// The FIRST trailing-operator rejection in list order, as the frozen
+/// left-to-right `concatMap` forces it.
+pub fn flat_condition_vars(cs: &[Condition]) -> Result<Vec<String>, WorldError> {
+    let mut out = Vec::new();
+    for c in cs {
+        out.extend(condition_vars(c)?);
+    }
+    Ok(out)
 }
 
 /// Every *sentence string* a condition list mentions — the raw authored paths
@@ -1333,20 +1355,57 @@ mod tests {
     #[test]
     fn condition_vars_walks_every_constructor() {
         // Every mentioned name, over every constructor incl. subquery internals.
-        assert_eq!(condition_vars(&m("at.Who")), vec!["at", "Who"]);
-        assert_eq!(condition_vars(&n("seen.A")), vec!["seen", "A"]);
-        assert_eq!(condition_vars(&eq("A", "B")), vec!["A", "B"]);
+        let vars = |c: &Condition| condition_vars(c).expect("well-formed sentences");
+        assert_eq!(vars(&m("at.Who")), vec!["at", "Who"]);
+        assert_eq!(vars(&n("seen.A")), vec!["seen", "A"]);
+        assert_eq!(vars(&eq("A", "B")), vec!["A", "B"]);
         assert_eq!(
-            condition_vars(&Condition::Calc("R".into(), CalcOp::Add, "A".into(), "1".into())),
+            vars(&Condition::Calc("R".into(), CalcOp::Add, "A".into(), "1".into())),
             vec!["R", "A", "1"]
         );
         assert_eq!(
-            condition_vars(&subquery("S", &["W"], vec![m("p.W.deed"), neq("W", "X")])),
+            vars(&subquery("S", &["W"], vec![m("p.W.deed"), neq("W", "X")])),
             vec!["S", "W", "p", "W", "deed", "W", "X"]
         );
         assert_eq!(
-            condition_vars(&Condition::Or(vec![vec![m("p.A")], vec![n("q.B")]])),
+            vars(&Condition::Or(vec![vec![m("p.A")], vec![n("q.B")]])),
             vec!["p", "A", "q", "B"]
+        );
+    }
+
+    #[test]
+    fn condition_vars_rejects_a_trailing_operator_where_the_frozen_pathnames_raises() {
+        // Frozen: `conditionVars (Match "a.b.")` is `pathNames "a.b."`, and
+        // `pathNames = map fst . tokens` — `tokens` RAISES:
+        //   Prax.Db.tokens: trailing operator '.' in "a.b."
+        // Verified on the frozen engine. The unchecked split returns
+        // `["a", "b", ""]` instead, and "" is not a reserved name, so a guard
+        // built on it PASSES where the frozen one dies.
+        for (s, op) in [("a.b.", '.'), ("a.b!", '!')] {
+            assert_eq!(
+                condition_vars(&m(s)),
+                Err(WorldError::TrailingOperator {
+                    sentence: s.to_owned(),
+                    op,
+                }),
+                "Match {s:?} must be rejected where the frozen pathNames raises"
+            );
+            assert_eq!(
+                condition_vars(&n(s)),
+                Err(WorldError::TrailingOperator {
+                    sentence: s.to_owned(),
+                    op,
+                }),
+                "Not {s:?} must be rejected where the frozen pathNames raises"
+            );
+        }
+        // The rejection reaches through every recursive constructor, because the
+        // frozen `concatMap conditionVars` forces each element.
+        assert!(condition_vars(&Condition::Absent(vec![m("ok"), m("a.")])).is_err());
+        assert!(condition_vars(&Condition::Or(vec![vec![m("ok")], vec![n("a!")]])).is_err());
+        assert!(
+            condition_vars(&subquery("S", &["W"], vec![m("p.W.")])).is_err(),
+            "a subquery's where-clause is walked too"
         );
     }
 

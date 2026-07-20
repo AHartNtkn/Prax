@@ -78,22 +78,6 @@ mod tests {
         }
     }
 
-    /// Every `.rs` file under `rust/`, recursively. `target/` is build output,
-    /// not source.
-    fn every_rust_source(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
-        for entry in std::fs::read_dir(dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display())) {
-            let path = entry.expect("a dir entry").path();
-            if path.is_dir() {
-                if path.file_name().is_some_and(|f| f == "target") {
-                    continue;
-                }
-                every_rust_source(&path, out);
-            } else if path.extension().is_some_and(|e| e == "rs") {
-                out.push(path);
-            }
-        }
-    }
-
     /// A source line that is nothing but a string literal, and its contents.
     fn bare_literal(line: &str) -> Option<String> {
         let t = line.trim().strip_prefix('"')?;
@@ -151,18 +135,9 @@ mod tests {
     fn no_inline_golden_literals() {
         let goldens: Vec<(String, Vec<String>)> =
             GOLDENS.iter().map(|g| ((*g).to_owned(), load(g))).collect();
-        let rust_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .canonicalize()
-            .expect("the rust/ workspace root");
-        let mut sources = Vec::new();
-        every_rust_source(&rust_root, &mut sources);
-        assert!(
-            sources.len() > 40,
-            "the sweep found only {} files under {} — it is not reaching the workspace",
-            sources.len(),
-            rust_root.display()
-        );
+        let rust_root = crate::source_sweep::rust_root();
+        let sources = crate::source_sweep::every_rust_source(&rust_root);
+        crate::source_sweep::assert_reaches_workspace(&sources, &rust_root);
         println!(
             "inline-literal gate: {} .rs files under {}, against {} goldens",
             sources.len(),
@@ -172,8 +147,11 @@ mod tests {
 
         let mut offenders = Vec::new();
         for path in &sources {
-            // This file's own doc comment names the pattern it forbids.
-            if path.file_name().is_some_and(|f| f == "goldens.rs") {
+            // This file's own doc comment names the pattern it forbids. Matched
+            // on the FULL path [slice-2 review M3]: by basename, a second
+            // `goldens.rs` in any crate would inherit the exemption and become a
+            // blind spot in a gate whose whole job is to have none.
+            if path.ends_with("conformance/src/goldens.rs") {
                 continue;
             }
             let body = std::fs::read_to_string(path).expect("readable");

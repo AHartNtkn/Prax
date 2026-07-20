@@ -43,7 +43,7 @@ use crate::db::{Bindings, Db, Val, ground, val_to_string};
 use crate::derive::{CompiledRule, close, close_from};
 use crate::error::WorldError;
 use crate::interner::{Interner, Sym};
-use crate::path::{CompiledPath, segment_names, tokenize};
+use crate::path::{CompiledPath, segment_names, segment_names_checked, tokenize};
 use crate::planner::{self, Intention, MotiveSignature};
 use crate::query::{Cond, Condition, query};
 use crate::relevance::{eviction_shadow_names, may_unify_syms};
@@ -294,6 +294,12 @@ impl State {
     /// instance path, so a `.`/`!` inside it is a path injection.
     pub fn set_characters(&mut self, characters: Vec<Character>) -> Result<(), WorldError> {
         for c in &characters {
+            // UNCHECKED-SPLIT (frozen: none — this guard is DIV-2, additive).
+            // `setCharacters` has NO name guard at all and `Prax.Types.character`
+            // is a bare record build, so there is no frozen `pathNames` call here
+            // to mirror and nothing that can raise. The unguarded split is what
+            // this guard wants: `"hall."` splits to two segments and is rejected
+            // as the multi-segment name it is, which is the error DIV-2 is about.
             if segment_names(&c.name).len() != 1 {
                 return Err(WorldError::MultiSegmentCharacterName {
                     name: c.name.clone(),
@@ -330,7 +336,7 @@ impl State {
         let forbidden = ["Actor".to_owned()];
         for r in &rules {
             for (conds, outs) in &r.body {
-                if let Some(v) = authored_var_clash(&forbidden, conds, outs).into_iter().next() {
+                if let Some(v) = authored_var_clash(&forbidden, conds, outs)?.into_iter().next() {
                     return Err(WorldError::ReservedVarClash {
                         context: "Engine.set_schedule".to_owned(),
                         var: v,
@@ -349,7 +355,12 @@ impl State {
     /// out (`Prax.Engine.addScheduleRules`). Private; the door calls it too.
     fn add_schedule_rules(&mut self, rules: Vec<ScheduleRule>) -> Result<(), WorldError> {
         for r in &rules {
-            if segment_names(&r.name).len() != 1 {
+            // The frozen guard is `filter ((/= 1) . length . pathNames . srName)`
+            // (`Engine.hs:291`), and `pathNames` raises on a trailing operator
+            // BEFORE the length is taken — so a rule named `"tick."` dies as a
+            // malformed sentence, not as a multi-segment name. Both reject; the
+            // error identity is the frozen one only through the checked split.
+            if segment_names_checked(&r.name)?.len() != 1 {
                 return Err(WorldError::MultiSegmentRuleName {
                     name: r.name.clone(),
                 });
@@ -1679,6 +1690,11 @@ mod tests {
             .collect()
     }
     fn axiom_head_has(st: &State, s: &str) -> bool {
+        // UNCHECKED-SPLIT (frozen: none — a test helper, not a port). It splits
+        // this file's own literal head paths (`contradiction`, `feud.A.B`) to
+        // compare against the compiled axiom heads; no frozen `pathNames` call
+        // stands behind it, and a trailing operator here would be a typo in the
+        // test, which the comparison then fails on.
         head_names(st).contains(&segment_names(s))
     }
 
