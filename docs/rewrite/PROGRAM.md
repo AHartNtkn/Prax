@@ -22,8 +22,8 @@ comparator.
 | S4 | Types + Engine + builder API (design-heavy) | DONE | [S04](reports/S04-engine.md) |
 | S5 | Loop + Schedule + Rng (stream landed S4) | DONE | [S05](reports/S05-loop-schedule.md) |
 | S6 | Planner + Minds + Relevance + Sight (design-heavy; fidelity summit) | DONE | [S06](reports/S06-planner.md) |
-| S7 | Vertical world slices: Feud → Audience → Intrigue → Bar → Village | IN PROGRESS (design) | — |
-| S8 | Script + Play | — | — |
+| S7 | Vertical world slices: Feud → Intrigue → Bar → Village (Audience → S8, [A1]) | IN PROGRESS (design) | — |
+| S8 | Script + Play + Audience ([A1]) | — | — |
 | S9 | TypeCheck + AnalysisTable + Stress + Persist + Inspect + CLI | — | — |
 | S10 | Hardening + cut-over | — | — |
 

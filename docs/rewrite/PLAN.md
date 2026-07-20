@@ -112,7 +112,8 @@ S5 Loop+Schedule+Rng (LoopSpec advance, Schedule*; Rng reduced to
 S6 Planner+Minds+Relevance+Sight (discount order pinned, tiebreak, v34 reuse
    with reuse==live proptest, v35 intentions; decimal→ordering pins) —
    DESIGN-HEAVY, the fidelity summit — 15%
-S7 Vertical world slices Feud→Audience→Intrigue→Bar→Village, each slice =
+S7 Vertical world slices Feud→Intrigue→Bar→Village (Audience moved to S8 —
+   it is Script-compiled; S7 design [A1]), each slice =
    needed vocab modules + world + DIFFERENTIAL ON (trace + randtrace ≥100
    seeds × cap 50, state mode) — 20%
 S8 Script+Play (JSON round-trip; examples/play.json loads unchanged) — 5%
