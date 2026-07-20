@@ -16,7 +16,7 @@ pub mod blackmail;
 pub mod coerce;
 pub mod confession;
 pub mod conversation;
-pub mod core_practices;
+pub mod core_model;
 pub mod debt;
 pub mod deceit;
 pub mod deontic;

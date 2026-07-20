@@ -41,6 +41,10 @@ mod gate {
         "FactionSpec.hs",
         "KinSpec.hs",
         "FeudSpec.hs",
+        // S7 slice 2 (intrigue):
+        "CoreSpec.hs",
+        "EmotionSpec.hs",
+        "BeliefsSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {
