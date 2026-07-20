@@ -1090,7 +1090,14 @@ wReuseEviction = perf
               [ Eq "Actor" "beth", Match "mood.Actor!sad", Not "moped.Actor" ]
               [ Insert "moped.Actor" ]
           , action "[Actor]: console beth"
-              [ Eq "Actor" "alice", Not "mood.beth!happy" ]
+              -- Deliberately guarded on the ACTOR alone: any guard mentioning
+              -- the mood family would itself become a read anchor of every
+              -- mover, and the insert's own anchor would then block the reuse
+              -- without the shadow ever being consulted. With only the actor
+              -- test, @mood.beth!happy@ shares no anchor with @mood.beth!sad@
+              -- (two distinct literals in the last segment), so the EVICTION
+              -- SHADOW is the only thing that can stop the stale reuse.
+              [ Eq "Actor" "alice" ]
               [ Insert "mood.beth!happy" ]
           , action "[Actor]: Wait about" [] [] ] }
 

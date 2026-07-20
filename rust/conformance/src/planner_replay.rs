@@ -454,8 +454,11 @@ mod replay {
                             .then([insert("moped.Actor")]),
                     )
                     .action(
+                        // Guarded on the ACTOR alone: see the oracle's note —
+                        // any mood-family guard would itself be a read anchor
+                        // and the eviction shadow would never be load-bearing.
                         Action::new("[Actor]: console beth")
-                            .when([eq("Actor", "alice"), not_("mood.beth!happy")])
+                            .when([eq("Actor", "alice")])
                             .then([insert("mood.beth!happy")]),
                     )
                     .action(Action::new("[Actor]: Wait about"));
