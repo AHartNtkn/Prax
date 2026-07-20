@@ -488,13 +488,17 @@ mod replay {
                 let signal = Practice::new("signal")
                     .roles(["R"])
                     .action(
+                        // Guarded on `computed.Actor`, never on `gate.2`: a
+                        // `gate.2` guard would itself anchor the gate family for
+                        // every mover, making the scope's read-anchor
+                        // contribution a duplicate and the fixture inert.
                         Action::new("[Actor]: compute the gate")
                             .when([
                                 eq("Actor", "alice"),
-                                not_("gate.2"),
+                                not_("computed.Actor"),
                                 calc("Sum", CalcOp::Add, "1", "1"),
                             ])
-                            .then([insert("gate.Sum")]),
+                            .then([insert("computed.Actor"), insert("gate.Sum")]),
                     )
                     .action(
                         Action::new("[Actor]: cheer")

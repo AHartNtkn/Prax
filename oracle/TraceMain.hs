@@ -1108,6 +1108,15 @@ wReuseEviction = perf
 -- the read anchor is the compile-time one — they must compare EQUAL, or the
 -- gate misses the intersection and reuses the root's out-of-scope Nothing
 -- after the move has brought the mover into scope.
+--
+-- The action is guarded on @computed.Actor@, NOT on @gate.2@. A @gate.2@ guard
+-- reads that family, so it becomes a read anchor of every mover in its own
+-- right (the affordance walk grounds Actor:=mover) — the scope's contribution
+-- to moverReadAnchors is then a duplicate, and dropping the SCOPE component
+-- entirely leaves every score and pick unchanged. With the guard moved off the
+-- gate family, the scope read is the ONLY anchor that intersects the delta:
+-- suppress it and alice's depth-1/2 pick flips from "compute the gate" to
+-- "Wait about", because bob's move is reused stale as Nothing.
 wCollision :: PraxState
 wCollision = perf
   [ Insert "practice.signal.here"
@@ -1122,8 +1131,8 @@ wCollision = perf
       { practiceId = "signal", roles = ["R"]
       , actions =
           [ action "[Actor]: compute the gate"
-              [ Eq "Actor" "alice", Not "gate.2", Calc "Sum" Add "1" "1" ]
-              [ Insert "gate.Sum" ]
+              [ Eq "Actor" "alice", Not "computed.Actor", Calc "Sum" Add "1" "1" ]
+              [ Insert "computed.Actor", Insert "gate.Sum" ]
           , action "[Actor]: cheer"
               [ Eq "Actor" "bob", Not "cheer.Actor" ] [ Insert "cheer.Actor" ]
           , action "[Actor]: Wait about" [] [] ] }
