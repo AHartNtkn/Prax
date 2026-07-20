@@ -98,6 +98,40 @@ impl Outcome {
     }
 }
 
+/// The WALK IDENTITY of a record stream: the ordered action sequence plus the
+/// terminal stop, as one string. Two seeds whose streams share an identity
+/// compared the SAME walk — the second bought no coverage.
+///
+/// [I1] The slice-2 review measured intrigue's 375-seed sweep replaying exactly
+/// four distinct walks ~94 times each: the record COUNT rose linearly with the
+/// seeds while the distinct work stayed at 34 records. A budget denominated in
+/// records therefore certifies duplication, so the matrix carries this alongside
+/// it and the report prints both. Built from the FROZEN stream, which is the
+/// authority on what walk a seed names.
+///
+/// The identity is the sequence itself, not a hash of it: at the sweep sizes §4
+/// asks for (hundreds of seeds, tens of records) the exact strings cost nothing
+/// and a hash could collide, which would UNDER-report distinct walks — the
+/// direction that hides the finding this exists to surface.
+pub fn walk_identity(stream: &[Value]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    // The header (record 0) describes the question, not the walk.
+    for r in stream.iter().skip(1) {
+        if let Some(a) = r.get("action") {
+            parts.push(a.to_string());
+        } else if let Some(reason) = r.get("reason") {
+            // The terminal record: two walks that stopped for different reasons
+            // are different walks even where their actions agree.
+            parts.push(format!(
+                "end:{}:{}",
+                reason,
+                r.get("ending").unwrap_or(&Value::Null)
+            ));
+        }
+    }
+    parts.join("|")
+}
+
 /// Compare two record streams (header first, then records in order).
 ///
 /// # Errors

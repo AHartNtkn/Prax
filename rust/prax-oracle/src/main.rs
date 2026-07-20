@@ -260,23 +260,41 @@ fn parse_run(args: &[&str]) -> Result<RunSpec, String> {
     })
 }
 
+/// What one comparison run produced: the verdict, the `worldshape` verdict it
+/// ran behind, and the WALK the two engines actually walked [I1].
+///
+/// The walk identity rides along because a matrix cell's contribution to
+/// COVERAGE is not its record count — 375 intrigue seeds replay four walks — and
+/// a number the report cannot distinguish from repetition is the number nobody
+/// should size a budget with.
+pub struct Run {
+    /// The verdict.
+    pub outcome: compare::Outcome,
+    /// The `worldshape` verdict this ran behind.
+    pub shape: Shape,
+    /// The frozen stream's [`compare::walk_identity`]; empty when no walk ran
+    /// (a shape divergence).
+    pub walk: String,
+}
+
 /// Run one comparison, gating on `worldshape` FIRST (§1.6: worlds are
 /// shape-checked before any seed runs, and [S-I2] makes ENUMERATION reportable
 /// only behind a green one).
 ///
 /// # Errors
 /// If either side cannot be driven, or the classifier refuses.
-pub fn run_one(spec: &RunSpec, reg: &Register) -> Result<(compare::Outcome, Shape), String> {
+pub fn run_one(spec: &RunSpec, reg: &Register) -> Result<Run, String> {
     let (green, shape_lines) = shape_compare(&spec.world)?;
     let rev = drive_frozen::freeze_rev()?;
     if !green {
-        return Ok((
-            compare::Outcome::ShapeDivergent {
+        return Ok(Run {
+            outcome: compare::Outcome::ShapeDivergent {
                 fields: vec!["worldshape".to_owned()],
                 detail: shape_lines,
             },
-            Shape::NotChecked,
-        ));
+            shape: Shape::NotChecked,
+            walk: String::new(),
+        });
     }
     run_one_behind(spec, reg, &Shape::Green(rev))
 }
@@ -291,13 +309,13 @@ pub fn run_one(spec: &RunSpec, reg: &Register) -> Result<(compare::Outcome, Shap
 ///
 /// # Errors
 /// If either side cannot be driven, or the classifier refuses.
-pub fn run_one_behind(
-    spec: &RunSpec,
-    reg: &Register,
-    shape: &Shape,
-) -> Result<(compare::Outcome, Shape), String> {
+pub fn run_one_behind(spec: &RunSpec, reg: &Register, shape: &Shape) -> Result<Run, String> {
     let shape = shape.clone();
     let mut frozen = drive_frozen::run_jsonl(&spec.frozen_args(spec.mode))?;
+    // The walk identity is taken from the COARSE frozen stream, before any
+    // localization rerun truncates it — the walk a seed names is the whole walk,
+    // not the prefix the comparator stopped at.
+    let walk = compare::walk_identity(&frozen);
     let mut rust = rust_stream(spec)?;
     let mut ctx = Ctx {
         walk: spec.walk,
@@ -360,7 +378,11 @@ pub fn run_one_behind(
             spec.seed,
         )?;
     }
-    Ok((outcome, shape))
+    Ok(Run {
+        outcome,
+        shape,
+        walk,
+    })
 }
 
 /// Both sides of the run re-driven with the FULL localization emission and
@@ -529,7 +551,7 @@ pub fn load_register() -> Result<Register, String> {
 fn cmd_compare(args: &[&str]) -> Result<bool, String> {
     let spec = parse_run(args)?;
     let reg = load_register()?;
-    let (outcome, shape) = run_one(&spec, &reg)?;
+    let Run { outcome, shape, .. } = run_one(&spec, &reg)?;
     report(&spec, &outcome, &shape);
     Ok(!outcome.is_failure())
 }
@@ -541,7 +563,7 @@ fn cmd_explain(args: &[&str]) -> Result<bool, String> {
     let mut spec = parse_run(args)?;
     spec.emit = Emit::all();
     let reg = load_register()?;
-    let (outcome, shape) = run_one(&spec, &reg)?;
+    let Run { outcome, shape, .. } = run_one(&spec, &reg)?;
     report(&spec, &outcome, &shape);
     Ok(!outcome.is_failure())
 }

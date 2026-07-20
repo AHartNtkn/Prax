@@ -29,18 +29,83 @@
 //! range is EXTENDED, in batches sized from the records per seed that world has
 //! actually produced, until it clears the floor. Nobody retypes a per-world seed
 //! count, and the floor is checked rather than assumed.
+//!
+//! **But records are not coverage** [I1]. The slice-2 review measured intrigue's
+//! 375-seed sweep replaying exactly FOUR distinct walks ~94 times each: the
+//! record count rose with every seed while the distinct work stayed at 34
+//! records, so a floor denominated in records certified duplication. Slice 1's
+//! own diagnosis had already said so — *branching factor, not seeds or cap, sets
+//! coverage* — and the amendment then gated on the metric that responds to
+//! replaying one walk. So every cell now carries its WALK IDENTITY
+//! ([`crate::compare::walk_identity`]), the report prints DISTINCT WALKS beside
+//! records, and extension stops at whichever comes first: the record floor, or
+//! SATURATION — no new distinct walk in [`saturation_run`] consecutive seeds.
+//! The report says which stopped it, so "375 seeds, 3,025 records, 4 distinct
+//! walks" cannot be read as coverage.
 
 use crate::classify::{Shape, Walk};
 use crate::compare::Outcome;
 use crate::record::{Emit, Mode};
 use crate::register::Register;
-use crate::{RunSpec, drive_frozen, load_register, run_one_behind, shape_compare, worlds};
+use crate::{Run, RunSpec, drive_frozen, load_register, run_one_behind, shape_compare, worlds};
 
 /// One (world, seed) result. `seed` is `None` for the world's single trace cell.
 struct Cell {
     world: String,
     seed: Option<i64>,
     outcome: Outcome,
+    /// The walk this cell walked ([`crate::compare::walk_identity`]) — the unit
+    /// the distinct-walk count is taken over [I1].
+    walk: String,
+}
+
+/// What stopped a world's seed extension — printed in the report block, because
+/// "375 seeds" means one thing when the record floor stopped it and another when
+/// saturation did.
+enum BudgetStop {
+    /// No `--min-records`: exactly the seeds that were asked for.
+    SeedsAsRequested,
+    /// The record floor was cleared.
+    MinRecords(usize),
+    /// No new distinct walk in this many consecutive seeds.
+    Saturated(usize),
+    /// A divergence — the finding, not the budget, ended the sweep.
+    Divergent,
+}
+
+impl BudgetStop {
+    fn describe(&self) -> String {
+        match self {
+            BudgetStop::SeedsAsRequested => "--seeds as requested".to_owned(),
+            BudgetStop::MinRecords(n) => format!("min-records {n} cleared"),
+            BudgetStop::Saturated(n) => format!("saturated: no new walk in {n} seeds"),
+            BudgetStop::Divergent => "DIVERGENT — sweep stopped at the finding".to_owned(),
+        }
+    }
+}
+
+/// A walk reachable from at least this share of seeds is one a sweep must not
+/// miss. Stated, not tuned: 1% of a several-hundred-seed sweep is the coarsest
+/// branch anybody would call rare, and the criterion below is derived from it
+/// rather than from a round number of seeds.
+const WALK_MISS_PROB: f64 = 0.01;
+/// The confidence that no such walk was missed.
+const WALK_CONFIDENCE: f64 = 0.95;
+
+/// How many CONSECUTIVE seeds must add no new distinct walk before a world is
+/// called saturated.
+///
+/// Treating a seed as an independent draw from the world's walk distribution, a
+/// walk of probability `p` survives `n` draws unseen with probability
+/// `(1 - p)^n`; requiring that to be at most `1 - c` gives
+/// `n = ceil(ln(1 - c) / ln(1 - p))` = **299** at `p = 1%`, `c = 95%`. That is
+/// the whole justification: no round number is chosen, and both inputs are named
+/// above so a reader can disagree with the criterion rather than with a
+/// constant. `--walk-saturation N` overrides it for an operator who wants a
+/// different claim.
+pub fn saturation_run() -> usize {
+    let n = (1.0 - WALK_CONFIDENCE).ln() / (1.0 - WALK_MISS_PROB).ln();
+    n.ceil() as usize
 }
 
 /// Parse `A..B` (inclusive).
@@ -98,7 +163,14 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
         }
     }
 
+    let sat = match crate::flag(args, "--walk-saturation") {
+        Some(_) => usize::try_from(crate::int_flag(args, "--walk-saturation", None)?)
+            .map_err(|_| "--walk-saturation expects a non-negative integer".to_owned())?,
+        None => saturation_run(),
+    };
+
     let mut cells = Vec::new();
+    let mut stops: Vec<(String, BudgetStop)> = Vec::new();
     for (w, green) in &shapes {
         if !green {
             cells.push(Cell {
@@ -108,7 +180,9 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
                     fields: vec!["worldshape".to_owned()],
                     detail: Vec::new(),
                 },
+                walk: String::new(),
             });
+            stops.push((w.clone(), BudgetStop::Divergent));
             continue;
         }
         let shape = Shape::Green(rev.clone());
@@ -124,12 +198,13 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
             mode: Mode::State,
             emit: Emit::matrix(),
         };
-        let (o, _) = run_one_behind(&trace, &reg, &shape)?;
-        println!("{}", line(w, None, "trace", &o));
+        let r = run_one_behind(&trace, &reg, &shape)?;
+        println!("{}", line(w, None, "trace", &r.outcome, false));
         cells.push(Cell {
             world: w.clone(),
             seed: None,
-            outcome: o,
+            outcome: r.outcome,
+            walk: r.walk,
         });
         // The declared seeds first, then — under `--min-records` — as many more
         // as the floor needs. Each extension is sized from the records per seed
@@ -139,7 +214,12 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
         let mut next_seed = seeds.last().map_or(0, |s| s + 1);
         let (mut seeds_run, mut rand_records) = (0usize, 0usize);
         let mut failed = false;
-        loop {
+        // [I1] The coverage accounting: the distinct walks seen so far, and how
+        // many consecutive seeds have added none. `since_new` counts SEEDS in
+        // seed order, which is the unit the criterion is stated in.
+        let mut walks: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut since_new = 0usize;
+        let stop = loop {
             let specs: Vec<RunSpec> = batch
                 .iter()
                 .map(|s| RunSpec {
@@ -149,39 +229,54 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
                     ..trace.clone()
                 })
                 .collect();
-            for (spec, o) in specs.iter().zip(run_seeds(&specs, &reg, &shape, jobs)?) {
-                println!("{}", line(w, spec.seed, "randtrace", &o));
+            for (spec, r) in specs.iter().zip(run_seeds(&specs, &reg, &shape, jobs)?) {
+                let fresh = !r.walk.is_empty() && walks.insert(r.walk.clone());
+                since_new = if fresh { 0 } else { since_new + 1 };
+                println!("{}", line(w, spec.seed, "randtrace", &r.outcome, fresh));
                 seeds_run += 1;
-                rand_records += o.records_compared();
-                failed |= o.is_failure();
+                rand_records += r.outcome.records_compared();
+                failed |= r.outcome.is_failure();
                 cells.push(Cell {
                     world: w.clone(),
                     seed: spec.seed,
-                    outcome: o,
+                    outcome: r.outcome,
+                    walk: r.walk,
                 });
             }
-            let Some(floor) = min_records else { break };
+            let Some(floor) = min_records else { break BudgetStop::SeedsAsRequested };
             if failed {
                 // A divergence is the finding; grinding out more seeds behind one
                 // would bury it.
-                break;
+                break BudgetStop::Divergent;
+            }
+            // Saturation is checked BEFORE the record floor: past it every
+            // further seed is a replay, so a floor cleared by replays is not a
+            // floor anybody should read as coverage.
+            if since_new >= sat {
+                break BudgetStop::Saturated(sat);
             }
             let Some(needed) = seeds_still_needed(rand_records, seeds_run, floor)
                 .map_err(|e| format!("matrix {w}: {e}"))?
             else {
-                break;
+                break BudgetStop::MinRecords(floor);
             };
+            // Never extend past the point where saturation would fire mid-batch:
+            // the criterion counts consecutive seeds, and a batch that runs
+            // hundreds of seeds beyond it would report a stop that already
+            // happened.
+            let needed = needed.min(sat - since_new);
             let needed = i64::try_from(needed).map_err(|_| {
                 format!("matrix --min-records {floor}: {w} needs more seeds than fit in i64")
             })?;
             batch = (next_seed..next_seed + needed).collect();
             next_seed += needed;
-        }
+        };
+        stops.push((w.clone(), stop));
     }
 
     if report_format {
         println!();
-        for l in report_block(&cells) {
+        for l in report_block(&cells, &stops) {
             println!("{l}");
         }
     }
@@ -206,9 +301,9 @@ pub fn run_seeds(
     reg: &Register,
     shape: &Shape,
     jobs: usize,
-) -> Result<Vec<Outcome>, String> {
+) -> Result<Vec<Run>, String> {
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let done: std::sync::Mutex<Vec<(usize, Result<Outcome, String>)>> =
+    let done: std::sync::Mutex<Vec<(usize, Result<Run, String>)>> =
         std::sync::Mutex::new(Vec::new());
     std::thread::scope(|scope| {
         for _ in 0..jobs.min(specs.len()) {
@@ -217,7 +312,7 @@ pub fn run_seeds(
                 loop {
                     let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     let Some(spec) = specs.get(i) else { return };
-                    let r = run_one_behind(spec, reg, shape).map(|(o, _)| o);
+                    let r = run_one_behind(spec, reg, shape);
                     done.lock().expect("the results lock").push((i, r));
                 }
             });
@@ -262,8 +357,9 @@ fn seeds_still_needed(records: usize, seeds_run: usize, floor: usize) -> Result<
     Ok(Some((floor - records).div_ceil(per_seed)))
 }
 
-fn line(world: &str, seed: Option<i64>, walk: &str, o: &Outcome) -> String {
+fn line(world: &str, seed: Option<i64>, walk: &str, o: &Outcome, fresh: bool) -> String {
     let seed = seed.map_or_else(|| "-".to_owned(), |s| s.to_string());
+    let fresh = if fresh { "  NEW-WALK" } else { "" };
     let detail = match o {
         Outcome::Divergent(d) => format!(
             "  {} @ord {} (t {:?}/{:?}) fields {:?}",
@@ -277,19 +373,25 @@ fn line(world: &str, seed: Option<i64>, walk: &str, o: &Outcome) -> String {
         _ => String::new(),
     };
     format!(
-        "{world:<10} {walk:<10} seed {seed:>4}  {:<22}{:>5} rec{detail}",
+        "{world:<10} {walk:<10} seed {seed:>4}  {:<22}{:>5} rec{fresh}{detail}",
         o.cell(),
         o.records_compared()
     )
 }
 
 /// The per-world block a stage report embeds VERBATIM.
-fn report_block(cells: &[Cell]) -> Vec<String> {
+///
+/// `distinct walks` is counted over the RANDTRACE cells only — the one trace
+/// cell is a different walk kind, and the column exists to say what the seed
+/// sweep bought. `budget stop` names what ended the extension, because "375
+/// seeds" means one thing when the record floor stopped it and another when
+/// saturation did [I1].
+fn report_block(cells: &[Cell], stops: &[(String, BudgetStop)]) -> Vec<String> {
     let mut out = vec![
         "| world | randtrace seeds | clean | clean-mod-adjudicated | DIVERGENT | \
-         SHAPE-DIVERGENT | records compared |"
+         SHAPE-DIVERGENT | records compared | distinct walks | budget stop |"
             .to_owned(),
-        "|---|---|---|---|---|---|---|".to_owned(),
+        "|---|---|---|---|---|---|---|---|---|".to_owned(),
     ];
     let mut worlds: Vec<&String> = cells.iter().map(|c| &c.world).collect();
     worlds.sort();
@@ -297,14 +399,24 @@ fn report_block(cells: &[Cell]) -> Vec<String> {
     for w in worlds {
         let mine: Vec<&Cell> = cells.iter().filter(|c| &c.world == w).collect();
         let count = |f: fn(&Outcome) -> bool| mine.iter().filter(|c| f(&c.outcome)).count();
+        let distinct: std::collections::BTreeSet<&String> = mine
+            .iter()
+            .filter(|c| c.seed.is_some() && !c.walk.is_empty())
+            .map(|c| &c.walk)
+            .collect();
+        let stop = stops
+            .iter()
+            .find(|(sw, _)| sw == w)
+            .map_or_else(|| "-".to_owned(), |(_, s)| s.describe());
         out.push(format!(
-            "| {w} | {} | {} | {} | {} | {} | {} |",
+            "| {w} | {} | {} | {} | {} | {} | {} | {} | {stop} |",
             mine.iter().filter(|c| c.seed.is_some()).count(),
             count(|o| matches!(o, Outcome::Clean { .. })),
             count(|o| matches!(o, Outcome::CleanModAdjudicated { .. })),
             count(|o| matches!(o, Outcome::Divergent(_))),
             count(|o| matches!(o, Outcome::ShapeDivergent { .. })),
             mine.iter().map(|c| c.outcome.records_compared()).sum::<usize>(),
+            distinct.len(),
         ));
     }
     out
@@ -350,29 +462,108 @@ mod tests {
         );
     }
 
+    fn cell(seed: Option<i64>, outcome: Outcome, walk: &str) -> Cell {
+        Cell {
+            world: "probe".into(),
+            seed,
+            outcome,
+            walk: walk.to_owned(),
+        }
+    }
+
     #[test]
     fn the_report_block_counts_every_cell_exactly_once() {
         let cells = vec![
-            Cell {
-                world: "probe".into(),
-                seed: None,
-                outcome: Outcome::Clean { records: 8 },
-            },
-            Cell {
-                world: "probe".into(),
-                seed: Some(0),
-                outcome: Outcome::Clean { records: 8 },
-            },
-            Cell {
-                world: "probe".into(),
-                seed: Some(1),
-                outcome: Outcome::CleanModAdjudicated {
+            cell(None, Outcome::Clean { records: 8 }, "trace-walk"),
+            cell(Some(0), Outcome::Clean { records: 8 }, "A|B|end"),
+            cell(
+                Some(1),
+                Outcome::CleanModAdjudicated {
                     ids: vec!["DIV-9".into()],
                     records: 8,
                 },
-            },
+                "A|B|end",
+            ),
         ];
-        let b = report_block(&cells);
-        assert_eq!(b[2], "| probe | 2 | 2 | 1 | 0 | 0 | 24 |");
+        let stops = vec![("probe".to_owned(), BudgetStop::MinRecords(16))];
+        let b = report_block(&cells, &stops);
+        assert_eq!(
+            b[2],
+            "| probe | 2 | 2 | 1 | 0 | 0 | 24 | 1 | min-records 16 cleared |"
+        );
+    }
+
+    #[test]
+    fn the_distinct_walk_column_counts_walks_and_not_seeds() {
+        // [I1] The finding this column exists for, in miniature: three seeds,
+        // 24 records, ONE walk. The records column is the same number a sweep
+        // with three genuinely different walks would print.
+        let cells = vec![
+            cell(None, Outcome::Clean { records: 8 }, "trace-walk"),
+            cell(Some(0), Outcome::Clean { records: 8 }, "A|B|end"),
+            cell(Some(1), Outcome::Clean { records: 8 }, "A|B|end"),
+            cell(Some(2), Outcome::Clean { records: 8 }, "A|B|end"),
+        ];
+        let stops = vec![("probe".to_owned(), BudgetStop::Saturated(299))];
+        let b = report_block(&cells, &stops);
+        assert_eq!(
+            b[2],
+            "| probe | 3 | 4 | 0 | 0 | 0 | 32 | 1 | saturated: no new walk in 299 seeds |",
+            "three seeds replaying one walk must report ONE distinct walk"
+        );
+        // The trace cell is not a randtrace walk and is not counted as one, but
+        // its records are compared records and do count.
+        let varied = vec![
+            cell(None, Outcome::Clean { records: 8 }, "trace-walk"),
+            cell(Some(0), Outcome::Clean { records: 8 }, "A|B|end"),
+            cell(Some(1), Outcome::Clean { records: 8 }, "A|C|end"),
+            cell(Some(2), Outcome::Clean { records: 8 }, "B|end"),
+        ];
+        let b = report_block(&varied, &stops);
+        assert!(
+            b[2].contains("| 32 | 3 |"),
+            "three different walks over the same record count: {}",
+            b[2]
+        );
+    }
+
+    #[test]
+    fn the_saturation_criterion_is_derived_from_its_two_stated_inputs() {
+        // n = ceil(ln(1 - 0.95) / ln(1 - 0.01)): a walk reachable from 1% of
+        // seeds survives n draws unseen with probability at most 5%.
+        assert_eq!(saturation_run(), 299);
+        let n = f64::from(u32::try_from(saturation_run()).expect("the run length fits"));
+        assert!(
+            (1.0 - WALK_MISS_PROB).powf(n) <= 1.0 - WALK_CONFIDENCE,
+            "the run length must actually deliver the confidence it claims"
+        );
+    }
+
+    #[test]
+    fn the_walk_identity_separates_walks_that_the_record_count_cannot() {
+        use serde_json::json;
+        let header = json!({"world": "probe"});
+        let walk = |actions: &[&str], reason: &str| {
+            let mut v = vec![header.clone()];
+            for a in actions {
+                v.push(json!({"t": 0, "action": a}));
+            }
+            v.push(json!({"end": true, "reason": reason, "ending": null}));
+            crate::compare::walk_identity(&v)
+        };
+        // Same length, different actions: two walks.
+        assert_ne!(walk(&["a: bide", "b: bide"], "cap"), walk(&["a: bide", "b: act"], "cap"));
+        // Same actions, different stop rule: still two walks — "both stopped" is
+        // not agreement about how.
+        assert_ne!(walk(&["a: bide"], "cap"), walk(&["a: bide"], "ending"));
+        // The same walk from two seeds is ONE walk, which is the whole point.
+        assert_eq!(walk(&["a: bide"], "cap"), walk(&["a: bide"], "cap"));
+        // The header is not part of the walk.
+        let mut with_other_header = vec![json!({"world": "other"})];
+        with_other_header.push(json!({"end": true, "reason": "cap", "ending": null}));
+        assert_eq!(
+            crate::compare::walk_identity(&with_other_header),
+            walk(&[], "cap")
+        );
     }
 }

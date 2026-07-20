@@ -79,7 +79,7 @@ Also: `Prax.Core.coreFns` ends in a `FnCase []` fallback and matching is FIRST-m
 | 4 | **village** | project, witness (full), rumor, repute, deceit, persona, debt, coerce, blackmail, confession | **mechanism-dense**: seedDie + draw ⇒ first world exposure of the **CRoll stream**, coercion's rename kernel, confession/absolution axioms, obligedClose, the v37 gathering wake, endeavor part-sets, the sight window | worldshape; **GoldenDrive village 21 (idle=you)**; the v37-wake pin; trace 42; randtrace **300 × 50** + a **die-seed sweep** |
 
 **Sequencing**: risk rises monotonically and each slice's new machinery is netted before the next can hide behind it. Feud has no schedule/functions/rng/desires — a divergence there is closure or enumeration, nothing else. Bar before Village because Bar's schedule/expiry/spawn load is a strict subset of Village's ambient load.
-**Budget**: ≥100 × cap 50 is a FLOOR, scaled by mechanism density, normalized on **effective turns** (endings truncate walks — top up until ≥3,000 effective turns per world). **Gap the PLAN misses**: `randtrace --seed` is the WALK seed; the engine die seed is fixed inside villageWorld, so the Roll space is barely sampled. **Add `randtrace --die-seed S`** (additive) and sweep village over ≥20 die seeds × 20 walk seeds — without it the RNG class is nearly untested until S10, and RNG bugs are invisible in a golden.
+**Budget**: ≥100 × cap 50 is a FLOOR, scaled by mechanism density, normalized on **effective turns** (endings truncate walks — top up until ≥3,000 effective turns per world). **AMENDED by §12: the gate is DISTINCT WALKS, and the record floor is only the other half of it** — a seed range that clears 3,000 records by replaying one walk 125 times has bought nothing, and slice 1's feud/bigfeud sweeps did exactly that. **Gap the PLAN misses**: `randtrace --seed` is the WALK seed; the engine die seed is fixed inside villageWorld, so the Roll space is barely sampled. **Add `randtrace --die-seed S`** (additive) and sweep village over ≥20 die seeds × 20 walk seeds — without it the RNG class is nearly untested until S10, and RNG bugs are invisible in a golden.
 
 ## 5. Owed discharges, pins, allowlist
 
@@ -357,3 +357,32 @@ lenses independently found the candidate-order defect.
   mechanical about the marker, not the reasoning — it cannot read Haskell — but
   the substitution can no longer be made SILENTLY, which is what made the first
   three occurrences findable only by review.
+
+- **The differential budget measures COVERAGE, not repetition** [slice-2 review
+  I1]. §11 made the record COUNT the operative gate, but slice 1's own diagnosis
+  had already named the mechanism — *"branching factor, not seeds or cap, sets
+  coverage"* — and the record count is precisely the metric that rises when one
+  walk is replayed. So §11's amendment fixed the wrong half: it converted a
+  stated seed count into a stated record count, and a record count certifies
+  duplication just as happily. **Corrected rule**: every matrix cell carries its
+  WALK IDENTITY (the frozen stream's ordered action sequence plus its terminal
+  stop), the report block carries a **distinct walks** column and a **budget
+  stop** column beside `records compared`, and a world's seed range stops
+  extending at whichever comes first — the record floor, or **saturation**: no
+  new distinct walk in N consecutive seeds. N is derived, not chosen:
+  `ceil(ln(1 - c) / ln(1 - p))` = **299** for a walk reachable from `p = 1%` of
+  seeds at `c = 95%` confidence, both inputs named in `matrix.rs` and overridable
+  with `--walk-saturation`. Saturation is checked BEFORE the floor, because past
+  it every further seed is a replay.
+  **What the corrected accounting revealed, and it is worse than the review's
+  measurement:** intrigue's sweep replays **4** distinct walks (303 seeds, 2,449
+  records), and **feud and bigfeud have exactly ONE distinct walk each** — every
+  seed produces `alice: make amends with bob` followed by idle passes to the dead
+  end, verified directly on the frozen engine at seeds 0/1/7/42/250 and
+  0/5/99/124. Slice 1's "3,025 records compared" was one 24-record walk replayed
+  125 times. The randtrace sweep contributes ONE walk to those worlds no matter
+  what it is asked for; their coverage comes from the trace walk and the resident
+  pins, and the report now says so on its face instead of printing a number that
+  reads like coverage. **For slices 3-4 this is the number to size against**: a
+  world whose distinct-walk count saturates at 1-4 does not need a die-seed sweep
+  to be big, it needs its branching to be exercised some other way.
