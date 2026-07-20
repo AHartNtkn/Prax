@@ -22,7 +22,7 @@
 
 use prax_core::engine::State;
 use prax_core::query::{absent, eq, matches, neq, not_};
-use prax_core::types::{Action, Character, Desire, Practice, Want, insert};
+use prax_core::types::{Action, Character, Desire, Practice, Want, dead_sentence, insert};
 use prax_vocab::beliefs::{believe, believes_that};
 use prax_vocab::core_model::{WARMTH, adjust_score, core_fns, set_bond};
 use prax_vocab::emotion::{PLEASED, feel_toward};
@@ -153,7 +153,7 @@ pub fn intrigue_world() -> State {
     // (which enables the poisoning) then strike.
     st.set_desires(vec![Desire::new(
         KILL_ARTUS,
-        Want::new(vec![matches("dead.artus")], 100),
+        Want::new(vec![matches(dead_sentence("artus"))], 100),
     )])
     .expect("intrigue desires");
     for o in [

@@ -901,7 +901,7 @@ impl State {
         let names: Vec<String> = self.defs.characters.iter().map(|c| c.name.clone()).collect();
         let alive: Vec<bool> = names
             .iter()
-            .map(|n| !self.db_has(&format!("dead.{n}")))
+            .map(|n| !self.db_has(&crate::types::dead_sentence(n)))
             .collect();
         self.defs
             .characters

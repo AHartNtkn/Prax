@@ -304,6 +304,16 @@ impl Desire {
     }
 }
 
+/// Death (and eviction) are represented by the fact `dead.<name>`
+/// (`Prax.Types.deadSentence`). A dead character stays in the cast list but is
+/// skipped in turn-taking and lookahead. Ported as its own helper rather than
+/// inlined at each site (§3: port each module's own path helper, never replace
+/// it) — a call site that spells the path out no longer moves when the helper
+/// does.
+pub fn dead_sentence(name: &str) -> String {
+    format!("dead.{name}")
+}
+
 /// A character/agent (`Prax.Types.Character`). Wants drive autonomous choice; a
 /// practice-bound character only acts within its bound practice.
 #[derive(Debug, Clone, PartialEq, Eq)]

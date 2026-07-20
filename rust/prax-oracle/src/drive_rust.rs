@@ -259,6 +259,14 @@ pub fn rand_walk(st: &mut State, em: Emit, mode: Mode, cap: i64, seed0: u64) -> 
 
 /// The ending reached, if any — an `ending.<key>` fact in the BASE db (the
 /// frozen `endingReached`, which takes the first binding).
+///
+/// [M3, carried by §10 and unguarded] The orders differ in principle: the frozen
+/// `listToMaybe [ e | b <- unify "ending.E" … ]` takes the first UNIFY BINDING,
+/// this takes the first CHILD KEY. They cannot differ in any world shipped so
+/// far, because `ending!X` is an exclusion slot — `ending` has exactly one child
+/// at all times, so both orders name it. The first world that can hold TWO
+/// simultaneous endings makes this a real divergence, and there is no pin that
+/// would catch it: the differential compares the walks, and both would stop.
 fn ending_reached(st: &mut State) -> Option<String> {
     st.db_child_keys("ending").into_iter().next()
 }
