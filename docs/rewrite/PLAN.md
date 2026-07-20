@@ -105,8 +105,10 @@ S2 Query, one compiled path (QuerySpec + CookedSpec's observable half) — 8%
 S3 Derive + view, incrementality kept (v27/v33 perf history), ViewInvariant
    reborn as incremental==naive proptest — DESIGN-HEAVY — 8%
 S4 Types+Engine+builder API (the make-or-break authoring surface; EngineSpec,
-   RngSpec guards, GateSpec hygiene half) — DESIGN-HEAVY — 15%
-S5 Loop+Schedule+Rng (LoopSpec advance, Schedule*, MINSTD stream) — 5%
+   RngSpec IN FULL — the MINSTD stream rides CRoll execution, pulled forward
+   from S5 [S4 panel I2] — GateSpec hygiene half) — DESIGN-HEAVY — 15%
+S5 Loop+Schedule+Rng (LoopSpec advance, Schedule*; Rng reduced to
+   loop-integration stream fixtures — the stream itself landed at S4) — 5%
 S6 Planner+Minds+Relevance+Sight (discount order pinned, tiebreak, v34 reuse
    with reuse==live proptest, v35 intentions; decimal→ordering pins) —
    DESIGN-HEAVY, the fidelity summit — 15%
