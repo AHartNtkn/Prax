@@ -100,3 +100,79 @@ On divergence the slice STOPS; no further vocab lands until adjudicated against 
 5. **The register's laws**: does no-propagation make some legitimate frozen-bug adjudication un-encodable (local consequences that nonetheless propagate through one derived fact)? Empty-register-with-mutation-fixture vs no-op entries for discoverability?
 6. **The non-mechanical five**: is `as_role` → `rename_vars` value-identical to `groundCondition` for every shipped CoPresence incl. Subquery binders? Is `conflicts`' throwaway interner sound (no id escape, no cross-lineage compare)?
 7. **[A1] and the S8 boundary**: is moving Audience right, or should Prompter's compile half be pulled forward as S4 pulled Rng? Either way S8 inherits: the story rule + scenePatience/currentScene reserved families unregistered through all of S7 (no S7 world exercises `door::register_reserved_families` or the two-door collision), ScheduleRuleSpec's playWorld row still owed:S8, and worldshape's encoder meets script-COMPILED practices for the first time at S8 — does it assume authored provenance?
+
+## 8. PANEL RULINGS — soundness lens (binding addendum; where this conflicts with §§1-7, THIS governs)
+
+Verdict UNSOUND-as-written; six Criticals, five sharing one root: the classifier
+was specified against an IDEALIZED record, never against the fields
+`oracle/TraceMain.hs` emits. All folded:
+
+- **[S-C1] The classifier is NON-TOTAL — add a TURN class and a terminal
+  UNCLASSIFIED.** `actor`/`cursor`/`idle`/`t` are emitted and unclassified, yet
+  `advance` (cursor arithmetic, the `i <= cursor` wrap, aliveness, post-boundary
+  re-selection) is a distinct bug site. New ladder: **TURN** (actor/cursor/idle
+  differ) → ENUMERATION → DECISION → RNG → SCHEDULE → STATE → **UNCLASSIFIED**
+  (a terminal class that FAILS LOUD rather than mis-labeling; any record pair
+  that differs but matches no class is a comparator bug and reports as such).
+- **[S-C2] Localization needs NATIVE-ORDER candidates.** `--candidates` emits
+  SORTED labels while the walk consumes native order — an order-only enumeration
+  bug would report as DECISION and point at a planner `randtrace` never runs.
+  The localization rerun emits candidates in native order (additive oracle flag).
+- **[S-C3] `action` is a rendered LABEL, not an identity.** Distinct
+  GroundedActions can share a label, and the stable tiebreak lets candidate order
+  decide between them. Localization emits action IDENTITY:
+  `{practice_id, instance_id, action_id, bindings}`.
+- **[S-C4] `randtrace` has no `--mode` and never emits `view`** — so [§1.3]'s
+  view-mode reclassification, the DIV-1-shaped rule, is unavailable on the walk
+  that carries the BULK of every slice's budget. Add `randtrace --mode`
+  (additive).
+- **[S-C5] RNG and SCHEDULE cannot reach their own pointers.** `CRoll` advances
+  the stream UNCONDITIONALLY, so taken-vs-not leaves `rng` equal; an expiry
+  firing on the wrong subtree or dropping silently leaves `expiries` equal. Both
+  would report STATE. Localization adds a **per-turn draw log** (each Roll: odds,
+  the advanced value, taken?) and a **boundary log** (which dues fired, which
+  expiries fired, in order).
+- **[S-C6] "The setup db as a SET suffices" is FALSE.** Two setup orders can
+  produce an identical labeled-sentence set with different `expiries`
+  (InsertFor-vs-Insert supersession), different `rngSeed` (a Roll-bearing spawn
+  init), and different schedule firing order (setSchedule append order).
+  `worldshape.shape` dumps the **full post-setup state** — `stateFields`
+  verbatim (cursor, rng, dues, expiries) — plus schedule rules in DECLARATION
+  order.
+- **[S-I1] The register's law 2 replaced**: no-propagation/truncation is too
+  strong (a stable adjudicated derived-fact difference would truncate every walk
+  at its first record while reporting non-DIVERGENT). Replace with **marked
+  continuation under a non-growth invariant**: the comparison continues, the
+  record is marked, and the difference set must NOT GROW — if it grows, the
+  record is DIVERGENT (law 1's escalation, which truncation was presuming). Add
+  a FOURTH mutation fixture: a covered difference that later grows ⇒ DIVERGENT.
+- **[S-I2] ENUMERATION is only reportable after a GREEN `worldshape` for that
+  world at the SAME freeze rev**, and the report carries the rev — the
+  precedence becomes a rule, not a parenthetical.
+- **[S-I3] Add a TERMINATION class**: the three randtrace stop rules emit no
+  record and `passes` is never emitted, so a stream-length divergence has no
+  class and no evidence. Emit `passes` + the stop reason; classify
+  stream-length divergence as TERMINATION.
+- **[S-I4] `--candidates` is MANDATORY in matrix mode** — without it ENUMERATION
+  can never fire and every enumeration bug reports as DECISION.
+- **[S-I5] `conflicts`' throwaway interner is SOUND** (no id escape, single
+  lineage, `exists` order-invariant), but resolve its fallibility explicitly
+  (`Result` or a documented total path — never an `unwrap`), and fix
+  `obligations_of`'s parameter order to match §3's own rule.
+- **[S-I6] `as_role` via `rename_vars` is value-identical for EVERY shipped case**
+  (one CoPresence shape; five call sites; all substituting a variable; no
+  Subquery binder anywhere) — but the two differ IN GENERAL (`groundTokens`
+  substitutes only `symIsVar` segments; `rename_sentence` any named segment) and
+  `as_role` is exported API. Therefore: a numbered DIVERGENCES entry, a
+  WitnessSpec equality pin over the actual shipped templates, and a STATED
+  CONTRACT that the replacement must be a variable.
+- **Minors folded**: compare HEADERS first (a `--depth`/`--idle` drift would
+  present as a DECISION storm) and report a mismatch as SHAPE-DIVERGENT [M1];
+  anchor on record ORDINAL, not `t` (randtrace's `t` does not advance on an idle
+  pass), printing both [M2]; give the `expiries` diff §1.5's path-tree treatment
+  [M3]; the localization rerun dumps the actor's `Intention` beside `--scores`
+  (the tell "score tables identical, action differs ⇒ intention, not planner"
+  is otherwise unavailable) [M4]; §3.4's "where DIV-1's shape lives" is SOFTENED
+  — the empty-register prediction is now CHECKED: both shipped aggregate axiom
+  bodies read the same family as their Match seed, so DIV-1's disjointness
+  precondition never holds in any shipped world [M5].
