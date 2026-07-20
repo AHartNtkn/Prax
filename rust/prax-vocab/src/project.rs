@@ -23,10 +23,14 @@
 //! world-visible fiction. The ledger entry doubles as the once-guard, so each part
 //! fires ONCE per instance.
 //!
-//! Frozen reference: `src/Prax/Project.hs`. The generated LABEL ORDER and GUARD
-//! ORDER are golden-visible (S7 design §3.3): [`endeavor`] is transcribed
+//! Frozen reference: `src/Prax/Project.hs`. [`endeavor`] is transcribed
 //! literally, and `worldshape village` compares the whole generated practice
-//! structurally against the frozen one.
+//! structurally against the frozen one. S7 design §3.3 called the generated
+//! LABEL ORDER and GUARD ORDER "golden-visible"; that was measured FALSE in the
+//! slice-4 review (neither the village-21 golden nor any frozen `ProjectSpec`
+//! pin reddens when either order is permuted), so both orders are held by the
+//! native pins `the_generated_part_actions_follow_the_authored_part_order` and
+//! `the_generated_part_guard_conjuncts_hold_their_order` below.
 
 use prax_core::error::WorldError;
 use prax_core::query::{Condition, eq, matches, not_};
@@ -431,6 +435,67 @@ mod tests {
         st.possible_actions(who)
             .iter()
             .any(|ga| ga.label.contains(needle))
+    }
+
+    // The generated ACTION-LABEL ORDER and the generated GUARD ORDER, pinned
+    // NATIVELY — no `// H:` label, because no frozen `ProjectSpec` case observes
+    // either order and neither does the village-21 golden.
+    //
+    // Measured in the slice-4 review by two mutations of `endeavor`: reversing
+    // `for p in parts`, and swapping the two leading `when` conjuncts with
+    // `needs`/`after` transposed. Under BOTH, all 17 frozen `ProjectSpec` pins,
+    // the whole `conformance` suite and `golden_drive::…village_twenty_one_turns_of_free_play`
+    // stayed green; the sole net was `worldshape village --check`, which asserts
+    // only equal-to-frozen — the net [D-I1] rules insufficient, and one that
+    // evaporates when the frozen tree is deleted at cut-over. These two pins are
+    // what actually holds the order.
+
+    #[test]
+    fn the_generated_part_actions_follow_the_authored_part_order() {
+        let (_, prac, _) = oven_end();
+        assert_eq!(
+            prac.actions
+                .iter()
+                .map(|a| a.name.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "[Actor]: sweep the hearth",
+                "[Actor]: fetch the clay",
+                "[Actor]: shape the oven",
+                "[Actor]: fire it",
+            ],
+            "one generated action per part, in the AUTHORED part order -- \
+             no reordering, no extras, none dropped"
+        );
+    }
+
+    #[test]
+    fn the_generated_part_guard_conjuncts_hold_their_order() {
+        let (_, prac, _) = oven_end();
+        let shape = prac
+            .actions
+            .iter()
+            .find(|a| a.name == "[Actor]: shape the oven")
+            .expect("the shape part action");
+        assert_eq!(
+            shape.when,
+            vec![
+                eq("Actor", "Owner"),
+                not_("practice.oven.Owner.did.shape"),
+                matches("practice.oven.Owner.did.fetch"),
+                matches("carrying.Owner.clay"),
+            ],
+            "ownership, then the once-guard, then the `after` edges, then the \
+             authored `needs` -- in that order"
+        );
+        assert_eq!(
+            shape.then,
+            vec![
+                insert("practice.oven.Owner.did.shape"),
+                delete("carrying.Owner.clay"),
+            ],
+            "the ledger write leads; the authored yields follow it"
+        );
     }
 
     // Property 1: local reward carries the horizon (v24's theorem, on edges).
