@@ -10,7 +10,7 @@
 //!   not advance on an idle pass, so two records at the same `t` are not the
 //!   same step. Both are printed.
 
-use crate::classify::{Ctx, Shape, Verdict, classify};
+use crate::classify::{Ctx, Shape, Verdict, ViewWitness, classify};
 use crate::diff::{RecordDiff, diff_records};
 use crate::register::{Register, Ruling, Situation};
 use serde_json::Value;
@@ -55,6 +55,9 @@ pub struct Divergence {
     pub rust: Value,
     /// Why the register did not cover it, when it applied at all.
     pub register_note: Option<String>,
+    /// The [§1.3(a)] view witness, when the reclassification fired: the earlier
+    /// record whose closed views differ and the derived facts that differ there.
+    pub view_witness: Option<ViewWitness>,
 }
 
 impl Outcome {
@@ -139,6 +142,7 @@ pub fn compare_streams(
                     frozen: a.clone(),
                     rust: b.clone(),
                     register_note: (!reg.entries.is_empty()).then_some(note),
+                    view_witness: ctx.view_differs_earlier.clone(),
                 })));
             }
         }
@@ -175,6 +179,13 @@ pub fn render(d: &Divergence, shape: &Shape) -> Vec<String> {
     out.push("--- field diff ---".to_owned());
     for fd in &d.diff.fields {
         out.extend(crate::diff::render_field(fd));
+    }
+    if let Some(w) = &d.view_witness {
+        out.push(format!(
+            "--- the view divergence at record ordinal {} (the base dbs there AGREE) ---",
+            w.ordinal
+        ));
+        out.extend(w.diff.iter().cloned());
     }
     out.push("--- records ---".to_owned());
     out.push(format!("frozen: {}", brief(&d.frozen)));

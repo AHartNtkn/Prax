@@ -11,22 +11,31 @@
 //! | rung | fires when | points at |
 //! |---|---|---|
 //! | **TERMINATION** | the streams stop differently, one is short, or `passes` differs | the three stop rules |
-//! | **TURN** | `actor`/`cursor`/`idle`/`t` differ | `advance`: cursor arithmetic, the `i <= cursor` wrap, aliveness, post-boundary re-selection |
+//! | **STATE(view)** | an EARLIER record's `view` differed while its base db agreed | derivation: axiom heads, defeater names, closure completeness |
+//! | **TURN** | `actor`/`cursor`/`t` differ | `advance`: cursor arithmetic, the `i <= cursor` wrap, aliveness, post-boundary re-selection |
 //! | **ENUMERATION** | `candidates` differ | `possible_actions` ordering/filters — or a world-port error (§2) |
-//! | **DECISION** | candidates equal, `action`/`identity`/`scores`/`intention_*` differs | MODE-DEPENDENT [D-C2] |
+//! | **DECISION** | candidates equal, `action`/`idle`/`identity`/`scores`/`intention_*` differs | MODE-DEPENDENT [D-C2] |
 //! | **RNG** | action equal, `rng`/`walkSeed`/`draws` differ | `CRoll` execution, or the walk's own `pick`/LCG |
 //! | **SCHEDULE** | action+rng equal, `boundary`/`dues`/`expiries` differ | boundary firing, re-arming, expiry arm/cancel/purge, v44 supersession |
 //! | **STATE** | all above equal, `facts` differ | perform semantics, spawn, ForEach snapshot, Call's base-db quirk, closure |
-//! | **STATE(view)** | `view` differs and `facts` does NOT (here, or at t−1) | derivation: axiom heads, defeater names, closure completeness |
+//! | **STATE(view)** | `view` differs and `facts` does NOT, at this record | derivation: axiom heads, defeater names, closure completeness |
 //! | **UNCLASSIFIED** | differs but matches NO rung | THE COMPARATOR ITSELF — fails loud |
 //!
-//! Three amendments carry most of the classifier's value:
+//! Four amendments carry most of the classifier's value:
 //!
-//! - **[S-C1] totality.** `actor`/`cursor`/`idle`/`t` were emitted and
-//!   unclassified while `advance` is a distinct bug site; and a pair that
-//!   matched no rung was silently mislabeled as the last one. TURN and a
-//!   terminal UNCLASSIFIED close both holes — UNCLASSIFIED is a comparator bug
-//!   and reports as such rather than pointing an implementer at innocent code.
+//! - **[S-C1] totality.** `actor`/`cursor`/`t` were emitted and unclassified
+//!   while `advance` is a distinct bug site; and a pair that matched no rung was
+//!   silently mislabeled as the last one. TURN and a terminal UNCLASSIFIED close
+//!   both holes — UNCLASSIFIED is a comparator bug and reports as such rather
+//!   than pointing an implementer at innocent code.
+//! - **[§1.3(a)] the view reclassification sits ABOVE the ladder, not inside
+//!   STATE.** The hazard the rule names is that a view-only divergence surfaces
+//!   *a turn later* as TURN/ENUMERATION/DECISION — every one of which outranks
+//!   STATE. Consulted from inside STATE the rule could only ever rescue a
+//!   divergence that had already landed on STATE, which is precisely the case
+//!   that needs no rescue. So it is consulted once, immediately below
+//!   TERMINATION: if the derivation already disagreed at an earlier record while
+//!   the base dbs agreed, everything below is downstream of that.
 //! - **[D-C2] mode parameterisation.** `randWalk` never touches the planner: it
 //!   selects with `possible_actions` + `pick`. So in randtrace mode "candidates
 //!   equal, action differs" is DEFINITIONALLY an ordering or pick/LCG bug, and
@@ -76,7 +85,8 @@ pub enum Class {
     Schedule,
     /// Same everything above, different facts.
     State,
-    /// A STATE divergence localized to the VIEW at t−1 — the DIV-1 shape.
+    /// The divergence localized to the closed VIEW — here, or at an earlier
+    /// record whose base db agreed. The DIV-1 shape.
     StateView,
     /// Differs, but matches no rung. A COMPARATOR BUG.
     Unclassified,
@@ -113,17 +123,37 @@ pub struct Verdict {
     pub other_fields: Vec<String>,
 }
 
+/// The [§1.3(a)] witness: an EARLIER record at which the closed VIEWs differ
+/// while the base dbs there agree, together with that record's rendered `view`
+/// field diff.
+///
+/// The rendered diff travels with the verdict rather than being left for the
+/// reader to reproduce: the whole value of the reclassification is that it names
+/// the DERIVED FACTS that went missing, and a class plus an ordinal does not.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ViewWitness {
+    /// The record ordinal where the views first differ.
+    pub ordinal: usize,
+    /// That record's `view` field diff, rendered (§1.5's path tree).
+    pub diff: Vec<String>,
+}
+
 /// The classifier's inputs beyond the record pair.
 pub struct Ctx {
     /// Which walk produced the stream.
     pub walk: Walk,
     /// The `worldshape` gate's state [S-I2].
     pub shape: Shape,
-    /// Did the VIEWs differ at the PREVIOUS record while the base dbs agreed?
-    /// The localizer sets this from the `--mode view` rerun; it reclassifies a
-    /// STATE-looking divergence as `STATE(view)` — the DIV-1 shape and the
-    /// single most valuable rule in the classifier.
-    pub view_differs_at_previous: bool,
+    /// Did the VIEWs already differ at an EARLIER record, while the base dbs
+    /// there agreed? The localizer sets this from the `--mode view` rerun, which
+    /// scans back to the FIRST record whose views differ — "t−1" and
+    /// "ordinal−1" are different windows once an idle pass desynchronises them
+    /// [M2], so a fixed one-record lookback misses the common case. It
+    /// reclassifies the divergence as `STATE(view)` — the DIV-1 shape and the
+    /// single most valuable rule in the classifier. The ordinal is carried so
+    /// the report names the record to read AND the derived facts that differ
+    /// there, not merely the class.
+    pub view_differs_earlier: Option<ViewWitness>,
 }
 
 /// Fields grouped by rung, in ladder order.
@@ -135,10 +165,23 @@ pub struct Ctx {
 /// [`crate::harness_tests`] drives the frozen oracle with every emission flag on
 /// and asserts the coverage, so a field added to the emission cannot land
 /// without a rung.
-const TURN_FIELDS: &[&str] = &["actor", "cursor", "idle", "t"];
+///
+/// `idle` is on the DECISION rung, NOT on TURN. It is not an `advance` output:
+/// both walks define it as exactly "the turn produced no move" (`acted.is_none()`
+/// in the trace walk, an empty candidate list in the randtrace one), which is
+/// definitionally downstream of enumeration and planning — and it is the same
+/// observation `action` already carries (`idle` iff `action` is `"-"`/`null`).
+/// Claiming it for TURN is what let a closure bug report as an `advance` bug: the
+/// derived fact the closure dropped removed the actor's only candidate, the
+/// actor idled, and `idle` carried the pair to a rung about cursor arithmetic.
+/// This is the same guard §1.3(b) already applies to the symmetric hazard
+/// ("differing `walkSeed` with differing candidate-list LENGTH is ENUMERATION,
+/// never RNG").
+const TURN_FIELDS: &[&str] = &["actor", "cursor", "t"];
 const ENUMERATION_FIELDS: &[&str] = &["candidates"];
 const DECISION_FIELDS: &[&str] = &[
     "action",
+    "idle",
     "identity",
     "scores",
     "intention_before",
@@ -229,6 +272,29 @@ pub fn classify(ctx: &Ctx, d: &RecordDiff, frozen: &Value, rust: &Value) -> Resu
              many records, and the `passes` counter the dead-end rule reads (it advances only on \
              an idle pass, and the cap decrements only on an action)"
                 .to_owned(),
+        ));
+    }
+
+    // [§1.3(a)] THE VIEW RECLASSIFICATION, above the whole engine ladder. If the
+    // localizer's `--mode view` rerun found the VIEWs already disagreeing at an
+    // earlier record while the base dbs agreed, the derivation diverged there and
+    // everything here is its consequence — the missing derived fact removes a
+    // candidate (ENUMERATION), the actor idles or picks differently (DECISION),
+    // and in randtrace `t` then desynchronises from the ordinal (TURN). Consulted
+    // from inside STATE this rule cannot reach any of those rungs, which are
+    // exactly the ones §1.3(a) names.
+    if let Some(w) = &ctx.view_differs_earlier {
+        let at = w.ordinal;
+        return Ok(verdict(
+            Class::StateView,
+            names.clone(),
+            format!(
+                "the closed VIEW already differed at record ordinal {at}, while the base dbs \
+                 there AGREED — a DERIVATION divergence (axiom heads, defeater names, closure \
+                 completeness), surfacing here as its downstream consequence. This is the DIV-1 \
+                 shape; the derived facts that went missing are named below, under `the view \
+                 divergence`. Nothing on the rungs below this one can produce it."
+            ),
         ));
     }
 
@@ -346,16 +412,6 @@ pub fn classify(ctx: &Ctx, d: &RecordDiff, frozen: &Value, rust: &Value) -> Resu
                 "the base dbs AGREE and only the closed VIEW differs — a DERIVATION divergence \
                  (axiom heads, defeater names, closure completeness), at its own record. This is \
                  the DIV-1 shape; nothing in perform semantics can produce it."
-                    .to_owned(),
-            ));
-        }
-        if ctx.view_differs_at_previous {
-            return Ok(verdict(
-                Class::StateView,
-                state,
-                "the VIEW at t−1 already differed while the base dbs agreed — a DERIVATION \
-                 divergence (axiom heads, defeater names, closure completeness), surfacing here a \
-                 turn later. This is the DIV-1 shape."
                     .to_owned(),
             ));
         }

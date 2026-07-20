@@ -33,7 +33,7 @@ mod walk;
 mod worldshape;
 mod worlds;
 
-use classify::{Ctx, Shape, Walk};
+use classify::{Ctx, Shape, ViewWitness, Walk};
 use record::{Emit, Mode};
 use register::Register;
 use serde_json::Value;
@@ -300,7 +300,7 @@ pub fn run_one_behind(
     let mut ctx = Ctx {
         walk: spec.walk,
         shape: shape.clone(),
-        view_differs_at_previous: false,
+        view_differs_earlier: None,
     };
     let mut outcome =
         compare::compare_streams(&frozen, &rust, &ctx, reg, &spec.world, spec.sub(), spec.seed)?;
@@ -339,15 +339,15 @@ pub fn run_one_behind(
 
     // [§1.3(a)] THE VIEW-MODE RECLASSIFICATION — the DIV-1 shape and the single
     // most valuable rule in the classifier. A view-only divergence is invisible
-    // in `state` mode and surfaces a turn later as ENUMERATION/DECISION/STATE, so
-    // on ANY divergence both sides are rerun in `--mode view`; if the views
-    // differ at t−1 while the base dbs agree, the class becomes STATE(view).
+    // in `state` mode and surfaces a turn later as TURN/ENUMERATION/DECISION/
+    // STATE, so on ANY divergence both sides are rerun in `--mode view`; if the
+    // views differ at an earlier record while the base dbs there agree, the class
+    // becomes STATE(view) and the classifier says so ABOVE the whole ladder.
     if let Some(ordinal) = divergent_ordinal(&outcome)
         && spec.mode != Mode::View
-        && let Some(differs) = view_divergence_at(spec, ordinal)?
-        && differs
+        && let Some(witness) = view_divergence_before(spec, ordinal)?
     {
-        ctx.view_differs_at_previous = true;
+        ctx.view_differs_earlier = Some(witness);
         outcome = compare::compare_streams(
             &frozen,
             &rust,
@@ -394,11 +394,25 @@ fn divergent_ordinal(o: &compare::Outcome) -> Option<usize> {
     }
 }
 
-/// Did the VIEWs differ at the record BEFORE `ordinal` while the base dbs
-/// agreed? `None` when the view rerun cannot reach that record.
-fn view_divergence_at(spec: &RunSpec, ordinal: usize) -> Result<Option<bool>, String> {
+/// The FIRST record strictly before `ordinal` at which the closed VIEWs differ
+/// while the base dbs still agree — the [§1.3(a)] window.
+///
+/// The window is scanned, not indexed at `ordinal - 1`. Two units are in play:
+/// the view divergence happens at some walk step, the state-mode divergence
+/// surfaces at some record ordinal, and [M2] records that `t` does not advance
+/// on an idle pass — so an idle pass between them desynchronises "t−1" from
+/// "ordinal−1" and a fixed one-record lookback returns `false` for exactly the
+/// derivation bugs the rule exists to catch. Scanning forward from the first
+/// record also reports the EARLIEST such record, which is where the reader
+/// should start.
+///
+/// `None` when the view rerun cannot reach the ordinal at all.
+fn view_divergence_before(
+    spec: &RunSpec,
+    ordinal: usize,
+) -> Result<Option<ViewWitness>, String> {
     if ordinal < 2 {
-        return Ok(Some(false));
+        return Ok(None);
     }
     let view_spec = RunSpec {
         mode: Mode::View,
@@ -406,12 +420,35 @@ fn view_divergence_at(spec: &RunSpec, ordinal: usize) -> Result<Option<bool>, St
     };
     let frozen = drive_frozen::run_jsonl(&view_spec.frozen_args(Mode::View))?;
     let rust = rust_stream(&view_spec)?;
-    let prev = ordinal - 1;
-    let (Some(a), Some(b)) = (frozen.get(prev), rust.get(prev)) else {
-        return Ok(None);
-    };
-    let d = diff::diff_records(a, b);
-    Ok(Some(d.has("view") && !d.has("facts")))
+    Ok(first_view_divergence(&frozen, &rust, ordinal))
+}
+
+/// The scan itself, over two already-driven `--mode view` streams — separated
+/// from the driving so the window rule has a resident net that does not need an
+/// engine bug to exercise it.
+pub fn first_view_divergence(
+    frozen: &[Value],
+    rust: &[Value],
+    ordinal: usize,
+) -> Option<ViewWitness> {
+    for i in 1..ordinal {
+        let (Some(a), Some(b)) = (frozen.get(i), rust.get(i)) else {
+            return None;
+        };
+        let d = diff::diff_records(a, b);
+        if d.has("facts") {
+            // The base dbs already disagree here: whatever else differs, this is
+            // not a view-only divergence and the ladder below must judge it.
+            return None;
+        }
+        if let Some(fd) = d.get("view") {
+            return Some(ViewWitness {
+                ordinal: i,
+                diff: diff::render_field(fd),
+            });
+        }
+    }
+    None
 }
 
 /// Build the Rust side's record stream for a run.

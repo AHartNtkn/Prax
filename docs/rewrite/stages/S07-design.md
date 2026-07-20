@@ -283,3 +283,32 @@ lenses independently found the candidate-order defect.
   with two simultaneous endings), M4 (the cache key omits `$PRAX_ORACLE_CMD`),
   M5 (the stop RULES live in drive_rust, not walk.rs — S9's Stress port would
   re-derive them).
+
+## 11. SLICE-1 AMENDMENTS (binding; recorded from the slice-1 review's fix wave)
+
+- **§1.3(a)'s view reclassification is consulted ABOVE the ladder, not inside the
+  STATE rung** [slice-1 review C1(b)]. §1.3(a)'s own text names the hazard as a
+  view divergence surfacing "a turn later as ENUMERATION/DECISION" — and in
+  randtrace, where `t` does not advance on an idle pass [M2], also as TURN. All
+  three outrank STATE, so a rule consulted from inside STATE was inoperative for
+  exactly the three classes it corrects. Full order:
+  **TERMINATION → STATE(view, earlier record) → TURN → ENUMERATION → DECISION →
+  RNG → SCHEDULE → STATE / STATE(view, this record) → UNCLASSIFIED**. TERMINATION
+  stays first for the reason §10 gives.
+- **§1.3(a)'s window is the FIRST earlier record whose views differ, not `t−1`**
+  [slice-1 review C1(c)]. [M2] already ruled that `t` and the record ordinal are
+  different units; an idle pass between the derivation divergence and the record
+  where it surfaces desynchronises them, so a one-record lookback returns false
+  for the ordinary case. The localizer scans back from the divergent ordinal,
+  stops at the first record whose `view` differs while its `facts` agree, and
+  reports that ordinal. A base-db divergence encountered first defeats the rule
+  — the precondition is that the base dbs agree where the views differ.
+- **The reclassification carries the VIEW field diff into the report**, not just
+  the class and the ordinal. The rule's whole value is naming the derived facts
+  that went missing; a class plus an ordinal leaves the reader to reproduce it.
+- **`idle` is a DECISION field, never a TURN field** [slice-1 review C1(a)]. It
+  is not an `advance` output: both walks define it as "the turn produced no move"
+  (`acted.is_none()`; an empty candidate list in randtrace), which is downstream
+  of enumeration and planning, and it restates what `action` already carries.
+  This is the same guard §1.3(b) applies to `walkSeed` with differing
+  candidate-list length. [S-C1]'s TURN set becomes `actor`/`cursor`/`t`.

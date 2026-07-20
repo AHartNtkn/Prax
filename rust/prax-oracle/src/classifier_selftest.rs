@@ -12,15 +12,24 @@
 //! view-mode reclassification, and the [S-I2] shape precedence. `cargo test -p
 //! prax-oracle -- --nocapture` prints each verdict.
 
-use crate::classify::{Class, Ctx, Shape, Walk, classify, render};
+use crate::classify::{Class, Ctx, Shape, ViewWitness, Walk, classify, render};
 use crate::diff::diff_records;
 use serde_json::{Value, json};
+
+/// The localizer's [§1.3(a)] finding, as the classifier receives it: an earlier
+/// record whose closed views differ while the base dbs there agree.
+fn witness(ordinal: usize) -> ViewWitness {
+    ViewWitness {
+        ordinal,
+        diff: vec!["field `view`:".to_owned(), "  only_frozen: resents.dave.alice".to_owned()],
+    }
+}
 
 fn ctx(walk: Walk) -> Ctx {
     Ctx {
         walk,
         shape: Shape::Green("selftest".to_owned()),
-        view_differs_at_previous: false,
+        view_differs_earlier: None,
     }
 }
 
@@ -140,7 +149,7 @@ fn enumeration_is_not_reportable_without_a_green_worldshape() {
     let c = Ctx {
         walk: Walk::Randtrace,
         shape: Shape::NotChecked,
-        view_differs_at_previous: false,
+        view_differs_earlier: None,
     };
     let e = classify(&c, &d, &a, &b).expect_err("must refuse");
     println!("[S-I2 shape precedence] refused: {e}");
@@ -258,17 +267,18 @@ fn state_the_facts_differ_and_nothing_above_does() {
 }
 
 #[test]
-fn state_view_reclassifies_when_the_view_diverged_a_turn_earlier() {
+fn state_view_reclassifies_when_the_view_diverged_at_an_earlier_record() {
     // [§1.3(a)] the DIV-1 shape: a view-only divergence is invisible in `state`
     // mode and surfaces a turn later. The localizer's `--mode view` rerun is
-    // what sets this flag; the classifier's job is to honour it.
+    // what sets this flag; the classifier's job is to honour it — and to name
+    // the record the reader should open.
     let a = base();
     let b = with(base(), "facts", json!(["char.vera"]));
     let d = diff_records(&a, &b);
     let c = Ctx {
         walk: Walk::Trace,
         shape: Shape::Green("selftest".to_owned()),
-        view_differs_at_previous: true,
+        view_differs_earlier: Some(witness(2)),
     };
     let v = classify(&c, &d, &a, &b).expect("classifies");
     println!("[STATE(view) / reclassified]");
@@ -276,7 +286,82 @@ fn state_view_reclassifies_when_the_view_diverged_a_turn_earlier() {
         println!("  {l}");
     }
     assert_eq!(v.class, Class::StateView);
-    assert!(v.pointer.contains("t−1"), "{}", v.pointer);
+    assert!(v.pointer.contains("ordinal 2"), "{}", v.pointer);
+}
+
+#[test]
+fn idle_is_a_decision_field_not_a_turn_field() {
+    // [C1](a). `idle` is `acted.is_none()` — the turn produced no move. That is
+    // downstream of enumeration and planning, and it is the same observation
+    // `action` already carries. Claimed by TURN, a closure bug that removes the
+    // actor's only candidate reports as an `advance` bug and sends the reader to
+    // cursor arithmetic. Here candidates are EQUAL, so the pair is a clean
+    // DECISION.
+    let a = with(base(), "idle", json!(false));
+    let b = with(with(base(), "idle", json!(true)), "action", json!("-"));
+    let v = verdict("DECISION / idle", &ctx(Walk::Trace), &a, &b);
+    assert_eq!(
+        v,
+        Class::Decision,
+        "`idle` is not an `advance` output and must never carry a pair to TURN"
+    );
+}
+
+#[test]
+fn the_view_reclassification_outranks_turn_enumeration_and_decision() {
+    // [C1](b). §1.3(a)'s stated hazard is that a view divergence surfaces a turn
+    // later AS ENUMERATION/DECISION — and in randtrace, where `t` does not
+    // advance on an idle pass [M2], as TURN. All three outrank STATE, so a rule
+    // consulted from inside the STATE rung is inoperative for every class it was
+    // written to correct. This pair perturbs all three at once.
+    let a = base();
+    let mut b = base();
+    for (k, x) in [
+        ("t", json!(4)),
+        ("candidates", json!(["vera: brag"])),
+        ("action", json!("vera: wait about")),
+        ("idle", json!(true)),
+    ] {
+        b = with(b, k, x);
+    }
+    let d = diff_records(&a, &b);
+    let c = Ctx {
+        walk: Walk::Randtrace,
+        shape: Shape::Green("selftest".to_owned()),
+        view_differs_earlier: Some(witness(1)),
+    };
+    let v = classify(&c, &d, &a, &b).expect("classifies");
+    println!("[STATE(view) / above the ladder]");
+    for l in render(&v) {
+        println!("  {l}");
+    }
+    assert_eq!(
+        v.class,
+        Class::StateView,
+        "an earlier view-only divergence outranks TURN, ENUMERATION and DECISION"
+    );
+    assert!(v.pointer.contains("ordinal 1"), "{}", v.pointer);
+}
+
+#[test]
+fn termination_still_outranks_the_view_reclassification() {
+    // The view rule sits BELOW TERMINATION: comparing a terminal record against a
+    // turn record makes every other field difference an artifact of comparing
+    // unlike records, whatever the derivation did earlier.
+    let a = json!({"end": true, "reason": "deadend", "ending": null, "passes": 4, "records": 12});
+    let b = base();
+    let d = diff_records(&a, &b);
+    let c = Ctx {
+        walk: Walk::Randtrace,
+        shape: Shape::Green("selftest".to_owned()),
+        view_differs_earlier: Some(witness(1)),
+    };
+    let v = classify(&c, &d, &a, &b).expect("classifies");
+    println!("[TERMINATION above STATE(view)]");
+    for l in render(&v) {
+        println!("  {l}");
+    }
+    assert_eq!(v.class, Class::Termination);
 }
 
 #[test]
@@ -398,6 +483,68 @@ fn the_ladder_precedence_holds_when_several_rungs_fire_at_once() {
             "the report must still name `{f}` as also-differing"
         );
     }
+}
+
+#[test]
+fn the_view_window_scans_back_past_an_idle_pass_instead_of_indexing_t_minus_one() {
+    // [C1](c). The two units are NOT the same window. A derivation divergence
+    // shows in the closed view at record 1; the base dbs stay equal through an
+    // IDLE pass at record 2 (where the acting character's view carries none of
+    // the affected facts, so `view` agrees there); the state-mode divergence
+    // finally surfaces at record 3. Indexing `ordinal - 1` looks only at record
+    // 2, finds nothing, and the reclassification never fires — which is exactly
+    // what suppressed it on the reviewer's injected closure bug.
+    let rec = |view: Value| {
+        json!({"t": 1, "actor": "vera", "facts": ["char.vera"], "view": view})
+    };
+    let agree = || rec(json!(["char.vera"]));
+    let frozen = vec![
+        json!({"header": true}),
+        rec(json!(["char.vera", "resents.dave.alice"])),
+        agree(),
+        agree(),
+    ];
+    let rust = vec![json!({"header": true}), agree(), agree(), agree()];
+
+    let w = crate::first_view_divergence(&frozen, &rust, 3)
+        .expect("the scan must reach back past the idle pass to record 1");
+    assert_eq!(w.ordinal, 1, "the EARLIEST view divergence is the anchor");
+    assert!(
+        w.diff.iter().any(|l| l.contains("resents.dave.alice")),
+        "the witness must NAME the derived fact that went missing: {:?}",
+        w.diff
+    );
+
+    // The one-record window this replaces: record 2 alone shows nothing.
+    assert!(
+        crate::first_view_divergence(&frozen, &rust, 2).is_some(),
+        "record 1 is still in the window when the divergence is at 2"
+    );
+    assert!(
+        crate::first_view_divergence(&frozen, &rust, 1).is_none(),
+        "there is no record before the first one"
+    );
+}
+
+#[test]
+fn a_base_db_divergence_before_the_ordinal_defeats_the_view_window() {
+    // The rule's precondition is that the base dbs AGREE where the views differ.
+    // If `facts` already disagreed earlier, this is not a derivation divergence
+    // and the ladder below must judge it on its own evidence.
+    let frozen = vec![
+        json!({"header": true}),
+        json!({"facts": ["char.vera", "bragged.vera"], "view": ["char.vera"]}),
+        json!({"facts": ["char.vera"], "view": ["char.vera", "resents.dave.alice"]}),
+    ];
+    let rust = vec![
+        json!({"header": true}),
+        json!({"facts": ["char.vera"], "view": ["char.vera"]}),
+        json!({"facts": ["char.vera"], "view": ["char.vera"]}),
+    ];
+    assert!(
+        crate::first_view_divergence(&frozen, &rust, 3).is_none(),
+        "a base-db divergence at record 1 is not a view-only divergence"
+    );
 }
 
 #[test]
