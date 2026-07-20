@@ -123,3 +123,84 @@ S7's standing lesson, twice earned: **a net that only asserts equal-to-frozen EV
 6. **The distinct-walk predictions.** Plausible? Is "at least three for play" the right falsifiable claim? Should the walk identity for script worlds include the SCENE PATH as well as the action sequence and terminal stop?
 7. **CG-1 hygiene.** Is the REFRESH strengthening real or a restatement? Is there ANY authored route in a script — including through JSON, whose `Outcome` surface is wider than the smart constructors' — to a bare insert onto a live timer that `compile`'s five-list sweep misses? (An enumeration is exactly the kind of thing that goes stale.)
 8. **Scope honesty.** Is anything in the frozen `play` loop that S8's library surface must provide being quietly deferred to S9 without a KILLED row?
+
+## 9. PANEL RULINGS (binding addendum; where this conflicts with §§1-8, THIS governs)
+
+Both lenses returned heavy: soundness UNSOUND (3 Critical, 6 Important), design
+FLAWED+GAPS (3 Critical, 9 Important). Several findings are MEASURED, and two
+reverse claims I wrote.
+
+### Measurements that settle open items (no slice-time rediscovery)
+- `dump-play` IS byte-identical to `examples/play.json` (2122 bytes, sorted
+  keys). **[R7] claim 6 is TRUE; §3's degraded contingency is DEAD — delete it,
+  do not carry it.**
+- The frozen `worldshape` DOES emit `engine_rules` — **[R5]'s "verify at slice
+  start" is discharged now**; no oracle extension needed.
+- Label counts confirmed 34 / 12 = 46. owed:S8 is EXACTLY one row. The Memory
+  feature really is gone ([R1] correct). `examples/` is NOT under the freeze
+  ([R7].1 correct, and the file is still pristine). `play`/`audience` are in the
+  frozen registry with the right idlers. A `Roll` in a script setup panics
+  unconditionally (§4's argument is sound and stronger than the frozen scan).
+
+### [S-C1] — CG-1 IS CLOSABLE HERE, and §5's claim is FALSE
+§5 said a bare insert onto a live timer is "INEXPRESSIBLE in a script". It is
+not: `InsertFor` is in the authored `Outcome` surface, `sceneSetup` and
+`beatEffects` both accept it, and the JSON door spells it directly. The lens
+authored a script whose setup arms its own timer and whose beat effect
+bare-inserts the same path, ran it on BOTH engines, and measured the timer
+cancelled and the junction never firing — **CG-1's supersession half, from
+authored data, at world scale, through JSON.**
+**RULING: S8 CLOSES CG-1.** Ship that script as a resident conformance fixture
+(a real authored world, not a synthetic state), pin the supersession AND the
+control (a timer left alone still fires), verify it reddens under deleting
+`expiries.remove`, run it through the differential, and then REWRITE PROGRAM.md's
+CG-1 from "carried gap" to CLOSED with the evidence. §5's paragraph is struck.
+The REFRESH strengthening stands but is now the minor half.
+
+### [S-C2] — duplicate JSON keys: aeson keeps the FIRST, serde_json the LAST
+[R8]'s ordered-probe recipe cannot reproduce this. The decoder must handle
+duplicate keys explicitly (reject, or first-wins to match) — decide by what the
+frozen does on the reachable inputs and PIN the choice; do not let serde's
+default silently disagree.
+
+### [S-C3] — `"memories": null` slips past the frozen loud guard
+Adjudicate on the measurement, not intent: reproduce the frozen's actual
+behavior (including the hole) OR fix it as a bug under the program's ruling —
+but state which, with the measurement, in DIVERGENCES if it is a fix.
+
+### [D-C1] — §5's termination rationale is FALSE for `--mode trace`
+`traceWalk` never checks for an ending; only randtrace stops on `ending.E`.
+Correct the prediction and the expectations; the TERMINATION rung reasoning
+applies to randtrace only.
+
+### [D-C2] — [R4] made the reserved-family list WORLD-DEPENDENT; that is a divergence
+The frozen list is a world-INDEPENDENT constant (TypeCheck imports it), so a
+NON-script world authoring `scenePatience` is flagged by the frozen checker and
+would NOT be by a Rust list seeded only when a script compiles. **RULING: the
+reserved-family names are an ENGINE concern — what the checker refuses — not
+script content; the fact that the script layer generates them does not make them
+script-owned (`turn`/`contradiction` are already core constants).** Move the
+constants to prax-core and seed the full list statically, world-independent, one
+home. The door then survives ONLY if something genuinely needs runtime
+registration; if nothing does, DELETE IT (no dual systems). This also unblocks
+the already-booked owed:S9 pin the lens found unre-expressible.
+
+### [D-C3] — §5 must specify `--emit state`
+`currentScene` is visible ONLY through the facts field; without it the scene
+machinery is untested by the trace.
+
+### [D-I1] — idempotence belongs in the TYPE, not the door
+If the door survives [D-C2], the field is a set type so duplication is
+UNREPRESENTABLE rather than absorbed.
+
+### Remaining Importants (fold at implementation)
+[D-I2] §6 and §7 list different pin sets — reconcile; §7 claims one row per
+surface and must actually be that. [D-I3] the compile guard ORDER is
+under-specified — the pin cannot be written from the design as it stands; specify
+it. [D-I4] `script_player`'s consumer is misplaced. [D-I5] use the freeze
+mechanism that already exists for `examples/play.json` rather than a new one.
+[D-I6] the `serde_json` `preserve_order` feature-unification hazard silently
+breaks byte-compat — PIN it. [D-I7] the five-list sweep DOES have a hole
+(`Count`/`Subquery`'s set operand) but it is a READ hole, so CG-1 survives it.
+[D-I8] `sceneOpening` is authored, round-trips, and is consumed by NOTHING — say
+so. Plus the soundness lens's six Importants, folded at implementation.
