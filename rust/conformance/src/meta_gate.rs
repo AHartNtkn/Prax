@@ -46,6 +46,12 @@ mod gate {
         "EmotionSpec.hs",
         "BeliefsSpec.hs",
         "IntrigueSpec.hs",
+        // S7 slice 3 (bar + dm) — the vocab half:
+        "ReactionsSpec.hs",
+        "DeonticSpec.hs",
+        "ConversationSpec.hs",
+        "ArcSpec.hs",
+        "WitnessSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {

@@ -168,6 +168,71 @@ not mistaken for a fresh correctness divergence. Should such a world ever ship, 
 posture graduates to a numbered DIV with a comparator suppression on the witness
 field.
 
+## DIV-4 (S7): `asRole` retargets a co-presence template by RENAMING, not by grounding
+
+**What**: `Prax.Witness.asRole` is
+`map (groundCondition (Map.singleton (intern "Witness") (VSym (intern v))))` —
+it substitutes through `Prax.Query.groundCondition`, whose token round-trip goes
+through `Prax.Db.tokens` and so RAISES on a malformed template. The Rust
+`prax_vocab::witness::as_role` substitutes through S4's
+`prax_core::types::rename_vars` instead: pure, infallible, operator-preserving.
+
+**Why**: `ground_condition` needs a `&mut Interner` and returns a `Result`. Every
+caller of `as_role` is a pure value-builder in `prax-vocab`
+(`Rumor.gossip`, `Deceit.lie`, `Confession.confess`, and `Blackmail`'s trigger and
+punish conditions), so threading an interner and a rejection through it would
+infect five combinator signatures — and their callers — for a fallibility no
+shipped template can reach. S7 design [S-I6] rules for `rename_vars`, with this
+entry, a WitnessSpec equality pin, and a stated contract as the price.
+
+**Where they agree, verified rather than argued**: on the frozen engine at the
+shipped template, and on the Subquery binder shape [S-I6] names as the thing to
+check —
+
+```
+HASKELL asRole "Hearer" [Match "…at.Actor!P", Match "…at.Witness!P"]
+     -> [Match "…at.Actor!P", Match "…at.Hearer!P"]
+HASKELL asRole "Hearer" [Subquery {subSet="Witness", subFind=["C"], subWhere=[Match "at.C!P"]}]
+     -> [Subquery {subSet="Hearer", subFind=["C"], subWhere=[Match "at.C!P"]}]
+```
+
+Both are reproduced value-for-value by
+`prax_vocab::witness::tests::as_role_agrees_with_ground_condition_on_every_shipped_template`,
+which builds the frozen implementation (`ground_condition` under a
+`Witness → VSym v` binding) as the ORACLE and compares against `as_role` over
+every shipped `CoPresence` and every role the shipped call sites retarget to.
+
+**Where they differ, and the contract that closes it**:
+
+1. *Fallibility.* `groundCondition` rejects a template whose sentence ends in an
+   operator; `rename_vars` renders the malformed sentence and carries on.
+   Observed on the frozen engine:
+   `asRole "Hearer" [Match "at.Witness!"] -> ERROR -> Prax.Db.tokens: trailing
+   operator '!' in "at.Witness!"`. Pinned in both directions by
+   `the_two_implementations_differ_off_the_shipped_shape`. No shipped template is
+   malformed, and `worldshape`'s bodies comparison holds each world's template
+   identical to the frozen one, so a malformed template cannot arrive unnoticed.
+2. *Substitution rule.* `groundTokens` substitutes only segments the tokenizer
+   classifies as VARIABLES; `rename_sentence` substitutes any segment whose name
+   matches. These coincide because the substituted key is the fixed, capitalized
+   `Witness`, which is always a variable — which is why the key is not a
+   parameter of `as_role`.
+
+**Stated contract**: the replacement `v` MUST be a variable name. The frozen
+function substitutes a `VSym`, so a non-variable replacement yields a template
+that no longer quantifies — an authoring error under either implementation, but
+only this one would carry it silently. Asserted, not merely written down, by
+`as_roles_contract_the_replacement_is_a_variable`.
+
+**Fiction consequence**: none. All five shipped call sites substitute a variable
+(`Hearer`, or a victim's own bound variable), no shipped template is malformed,
+and no shipped template carries a Subquery binder at all.
+
+**Comparator posture**: no suppression. `as_role` is not reached by any slice-3
+world (Bar authors `CoPresence` but never retargets it); slice 4's Village
+worlds exercise all five call sites, and their traces are compared with no
+adjudication.
+
 ## Recorded posture (not a DIV): due expiries fire in rendered-name order
 
 At a round boundary (`roundBoundary`, spec v44) the engine fires every due
