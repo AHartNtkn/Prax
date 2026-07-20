@@ -75,8 +75,8 @@ Also: `Prax.Core.coreFns` ends in a `FnCase []` fallback and matching is FIRST-m
 |---|---|---|---|---|
 | 1 | **feud** | faction, kin | derive/Kin/Faction transitive rules at world scale; **defeasible retraction** ⇒ neg-footprint tier + full reclose on real data | worldshape; `trace --turns 24 --mode state`; randtrace **100 × 50** |
 | 2 | **intrigue** | core, emotion, beliefs | defineFunctions + Call routing (BASE-db quirk, first-case/first-binding), desire-driven planning, **endings** | worldshape; **GoldenDrive intrigue 12**; trace 24; randtrace 100 × 50 |
-| 3 | **bar** (+dm) | reactions, deontic (non-S4 exports), conversation, arc, witness | **widest integration**: schedule rules + sightRule, expiries + supersession, reaction SPAWN, Subquery/Count/Cmp/Calc, obligations/violations, the **director practice** (bound_to), TWO worlds from one module | worldshape ×2; **GoldenDrive bar 12**; **the LoopSpec 25-turn narration**; trace 40; randtrace **100 × 50 each** |
-| 4 | **village** | project, witness (full), rumor, repute, deceit, persona, debt, coerce, blackmail, confession | **mechanism-dense**: seedDie + draw ⇒ first world exposure of the **CRoll stream**, coercion's rename kernel, confession/absolution axioms, obligedClose, the v37 gathering wake, endeavor part-sets, the sight window | worldshape; **GoldenDrive village 21 (idle=you)**; the v37-wake pin; trace 42; randtrace **300 × 50** + a **die-seed sweep** |
+| 3 | **bar** (+dm) | reactions, deontic (non-S4 exports), conversation, arc, witness | **widest integration**: schedule rules + sightRule, expiries + supersession (**FALSE — MEASURED: bar exercises expiries but NOT the supersession; §13**), reaction SPAWN, Subquery/Count/Cmp/Calc, obligations/violations, the **director practice** (bound_to), TWO worlds from one module | worldshape ×2; **GoldenDrive bar 12**; **the LoopSpec 25-turn narration**; trace 40; randtrace **100 × 50 each** |
+| 4 | **village** | project, witness (full), rumor, repute, deceit, persona, debt, coerce, blackmail, confession | **mechanism-dense**: **the v44 SUPERSESSION, inherited unnetted from slice 3 (§13)**, seedDie + draw ⇒ first world exposure of the **CRoll stream**, coercion's rename kernel, confession/absolution axioms, obligedClose, the v37 gathering wake, endeavor part-sets, the sight window | worldshape; **GoldenDrive village 21 (idle=you)**; the v37-wake pin; trace 42; randtrace **300 × 50** + a **die-seed sweep** |
 
 **Sequencing**: risk rises monotonically and each slice's new machinery is netted before the next can hide behind it. Feud has no schedule/functions/rng/desires — a divergence there is closure or enumeration, nothing else. Bar before Village because Bar's schedule/expiry/spawn load is a strict subset of Village's ambient load.
 **Budget**: ≥100 × cap 50 is a FLOOR, scaled by mechanism density, normalized on **effective turns** (endings truncate walks — top up until ≥3,000 effective turns per world). **AMENDED by §12: the gate is DISTINCT WALKS, and the record floor is only the other half of it** — a seed range that clears 3,000 records by replaying one walk 125 times has bought nothing, and slice 1's feud/bigfeud sweeps did exactly that. **Gap the PLAN misses**: `randtrace --seed` is the WALK seed; the engine die seed is fixed inside villageWorld, so the Roll space is barely sampled. **Add `randtrace --die-seed S`** (additive) and sweep village over ≥20 die seeds × 20 walk seeds — without it the RNG class is nearly untested until S10, and RNG bugs are invisible in a golden.
@@ -386,3 +386,76 @@ lenses independently found the candidate-order defect.
   reads like coverage. **For slices 3-4 this is the number to size against**: a
   world whose distinct-walk count saturates at 1-4 does not need a die-seed sweep
   to be big, it needs its branching to be exercised some other way.
+
+## 13. SLICE-3 AMENDMENTS (binding; recorded from the slice-3 review's fix wave)
+
+- **§4's slice-3 risk row is WRONG: bar exercises expiries but NOT the v44
+  SUPERSESSION** [slice-3 implementer disclosure, reproduced by the slice-3
+  review and re-verified here]. Supersession fires when a BARE insert lands on a
+  path already carrying a pending timer. Every `*.feels.*` write in both bar
+  worlds — the greeting arms, disapproval, the drink, the arc, and BOTH
+  directors' nudges (`dm_practice`, `direct_practice`) — goes through
+  `feel_toward_for`, an `InsertFor`; nothing in either world writes that family
+  any other way, so the bare-insert-onto-a-pending-timer case is UNREACHABLE
+  there. This is demonstrated, not argued: delete `rt.expiries.remove(path)` from
+  `engine.rs`'s `perform_effect` and `worldshape bar`, `worldshape dm`, both
+  40-turn traces and four randtrace seeds all stay clean; only
+  `schedule_spec::law_3_bare_re_insert_cancels_the_timer` and the S4
+  `engine_replay` fixture redden.
+  **What this costs the program.** §4's sequencing claim — *"each slice's new
+  machinery is netted before the next can hide behind it"* — does not hold for
+  supersession at slice 3. The law is netted by the resident S4/S5 pins, which is
+  a real net but a UNIT one: no world-scale walk exercises it, so a supersession
+  bug that only manifests through authored data would survive all of S7 unless
+  slice 4 nets it. **Binding on slice 4**: village writes `*.feels.*` through more
+  than one route, so the slice-4 differential must include a walk in which a bare
+  insert lands on a path with a live timer, and must SAY SO with a mutation RED
+  (delete the `expiries.remove` and show a village walk reddening). If village
+  turns out not to reach it either, that is a finding to report at world scale,
+  not a gap to leave silent — the program never nets the law otherwise.
+
+- **A frozen pin may not be assumed to test the thing its label suggests**
+  [slice-3 implementer disclosure, reproduced]. Neither frozen `DirectorSpec`
+  case tests `charBoundTo`: both assert only that every director affordance is
+  metalevel, and both directors are UNPLACED in the setup — so every embodied
+  action is already withheld by its own location condition and dropping the
+  binding changes nothing they can observe. §9 [D-I8/I9]'s "the director
+  practice's metalevel affordances" is therefore covered by a NATIVE pin
+  (`the_binding_is_what_keeps_a_director_disembodied`, which places the director
+  in the room, asserts the menu is unchanged, AND asserts the converse), not by a
+  frozen one. **Binding on slice 4**, whose ten new modules carry the largest
+  frozen-label count of the stage: a `// H:` label is a claim about PROVENANCE,
+  never about coverage. Where a slice's stated risk rests on a frozen pin, the
+  mutation RED must show THAT pin reddening; if only the shape gate does, the
+  slice owes a native pin and owes saying so.
+
+- **A reported quantity may not overstate its own basis — now enforced, not
+  remembered** [slice-3 review I1, the THIRD recurrence: slice-1 I3 printed the
+  requested step count as the compared count, slice-2 I1 let a record count
+  certify duplication as coverage, slice-3 I1 printed `min-records 3000 cleared`
+  for a sweep whose extension loop never ran]. The mechanism in slice 3: the
+  matrix loop runs the DECLARED seed range as batch 1 and only then consults the
+  floor, so a request already larger than the floor needs ends the sweep itself
+  and the floor stops nothing — and `BudgetStop` had no variant to say so. The
+  requested `0..299` therefore printed a stop that did not happen; measured, bar
+  clears 3,000 records at seed **45** and dm at seed **58**, so 254 and 241 of
+  those seeds were operator-requested surplus. **Corrected rule, three parts, all
+  binding on every later slice:**
+  1. `BudgetStop::RequestedExceedsFloor { floor, cleared_at_seed, surplus_seeds }`
+     — the column names the request when the request is what ended the sweep.
+  2. **The report block CARRIES ITS OWN INVOCATION**, verbatim and
+     shell-pasteable. §1.8's no-hand-typed-numbers rule exists so a reader can
+     reproduce a block; a block whose seed range, cap and floor are invisible in
+     it cannot be reproduced, and this one could not be — the review found the
+     discrepancy only by running the invocation the design documents and getting
+     different numbers.
+  3. **Provenance is carried in the type and re-checked on the rendered block.**
+     `Provenance{Measured,Chosen}` and `Reported<T>`, whose `Display` is the only
+     path a number takes into a report cell, so a number cannot render without
+     its tag; numeric columns are built from a `COLUMNS` table pairing each
+     header with the provenance of every value under it; and
+     `provenance_violations` re-scans the finished block — LIVE in `matrix::run`,
+     not only in the suite — rejecting any untagged number and any numeric column
+     carrying prose. A block that overstates its basis is now a comparator error
+     with a nonzero exit, not a paragraph a reviewer has to catch. Three
+     recurrences is a structural defect; the answer is structure.
