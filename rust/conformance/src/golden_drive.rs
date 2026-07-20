@@ -78,4 +78,24 @@ mod tests {
             "the bar decision sequence must match the frozen golden turn for turn"
         );
     }
+
+    // H: GoldenDriveSpec.hs "village: 21 turns of free play, decision for decision"
+    #[test]
+    fn village_twenty_one_turns_of_free_play() {
+        // `driveLabels 21 (Just playerName) villageWorld`: the human seat idles,
+        // so `you`'s four turns show as `you: -` and the other five villagers
+        // play freely. 21 turns span 3.5 rounds of a 6-member cast, which is
+        // enough for bob's endeavor to reach `fetch`, eve's whisper to land, and
+        // dana's shun — the beat that consumes the die.
+        let mut st = prax_worlds::village::village_world();
+        let got = drive_labels(&mut st, 21, Some(prax_worlds::village::PLAYER_NAME));
+        for (i, line) in got.iter().enumerate() {
+            println!("{i:2}: {line}");
+        }
+        assert_eq!(
+            got,
+            load("village-21"),
+            "the village decision sequence must match the frozen golden turn for turn"
+        );
+    }
 }

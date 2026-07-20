@@ -424,6 +424,32 @@ impl State {
         Ok(())
     }
 
+    /// [`State::perform_outcome`] with the outcome GROUNDED to `binds` first
+    /// (`Prax.Engine.performOutcome` after `Prax.Engine.groundOutcome`): the
+    /// authored template's named variables are substituted, everything else stays
+    /// quantified. `VillageSpec`'s percolation pin fires a `witnessed` template
+    /// with `Actor` bound and lets the `Witness` quantifier find whoever is there.
+    ///
+    /// # Errors
+    /// The compile-time rejections [`State::perform_outcome`] carries.
+    pub fn perform_outcome_grounded(
+        &mut self,
+        o: &Outcome,
+        binds: &[(&str, &str)],
+    ) -> Result<(), WorldError> {
+        let interner = Arc::make_mut(&mut self.interner);
+        let effect = compile_outcome(interner, o)?;
+        let mut b = Bindings::new();
+        for (k, v) in binds {
+            let key = interner.intern(k);
+            let val = Val::Sym(interner.intern(v));
+            b.insert(key, val);
+        }
+        let grounded = ground_effect(interner, &effect, &b);
+        perform_effect(interner, &self.defs, &mut self.rt, &grounded);
+        Ok(())
+    }
+
     /// All actions the named actor can currently perform, across every
     /// instantiated practice and every satisfying binding, evaluated against the
     /// VIEW (`Prax.Engine.possibleActions`). Deterministic: pids in name order,
@@ -696,9 +722,81 @@ impl State {
         let interner = Arc::make_mut(interner);
         grounded_delta_anchors(interner, defs.as_ref(), ga)
     }
+    /// Is `mover` inside `actor`'s PREDICTION SCOPE — the world's own scope
+    /// template, grounded to the pair and queried against the view
+    /// (`Prax.Planner.inScope`)? The one live observable of a world's
+    /// `predictionScope`: the planner's round-walk consults exactly this before
+    /// it will call [`State::predict_move`] at all, so a world whose scope is
+    /// mis-transcribed predicts for the wrong pairs.
+    pub fn in_prediction_scope(&mut self, actor: &Character, mover: &Character) -> bool {
+        let State { interner, defs, rt } = self;
+        let interner = Arc::make_mut(interner);
+        planner::in_scope(interner, defs.as_ref(), rt, actor, mover)
+    }
     /// The improvable-desire table (`Prax.Relevance.improvableDesires`).
     pub fn improvables(&self) -> &[String] {
         &self.defs.compiled.improvables
+    }
+    /// The improvable-desire table RECOMPUTED from this state's own compiled
+    /// tables, rather than read off the field [`State::improvables`] caches
+    /// (`Prax.Relevance.improvableDesires` applied to the state, which the frozen
+    /// `RelevanceSpec` compares against the field to prove the field is not
+    /// stale). The two must always be equal; a difference is a rebuild bug.
+    pub fn improvable_desires_recomputed(&mut self) -> Vec<String> {
+        let State { interner, defs, .. } = self;
+        let interner = Arc::make_mut(interner);
+        let comp = defs.compiled();
+        let fn_pool = crate::relevance::cooked_fn_pool(&comp.fns);
+        crate::relevance::improvable_desires(
+            interner,
+            &comp.practices,
+            &fn_pool,
+            &comp.rules,
+            &comp.desires,
+            defs.desires(),
+        )
+    }
+    /// Would inserting or retracting `sentence` disturb the derived closure
+    /// (`Prax.Relevance.relevantDelta`)? False is the FAST PATH the engine takes:
+    /// the delta commutes with closure, so no reclose is needed. The eviction
+    /// shadow of an `!` insert counts on the delete side.
+    ///
+    /// # Errors
+    /// [`WorldError::TrailingOperator`] / [`WorldError::PathTooLong`] from the
+    /// tokenizer.
+    pub fn relevant_delta(&mut self, sentence: &str) -> Result<bool, WorldError> {
+        let State { interner, defs, .. } = self;
+        let interner = Arc::make_mut(interner);
+        let path = tokenize(interner, sentence)?;
+        let shadows = eviction_shadow_names(interner, &path);
+        Ok(relevant_names(
+            &path.segs,
+            &shadows,
+            &defs.compiled.footprint,
+        ))
+    }
+    /// Is this world continuation-safe — do its axioms admit the grow tier at all
+    /// (`Prax.Relevance.contMonotone`)?
+    pub fn cont_monotone(&self) -> bool {
+        self.defs.compiled.cont_monotone
+    }
+    /// May inserting `sentence` take the continuation (grow) tier rather than a
+    /// full reclose (`Prax.Engine.monotoneToks`, the frozen `monotoneInsert`): the
+    /// world is continuation-safe, the insert evicts nothing (`!`-free), and it
+    /// unifies no negated body pattern (defeats nothing).
+    ///
+    /// # Errors
+    /// [`WorldError::TrailingOperator`] / [`WorldError::PathTooLong`] from the
+    /// tokenizer.
+    pub fn monotone_insert(&mut self, sentence: &str) -> Result<bool, WorldError> {
+        let State { interner, defs, .. } = self;
+        let interner = Arc::make_mut(interner);
+        let path = tokenize(interner, sentence)?;
+        Ok(monotone_toks(
+            &path,
+            defs.compiled.cont_monotone,
+            &defs.compiled.neg_footprint,
+        ))
     }
     /// Test-only: tokenize a sentence through this state's interner (the frozen
     /// RelevanceSpec's `map intern (pathNames s)` — so an anchor-membership check

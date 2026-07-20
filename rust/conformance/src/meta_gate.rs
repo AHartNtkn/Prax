@@ -54,6 +54,20 @@ mod gate {
         "ConversationSpec.hs",
         "ArcSpec.hs",
         "WitnessSpec.hs",
+        // S7 slice 4 (village):
+        "VillageSpec.hs",
+        "ProjectSpec.hs",
+        "RumorSpec.hs",
+        "ReputeSpec.hs",
+        "DeceitSpec.hs",
+        "PersonaSpec.hs",
+        "DebtSpec.hs",
+        "CoerceSpec.hs",
+        "BlackmailSpec.hs",
+        "ConfessionSpec.hs",
+        // Per-file: GoldenDriveSpec's three world labels span slices 2-4, but no
+        // stage boundary intervenes (S7 design §5).
+        "GoldenDriveSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {

@@ -108,7 +108,7 @@ pub(crate) fn candidate_actions(
 /// against the view; the empty template means everyone (an empty conjunction
 /// yields the seed binding, non-null). [S-C1] The template is the already-compiled
 /// `Compiled.scope`, never re-cooked.
-fn in_scope(
+pub(crate) fn in_scope(
     interner: &mut Interner,
     defs: &Defs,
     rt: &Runtime,
