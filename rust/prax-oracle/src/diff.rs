@@ -14,6 +14,15 @@
 //! `expiries` gets the same tree treatment [M3]: it is keyed by exact labeled
 //! path, so a lifetime bug produces exactly the wide, structured difference the
 //! tree exists for.
+//!
+//! Every OTHER structured field — worldshape's `axioms`, `practices`, `cast`,
+//! `functions`, `schedule` — gets [`value_diff`]: the two values are descended
+//! together and only the DIFFERING NODES are printed, each under a path that
+//! names the practice, action or axiom it sits in. §2 promises "every port error
+//! becomes a one-line structural diff before a turn runs"; a truncated head
+//! prefix of two multi-KB blobs is not that, and is worst for exactly the errors
+//! that hide deepest — a transposed atom inside one rule body leaves both
+//! prefixes byte-identical.
 
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -232,10 +241,109 @@ pub fn render_tree(paths: &[String], cap: usize) -> Vec<String> {
     out
 }
 
+/// One localized difference inside a structured (object/array) field value: the
+/// path to the differing node and the two leaf values.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ValueDelta {
+    /// The path from the field root — object keys by name, array elements by
+    /// index AND by whatever names them (an action's `label`, an axiom's `then`).
+    pub path: String,
+    /// The frozen node, or `None` when the frozen side has nothing there.
+    pub frozen: Option<Value>,
+    /// The Rust node, or `None` when the Rust side has nothing there.
+    pub rust: Option<Value>,
+}
+
+/// Descend two structured values and report the DIFFERING NODES, not the two
+/// whole values.
+///
+/// A fixed-length head prefix of a JSON blob is a zero-information diff for
+/// exactly the bug class this gate exists to catch: transpose one atom inside one
+/// rule body and both sides print the same 400 leading bytes, the same byte
+/// count, and the operator is told they differ. `facts`/`expiries` escape that
+/// through §1.5's path tree; worldshape's `axioms`, `practices` and `cast` arrays
+/// had nothing. This is their treatment: recurse through objects by key and
+/// arrays by index until the values stop being containers, and report the leaf.
+/// It gets monotonically more valuable as the worlds get bigger — village's
+/// `endeavor` generator emits a many-KB practice array whose "generated label
+/// order and guard order are golden-visible" (§3.3).
+pub fn value_diff(frozen: &Value, rust: &Value) -> Vec<ValueDelta> {
+    let mut out = Vec::new();
+    walk_values(String::new(), Some(frozen), Some(rust), &mut out);
+    out
+}
+
+fn walk_values(path: String, a: Option<&Value>, b: Option<&Value>, out: &mut Vec<ValueDelta>) {
+    if a == b {
+        return;
+    }
+    match (a, b) {
+        (Some(Value::Object(x)), Some(Value::Object(y))) => {
+            let keys: BTreeSet<&String> = x.keys().chain(y.keys()).collect();
+            for k in keys {
+                walk_values(format!("{path}.{k}"), x.get(k), y.get(k), out);
+            }
+        }
+        (Some(Value::Array(x)), Some(Value::Array(y))) => {
+            for i in 0..x.len().max(y.len()) {
+                let (xi, yi) = (x.get(i), y.get(i));
+                // Name the element by whatever names it on the side that has it,
+                // so the reader sees "the `shun` action" rather than "index 1".
+                let named = xi.or(yi).and_then(element_name);
+                let step = named.map_or_else(
+                    || format!("[{i}]"),
+                    |n| format!("[{i} {n}]"),
+                );
+                walk_values(format!("{path}{step}"), xi, yi, out);
+            }
+        }
+        _ => out.push(ValueDelta {
+            path: if path.is_empty() {
+                "(whole value)".to_owned()
+            } else {
+                path
+            },
+            frozen: a.cloned(),
+            rust: b.cloned(),
+        }),
+    }
+}
+
+/// What names an array element, when anything does: an action or practice
+/// `label`/`name`, or an axiom's head list. Purely for the report.
+fn element_name(v: &Value) -> Option<String> {
+    let o = v.as_object()?;
+    for k in ["label", "name", "id", "then"] {
+        if let Some(x) = o.get(k) {
+            return Some(format!("{k}={x}"));
+        }
+    }
+    None
+}
+
 /// Render one field difference for the report.
 pub fn render_field(fd: &FieldDiff) -> Vec<String> {
     let mut out = vec![format!("field `{}`:", fd.field)];
     match &fd.paths {
+        None if fd.frozen.is_object()
+            || fd.frozen.is_array()
+            || fd.rust.is_object()
+            || fd.rust.is_array() =>
+        {
+            let deltas = value_diff(&fd.frozen, &fd.rust);
+            out.push(format!(
+                "  {} differing node(s), localized:",
+                deltas.len()
+            ));
+            for d in deltas.iter().take(TREE_CAP) {
+                out.push(format!("    at {}", d.path));
+                out.push(format!("      frozen: {}", side(d.frozen.as_ref())));
+                out.push(format!("      rust  : {}", side(d.rust.as_ref())));
+            }
+            if deltas.len() > TREE_CAP {
+                out.push(format!("    … and {} more", deltas.len() - TREE_CAP));
+            }
+        }
         None => {
             out.push(format!("  frozen: {}", truncate(&fd.frozen)));
             out.push(format!("  rust  : {}", truncate(&fd.rust)));
@@ -272,6 +380,12 @@ pub fn render_field(fd: &FieldDiff) -> Vec<String> {
         }
     }
     out
+}
+
+/// One side of a localized delta: the node, or a plain statement that the side
+/// has nothing there (an absent node and a null node are different findings).
+fn side(v: Option<&Value>) -> String {
+    v.map_or_else(|| "(absent)".to_owned(), truncate)
 }
 
 fn truncate(v: &Value) -> String {
@@ -334,6 +448,95 @@ mod tests {
         let a = json!({"t": 1, "walkSeed": 9});
         let b = json!({"t": 1});
         assert_eq!(diff_records(&a, &b).field_names(), vec!["walkSeed"]);
+    }
+
+    #[test]
+    fn a_transposed_atom_in_one_rule_body_localizes_to_that_atom() {
+        // [I1]. This is the reviewer's injected mutation in miniature: the
+        // grandparent rule's first body atom transposed `parent.G.P` →
+        // `parent.P.G`, every axiom HEAD identical. Under a truncated head prefix
+        // both sides printed the same 400 bytes and the same byte count. The
+        // structural diff has to name the axiom and show the two atoms.
+        let axioms = |g: &str| {
+            json!([
+                {"when": [["Match", "married.A.B"]], "then": ["married.B.A"]},
+                {"when": [["Match", g], ["Match", "parent.P.C"]], "then": ["grandparent.G.C"]}
+            ])
+        };
+        let d = diff_records(
+            &json!({"axioms": axioms("parent.G.P")}),
+            &json!({"axioms": axioms("parent.P.G")}),
+        );
+        let lines = render_field(d.get("axioms").expect("axioms differ"));
+        for l in &lines {
+            println!("{l}");
+        }
+        assert!(
+            lines.iter().any(|l| l.contains("1 differing node(s)")),
+            "exactly one node differs: {lines:?}"
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains(r#"grandparent.G.C"#) && l.contains("when[0][1]")),
+            "the path must name the axiom by its head and reach the atom: {lines:?}"
+        );
+        assert!(
+            lines.iter().any(|l| l.contains("parent.G.P")),
+            "the frozen atom must appear: {lines:?}"
+        );
+        assert!(
+            lines.iter().any(|l| l.contains("parent.P.G")),
+            "the rust atom must appear: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn a_node_present_on_one_side_only_is_reported_as_absent_not_as_null() {
+        // A dropped axiom arm and an axiom whose body is JSON `null` are
+        // different port errors; the diff must not render them the same way.
+        let d = diff_records(
+            &json!({"axioms": [{"then": ["a"]}, {"then": ["b"]}]}),
+            &json!({"axioms": [{"then": ["a"]}]}),
+        );
+        let lines = render_field(d.get("axioms").expect("axioms differ"));
+        for l in &lines {
+            println!("{l}");
+        }
+        assert!(
+            lines.iter().any(|l| l.contains("rust  : (absent)")),
+            "{lines:?}"
+        );
+        assert!(
+            lines.iter().any(|l| l.contains(r#"then=["b"]"#)),
+            "the missing arm is named by its head: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn the_structural_diff_caps_its_output_and_says_how_many_it_hid() {
+        let wide = |k: usize| {
+            json!({
+                "practices": (0..40)
+                    .map(|i| json!({"label": format!("act{i}"), "when": [["Match", format!("a{}", i * k)]]}))
+                    .collect::<Vec<_>>()
+            })
+        };
+        let d = diff_records(&wide(1), &wide(2));
+        let lines = render_field(d.get("practices").expect("practices differ"));
+        assert!(lines[1].contains("39 differing node(s)"), "{:?}", lines[1]);
+        assert!(
+            lines.iter().any(|l| l.contains("… and 27 more")),
+            "the report is capped: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn a_scalar_field_still_prints_both_sides_plainly() {
+        let d = diff_records(&json!({"action": "a: brag"}), &json!({"action": "a: wait"}));
+        let lines = render_field(d.get("action").expect("action differs"));
+        assert_eq!(lines[1], r#"  frozen: "a: brag""#);
+        assert_eq!(lines[2], r#"  rust  : "a: wait""#);
     }
 
     #[test]
