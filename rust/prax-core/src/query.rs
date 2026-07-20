@@ -89,6 +89,65 @@ pub enum Condition {
     Exists(Vec<Condition>),
 }
 
+// Free leaf constructors — the authoring surface's ergonomic half (S4 review
+// M1: every consumer was reinventing these locally; added before S7's 20
+// vocab modules multiply the idiom). `impl Into<String>` so string literals
+// author directly.
+
+/// A bare sentence match — [`Condition::Match`].
+pub fn matches(s: impl Into<String>) -> Condition {
+    Condition::Match(s.into())
+}
+/// Negation as failure — [`Condition::Not`].
+pub fn not_(s: impl Into<String>) -> Condition {
+    Condition::Not(s.into())
+}
+/// Equality/assignment — [`Condition::Eq`].
+pub fn eq(a: impl Into<String>, b: impl Into<String>) -> Condition {
+    Condition::Eq(a.into(), b.into())
+}
+/// Inequality — [`Condition::Neq`].
+pub fn neq(a: impl Into<String>, b: impl Into<String>) -> Condition {
+    Condition::Neq(a.into(), b.into())
+}
+/// Numeric comparison — [`Condition::Cmp`].
+pub fn cmp(op: CmpOp, a: impl Into<String>, b: impl Into<String>) -> Condition {
+    Condition::Cmp(op, a.into(), b.into())
+}
+/// Integer arithmetic binding — [`Condition::Calc`].
+pub fn calc(
+    result: impl Into<String>,
+    op: CalcOp,
+    a: impl Into<String>,
+    b: impl Into<String>,
+) -> Condition {
+    Condition::Calc(result.into(), op, a.into(), b.into())
+}
+/// Set-size binding — [`Condition::Count`].
+pub fn count(result: impl Into<String>, set: impl Into<String>) -> Condition {
+    Condition::Count(result.into(), set.into())
+}
+/// Nested-query set capture — [`Condition::Subquery`].
+pub fn subquery(
+    set: impl Into<String>,
+    find: Vec<String>,
+    where_: Vec<Condition>,
+) -> Condition {
+    Condition::Subquery { set: set.into(), find, where_ }
+}
+/// Disjunction — [`Condition::Or`].
+pub fn or_(clauses: Vec<Vec<Condition>>) -> Condition {
+    Condition::Or(clauses)
+}
+/// `¬∃` over a conjunction — [`Condition::Absent`].
+pub fn absent(conds: Vec<Condition>) -> Condition {
+    Condition::Absent(conds)
+}
+/// Boolean `∃` over a conjunction — [`Condition::Exists`].
+pub fn exists(conds: Vec<Condition>) -> Condition {
+    Condition::Exists(conds)
+}
+
 /// Universal quantification `∀ x. guard(x) → body(x)`, as "there is no
 /// `guard`-binding for which `body` fails" (`Prax.Query.forAll`).
 pub fn for_all(guard: Vec<Condition>, body: Vec<Condition>) -> Condition {

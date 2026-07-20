@@ -19,7 +19,7 @@ comparator.
 | S1 | Sym + Db + EL | DONE | [S01](reports/S01-sym-db-el.md) |
 | S2 | Query (one compiled path) | DONE | [S02](reports/S02-query.md) |
 | S3 | Derive + view (design-heavy) | DONE | [S03](reports/S03-derive.md) |
-| S4 | Types + Engine + builder API (design-heavy) | IN PROGRESS | — |
+| S4 | Types + Engine + builder API (design-heavy) | DONE | [S04](reports/S04-engine.md) |
 | S5 | Loop + Schedule + Rng (stream landed S4) | — | — |
 | S6 | Planner + Minds + Relevance + Sight (design-heavy; fidelity summit) | — | — |
 | S7 | Vertical world slices: Feud → Audience → Intrigue → Bar → Village | — | — |
