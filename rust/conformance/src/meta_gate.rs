@@ -45,6 +45,7 @@ mod gate {
         "CoreSpec.hs",
         "EmotionSpec.hs",
         "BeliefsSpec.hs",
+        "IntrigueSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {

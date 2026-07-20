@@ -37,6 +37,7 @@ pub fn build(name: &str) -> Result<State, String> {
         "probe" => Ok(crate::probe::probe_world()),
         "feud" => Ok(prax_worlds::feud::feud_world()),
         "bigfeud" => Ok(prax_worlds::feud::big_feud(BIG_FEUD_N)),
+        "intrigue" => Ok(prax_worlds::intrigue::intrigue_world()),
         other => match slice_of(other) {
             Some(slice) => Err(format!(
                 "world `{other}` is not ported to Rust yet — it lands in S7 slice {slice}. \
@@ -56,6 +57,10 @@ pub fn idler(name: &str) -> Option<&'static str> {
     match name {
         "probe" => Some(crate::probe::PROBE_IDLER),
         "feud" | "bigfeud" => Some(prax_worlds::feud::PLAYER_NAME),
+        // NOT `intrigue`: the frozen `GoldenDriveSpec` drives it with
+        // `driveLabels 12 Nothing`, so marcus is planner-driven like everyone
+        // else. An idler here would make the trace differential a different walk
+        // from the golden it has to agree with.
         "village" => Some("you"),
         _ => None,
     }
@@ -63,5 +68,5 @@ pub fn idler(name: &str) -> Option<&'static str> {
 
 /// Every world the Rust side can currently build.
 pub fn ported() -> Vec<&'static str> {
-    vec!["probe", "feud", "bigfeud"]
+    vec!["probe", "feud", "bigfeud", "intrigue"]
 }

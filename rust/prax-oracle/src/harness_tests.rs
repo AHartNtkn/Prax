@@ -513,3 +513,95 @@ fn render(o: &Outcome) -> Vec<String> {
         _ => vec![o.cell().to_owned()],
     }
 }
+
+// The standing net for S7 slice 2 (intrigue) — the resident core of the slice's
+// matrix, on the same terms as slice 1's: small, fast enough to live in
+// `cargo test`, and enough that a later `prax_core` change that breaks the
+// intrigue port fails the suite instead of waiting for a hand-run matrix.
+//
+// Slice 2 is the first slice whose walks can END: `ending.E` freezes the drama
+// and stops the randtrace. That stop is the reason the seed sweep here also
+// asserts the terminal record's REASON rather than only that the streams agree —
+// two walks that both stopped on `cap` would agree about a rule neither ran.
+
+fn intrigue_spec(walk: Walk, steps: i64, seed: Option<i64>) -> RunSpec {
+    RunSpec {
+        world: "intrigue".to_owned(),
+        walk,
+        steps,
+        seed,
+        die_seed: None,
+        depth: 2,
+        idle: worlds::idler("intrigue").map(str::to_owned),
+        mode: Mode::State,
+        emit: Emit::matrix(),
+    }
+}
+
+#[test]
+fn worldshape_agrees_on_the_intrigue_world() {
+    let (green, lines) = shape_compare("intrigue").expect("both sides emit a worldshape");
+    for l in &lines {
+        println!("{l}");
+    }
+    assert!(
+        green,
+        "intrigue: the two transcriptions of the world disagree"
+    );
+}
+
+#[test]
+fn the_intrigue_trace_agrees_record_for_record() {
+    let reg = load_register().expect("the register loads");
+    let (o, _) = run_one(&intrigue_spec(Walk::Trace, 24, None), &reg).expect("the run completes");
+    println!("intrigue trace: {}", o.cell());
+    assert!(
+        matches!(o, Outcome::Clean { .. }),
+        "intrigue trace diverged: {:?}",
+        render(&o)
+    );
+}
+
+#[test]
+fn the_intrigue_randtrace_agrees_over_a_seed_sweep() {
+    let reg = load_register().expect("the register loads");
+    for seed in 0..4 {
+        let (o, _) = run_one(&intrigue_spec(Walk::Randtrace, 50, Some(seed)), &reg)
+            .expect("the run completes");
+        println!("intrigue randtrace seed {seed}: {}", o.cell());
+        assert!(
+            matches!(o, Outcome::Clean { .. }),
+            "intrigue seed {seed} diverged: {:?}",
+            render(&o)
+        );
+    }
+}
+
+/// THE ENDING STOP, observed rather than assumed. `ending.E` is slice 2's new
+/// terminal rule; a differential that only checks the two streams for agreement
+/// cannot tell "both walks stopped at the ending" from "neither walk ever
+/// reached one". So this reads the terminal record on BOTH sides and asserts the
+/// reason IS the ending — and, since `stop_record` carries which ending, that
+/// they name the same one.
+#[test]
+fn the_randtrace_walk_stops_at_the_ending_on_both_sides() {
+    for seed in 0..4 {
+        let spec = intrigue_spec(Walk::Randtrace, 50, Some(seed));
+        let frozen = crate::drive_frozen::run_jsonl(&spec.frozen_args(spec.mode))
+            .expect("the frozen randtrace");
+        let rust = crate::rust_stream(&spec).expect("the rust randtrace");
+        let f_end = frozen.last().expect("a terminal record");
+        let r_end = rust.last().expect("a terminal record");
+        println!("intrigue seed {seed}: frozen {f_end}\n                rust   {r_end}");
+        assert_eq!(
+            f_end["reason"], "ending",
+            "seed {seed}: the frozen walk must stop because an ending was reached, not on cap \
+             — otherwise this slice's new stop rule is never exercised"
+        );
+        assert_eq!(f_end, r_end, "seed {seed}: the terminal records must agree");
+        assert!(
+            f_end["ending"].is_string(),
+            "seed {seed}: the stop record names the ending reached"
+        );
+    }
+}
