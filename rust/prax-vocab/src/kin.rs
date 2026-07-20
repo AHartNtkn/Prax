@@ -53,8 +53,12 @@ pub fn kin_axioms() -> Vec<Axiom> {
 /// author's choice per wedding — world content, not module policy.
 ///
 /// The frozen guard checks `joiner` and `spouse` only; `faction` is checked by
-/// the [`joins`] call this builds, which here runs eagerly rather than when the
-/// outcome is forced.
+/// the [`joins`] call this builds, which here runs EAGERLY rather than when the
+/// outcome is forced — DIV-3, stated in full at the [`crate::faction`] module
+/// header and pinned by `wed_rejects_a_bad_faction_at_construction`. Every
+/// consumer that forces the membership path sees identical behaviour; a
+/// spine-only observer (frozen `KinSpec.hs:122-127` takes `length (wed …)`) does
+/// not.
 pub fn wed(joiner: &str, faction: &str, spouse: &str) -> Result<Vec<Outcome>, WorldError> {
     if bad(joiner) || bad(spouse) {
         return Err(WorldError::NotASinglePathSegment {
@@ -303,6 +307,35 @@ mod tests {
                 "wed {joiner:?} {spouse:?} must be a loud rejection"
             );
         }
+    }
+
+    #[test]
+    fn wed_rejects_a_bad_faction_at_construction() {
+        // DIV-3, the eagerness deviation, pinned at the input that exhibits it.
+        // The frozen `wed` guards `joiner` and `spouse` itself and leaves the
+        // FACTION to the `memberPath` inside the `Insert`, whose `error` fires
+        // only when that String is forced — so `length (wed "ana" "b.ad" "cass")`
+        // does not raise in Haskell (`KinSpec.hs:122-127` is exactly such an
+        // observer). Rust's `joins` returns `Result`, so the rejection happens at
+        // construction. That is the whole of the deviation, and it is the
+        // behaviour the world author actually gets, so it is what must be pinned:
+        // a declared behaviour change with no pin is a declared behaviour change
+        // nobody has ever observed.
+        for faction in ["b.ad", "b!ad", ""] {
+            let got = wed("ana", faction, "cass");
+            assert!(
+                matches!(got, Err(WorldError::NotASinglePathSegment { .. })),
+                "wed with faction {faction:?} rejects at construction, not when the outcome is \
+                 forced, got {got:?}"
+            );
+        }
+        // …and a good faction still builds both outcomes, in order.
+        let os = wed("ana", "yard", "cass").expect("a well-formed wedding");
+        assert_eq!(
+            os,
+            vec![insert("married.ana.cass"), insert("member.ana!yard")],
+            "the marriage fact comes first, then the membership overwrite"
+        );
     }
 
     // H: KinSpec.hs "wed: inserts the marriage fact and overwrites the joiner's membership"

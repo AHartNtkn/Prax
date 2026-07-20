@@ -99,6 +99,52 @@ corpora regenerate byte-identically across this change. The divergence is
 purely about what the two engines ACCEPT: everything the frozen engine accepts
 and the Rust also accepts, the two agree on bit for bit.
 
+## DIV-3 (S7): the vocab combinators' name guards are EAGER, where the frozen ones fire only when the built sentence is forced
+
+**What**: `Prax.Faction.memberPath` guards its two names with `error`, and
+`Prax.Faction.joins who faction = Insert (memberPath who faction)` puts that
+guard inside a lazily-forced `String`. So the frozen guard fires whenever some
+consumer forces the path — and NEVER for a consumer that forces only the list
+spine. `Prax.Kin.wed` inherits this exactly: it checks `joiner` and `spouse`
+itself and leaves `faction` to the `joins` it builds. Both observations verified
+on the frozen engine at the same input:
+
+```
+HASKELL length (wed "ana" "b.ad" "cass") -> 2
+HASKELL show   (wed "ana" "b.ad" "cass") -> ERROR: Faction: names must be nonempty
+        single path segments (no '.' or '!'): ("ana","b.ad")
+```
+
+The frozen `Prax.KinSpec` (KinSpec.hs:122-127) contains exactly such a
+spine-only observer: it asserts on `length (wed …)`.
+
+**What the Rust does**: `member_path`, `joins` and `wed` return
+`Result<_, WorldError>`, so the rejection happens at CONSTRUCTION —
+`wed("ana", "b.ad", "cass")` is `Err(NotASinglePathSegment)` with no forcing
+involved.
+
+**Spec authority**: the guard exists to stop a malformed name being spliced into
+a built path (`member.<who>!<faction>`), which is a construction-time property of
+authored data; the program's established posture is that such guards fire at the
+door (DIV-2 makes the same argument for character names, and the frozen engine
+itself guards schedule-rule names at construction). A guard whose firing depends
+on which observer happens to force the value is not a guard on the data — it is a
+guard on the consumer. Rust also has no lazy `String` to hang an `error` inside:
+the alternative would be a panicking accessor, which the rewrite forbids
+outright.
+
+**Fiction consequence**: none. Every real consumer forces the path (that is what
+performing an outcome does), and for every such consumer the two engines are
+identical: same guard, same input, same rejection. The difference is observable
+only by an observer that never looks at the value it is guarding.
+
+**Comparator posture**: no suppression. The deviation cannot appear in a trace —
+a world reaching a turn has already forced every setup outcome, so a world whose
+`wed` carries a bad faction never reaches the comparator on either side; it fails
+to build on one and fails at its first force on the other. Pinned natively by
+`kin::tests::wed_rejects_a_bad_faction_at_construction`, which asserts the Rust
+behaviour at the exact input the frozen spec observes spine-only.
+
 ## Recorded posture (not a DIV): the ⊥-witness is selected by name order
 
 When a closure round forces two or more distinct values into one exclusive slot,

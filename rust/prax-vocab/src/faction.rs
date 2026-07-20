@@ -10,6 +10,16 @@
 //! it can do, so a one-character drift here renders plausibly and misbehaves
 //! silently (S7 design §3.4). Every guard the frozen module raises with `error`
 //! is a [`WorldError`] here, at the same input and in the same order.
+//!
+//! **One deviation, module-wide: the guards are EAGER.** Frozen `joins who
+//! faction = Insert (memberPath who faction)` holds `memberPath`'s guard inside a
+//! lazily-forced `String`, so a bad name is raised by whoever forces the outcome
+//! — or never, by an observer that only forces the list spine. The Rust builders
+//! return `Result` and so raise at CONSTRUCTION. Every consumer that forces the
+//! path sees the identical behaviour; a spine-only observer does not, and the
+//! frozen spec contains one (`KinSpec.hs:122-127` uses `length (wed …)`).
+//! Recorded as DIV-3 in `docs/rewrite/DIVERGENCES.md` and pinned at [`joins`] and
+//! at [`crate::kin::wed`], which inherits it through the [`joins`] it builds.
 
 use prax_core::error::WorldError;
 use prax_core::interner::is_variable_name;
@@ -40,6 +50,10 @@ pub fn member_path(who: &str, faction: &str) -> Result<String, WorldError> {
 }
 
 /// Join (or defect to, or marry into) a faction: one exclusion overwrite.
+///
+/// EAGER where the frozen `joins` is lazy — the module header's DIV-3 deviation,
+/// stated here because this is where it originates and everything else in the
+/// slice inherits it from this call.
 pub fn joins(who: &str, faction: &str) -> Result<Outcome, WorldError> {
     Ok(insert(member_path(who, faction)?))
 }
