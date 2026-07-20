@@ -8,7 +8,7 @@
 //! and that S6 seam cleanly: [`advance`] selects and returns the actor; S6 layers
 //! deliberation on top.
 
-use crate::engine::{GroundedAction, State};
+use crate::engine::{EffectStep, GroundedAction, State};
 use crate::planner::Intention;
 use crate::types::Character;
 
@@ -69,13 +69,26 @@ pub fn advance(st: &mut State) -> Character {
 /// full grounded equality — a movement pick is rarely want-bearing yet must expire
 /// once acted, and a stale grounding is never performed.
 pub fn npc_act(st: &mut State, depth: i32, actor: &Character) -> Option<GroundedAction> {
+    npc_act_logged(st, depth, actor, &mut |_| {})
+}
+
+/// [`npc_act`] with the per-effect observation the differential oracle's DRAW
+/// LOG needs ([S7 design S-C5]) — see [`State::perform_action_logged`]. There is
+/// ONE implementation: [`npc_act`] delegates here with a no-op observer, so the
+/// instrumented turn can never take a different decision than the plain one.
+pub fn npc_act_logged(
+    st: &mut State,
+    depth: i32,
+    actor: &Character,
+    observe: &mut dyn FnMut(EffectStep),
+) -> Option<GroundedAction> {
     let name = actor.name.clone();
     let sig = st.motive_signature(actor);
     if let Some(intent) = st.intention_of(&name)
         && intent.basis == sig
         && still_offered(st, actor, &intent.act)
     {
-        return act(st, intent.act);
+        return act(st, intent.act, observe);
     }
     let chosen = st.pick_action(depth, actor);
     st.set_intention(
@@ -85,7 +98,7 @@ pub fn npc_act(st: &mut State, depth: i32, actor: &Character) -> Option<Grounded
             basis: sig,
         },
     );
-    act(st, chosen)
+    act(st, chosen, observe)
 }
 
 /// The standing action must still be offered, by full grounded equality
@@ -97,9 +110,13 @@ fn still_offered(st: &mut State, actor: &Character, action: &Option<GroundedActi
     }
 }
 
-fn act(st: &mut State, chosen: Option<GroundedAction>) -> Option<GroundedAction> {
+fn act(
+    st: &mut State,
+    chosen: Option<GroundedAction>,
+    observe: &mut dyn FnMut(EffectStep),
+) -> Option<GroundedAction> {
     if let Some(ga) = &chosen {
-        st.perform_action(ga);
+        st.perform_action_logged(ga, observe);
     }
     chosen
 }

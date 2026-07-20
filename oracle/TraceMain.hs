@@ -50,7 +50,7 @@ import           Prax.Engine (possibleActions, performAction, currentTurn,
                               performOutcome, groundOutcome, definePractice,
                               definePractices, defineFunctions, setAxioms,
                               setCharacters, setDesires, setSchedule, seedDie)
-import           Prax.Rng (rollStep)
+import           Prax.Rng (rollStep, draw)
 import           Prax.Loop (advance, npcAct, runNpcTicks)
 import           Prax.TypeCheck (TypeError (..), typeCheck)
 import           Prax.EL (meet, leq)
@@ -75,6 +75,7 @@ import qualified Prax.Worlds.Village as Village
 -- state and its player name (the driveLabels idler for the golden worlds).
 worldNamed :: String -> Maybe (PraxState, String)
 worldNamed n = case n of
+  "probe"    -> Just (probeWorld,            "quill")
   "bar"      -> Just (Bar.barWorld,          Bar.playerName)
   "dm"       -> Just (Bar.barDirectorWorld,  Bar.directorName)
   "intrigue" -> Just (Intrigue.intrigueWorld, Intrigue.playerName)
@@ -84,8 +85,96 @@ worldNamed n = case n of
   "village"  -> Just (Village.villageWorld,  Village.playerName)
   _          -> Nothing
 
+-- | The SHIPPED worlds. @probe@ is deliberately absent: it is the differential
+-- harness's own self-test world, not content, and the fixture corpora
+-- ('deriveFixture') enumerate this list.
 allWorldNames :: [String]
 allWorldNames = ["bar", "dm", "intrigue", "play", "feud", "audience", "village"]
+
+-- probe: the harness's self-test world ----------------------------------------
+--
+-- The S7 comparator's own correctness net. Slice 0 ships the harness BEFORE any
+-- Rust world exists, so without this there would be no end-to-end run at all —
+-- drive_frozen, drive_rust, the record builder, the walk driver, worldshape's
+-- encoder and the classifier would all ship unexercised on real streams.
+--
+-- It is a HARNESS fixture, not content: it makes no coverage claim about the
+-- engine (that is what the four slices' worlds are for), and it is excluded
+-- from 'allWorldNames' so no corpus, matrix or report can mistake it for a
+-- shipped world. Its one job is to be transcribed IDENTICALLY on both sides —
+-- so it names every 'Condition' and every 'Outcome' constructor at least once,
+-- which is exactly what the canonical encoder must agree on.
+probeWorld :: PraxState
+probeWorld = perf
+  [ Insert "char.vera", Insert "char.otto", Insert "char.quill"
+  , Insert "dusty.here"
+  , Insert "practice.greet.world", Insert "practice.vigil.tower" ]
+  (seedDie 7
+    (setSchedule [dustRule]
+      (setDesires [curious]
+        (setCharacters [vera, otto, quill]
+          (setAxioms probeAxioms
+            (defineFunctions [noteFn]
+              (definePractices [greetP, vigilP] emptyState)))))))
+    { sorts = [("place", ["here", "there"])]
+    , predictionScope = [ Match "char.Actor", Match "char.Witness" ] }
+  where
+    vera  = (character "vera")
+      { charWants = [ Want [ Match "greeted.vera.otto" ] 5 ]
+      , charDesires = ["curious"] }
+    otto  = (character "otto")
+      { charWants = [ Want [ Match "bragged.otto" ] 3
+                    , Want [ Match "impressed.otto.vera" ] (-2) ] }
+    quill = (character "quill") { charBoundTo = Just "vigil" }
+    curious = Desire "curious" (Want [ Match "tallied.Owner" ] 4)
+    dustRule = ScheduleRule
+      { srName = "dust", srPeriod = 2
+      , srBody = [ ([ Not "dusty.here" ], [ Insert "dusty.here" ]) ] }
+    noteFn = Function "note" ["Who"]
+      [ FnCase [ Match "char.Who" ] [ Insert "noted.Who" ]
+      , FnCase [] [ Insert "noted.nobody" ] ]
+
+probeAxioms :: [Axiom]
+probeAxioms =
+  [ Axiom [ Match "greeted.X.Y" ] [ "acquainted.X.Y" ]
+  , Axiom [ Match "acquainted.X.Y" ] [ "acquainted.Y.X" ] ]
+
+greetP :: Practice
+greetP = practice
+  { practiceId = "greet", practiceName = "[G] greets", roles = ["G"]
+  , dataFacts = [ "tone.warm", "tone.curt!rude" ]
+  , initOutcomes = [ Insert "practice.greet.G.open" ]
+  , actions =
+      [ action "[Actor]: greet [Other]"
+          [ Match "char.Other", Neq "Actor" "Other", Not "greeted.Actor.Other" ]
+          [ Insert "greeted.Actor.Other", InsertFor 2 "fresh.Actor.Other" ]
+      , action "[Actor]: brag"
+          [ Not "bragged.Actor" ]
+          ( Insert "bragged.Actor"
+            : draw 1 2 [ Match "char.Other", Neq "Other" "Actor" ]
+                       [ Insert "impressed.Other.Actor" ] )
+      , action "[Actor]: tally the room"
+          [ Subquery { subSet = "Cs", subFind = ["C"]
+                     , subWhere = [ Match "char.C" ] }
+          , Count "N" "Cs", Cmp Gte "N" "2", Calc "M" Add "N" "1"
+          , Not "tallied.Actor" ]
+          [ Insert "tallied.Actor!M", Call "note" ["Actor"] ]
+      , action "[Actor]: sweep"
+          [ Or [ [ Match "dusty.here" ], [ Match "muddy.here" ] ]
+          , Absent [ Match "swept.Actor" ] ]
+          [ ForEach [ Match "char.C" ] [ Insert "saw.C.sweep" ]
+          , Insert "swept.Actor", Delete "dusty.here" ]
+      , action "[Actor]: wait about" [] []
+      ] }
+
+vigilP :: Practice
+vigilP = practice
+  { practiceId = "vigil", practiceName = "[V] keeps vigil", roles = ["V"]
+  , actions =
+      [ action "[Actor]: keep watch"
+          [ Eq "Actor" "vera", Exists [ Match "char.C" ], Not "watching.Actor" ]
+          [ Insert "watching.Actor" ]
+      ] }
 
 -- Argument helpers -----------------------------------------------------------
 
@@ -286,8 +375,10 @@ boundaryLogJSON stPre stPost = object
       [ object [ "path" .= s, "due" .= v
                , "existed_before" .= exists s (db stPre)
                , "present_after"  .= exists s (db stPost) ]
-      | (k, v) <- Map.toList (expiries stPre), v <= now
-      , let s = tokensToSentence k ] ]
+      -- Sorted by rendered path: the queue is genuinely unordered (the frozen
+      -- Map iterates in intern-id order), so the canon's name-sort applies.
+      | (s, v) <- sortOn fst [ (tokensToSentence k, v)
+                             | (k, v) <- Map.toList (expiries stPre), v <= now ] ] ]
   where now = currentTurn stPre + 1
 
 -- trace ----------------------------------------------------------------------

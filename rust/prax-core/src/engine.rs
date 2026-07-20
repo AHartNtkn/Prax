@@ -66,6 +66,46 @@ pub struct GroundedAction {
     pub label: String,
 }
 
+/// One top-level effect's execution, as observed by
+/// [`State::perform_action_logged`] — the differential oracle's draw log.
+/// Reported only for effects whose subtree can draw.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectStep {
+    /// The effect's index in the action's outcome list.
+    pub index: usize,
+    /// Every `Roll`'s authored odds in this effect's subtree, in traversal order.
+    pub odds: Vec<(i64, i64)>,
+    /// The stream position before the effect ran.
+    pub rng_before: Option<i64>,
+    /// The stream position after it ran (a draw ALWAYS advances it).
+    pub rng_after: Option<i64>,
+    /// Did the effect change the base db? The instrumented hit/miss signal.
+    pub changed: bool,
+}
+
+/// Every `Roll`'s odds in an effect subtree, in traversal order.
+fn roll_odds(e: &Effect) -> Vec<(i64, i64)> {
+    let mut out = Vec::new();
+    fn go(e: &Effect, out: &mut Vec<(i64, i64)>) {
+        match e {
+            Effect::Roll(n, d, _, os) => {
+                out.push((*n, *d));
+                for o in os {
+                    go(o, out);
+                }
+            }
+            Effect::ForEach(_, os) => {
+                for o in os {
+                    go(o, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    go(e, &mut out);
+    out
+}
+
 /// The authored sources retained (typecheck/persist/diagnostics) plus the
 /// compiled forms, rebuilt WHOLESALE by [`recompile`]. Split out of [`State`] so
 /// a fork shares it by `Arc` refcount.
@@ -384,6 +424,23 @@ impl State {
 
     /// Apply every effect of a grounded action, in order (`Prax.Engine.performAction`).
     pub fn perform_action(&mut self, ga: &GroundedAction) {
+        self.perform_action_logged(ga, &mut |_| {});
+    }
+
+    /// [`State::perform_action`] with the per-effect observation the differential
+    /// oracle's DRAW LOG needs ([S7 design S-C5]): `observe` is called once per
+    /// top-level effect with what that effect's execution did to the stream and
+    /// to the db.
+    ///
+    /// `Effect::Roll` advances the stream UNCONDITIONALLY, so taken-vs-not leaves
+    /// `rng_seed` equal and a draw bug would report as a STATE divergence with no
+    /// pointer at the die. The `changed` flag is the instrumented half: a hit
+    /// applies its body, a miss does not.
+    ///
+    /// There is ONE implementation — [`State::perform_action`] delegates here with
+    /// a no-op observer — so the instrument can never describe a different
+    /// execution than the engine performs.
+    pub fn perform_action_logged(&mut self, ga: &GroundedAction, observe: &mut dyn FnMut(EffectStep)) {
         let interner = Arc::make_mut(&mut self.interner);
         let defs = self.defs.as_ref();
         let Some(cp) = defs.compiled.practices.get(&ga.practice_id) else {
@@ -392,9 +449,25 @@ impl State {
         let Some(ca) = cp.actions.iter().find(|a| a.name == ga.action_id) else {
             return;
         };
-        for out in &ca.outs {
+        for (index, out) in ca.outs.iter().enumerate() {
             let g = ground_effect(interner, out, &ga.bindings);
+            let odds = roll_odds(&g);
+            let rng_before = self.rt.rng_seed;
+            let facts_before = if odds.is_empty() {
+                Vec::new()
+            } else {
+                self.rt.db.to_labeled_sentences(interner)
+            };
             perform_effect(interner, defs, &mut self.rt, &g);
+            if !odds.is_empty() {
+                observe(EffectStep {
+                    index,
+                    odds,
+                    rng_before,
+                    rng_after: self.rt.rng_seed,
+                    changed: facts_before != self.rt.db.to_labeled_sentences(interner),
+                });
+            }
         }
     }
 
@@ -765,6 +838,87 @@ impl State {
     pub fn mover_read_anchor_names(&mut self, actor: &str, mover: &str) -> Vec<String> {
         let anchors = self.mover_read_anchors_of(actor, mover);
         anchors.iter().map(|a| self.render_segs(a)).collect()
+    }
+
+    // ---- the authored-source read surface (the S7 `worldshape` gate) --------
+    //
+    // Worlds are authored DATA; a mis-transcribed label, swapped role or weight
+    // typo presents at trace time exactly like an engine divergence. The
+    // comparator's `worldshape` emits these, canonically encoded, and gates
+    // every trace behind a green shape diff (S7 design §2).
+
+    /// The authored practices, in practice-id order.
+    pub fn practice_defs(&self) -> &BTreeMap<String, Practice> {
+        &self.defs.practices
+    }
+    /// The authored function registry, in declaration order.
+    pub fn functions_src(&self) -> &[Function] {
+        &self.defs.fns
+    }
+    /// The axiom list the world DECLARED (closure included), in declaration order.
+    pub fn axioms_src(&self) -> &[Axiom] {
+        &self.defs.axioms
+    }
+    /// The vocabulary of nameable desires, in declaration order.
+    pub fn desires_src(&self) -> &[Desire] {
+        &self.defs.desires
+    }
+    /// The authored schedule rules, in DECLARATION order (which is firing order).
+    pub fn schedule_src(&self) -> &[ScheduleRule] {
+        &self.defs.schedule
+    }
+    /// The typechecker's sort table.
+    pub fn sorts(&self) -> &[(String, Vec<String>)] {
+        &self.defs.sorts
+    }
+    /// The conditions the planner predicts over.
+    pub fn prediction_scope(&self) -> &[Condition] {
+        &self.defs.prediction_scope
+    }
+    /// Every axiom head anchor, rendered by name, in table order.
+    pub fn axiom_head_names(&self) -> Vec<String> {
+        self.defs
+            .compiled
+            .axiom_heads
+            .iter()
+            .map(|h| self.render_segs(h))
+            .collect()
+    }
+    /// The characters with no `dead.<name>` mark in the BASE db
+    /// (`Prax.Types.livingCharacters`) — the randtrace walk's extinction test.
+    pub fn living_characters(&mut self) -> Vec<Character> {
+        let names: Vec<String> = self.defs.characters.iter().map(|c| c.name.clone()).collect();
+        let alive: Vec<bool> = names
+            .iter()
+            .map(|n| !self.db_has(&format!("dead.{n}")))
+            .collect();
+        self.defs
+            .characters
+            .iter()
+            .zip(alive)
+            .filter(|(_, a)| *a)
+            .map(|(c, _)| c.clone())
+            .collect()
+    }
+    /// A binding row rendered by name, in NAME order (never the run-dependent
+    /// `Sym` id order) — the oracle's `bindingJSON`.
+    pub fn render_bindings(&self, b: &Bindings) -> BTreeMap<String, String> {
+        b.iter()
+            .map(|(k, v)| {
+                (
+                    self.interner.resolve(k).to_owned(),
+                    crate::db::val_to_string(&self.interner, v),
+                )
+            })
+            .collect()
+    }
+
+    /// The child keys of a path in the BASE db, in name order
+    /// (`Prax.Db.childKeys`) — the randtrace walk's `ending.E` probe.
+    pub fn db_child_keys(&mut self, sentence: &str) -> Vec<String> {
+        let interner = Arc::make_mut(&mut self.interner);
+        let path = tokenize(interner, sentence).expect("a valid probe path");
+        self.rt.db.child_keys(interner, &path.segs)
     }
 
     /// A character's standing intention, if any (a clone off the runtime map).

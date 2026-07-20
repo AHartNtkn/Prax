@@ -166,6 +166,7 @@ version = "0.1.0"
 dependencies = [
  "prax-core",
  "prax-worlds",
+ "serde_json",
 ]
 
 [[package]]

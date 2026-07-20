@@ -13,3 +13,4 @@ path = "src/main.rs"
 [dependencies]
 prax-core = { path = "../prax-core" }
 prax-worlds = { path = "../prax-worlds" }
+serde_json = { workspace = true }
