@@ -35,12 +35,14 @@ import           System.IO (hPutStrLn, stderr)
 import           Prax.Db
 import           Prax.Sym (Sym, intern, symName)
 import           Prax.Types
-import           Prax.Engine (possibleActions, performAction, currentTurn)
+import           Prax.Engine (possibleActions, performAction, currentTurn,
+                              performOutcome, definePractices, defineFunctions,
+                              setAxioms, seedDie)
 import           Prax.Loop (advance, npcAct)
 import           Prax.TypeCheck (TypeError (..), typeCheck)
 import           Prax.EL (meet, leq)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..), query)
-import           Prax.Derive (Axiom (..), Contradiction (..), closure)
+import           Prax.Derive (Axiom (..), Contradiction (..), closure, axiom)
 import           Prax.Kin (kinAxioms)
 import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
@@ -330,8 +332,9 @@ runFixtures name = case name of
   "derive" -> putJSON deriveFixture
   "kin"    -> putJSON kinFixture
   "div1"   -> putJSON div1Fixture
+  "engine" -> putJSON engineFixture
   _        -> dieMsg ("unknown fixture " ++ show name
-                      ++ " (one of db el query derive kin div1)")
+                      ++ " (one of db el query derive kin div1 engine)")
 
 -- An axiom rendered for a fixture: the body conditions via Haskell `show` (the
 -- same serialization the query corpus uses) and the head sentence templates.
@@ -638,6 +641,129 @@ div1Fixture = object
   , "frozen"  .= closureJSON (closure div1Axioms (buildDb div1Base))
   , "correct" .= ([ "p.a", "q.thing", "r.a", "trigger" ] :: [String]) ]
 
+-- engine corpus (D-panel I4): unit perform-sequences whose full state dumps
+-- are OBSERVED from the frozen engine. Each scenario builds a world then applies
+-- labeled steps; every step's post-state is dumped (labeled base facts, closed
+-- view, cursor, rng, dues, expiries). The Rust replay reconstructs the same
+-- world + steps and asserts each dump byte-for-byte — perform semantics pinned by
+-- observation, not transcription. Corners: spawn (base-vs-view opacity, re-spawn
+-- after delete), ForEach snapshot, Call (BASE-db quirk, first-case-first-binding),
+-- expiry arm/refresh/cancel/purge, Roll advance-on-miss and hit, ⊥ collapse.
+engineDump :: PraxState -> Value
+engineDump st = object
+  [ "facts"    .= dbToLabeledSentences (db st)
+  , "view"     .= dbToLabeledSentences (readView st)
+  , "cursor"   .= cursor st
+  , "rng"      .= rngJSON (rngSeed st)
+  , "dues"     .= duesJSON (scheduleDues st)
+  , "expiries" .= expiriesJSON (expiries st) ]
+
+-- A labeled state transition applied to the running scenario state.
+type EngineStep = (String, PraxState -> PraxState)
+
+engineScenario :: String -> PraxState -> [EngineStep] -> Value
+engineScenario nm st0 steps = object
+  [ "name"  .= nm
+  , "steps" .= scanSteps st0 (("<initial>", id) : steps) ]
+  where
+    scanSteps _  []                = []
+    scanSteps st ((lbl, f) : rest) =
+      let st' = f st
+      in object [ "label" .= lbl, "dump" .= engineDump st' ] : scanSteps st' rest
+
+engineFixture :: Value
+engineFixture = object
+  [ "format"    .= (1 :: Int)
+  , "scenarios" .=
+      [ scenarioSpawnOpacity, scenarioRespawn, scenarioForEachSnapshot
+      , scenarioCall, scenarioExpiry, scenarioRollMiss, scenarioRollHit
+      , scenarioBottom ] ]
+  where
+    -- spawn: existedBefore reads the BASE db, so an instance the VIEW already
+    -- shows (derived by an axiom) still spawns and runs its inits.
+    spawnP = practice
+      { practiceId = "pp", roles = ["R"]
+      , initOutcomes = [ Insert "practice.pp.R.mark" ] }
+    scenarioSpawnOpacity = engineScenario
+      "spawn: base-vs-view opacity, inits run despite a view-visible instance"
+      (setAxioms [ axiom [ Match "seed.X" ] [ "practice.pp.X" ] ]
+                 (definePractices [spawnP] emptyState))
+      [ ("insert seed.a (view derives practice.pp.a; base has not)"
+        , performOutcome (Insert "seed.a"))
+      , ("insert practice.pp.a (existedBefore reads BASE, so it spawns + inits)"
+        , performOutcome (Insert "practice.pp.a")) ]
+
+    respawnP = practice
+      { practiceId = "rp", roles = ["R"]
+      , initOutcomes = [ Insert "practice.rp.R.mark" ] }
+    scenarioRespawn = engineScenario
+      "spawn: re-spawn after delete re-runs init"
+      (definePractices [respawnP] emptyState)
+      [ ("insert practice.rp.a (spawns, mark set)"
+        , performOutcome (Insert "practice.rp.a"))
+      , ("delete practice.rp.a (subtree incl. mark gone)"
+        , performOutcome (Delete "practice.rp.a"))
+      , ("insert practice.rp.a again (re-spawns, mark set again)"
+        , performOutcome (Insert "practice.rp.a")) ]
+
+    scenarioForEachSnapshot = engineScenario
+      "ForEach snapshots bindings: a member inserted mid-fold is not visited"
+      emptyState
+      [ ("insert member.a", performOutcome (Insert "member.a"))
+      , ("ForEach member.X { insert member.b; insert visited.X }"
+        , performOutcome (ForEach [ Match "member.X" ]
+                                  [ Insert "member.b", Insert "visited.X" ])) ]
+
+    -- Call queries the BASE db (not the view); it fires the first case and,
+    -- within it, only the first binding.
+    pickFn = Function "pick" ["Who"]
+      [ FnCase [ Match "cand.Who.X" ] [ Insert "chose.X" ]
+      , FnCase [] [ Insert "fallback" ] ]
+    scenarioCall = engineScenario
+      "Call: queries BASE (not the view), first case + first binding only"
+      (setAxioms [ axiom [ Match "trig.W" ] [ "cand.W.zzz" ] ]
+                 (defineFunctions [pickFn] emptyState))
+      [ ("insert cand.gil.beta",  performOutcome (Insert "cand.gil.beta"))
+      , ("insert cand.gil.alpha", performOutcome (Insert "cand.gil.alpha"))
+      , ("insert trig.gil (view derives cand.gil.zzz; base has not)"
+        , performOutcome (Insert "trig.gil"))
+      , ("Call pick [gil] -> chose.alpha (base-only, name-first; no fallback)"
+        , performOutcome (Call "pick" ["gil"])) ]
+
+    scenarioExpiry = engineScenario
+      "InsertFor: arm, refresh, bare-insert cancel, sibling arm, delete purge"
+      emptyState
+      [ ("InsertFor 3 a.b.c (arm due=3)",  performOutcome (InsertFor 3 "a.b.c"))
+      , ("InsertFor 5 a.b.c (refresh due=5)", performOutcome (InsertFor 5 "a.b.c"))
+      , ("Insert a.b.c bare (supersession cancels the timer)"
+        , performOutcome (Insert "a.b.c"))
+      , ("InsertFor 4 a.b.c (re-arm)",     performOutcome (InsertFor 4 "a.b.c"))
+      , ("InsertFor 4 a.b.d (sibling arm)", performOutcome (InsertFor 4 "a.b.d"))
+      , ("Delete a.b (purge every timer at or under)"
+        , performOutcome (Delete "a.b")) ]
+
+    scenarioRollMiss = engineScenario
+      "Roll: unconditional advance on a miss (seed 1: rollStep is odd -> miss)"
+      (seedDie 1 emptyState)
+      [ ("Roll 1/2 [] [Insert roll.a] -> miss, seed advances anyway"
+        , performOutcome (Roll 1 2 [] [ Insert "roll.a" ]))
+      , ("Roll 1/2 [] [Insert roll.b] -> advances again (a miss is not sticky)"
+        , performOutcome (Roll 1 2 [] [ Insert "roll.b" ])) ]
+
+    scenarioRollHit = engineScenario
+      "Roll: a hit applies the body (seed 2: rollStep is even -> hit)"
+      (seedDie 2 emptyState)
+      [ ("Roll 1/2 [] [Insert roll.hit] -> hit, seed advances"
+        , performOutcome (Roll 1 2 [] [ Insert "roll.hit" ])) ]
+
+    scenarioBottom = engineScenario
+      "bottom collapse: a contradicting insert surfaces `contradiction` in the view"
+      (setAxioms [ axiom [ Match "trig" ] [ "light!red" ]
+                 , axiom [ Match "trig" ] [ "light!green" ] ]
+                 emptyState)
+      [ ("insert trig (closure hits bottom -> view = base + contradiction)"
+        , performOutcome (Insert "trig")) ]
+
 -- Entry point ----------------------------------------------------------------
 
 main :: IO ()
@@ -653,4 +779,4 @@ main = do
            , "  prax-oracle trace <world> --turns N [--idle NAME] [--depth D] --mode decisions|state|view"
            , "  prax-oracle randtrace <world> --seed S --cap N [--candidates]"
            , "  prax-oracle check <world>"
-           , "  prax-oracle fixtures db|el|query|derive|kin|div1" ])
+           , "  prax-oracle fixtures db|el|query|derive|kin|div1|engine" ])
