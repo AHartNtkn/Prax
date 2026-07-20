@@ -31,6 +31,74 @@ Rust and incorrectly on the frozen Haskell.
 **Comparator posture**: no suppression needed — shipped traces agree. The
 negative fixture pins both outputs so the divergence is a committed artifact.
 
+## DIV-2 (S6): a separator-bearing character name is accepted by the frozen engine and read three different ways by its own planner
+
+**What**: nothing in the frozen engine forbids a character name containing a
+path separator (`.` or `!`) — `Prax.Types.character` is a bare record build and
+`setCharacters` has no guard. Supply one and the frozen planner disagrees with
+ITSELF about what the name means, because the same name reaches three sites
+through three different surfaces:
+
+- `Prax.Relevance.moverReadAnchors`' death anchor (Relevance.hs:284) is
+  `map intern (pathNames (deadSentence (charName m)))` — `pathNames` SPLITS, so
+  a mover named `hall.keeper` yields the 3-segment anchor `[dead, hall, keeper]`.
+- The same function's `scopeReads` (Relevance.hs:281) grounds at the SYM level
+  (`groundCookedCondition`), substituting one Sym for one segment — the name
+  stays a single segment.
+- `Prax.Planner.inScope` (Planner.hs:74) grounds through
+  `groundCondition` → `Prax.Db.ground` = `tokensToSentence (groundTokens …)`,
+  which rebuilds a STRING that `query`'s `Match s -> pathNames s`
+  (Query.hs:133) then RE-SPLITS — so here the name splits again.
+
+The consequences are behavioral, not cosmetic. `mayUnifySyms` truncates to the
+shorter path and compares segment-wise, so a 2-segment delta anchor
+`[dead, "hall.keeper"]` matches a 2-segment read anchor but fails against the
+3-segment one — the reuse gate fires on one reading and misses on the other,
+giving opposite reuse decisions on the same world. Likewise a prediction scope
+`[Match "near.Actor"]` becomes `[near, hall, keeper]` under `inScope` and
+`[near, "hall.keeper"]` under the sym-level path: the mover is included in or
+dropped from the imagined round, moving the score and possibly the pick. The
+RENDERED name is identical in every case, so no dump can see the difference.
+
+**What the Rust does**: `State::set_characters` REJECTS any name containing `.`
+or `!` with `WorldError::MultiSegmentCharacterName`, naming the character and
+the reason. The class becomes unreachable rather than silently divergent. The
+port is also made self-consistent regardless of the guard: `mover_read_anchors`
+builds its death anchor with `tokenize(interner, "dead.<m>")`, the same
+tokenizer `candidate_actions` and `living_characters` already use, so all three
+Rust sites agree on how a name segments (pinned by
+`the_death_read_anchor_is_tokenized_like_every_other_death_sentence`, which
+calls `mover_read_anchors` directly with `hall.keeper` because the guard makes
+the difference unobservable through `State`).
+
+**Spec authority**: single-segment naming is the established convention for
+every other engine-facing name — schedule-rule names carry an explicit
+construction guard in the frozen engine itself
+(`Prax.Engine.addScheduleRules`: "schedule rule name must be a single
+segment"), and `ScheduleRule`'s `srName` is documented "single segment; the
+persist re-association key" (Types.hs:213). A character name is spliced into
+engine-built sentences exactly as a rule name is spliced into its due key:
+`dead.<name>`, `<p>.believes.desires.<name>.…`, `practice.<pid>.<role>.<name>`.
+A separator inside it nests the character's fact families under one another and
+splits its death mark and scope anchors across segment boundaries. That is a
+path injection, not a name — so the guard is the rule the frozen engine already
+states, applied at the door that was missing it.
+
+The alternative — routing the Rust `in_scope` back through the string surface
+to match `inScope` — was rejected: it would reproduce an implementation
+accident (frozen's own `moverReadAnchors` does NOT do this), and the program's
+ruling is that Haskell bugs are never reproduced.
+
+**Fiction consequence**: none. No shipped world uses a separator-bearing
+character name. A world that tried one gets a loud construction-time error
+instead of two engines quietly telling different stories about the same cast.
+
+**Comparator posture**: no suppression. Frozen traces never contain such a
+name, so no fixture, corpus row or replay is affected — the planner and npc
+corpora regenerate byte-identically across this change. The divergence is
+purely about what the two engines ACCEPT: everything the frozen engine accepts
+and the Rust also accepts, the two agree on bit for bit.
+
 ## Recorded posture (not a DIV): the ⊥-witness is selected by name order
 
 When a closure round forces two or more distinct values into one exclusive slot,
