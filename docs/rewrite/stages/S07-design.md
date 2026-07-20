@@ -246,3 +246,40 @@ lenses independently found the candidate-order defect.
   re-derived from the actual spec files at slice start (one was already wrong);
   the per-slice allowlist assignment VERIFIED by the lens, as did the nine
   owed:S7 rows' slice mapping.
+
+## 10. LADDER AMENDMENT + slice-0 adjudications (binding)
+
+- **TERMINATION is FIRST in the ladder, not last** [review M6 — recorded here
+  rather than living only in a code comment]. Full order:
+  **TERMINATION → TURN → ENUMERATION → DECISION → RNG → SCHEDULE → STATE →
+  UNCLASSIFIED (fails loud)**. Reason: comparing an end record against a turn
+  record makes every field below it an artifact, so the terminal shape must be
+  settled before any field-level rung runs. TERMINATION is ALSO not gated on
+  `is_end` — `passes` rides every randtrace turn record, and the run stops at the
+  FIRST divergent record, so a `passes` difference with every earlier record
+  equal cannot be downstream of a turn divergence.
+- **The inline-golden gate is a CONTENT rule, not a shape rule** [review I2,
+  adjudicated]: run keyword-free and repo-wide, the "three consecutive string
+  literals" shape fired on NINE files of legitimate authored data — and an
+  allow-list to quiet them would be the keyword filter returning under another
+  name. It now rejects a run of consecutive bare literals reproducing three
+  consecutive lines OF A COMMITTED GOLDEN, in order: one shared action label is
+  coincidence, three in sequence is a copy. Keyword-free, repo-wide, and harder
+  to evade for the case that matters.
+- **[C1]'s wiring is verified by REPRODUCTION, not by an automated test**
+  [recorded honestly]: there is no way to introduce a genuine engine divergence
+  from inside the test suite (a world-level mutation reports SHAPE-DIVERGENT),
+  and a test-only hook faking one into the Rust stream was correctly refused.
+  What IS automated: the localization rerun returns the full emission truncated
+  to the ordinal over REAL engines, and a `draws`-only difference classifies RNG.
+  The join between them is the pasted engine-mutation reproduction.
+- **The rung-coverage test is the standing guard**: it drives the frozen oracle
+  with every emission flag, unions the emitted keys, and asserts the rungs cover
+  them BOTH ways. Any future emission addition that would reintroduce the
+  non-total ladder fails here first.
+- Remaining minors carried into slice 1 (not blocking): M2 (a truncated stream
+  with no terminal record classifies TURN — unreachable while both walks emit a
+  stop record, but unguarded), M3 (`ending_reached` name-order vs intern-order
+  with two simultaneous endings), M4 (the cache key omits `$PRAX_ORACLE_CMD`),
+  M5 (the stop RULES live in drive_rust, not walk.rs — S9's Stress port would
+  re-derive them).
