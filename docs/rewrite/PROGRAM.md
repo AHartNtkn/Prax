@@ -23,7 +23,7 @@ comparator.
 | S5 | Loop + Schedule + Rng (stream landed S4) | DONE | [S05](reports/S05-loop-schedule.md) |
 | S6 | Planner + Minds + Relevance + Sight (design-heavy; fidelity summit) | DONE | [S06](reports/S06-planner.md) |
 | S7 | Vertical world slices: Feud → Intrigue → Bar → Village (Audience → S8, [A1]) | SLICES 1-4 LANDED, slice-4 fix wave applied; slice-4 evidence report outstanding | [S07-1](reports/S07-slice1-feud.md) [S07-2](reports/S07-slice2-intrigue.md) [S07-3](reports/S07-slice3-bar.md) |
-| S8 | Script + Play + Audience ([A1]) | — | — |
+| S8 | Script + Play + Audience ([A1]) | IN PROGRESS (design) | — |
 | S9 | TypeCheck + AnalysisTable + Stress + Persist + Inspect + CLI | — | — |
 | S10 | Hardening + cut-over | — | — |
 
