@@ -7,3 +7,9 @@ authors.workspace = true
 description = "The Prax engine: interner, exclusion-logic DB, closure, query, planner, and turn loop."
 
 [dependencies]
+smallvec = { workspace = true }
+rustc-hash = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

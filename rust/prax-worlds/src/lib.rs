@@ -7,9 +7,9 @@
 //!
 //! `bar` carries both the plain night and the drama-manager (`dm`) variant.
 
+pub mod audience;
 pub mod bar;
+pub mod feud;
 pub mod intrigue;
 pub mod play;
-pub mod feud;
-pub mod audience;
 pub mod village;

@@ -10,23 +10,23 @@
 //! modules. Engine-side analyses (relevance, sight, schedule) live in
 //! [`prax_core`], not here — this crate is values only.
 
-pub mod core_practices;
-pub mod emotion;
-pub mod reactions;
-pub mod deontic;
-pub mod debt;
-pub mod coerce;
-pub mod blackmail;
-pub mod confession;
+pub mod arc;
 pub mod beliefs;
-pub mod witness;
-pub mod rumor;
-pub mod repute;
+pub mod blackmail;
+pub mod coerce;
+pub mod confession;
+pub mod conversation;
+pub mod core_practices;
+pub mod debt;
+pub mod deceit;
+pub mod deontic;
+pub mod emotion;
 pub mod faction;
 pub mod kin;
-pub mod deceit;
 pub mod minds;
 pub mod persona;
 pub mod project;
-pub mod conversation;
-pub mod arc;
+pub mod reactions;
+pub mod repute;
+pub mod rumor;
+pub mod witness;

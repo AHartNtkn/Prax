@@ -10,6 +10,6 @@
 //! [`json`] is the serde round-trip (`examples/play.json` must load unchanged
 //! across the cut-over).
 
-pub mod script;
 pub mod compile;
 pub mod json;
+pub mod script;

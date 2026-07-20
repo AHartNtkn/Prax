@@ -21,19 +21,20 @@
 //! Each module below is the home of one frozen-library concern; they are filled
 //! in stage by stage (S1 Sym+Db+EL, S2 Query, S3 Derive+view, …).
 
+pub mod db;
+pub mod derive;
+pub mod el;
+pub mod engine;
 pub mod error;
 pub mod interner;
-pub mod db;
-pub mod el;
-pub mod query;
-pub mod derive;
-pub mod types;
-pub mod engine;
-pub mod turn;
-pub mod schedule;
-pub mod rng;
-pub mod planner;
-pub mod relevance;
-pub mod sight;
-pub mod typecheck;
+pub mod path;
 pub mod persist;
+pub mod planner;
+pub mod query;
+pub mod relevance;
+pub mod rng;
+pub mod schedule;
+pub mod sight;
+pub mod turn;
+pub mod typecheck;
+pub mod types;
