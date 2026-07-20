@@ -413,6 +413,16 @@ fn value_after(
         Some((_, v)) => 0.9 * v,
         None => 0.0,
     };
+    fold_value(base, acc, self_next)
+}
+
+/// The outermost association of `valueAfter`, in ONE place so it can be pinned at
+/// bit level: `base + (othersScore + selfNext)` — NEVER `(base + acc) + selfNext`.
+/// The two differ by 1 ULP at realizable payoffs (see `fold_order_canary`), so this
+/// shape is the contract, not a preference. `#[inline]` — it is the frozen
+/// expression tree's last node, not an abstraction.
+#[inline]
+fn fold_value(base: f64, acc: f64, self_next: f64) -> f64 {
     base + (acc + self_next)
 }
 
@@ -1014,6 +1024,44 @@ mod smoke {
             Some("priya: denounce beth".to_owned()),
             "the cone must be recomputed, not reused"
         );
+    }
+
+    // THE FOLD-ORDER CANARY [S-I2], pinned at bit level.
+    //
+    // [S-I2] prescribes "2^53-adjacent utilities"; that is INFEASIBLE here — a
+    // base near 2^53 needs ~2.1e6 satisfying bindings at the largest i32 utility
+    // — and it is unnecessary. The sensitivity enters through the NESTED 0.9: at
+    // depth 2 the inner score is itself `base1 + (acc1 + 0.9*base0)`, so a depth-1
+    // value of 0.9 makes `0.9*v = 0.81` carry a full mantissa. At world-realizable
+    // payoffs (base=12 from a utility-12 want; acc=3.5 from ≥3 movers whose evals
+    // sum to 7; v=0.9) the two associations land exactly 1 ULP apart:
+    //
+    //   base + (acc + 0.9v) = 16.310000000000002   (bits 4625284074552279696)
+    //   (base + acc) + 0.9v = 16.31                (bits 4625284074552279695)
+    //
+    // Re-associating `fold_value` reddens this test — the discrimination the
+    // stage exists to provide.
+    #[test]
+    fn fold_order_canary_discriminates_the_association() {
+        let base = 12.0_f64;
+        let acc = 3.5_f64; // Σ 0.5 * eval over ≥3 movers, evals summing to 7
+        let v = 0.9_f64; // the depth-1 best score: 0 + (0 + 0.9*1)
+        let self_next = 0.9 * v;
+
+        let got = super::fold_value(base, acc, self_next);
+        assert_eq!(
+            got.to_bits(),
+            4625284074552279696_u64,
+            "the fold must associate base + (acc + 0.9v); got {got:?}"
+        );
+        // The canary must genuinely DISCRIMINATE: an inert canary is worthless.
+        let wrong = (base + acc) + self_next;
+        assert_ne!(
+            got.to_bits(),
+            wrong.to_bits(),
+            "canary is inert — it must separate the two associations"
+        );
+        assert_eq!(wrong.to_bits(), 4625284074552279695_u64);
     }
 
     // The v34 reuse gate must actually be REACHED (both arms) [S-I4]: a
