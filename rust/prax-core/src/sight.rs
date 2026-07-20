@@ -19,3 +19,22 @@ pub fn sighted_within(h: i64) -> Vec<Condition> {
         cmp(CmpOp::Gte, "Expiry", "Now"),
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    // H: SightSpec.hs "sightedWithin is a window over the stamp"
+    use super::*;
+
+    #[test]
+    fn sighted_within_is_the_four_condition_window() {
+        assert_eq!(
+            sighted_within(2),
+            vec![
+                Condition::Match("Actor.believes.atSince.Witness!Since".into()),
+                Condition::Match("turn!Now".into()),
+                Condition::Calc("Expiry".into(), CalcOp::Add, "Since".into(), "2".into()),
+                Condition::Cmp(CmpOp::Gte, "Expiry".into(), "Now".into()),
+            ]
+        );
+    }
+}
