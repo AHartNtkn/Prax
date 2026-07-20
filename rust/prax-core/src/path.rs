@@ -163,6 +163,39 @@ pub fn segment_names_checked(sentence: &str) -> Result<Vec<String>, WorldError> 
     Ok(out)
 }
 
+/// The string-level `Prax.Db.tokens`: each segment NAME paired with the operator
+/// that FOLLOWS it (`None` on the last), guard and all — for a caller that must
+/// rebuild the sentence after mapping the names and so cannot lose the `.`/`!`
+/// positions ([`crate::path::tokens_to_sentence`] is its inverse). The frozen
+/// `Prax.Confession.incorrigible` is the shipped caller.
+///
+/// [`segment_names_checked`] is `map fst` of this, exactly as the frozen
+/// `pathNames = map fst . tokens`.
+///
+/// # Errors
+/// [`WorldError::TrailingOperator`] if the sentence ends in `.` or `!`.
+pub fn segment_tokens_checked(sentence: &str) -> Result<Vec<(String, Option<char>)>, WorldError> {
+    let mut out = Vec::new();
+    scan_tokens(sentence, |name, op| {
+        out.push((name.to_owned(), op));
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+/// Re-render split tokens as a sentence (`Prax.Db.tokensToSentence`): each name
+/// followed by its own operator, if any.
+pub fn tokens_to_sentence(tokens: &[(String, Option<char>)]) -> String {
+    let mut out = String::new();
+    for (name, op) in tokens {
+        out.push_str(name);
+        if let Some(op) = op {
+            out.push(*op);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     // H: DbSpec.hs "tokens: trailing-operator rejection (v43 -- a trailing op would set a leaf's exclusion flag nothing ever reads)"

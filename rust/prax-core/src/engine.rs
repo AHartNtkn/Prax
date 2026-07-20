@@ -49,7 +49,7 @@ use crate::query::{Cond, Condition, query};
 use crate::relevance::{eviction_shadow_names, may_unify_syms};
 use crate::rng::{SEED_BOUNDS, roll_step};
 use crate::types::{
-    Axiom, Character, Desire, Function, Outcome, Practice, ScheduleRule, authored_var_clash,
+    Axiom, Character, Desire, Function, Outcome, Practice, ScheduleRule, Want, authored_var_clash,
 };
 
 /// A fully grounded, performable action produced by the engine
@@ -779,12 +779,36 @@ impl State {
         }
     }
 
+    /// The integer utility of the current view to an ARBITRARY want list —
+    /// `Prax.Planner.evaluate` itself, which cooks the wants it is handed rather
+    /// than reading a precompiled table. The frozen `evaluate` is partial in
+    /// exactly one way (`cookCondition` rejects a nested `Subquery`), so this is
+    /// fallible where the frozen raises. `ProjectSpec` scores an endeavor's
+    /// pursuit want directly, from `prax-vocab`, which is why this is public.
+    ///
+    /// # Errors
+    /// [`WorldError::NestedSubquery`] from [`crate::query::compile_condition`].
+    pub fn evaluate_wants(&mut self, wants: &[Want]) -> Result<i64, WorldError> {
+        let State { interner, rt, .. } = self;
+        let interner = Arc::make_mut(interner);
+        let mut model: Vec<(Vec<Cond>, i32)> = Vec::with_capacity(wants.len());
+        for w in wants {
+            let mut cs = Vec::with_capacity(w.when.len());
+            for c in &w.when {
+                cs.push(crate::query::compile_condition(interner, c)?);
+            }
+            model.push((cs, w.utility));
+        }
+        Ok(planner::evaluate_compiled(interner, rt.view(), &model))
+    }
+
     /// The integer utility of the current view to a character's own wants —
     /// `Prax.Planner.evaluate` over `Prax.Minds.selfWants`, which in the one
     /// compiled representation is exactly `evaluate_compiled` over
-    /// `cooked_self_wants`. Exposed for the PlannerSpec `evaluate` pin.
-    #[cfg(test)]
-    pub(crate) fn evaluate_self_wants(&mut self, c: &Character) -> i64 {
+    /// `cooked_self_wants`. Exposed for the PlannerSpec `evaluate` pin and for
+    /// `PersonaSpec`/`ConfessionSpec`'s per-mark conscience arithmetic, which
+    /// lives in `prax-vocab` and so needs it across the crate boundary.
+    pub fn evaluate_self_wants(&mut self, c: &Character) -> i64 {
         let State { interner, defs, rt } = self;
         let interner = Arc::make_mut(interner);
         let comp = defs.compiled();
