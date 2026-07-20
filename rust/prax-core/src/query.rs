@@ -353,9 +353,13 @@ fn num(interner: &Interner, v: &Val) -> Option<i64> {
     }
 }
 
-/// Parse an operand name as an integer, matching the frozen `readMaybe ::
-/// Maybe Integer` on the operand shapes the engine can produce: an optional
-/// leading `-` then ASCII digits. A non-numeric name (or one out of `i64` range)
+/// Parse an operand name as an integer. Accepted grammar: an optional leading
+/// `-` then ASCII digits — EXACTLY the shapes the engine can produce (Calc
+/// results, turn numbers, authored weights all render plain decimal). The
+/// frozen `readMaybe @Integer` additionally accepts hex/octal literals
+/// (`0x5`); that corner is deliberately NOT reproduced — no reachable operand
+/// renders that way, and rejecting it keeps the grammar the one the engine
+/// emits. A non-numeric name (or one out of `i64` range)
 /// is `None` — the defined "unresolvable operand drops the binding" path, not a
 /// silent swallow. (`i64` replaces `Integer`: a recorded deviation,
 /// ARCHITECTURE.md. No reachable operand carries the `+`/whitespace/parenthesis
