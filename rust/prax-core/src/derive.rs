@@ -482,6 +482,32 @@ mod tests {
         assert_eq!(derived(&mut i, &axs, &base), ["grandparent.tom.ann"]);
     }
 
+    // CASE 5 (S3 review I1): a two-`Match` rule whose NON-FIRST position binds a
+    // fact that is DERIVED a round after the first position's base fact enters the
+    // delta. This is the exact shape per-position delta seeding exists for: round 1
+    // seeds `p.a.b` from the delta but `r.b.c` is not in the model yet; round 2
+    // seeds the just-derived `r.b.c` from the delta at POSITION 1, and only then
+    // does `chain.a.c` fire. A single-position seed (`positions.iter().take(1)`,
+    // the review's mutation) seeds only position 0 and silently drops `chain.a.c`,
+    // while the flagship `naive_equals_production` net stayed green — this pin
+    // closes that blind spot deterministically.
+    #[test]
+    fn two_match_second_position_binds_a_later_derived_fact() {
+        let mut i = Interner::new();
+        let axs = [
+            rule(&mut i, &[m("p.X.Y"), m("r.Y.Z")], &["chain.X.Z"]),
+            rule(&mut i, &[m("seed.Y.Z")], &["r.Y.Z"]),
+        ];
+        let base = build(&mut i, &["p.a.b", "seed.b.c"]);
+        let d = derived(&mut i, &axs, &base);
+        assert!(d.contains(&"r.b.c".to_owned()), "r.b.c is derived from seed.b.c");
+        assert!(
+            d.contains(&"chain.a.c".to_owned()),
+            "chain.a.c: the SECOND Match binds r.b.c, derived a round after p.a.b \
+             entered the delta — dropped by single-position seeding. derived={d:?}"
+        );
+    }
+
     // H: DeriveSpec.hs "closure is a VIEW: base untouched, so derivation is defeasible"
     #[test]
     fn closure_is_a_view_so_derivation_is_defeasible() {

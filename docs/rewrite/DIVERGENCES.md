@@ -30,3 +30,26 @@ Rust and incorrectly on the frozen Haskell.
 
 **Comparator posture**: no suppression needed — shipped traces agree. The
 negative fixture pins both outputs so the divergence is a committed artifact.
+
+## Recorded posture (not a DIV): the ⊥-witness is selected by name order
+
+When a closure round forces two or more distinct values into one exclusive slot,
+BOTH engines report a single ⊥ witness — but they select it differently. The Rust
+sorts the round's fresh heads by rendered name and folds the meet in that order,
+so the reported witness is the name-least conflicting head (`derive.rs` `run`,
+design I4). The frozen engine folds `foldM meetOne` in `nub` (generation) order,
+so it reports the first conflicting head in generation order. The DeriveSpec pin
+is stated up-to-set ("names AN offending head", DeriveSpec:75) and the flagship
+`naive == production` law is internally consistent (both closures share the same
+sort+fold), so this selection is verified against the naive oracle, not against
+frozen's `nub` order.
+
+This is NOT a divergence, because no shipped world produces ⊥ during closure:
+`derive.json` has zero contradiction cases, and kin/div1 never force a conflicting
+exclusive slot, so `check_closure_case`'s exact-witness comparison is never
+exercised against frozen and no trace can differ. It is recorded here PRE-EMPTIVELY
+so that a future ⊥-bearing fixture whose Rust witness differs from frozen's is read
+as this known name-order-vs-nub-order selection difference (still up-to-set correct),
+not mistaken for a fresh correctness divergence. Should such a world ever ship, this
+posture graduates to a numbered DIV with a comparator suppression on the witness
+field.

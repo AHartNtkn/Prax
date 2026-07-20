@@ -235,6 +235,40 @@ mod props {
                 "DIV-1 fragment: r.{} must be derived (the Rust beats frozen here)", cc);
         }
 
+        // CASE 5 (S3 review I1), reliably constructed: a two-`Match` rule whose
+        // SECOND position binds a predicate DERIVED a round after the first
+        // position's base fact. This is the timing the broad generator's tiny
+        // constant pool cannot force — recursive facts co-occur too early, so a
+        // non-first `Match` position never has to bind a later-derived fact, and
+        // the single-position mutation (`positions.iter().take(1)`) stayed GREEN
+        // in `naive_equals_production`. Here `r` is derived by a SEPARATE rule from
+        // a base `seed`, so `r.mid.z` first appears in the delta one round AFTER
+        // `p.a.mid` — position 1 must be delta-seeded or `chain.a.z` is dropped.
+        // RED under the take(1) mutation (production loses `chain.a.z` while naive
+        // keeps it); GREEN on the correct per-position union.
+        #[test]
+        fn case5_second_match_binds_a_later_derived_fact(
+            a in any::<u8>(), mid in any::<u8>(), z in any::<u8>(),
+        ) {
+            let mut i = Interner::new();
+            let (a, mid, z) = (k(a), k(mid), k(z));
+            let specs: Vec<RuleSpec> = vec![
+                // A: p.X.Y + r.Y.Z → chain.X.Z ; r is DERIVED and disjoint from p.
+                (vec![mtch("p.X.Y".into()), mtch("r.Y.Z".into())], vec!["chain.X.Z".into()]),
+                // B: seed.Y.Z → r.Y.Z ; r.mid.z enters the delta one round after p.
+                (vec![mtch("seed.Y.Z".into())], vec!["r.Y.Z".into()]),
+            ];
+            let rules = compile_rules(&mut i, &specs);
+            let base = build_db(&mut i, &[format!("p.{a}.{mid}"), format!("seed.{mid}.{z}")]);
+            let prod = close(&mut i, &rules, &base);
+            let naive = naive_closure(&mut i, &rules, &base);
+            prop_assert_eq!(&prod, &naive, "CASE 5: naive != production");
+            prop_assert!(
+                prod.unwrap().to_labeled_sentences(&i).contains(&format!("chain.{a}.{z}")),
+                "CASE 5: chain.{}.{} must be derived (the second Match binds later-derived r.{}.{})",
+                a, z, mid, z);
+        }
+
         // Idempotence: closing an already-closed model is the closed model itself
         // (a fixpoint). Skipped when the base already contradicts.
         #[test]

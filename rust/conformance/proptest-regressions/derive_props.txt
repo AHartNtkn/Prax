@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 72c8f291302f1a004ad664ae6a3cc58402e9f4163803070c666fbc48d6149c03 # shrinks to a = 0, mid = 0, z = 0
+cc 99304f1903b57f1a92f7bab5fb8f03798579ddd69d9ef7ac8f76024ce99bb375 # shrinks to specs = [([Match("bc.X.Y"), Match("ba.Y.Z")], ["ba.X.Z"])], facts = ["bc.c1.c0"], delta = ["ba.c0.c0"]
