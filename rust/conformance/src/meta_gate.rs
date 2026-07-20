@@ -93,20 +93,34 @@ mod gate {
     }
 
     /// The allowlisted `(SpecFile, label)` pins from the committed manifest.
-    fn read_pins() -> BTreeSet<(String, String)> {
+    ///
+    /// A `Vec`, not a set, and duplicates are a LOUD failure [slice-4 review M1]:
+    /// the other two sides of the accounting (`collect_h_comments`, `read_killed`)
+    /// are `Vec`s and do catch a repeat, so collecting the manifest into a set
+    /// left it the one asymmetrically unprotected side — a duplicated manifest
+    /// line would collapse into one entry and its second occurrence would go
+    /// unaccounted for, silently.
+    fn read_pins() -> Vec<(String, String)> {
         let path = repo_root().join("conformance/HASKELL_PINS.txt");
         let text =
             fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-        let mut pins = BTreeSet::new();
+        let mut pins = Vec::new();
         for line in text.lines() {
             let Some((file, label)) = line.split_once('\t') else {
                 continue;
             };
             let base = basename(file);
             if ALLOWLIST.contains(&base.as_str()) {
-                pins.insert((base, label.to_owned()));
+                pins.push((base, label.to_owned()));
             }
         }
+        let mut seen: BTreeSet<&(String, String)> = BTreeSet::new();
+        let dups: Vec<&(String, String)> = pins.iter().filter(|p| !seen.insert(p)).collect();
+        assert!(
+            dups.is_empty(),
+            "HASKELL_PINS.txt lists these allowlisted pins more than once, so the \
+             accounting below would silently absorb the repeat: {dups:?}"
+        );
         pins
     }
 
@@ -158,6 +172,30 @@ mod gate {
         }
     }
 
+    /// A Markdown table row's cells, split on UNESCAPED `|` with `\|` unescaped
+    /// back to a literal pipe [slice-4 review M2].
+    ///
+    /// `|` is the table's own delimiter, so a Haskell label containing one can
+    /// only appear in `KILLED.md` escaped — which is Markdown's own rule, not a
+    /// convention invented here. Splitting raw made such a label inexpressible:
+    /// its row would split into an extra cell and surface as a confusing
+    /// typo-net error about a label nobody wrote.
+    fn row_cells(line: &str) -> Vec<String> {
+        let mut cells = vec![String::new()];
+        let mut chars = line.chars().peekable();
+        while let Some(c) = chars.next() {
+            match c {
+                '\\' if chars.peek() == Some(&'|') => {
+                    chars.next();
+                    cells.last_mut().expect("one cell always open").push('|');
+                }
+                '|' => cells.push(String::new()),
+                _ => cells.last_mut().expect("one cell always open").push(c),
+            }
+        }
+        cells.iter().map(|c| c.trim().to_owned()).collect()
+    }
+
     /// Every `KILLED.md` table row, as `(basename, label)`. Header and
     /// separator rows are skipped.
     fn read_killed() -> Vec<(String, String)> {
@@ -170,13 +208,13 @@ mod gate {
             if !trimmed.starts_with('|') {
                 continue;
             }
-            let cells: Vec<&str> = trimmed.split('|').map(str::trim).collect();
+            let cells = row_cells(trimmed);
             // "| a | b | c | d |" -> ["", "a", "b", "c", "d", ""]
             if cells.len() < 4 {
                 continue;
             }
-            let spec = cells[1];
-            let label = cells[2];
+            let spec = cells[1].as_str();
+            let label = cells[2].as_str();
             if spec == "SpecFile" || spec.starts_with("---") || spec.is_empty() {
                 continue;
             }
@@ -259,15 +297,15 @@ mod gate {
                 continue;
             }
             // "| spec | label | cat | owed | reason |" -> 7 cells.
-            let cells: Vec<&str> = trimmed.split('|').map(str::trim).collect();
+            let cells = row_cells(trimmed);
             if cells.len() < 6 {
                 continue;
             }
-            let spec = cells[1];
+            let spec = cells[1].as_str();
             if spec == "SpecFile" || spec.starts_with("---") || spec.is_empty() {
                 continue;
             }
-            if let Some(stage) = parse_owed(cells[4]) {
+            if let Some(stage) = parse_owed(&cells[4]) {
                 out.push((basename(spec), cells[2].to_owned(), stage));
             }
         }
@@ -430,5 +468,31 @@ mod gate {
             states.iter().any(|(s, _)| s == "S3"),
             "expected an S3 row on the board, got {states:?}"
         );
+    }
+
+    // [slice-4 review M2] A Haskell label containing a literal `|` must be
+    // EXPRESSIBLE in KILLED.md. Markdown's own escape is `\|`; splitting rows
+    // raw made such a label impossible to write down — its row gained a cell and
+    // the label came back truncated, surfacing as a typo-net error about a label
+    // nobody authored.
+    #[test]
+    fn a_killed_row_can_carry_a_label_containing_a_pipe() {
+        let cells = row_cells(r"| FooSpec.hs | a \| b, ruled out | decimal | — | reason |");
+        assert_eq!(
+            cells,
+            vec![
+                "".to_owned(),
+                "FooSpec.hs".to_owned(),
+                "a | b, ruled out".to_owned(),
+                "decimal".to_owned(),
+                "—".to_owned(),
+                "reason".to_owned(),
+                "".to_owned(),
+            ],
+            "the escaped pipe stays INSIDE the label cell and comes back literal"
+        );
+        // An UNESCAPED pipe still delimits — the escape is opt-in, so every row
+        // already in the file parses exactly as before.
+        assert_eq!(row_cells("| a | b |").len(), 4);
     }
 }

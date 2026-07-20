@@ -527,8 +527,9 @@ fn line(world: &str, seed: Option<i64>, walk: &str, o: &Outcome, fresh: bool) ->
 /// provenance of every value that can appear under it. The header is BUILT from
 /// this list, so a column cannot be added without stating where its numbers come
 /// from, and [`provenance_violations`] checks the rendered header against it.
-const COLUMNS: [(&str, Provenance); 7] = [
+const COLUMNS: [(&str, Provenance); 8] = [
     ("randtrace seeds", Provenance::Measured),
+    ("cells", Provenance::Measured),
     ("clean", Provenance::Measured),
     ("clean-mod-adjudicated", Provenance::Measured),
     ("DIVERGENT", Provenance::Measured),
@@ -559,6 +560,14 @@ fn shell_quote(arg: &str) -> String {
 /// seeds" means one thing when the record floor stopped it and another when
 /// saturation did [I1].
 ///
+/// `cells` is the block's own BASIS, and it is why the outcome columns can be
+/// read at all [slice-4 review M3]: `clean`/`clean-mod-adjudicated`/`DIVERGENT`/
+/// `SHAPE-DIVERGENT` count CELLS — the trace walk plus every randtrace seed —
+/// while `randtrace seeds` counts seeds. Without a cell count in the row, a
+/// clean sweep prints one more `clean` than it has seeds, and a row whose count
+/// exceeds its own visible basis is precisely the misreading §13(3) exists to
+/// prevent.
+///
 /// The block LEADS WITH THE INVOCATION THAT PRODUCED IT [I1]. §1.8's rule — no
 /// hand-typed matrix numbers, ever — exists so a reader can reproduce the block;
 /// a block whose seed range, cap and floor are invisible in it cannot be
@@ -578,7 +587,7 @@ fn report_block(cells: &[Cell], stops: &[(String, BudgetStop)], argv: &[&str]) -
         invocation,
         String::new(),
         header,
-        "|---|---|---|---|---|---|---|---|---|".to_owned(),
+        "|---|---|---|---|---|---|---|---|---|---|".to_owned(),
     ];
     let mut worlds: Vec<&String> = cells.iter().map(|c| &c.world).collect();
     worlds.sort();
@@ -596,8 +605,9 @@ fn report_block(cells: &[Cell], stops: &[(String, BudgetStop)], argv: &[&str]) -
             .find(|(sw, _)| sw == w)
             .map_or_else(|| "-".to_owned(), |(_, s)| s.describe());
         out.push(format!(
-            "| {w} | {} | {} | {} | {} | {} | {} | {} | {stop} |",
+            "| {w} | {} | {} | {} | {} | {} | {} | {} | {} | {stop} |",
             mine.iter().filter(|c| c.seed.is_some()).count(),
+            mine.len(),
             count(|o| matches!(o, Outcome::Clean { .. })),
             count(|o| matches!(o, Outcome::CleanModAdjudicated { .. })),
             count(|o| matches!(o, Outcome::Divergent(_))),
@@ -781,7 +791,7 @@ mod tests {
         let b = report_block(&cells, &stops, &[]);
         assert_eq!(
             b[ROW],
-            "| probe | 2 | 2 | 1 | 0 | 0 | 24 | 1 | the seed range was EXTENDED until min-records \
+            "| probe | 2 | 3 | 2 | 1 | 0 | 0 | 24 | 1 | the seed range was EXTENDED until min-records \
              16 (chosen) cleared |"
         );
     }
@@ -887,10 +897,10 @@ mod tests {
         let b = report_block(&cells, &[], &[]);
         assert_eq!(
             b[2],
-            "| world | randtrace seeds (measured) | clean (measured) | \
-             clean-mod-adjudicated (measured) | DIVERGENT (measured) | \
-             SHAPE-DIVERGENT (measured) | records compared (measured) | \
-             distinct walks (measured) | budget stop |"
+            "| world | randtrace seeds (measured) | cells (measured) | \
+             clean (measured) | clean-mod-adjudicated (measured) | \
+             DIVERGENT (measured) | SHAPE-DIVERGENT (measured) | \
+             records compared (measured) | distinct walks (measured) | budget stop |"
         );
     }
 
@@ -899,14 +909,14 @@ mod tests {
         // The guard's own RED set — a guard nobody has seen fail is a guard nobody
         // knows works. Each string below is the shape of a real recurrence.
         let header = report_block(&[], &[], &[])[2].clone();
-        let sep = "|---|---|---|---|---|---|---|---|---|".to_owned();
-        let sound = "| probe | 2 | 2 | 0 | 0 | 0 | 24 | 1 | saturated: no new walk in \
+        let sep = "|---|---|---|---|---|---|---|---|---|---|".to_owned();
+        let sound = "| probe | 2 | 3 | 2 | 0 | 0 | 0 | 24 | 1 | saturated: no new walk in \
                      299 (chosen) consecutive seeds |"
             .to_owned();
         assert!(provenance_violations(&[header.clone(), sep.clone(), sound]).is_empty());
 
         // 1. Slice-3's shape: a free-text stop naming a number with no source.
-        let untagged = "| probe | 2 | 2 | 0 | 0 | 0 | 24 | 1 | min-records 3000 cleared |";
+        let untagged = "| probe | 2 | 3 | 2 | 0 | 0 | 0 | 24 | 1 | min-records 3000 cleared |";
         let v = provenance_violations(&[header.clone(), sep.clone(), untagged.to_owned()]);
         assert_eq!(v.len(), 1, "{v:?}");
         assert!(v[0].contains("names `3000` without saying whether it was measured or chosen"));
@@ -920,7 +930,7 @@ mod tests {
 
         // 3. A numeric column carrying prose instead of a count — the way a
         //    requested value sneaks in dressed as a measurement.
-        let prose = "| probe | 2 | 2 | 0 | 0 | 0 | as requested | 1 | \
+        let prose = "| probe | 2 | 3 | 2 | 0 | 0 | 0 | as requested | 1 | \
                      --seeds as requested; no record floor was asked for |";
         let v = provenance_violations(&[header, sep, prose.to_owned()]);
         assert_eq!(v.len(), 1, "{v:?}");
@@ -942,7 +952,7 @@ mod tests {
         let b = report_block(&cells, &stops, &[]);
         assert_eq!(
             b[ROW],
-            "| probe | 3 | 4 | 0 | 0 | 0 | 32 | 1 | saturated: no new walk in 299 (chosen) \
+            "| probe | 3 | 4 | 4 | 0 | 0 | 0 | 32 | 1 | saturated: no new walk in 299 (chosen) \
              consecutive seeds |",
             "three seeds replaying one walk must report ONE distinct walk"
         );
