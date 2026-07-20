@@ -25,8 +25,16 @@ not by the public authoring surface.
 ## Core types (prax-core)
 
 - `Sym(u32)`, bit 0 = is-variable (v29 parity trick kept). `Interner` owned,
-  `Arc<Interner>` inside state; append-only; ids never observable — all
-  output through resolve, all observable orders sort BY NAME.
+  append-only; ids never observable — all output through resolve, all
+  observable orders sort BY NAME.
+  [AMENDED at S6, on the implementer's proposal, accepted as the better
+  design: the interner is ONE per State-lineage, threaded `&mut`, and a
+  planner fork clones only `Runtime` — mirroring the frozen engine's single
+  pool. This removes the per-fork interner clone entirely AND collapses the
+  cross-lineage Sym-comparison hazard the S6 panel found (delta syms vs
+  read-anchor syms) into a same-lineage compare BY CONSTRUCTION; the
+  fork-safety argument reduces to monotonic append. The S9 persist-reload
+  re-intern hazard is unaffected and stays flagged.]
 - `CompiledPath { segs: SmallVec<[Sym;6]>, excl: u32 }` — excl bit i = the
   separator after seg i is `!`. One tokenizer at the authoring boundary
   (trailing-operator rejection kept).
