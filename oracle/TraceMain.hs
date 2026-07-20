@@ -21,10 +21,11 @@
 -- are a pure function of the inputs.
 module Main (main) where
 
-import           Data.List (foldl', sort, sortOn)
+import           Data.List (foldl', intercalate, sort, sortOn)
 import           Data.Maybe (isNothing, listToMaybe, fromMaybe)
 import qualified Data.Map.Strict as Map
 import           Data.Word (Word64)
+import           GHC.Float (castDoubleToWord64)
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Data.Aeson (Value, object, (.=), toJSON, encode)
 import qualified Data.Aeson.Key as K
@@ -36,12 +37,17 @@ import           Prax.Db
 import           Prax.Sym (Sym, intern, symName)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, currentTurn,
-                              performOutcome, definePractices, defineFunctions,
-                              setAxioms, seedDie)
+                              performOutcome, definePractice, definePractices,
+                              defineFunctions, setAxioms, setCharacters,
+                              setDesires, setSchedule, seedDie)
 import           Prax.Loop (advance, npcAct)
 import           Prax.TypeCheck (TypeError (..), typeCheck)
 import           Prax.EL (meet, leq)
-import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..), query)
+import           Prax.Query (Condition (..), CookedCondition (..), CmpOp (..),
+                             CalcOp (..), forAll, implies, query)
+import           Prax.Planner (candidateActions, motiveSignature, pickAction,
+                               predictMove, scoreActions)
+import           Prax.Relevance (moverReadAnchors)
 import           Prax.Derive (Axiom (..), Contradiction (..), closure, axiom)
 import           Prax.Kin (kinAxioms)
 import qualified Prax.Worlds.Bar as Bar
@@ -333,8 +339,9 @@ runFixtures name = case name of
   "kin"    -> putJSON kinFixture
   "div1"   -> putJSON div1Fixture
   "engine" -> putJSON engineFixture
+  "planner" -> putJSON plannerFixture
   _        -> dieMsg ("unknown fixture " ++ show name
-                      ++ " (one of db el query derive kin div1 engine)")
+                      ++ " (one of db el query derive kin div1 engine planner)")
 
 -- An axiom rendered for a fixture: the body conditions via Haskell `show` (the
 -- same serialization the query corpus uses) and the head sentence templates.
@@ -764,6 +771,438 @@ engineFixture = object
       [ ("insert trig (closure hits bottom -> view = base + contradiction)"
         , performOutcome (Insert "trig")) ]
 
+-- planner corpus (S6) ---------------------------------------------------------
+--
+-- The stage's most valuable artifact: synthetic worlds built HERE (the library
+-- is imported, never edited) whose planner observables are dumped from the
+-- FROZEN engine. The Rust replay reconstructs each world with its own builder
+-- API and asserts every dump equal.
+--
+-- Two emission rules are specific to this corpus:
+--
+--   * [D-C1] scored tables are emitted in NATIVE result order — the ordering IS
+--     the observable under test, so the oracle's sort-everything convention is
+--     suspended for the scored rows (and for them alone).
+--   * [D-I1] every score is emitted as its RAW IEEE-754 bit pattern
+--     ('castDoubleToWord64', as a JSON integer). There is no decimal in the
+--     trusted comparison base: the replay compares @u64 == f64::to_bits@.
+--
+-- The relevance tables (improvables/liveness/caresAbout/moverReadAnchors) are
+-- likewise emitted in their native table order: each is a pure function of the
+-- compiled world (Map traversals are name-ordered on both sides), never
+-- run-dependent, and its order is itself part of the contract.
+
+-- | A path pattern rendered by name (the ONE rendering both sides produce:
+-- interned segment names joined by @.@ — cooked conditions carry no
+-- punctuation, so none is rendered).
+renderSyms :: [Sym] -> String
+renderSyms = intercalate "." . map symName
+
+-- | A score as its raw IEEE-754 bits [D-I1]. Emitted as an 'Integer' so Aeson
+-- prints the 64-bit value exactly (no decimal anywhere in the channel).
+bitsJSON :: Double -> Value
+bitsJSON = toJSON . (toInteger :: Word64 -> Integer) . castDoubleToWord64
+
+-- | A dead-now recipe, rendered: the tag, and for a 'GateCheck' each gate's
+-- conjunct patterns by name. Loud on any gate shape 'livenessOf' does not
+-- build (it emits single-'CMatch' gates only) — a silent skip here would hide
+-- a real divergence.
+livenessJSON :: Liveness -> Value
+livenessJSON FloorCheck     = toJSON ("FloorCheck" :: String)
+livenessJSON AlwaysLive     = toJSON ("AlwaysLive" :: String)
+livenessJSON (GateCheck gs) = object [ "GateCheck" .= map (map one) gs ]
+  where
+    one (CMatch p) = renderSyms p
+    one c          = error ("livenessJSON: unexpected gate condition " ++ show c)
+
+-- | A motive signature, field for field.
+sigJSON :: MotiveSignature -> Value
+sigJSON ms = object
+  [ "bearing"      .= msBearing ms
+  , "satisfaction" .= msSatisfaction ms
+  , "liveDesires"  .= msLiveDesires ms
+  , "knownMotives" .= [ [m, d] | (m, d) <- msKnownMotives ms ] ]
+
+-- | Apply outcomes left to right.
+perf :: [Outcome] -> PraxState -> PraxState
+perf os st = foldl' (flip performOutcome) st os
+
+-- | Every planner observable of one synthetic world.
+plannerWorldJSON :: (String, PraxState) -> Value
+plannerWorldJSON (nm, st) = object
+  [ "name"        .= nm
+  , "improvables" .= improvables st
+  , "liveness"    .= object [ K.fromString k .= livenessJSON v
+                            | (k, v) <- Map.toList (liveness st) ]
+  , "caresAbout"  .= object [ K.fromString k .= v
+                            | (k, v) <- Map.toList (caresAbout st) ]
+  , "readAnchors" .= [ object [ "actor" .= charName a, "mover" .= charName m
+                              , "anchors" .= map renderSyms (moverReadAnchors st a m) ]
+                     | a <- cast, m <- cast, charName a /= charName m ]
+  , "predict"     .= [ object [ "predictor" .= charName p, "mover" .= charName m
+                              , "action" .= fmap gaLabel (predictMove st p m) ]
+                     | p <- cast, m <- cast, charName p /= charName m ]
+  , "signatures"  .= [ object [ "character" .= charName c
+                              , "signature" .= sigJSON (motiveSignature st c) ]
+                     | c <- cast ]
+  , "candidates"  .= [ object [ "character" .= charName c
+                              , "actions" .= map gaLabel (candidateActions st c) ]
+                     | c <- cast ]
+  , "scored"      .= [ object [ "actor" .= charName c, "depth" .= d
+                              , "rows" .= [ object [ "label" .= gaLabel ga
+                                                   , "bits"  .= bitsJSON s ]
+                                          | (ga, s) <- scoreActions d st c ] ]
+                     | c <- cast, d <- depths ]
+  , "pick"        .= [ object [ "actor" .= charName c, "depth" .= d
+                              , "action" .= fmap gaLabel (pickAction d st c) ]
+                     | c <- cast, d <- depths ]
+  ]
+  where
+    cast   = characters st
+    depths = [0, 1, 2] :: [Int]
+
+plannerFixture :: Value
+plannerFixture = object
+  [ "format" .= (1 :: Int)
+  , "worlds" .= map plannerWorldJSON plannerWorlds ]
+
+-- The corpus's worlds. Every one is built from library setters only.
+plannerWorlds :: [(String, PraxState)]
+plannerWorlds =
+  [ ("tendBar: two instances, two customers", wTendBar)
+  , ("forall-host: a universal desire and a vacuous implication", wForallHost)
+  , ("models: gossiped, seen, and false believed minds", wModels)
+  , ("scope: the pair apart", wScopeApart)
+  , ("scope: the pair together", wScopeTogether)
+  , ("deadNow: floor shut, gate shut, subquery always live", wDeadNowShut)
+  , ("deadNow: floor marked, gate open", wDeadNowLive)
+  , ("reuse: the cone-mediated read (a derived head only)", wReuseCone)
+  , ("reuse: the eviction shadow (an exclusion displaces the read)", wReuseEviction)
+  , ("collision: a Calc-minted constant colliding with a scope literal", wCollision)
+  , ("wild Call: cares_about bears on everyone", wWildCall)
+  , ("the fold-order canary", wCanary)
+  ]
+
+-- W1: the tendBar shape — one practice, TWO instances, two customers with
+-- different beverage wants. Exercises multi-instance candidate enumeration and
+-- the instance-binding order the scored table's ties fall back to.
+wTendBar :: PraxState
+wTendBar = perf
+  [ Insert "practice.tendBar.ada", Insert "practice.tendBar.cleo"
+  , Insert "practice.tendBar.ada.customer.beth" ]
+  (setCharacters [ bethCider, danaSoda, character "ada", character "cleo" ]
+     (definePractices [tendBarP] emptyState))
+  where
+    bethCider = (character "beth")
+      { charWants = [ Want [ Match "practice.tendBar.Bartender.customer.beth!order!cider" ] 10 ] }
+    danaSoda = (character "dana")
+      { charWants = [ Want [ Match "practice.tendBar.Bartender.customer.dana!order!soda" ] 8 ] }
+
+tendBarP :: Practice
+tendBarP = practice
+  { practiceId = "tendBar"
+  , practiceName = "[Bartender] is tending bar"
+  , roles = ["Bartender"]
+  , dataFacts =
+      [ "beverageType.beer!alcoholic", "beverageType.cider!alcoholic"
+      , "beverageType.soda!nonalcoholic" ]
+  , actions =
+      [ action "[Actor]: Walk up to bar"
+          [ Neq "Actor" "Bartender"
+          , Not "practice.tendBar.Bartender.customer.Actor" ]
+          [ Insert "practice.tendBar.Bartender.customer.Actor" ]
+      , action "[Actor]: Order [Beverage]"
+          [ Match "practice.tendBar.Bartender.customer.Actor"
+          , Not "practice.tendBar.Bartender.customer.Actor!beverage"
+          , Match "practiceData.tendBar.beverageType.Beverage" ]
+          [ Insert "practice.tendBar.Bartender.customer.Actor!order!Beverage" ]
+      ]
+  }
+
+-- W2: the ∀-host — a universally quantified want (Absent/Absent) plus a
+-- vacuously true implication (Or/Absent), so both compiled quantifier shapes
+-- appear in the scored arithmetic AND in the read-anchor walk.
+wForallHost :: PraxState
+wForallHost = perf
+  [ Insert "guest.a", Insert "guest.b", Insert "hasDrink.a"
+  , Insert "practice.serve.host" ]
+  (setCharacters [ host, character "b" ] (definePractice serveP emptyState))
+  where
+    serveP = practice
+      { practiceId = "serve", practiceName = "[Host] hosts", roles = ["Host"]
+      , actions =
+          [ action "[Actor]: pour a drink for [Guest]"
+              [ Match "guest.Guest", Not "hasDrink.Guest" ]
+              [ Insert "hasDrink.Guest" ]
+          , action "[Actor]: rest" [] [] ] }
+    host = (character "host")
+      { charWants = [ Want [ forAll [Match "guest.G"] [Match "hasDrink.G"] ] 10
+                    , Want [ implies [Match "raining"] [Match "wet"] ] 4 ] }
+
+-- W3: the believed-model divergence — ada's model of each mover is what drives
+-- prediction, and it is wrong in two directions: beth genuinely holds the
+-- craving (gossiped), dana holds it too (seen), cleo does NOT (presumed —
+-- a FALSE belief that predicts a move cleo would never take).
+wModels :: PraxState
+wModels = perf
+  [ Insert "practice.tendBar.ada"
+  , Insert "practice.tendBar.ada.customer.beth"
+  , Insert "practice.tendBar.ada.customer.cleo"
+  , Insert "practice.tendBar.ada.customer.dana"
+  , Insert "ada.believes.desires.beth.cider-craving.heard.gossip"
+  , Insert "ada.believes.desires.dana.cider-craving.seen"
+  , Insert "ada.believes.desires.cleo.cider-craving.presumed" ]
+  (setDesires vocab
+     (setCharacters [ character "ada", holder "beth", character "cleo", holder "dana" ]
+        (definePractices [tendBarP] emptyState)))
+  where
+    vocab = [ Desire "cider-craving"
+                (Want [ Match "practice.tendBar.Bartender.customer.Owner!order!cider" ] 10) ]
+    holder n = (character n) { charDesires = ["cider-craving"] }
+
+-- W4: the prediction scope. The same heist twice — the pair in different rooms
+-- (the scope query fails, the mover is modelled as still) and in the same room
+-- (the scope passes and the enabling move is credited).
+heistP :: Practice
+heistP = practice
+  { practiceId = "heist", roles = ["R"]
+  , actions =
+      [ action "[Actor]: grab the relic"
+          [ Match "gate.open", Not "grabbed.inge", Eq "Actor" "inge" ]
+          [ Insert "grabbed.inge" ]
+      , action "[Actor]: open the gate"
+          [ Eq "Actor" "olaf", Not "gate.open" ]
+          [ Insert "gate.open" ]
+      , action "[Actor]: Wait about" [] [] ]
+  }
+
+heistBase :: PraxState
+heistBase =
+  (setDesires [ Desire "covet-relic" (Want [ Match "grabbed.Owner" ] 10) ]
+     (setCharacters [ olaf, inge ] (definePractices [heistP] emptyState)))
+    { predictionScope = [ Match "at.Actor!Room", Match "at.Witness!Room" ] }
+  where
+    olaf = (character "olaf") { charWants = [ Want [ Match "grabbed.inge" ] 6 ] }
+    inge = (character "inge") { charDesires = ["covet-relic"] }
+
+wScopeApart :: PraxState
+wScopeApart = perf
+  [ Insert "practice.heist.here"
+  , Insert "olaf.believes.desires.inge.covet-relic.heard.inge"
+  , Insert "at.olaf!gatehouse", Insert "at.inge!vault" ] heistBase
+
+wScopeTogether :: PraxState
+wScopeTogether = perf
+  [ Insert "practice.heist.here"
+  , Insert "olaf.believes.desires.inge.covet-relic.heard.inge"
+  , Insert "at.olaf!vault", Insert "at.inge!vault" ] heistBase
+
+-- W5: all three dead-now recipes in ONE vocabulary, dumped in both states.
+--
+--   * @hates-lying@ (negative) → FloorCheck: dead while no lied mark stands.
+--   * @wants-market@ (positive, gated on a fact NO mover action inserts and no
+--     axiom derives — only the engine schedule moves it) → GateCheck.
+--   * @counts-neighbours@ (Subquery/Count-tainted) → AlwaysLive.
+deadNowBase :: PraxState
+deadNowBase =
+  setSchedule [ marketRule ]
+    (setDesires vocab
+       (setCharacters [ priya, beth ] (definePractices [townP] emptyState)))
+  where
+    priya = (character "priya") { charWants = [ Want [ Match "sold.beth" ] 5 ] }
+    beth  = (character "beth")
+      { charDesires = ["hates-lying", "wants-market", "counts-neighbours"] }
+    vocab =
+      [ Desire "hates-lying" (Want [ Match "lied.Owner" ] (-5))
+      , Desire "wants-market" (Want [ Match "marketDay", Match "sold.Owner" ] 5)
+      , Desire "counts-neighbours"
+          (Want [ Subquery { subSet = "Ns", subFind = ["N"]
+                           , subWhere = [ Match "neighbour.N" ] }
+                , Count "K" "Ns", Cmp Gte "K" "1" ] 5)
+      ]
+    townP = practice
+      { practiceId = "town", roles = ["R"]
+      , actions =
+          [ action "[Actor]: confess"
+              [ Match "lied.Actor" ] [ Delete "lied.Actor" ]
+          , action "[Actor]: sell at the market"
+              [ Match "marketDay", Not "sold.Actor" ] [ Insert "sold.Actor" ]
+          , action "[Actor]: greet a neighbour"
+              [ Not "neighbour.Actor" ] [ Insert "neighbour.Actor" ]
+          , action "[Actor]: Wait about" [] [] ] }
+    -- The schedule is not a mover: the fact it moves stays an environment gate.
+    marketRule = ScheduleRule
+      { srName = "market", srPeriod = 2
+      , srBody = [ ([ Not "marketDay" ], [ Insert "marketDay" ]) ] }
+
+wDeadNowShut :: PraxState
+wDeadNowShut = perf
+  [ Insert "practice.town.here"
+  , Insert "priya.believes.desires.beth.hates-lying.heard.gossip"
+  , Insert "priya.believes.desires.beth.wants-market.heard.gossip" ] deadNowBase
+
+wDeadNowLive :: PraxState
+wDeadNowLive = perf [ Insert "lied.beth", Insert "marketDay" ] wDeadNowShut
+
+-- W6 [S-I3]: the CONE-mediated reuse case. beth's believed desire reads only a
+-- DERIVED head (@regards.*@); priya's candidate inserts the BASE fact the axiom
+-- fires on. Only extendDelta's cone fold puts the head into the delta, so only
+-- it stops the root's "beth is unmotivated" from being reused.
+wReuseCone :: PraxState
+wReuseCone = perf
+  [ Insert "practice.court.here"
+  , Insert "priya.believes.desires.beth.hates-infamy.heard.gossip" ]
+  (setAxioms [ axiom [ Match "W.believes.C.thief", Not "recanted.C" ]
+                     [ "regards.W.C.thief" ] ]
+     (setDesires [ Desire "hates-infamy" (Want [ Match "regards.V.Owner.thief" ] (-8)) ]
+        (setCharacters [ priya, character "beth" ]
+           (definePractices [courtP] emptyState))))
+  where
+    priya = (character "priya") { charWants = [ Want [ Match "apology.beth" ] 10 ] }
+    courtP = practice
+      { practiceId = "court", roles = ["R"]
+      , actions =
+          [ action "[Actor]: denounce beth"
+              [ Neq "Actor" "beth" ] [ Insert "Actor.believes.beth.thief" ]
+          , action "[Actor]: make amends"
+              [ Match "regards.V.Actor.thief" ]
+              [ Insert "recanted.Actor", Insert "apology.Actor" ]
+          , action "[Actor]: bide time" [] [] ] }
+
+-- W7 [S-I3]: the EVICTION-SHADOW reuse case. beth's read anchor is
+-- @mood.beth!sad@; alice's candidate inserts @mood.beth!happy@, whose own
+-- anchor does NOT may-unify the read (two distinct literals in the last
+-- segment). Only the exclusion's eviction shadow (@mood.beth.PraxEvicted@)
+-- intersects — so only a delta carrying shadows blocks the stale reuse.
+wReuseEviction :: PraxState
+wReuseEviction = perf
+  [ Insert "practice.parlour.here", Insert "mood.beth!sad"
+  , Insert "alice.believes.desires.beth.wants-to-mope.heard.gossip" ]
+  (setDesires [ Desire "wants-to-mope" (Want [ Match "moped.Owner" ] 5) ]
+     (setCharacters [ alice, character "beth" ]
+        (definePractices [parlourP] emptyState)))
+  where
+    alice = (character "alice") { charWants = [ Want [ Match "moped.beth" ] 6 ] }
+    parlourP = practice
+      { practiceId = "parlour", roles = ["R"]
+      , actions =
+          [ action "[Actor]: mope"
+              [ Eq "Actor" "beth", Match "mood.Actor!sad", Not "moped.Actor" ]
+              [ Insert "moped.Actor" ]
+          , action "[Actor]: console beth"
+              [ Eq "Actor" "alice", Not "mood.beth!happy" ]
+              [ Insert "mood.beth!happy" ]
+          , action "[Actor]: Wait about" [] [] ] }
+
+-- W8 [S-C1]: the collision fixture. The prediction scope reads the LITERAL
+-- @gate.2@; alice's candidate MINTS the name @2@ at run time (a Calc result)
+-- and inserts @gate.2@. The delta anchor is that runtime-minted constant and
+-- the read anchor is the compile-time one — they must compare EQUAL, or the
+-- gate misses the intersection and reuses the root's out-of-scope Nothing
+-- after the move has brought the mover into scope.
+wCollision :: PraxState
+wCollision = perf
+  [ Insert "practice.signal.here"
+  , Insert "alice.believes.desires.bob.wants-cheer.heard.gossip" ]
+  ((setDesires [ Desire "wants-cheer" (Want [ Match "cheer.Owner" ] 5) ]
+      (setCharacters [ alice, character "bob" ]
+         (definePractices [signalP] emptyState)))
+     { predictionScope = [ Match "gate.2" ] })
+  where
+    alice = (character "alice") { charWants = [ Want [ Match "cheer.bob" ] 4 ] }
+    signalP = practice
+      { practiceId = "signal", roles = ["R"]
+      , actions =
+          [ action "[Actor]: compute the gate"
+              [ Eq "Actor" "alice", Not "gate.2", Calc "Sum" Add "1" "1" ]
+              [ Insert "gate.Sum" ]
+          , action "[Actor]: cheer"
+              [ Eq "Actor" "bob", Not "cheer.Actor" ] [ Insert "cheer.Actor" ]
+          , action "[Actor]: Wait about" [] [] ] }
+
+-- W9: the wild-Call branch of bearingTemplates. @rouse@'s outcome is a Call to
+-- a function that is NOT registered, so its atom set is unresolvable — every
+-- character bears it, and every desire is conservatively improvable/AlwaysLive.
+wWildCall :: PraxState
+wWildCall = perf [ Insert "practice.rumour.here" ]
+  (setDesires [ Desire "wants-quiet" (Want [ Match "quiet.Owner" ] 5) ]
+     (setCharacters [ alice, beth ] (definePractices [rumourP] emptyState)))
+  where
+    alice = (character "alice") { charWants = [ Want [ Match "quiet.alice" ] 3 ] }
+    beth  = (character "beth") { charDesires = ["wants-quiet"] }
+    rumourP = practice
+      { practiceId = "rumour", roles = ["R"]
+      , actions =
+          [ action "[Actor]: rouse the room" [] [ Call "noSuchFunction" [] ]
+          , action "[Actor]: hush" [ Not "quiet.Actor" ] [ Insert "quiet.Actor" ]
+          , action "[Actor]: Wait about" [] [] ] }
+
+-- W10: THE FOLD-ORDER CANARY, as a world [S-I2].
+--
+-- alice's "raise" candidate at depth 2 is engineered to hit the corrected
+-- payoffs exactly:
+--
+--   base = 12   — @mark.p@ (utility 12) holds after raise
+--   acc  = 3.5  — three predicted movers, cumulative evals 7, 0, 0
+--                 (bob swaps p for q: 7; cara clears q: 0; dan sits: 0)
+--   v    = 0.9  — the depth-1 continuation: alice's only remaining candidate
+--                 ("reach") scores 0 + (0 + 0.9*1), the 1 being the depth-0
+--                 "mark s" (utility 1)
+--
+-- so the score is @12 + (3.5 + 0.9*0.9)@. The two associations land exactly one
+-- ULP apart (…696 vs …695), and the replay compares raw bits — re-associating
+-- the Rust fold reddens THIS fixture, not merely the native unit canary.
+--
+-- Two further discriminators ride along: eve is predicted Nothing (no believed
+-- model) yet HAS a candidate that would insert @mark.s@ — an implementation
+-- that contributed a term for an unmotivated mover moves the bits; and the
+-- nested 0.9 (v is itself 0.9·1) separates a misplaced discount from the right
+-- one.
+wCanary :: PraxState
+wCanary = perf
+  [ Insert "practice.stage.here"
+  , Insert "alice.believes.desires.bob.swap-marks.heard.gossip"
+  , Insert "alice.believes.desires.cara.tidy-marks.heard.gossip"
+  , Insert "alice.believes.desires.dan.take-a-seat.heard.gossip" ]
+  (setDesires vocab
+     (setCharacters [ alice, character "bob", character "cara"
+                    , character "dan", character "eve" ]
+        (definePractices [stageP] emptyState)))
+  where
+    alice = (character "alice")
+      { charWants = [ Want [ Match "mark.p" ] 12
+                    , Want [ Match "mark.q" ] 7
+                    , Want [ Match "mark.s" ] 1 ] }
+    vocab =
+      [ Desire "swap-marks"   (Want [ Match "mark.q" ] 5)
+      , Desire "tidy-marks"   (Want [ Not "mark.q" ] 5)
+      , Desire "take-a-seat"  (Want [ Match "chair.Owner" ] 5) ]
+    stageP = practice
+      { practiceId = "stage", roles = ["R"]
+      , actions =
+          [ action "[Actor]: raise the mark"
+              [ Eq "Actor" "alice", Not "raised.Actor" ]
+              [ Insert "raised.Actor", Insert "mark.p" ]
+          , action "[Actor]: reach for the shelf"
+              [ Eq "Actor" "alice", Not "reached.Actor" ]
+              [ Insert "reached.Actor" ]
+          , action "[Actor]: take the small mark"
+              [ Eq "Actor" "alice", Match "reached.Actor", Not "mark.s" ]
+              [ Insert "mark.s" ]
+          , action "[Actor]: swap the marks"
+              [ Eq "Actor" "bob", Match "mark.p" ]
+              [ Delete "mark.p", Insert "mark.q" ]
+          , action "[Actor]: tidy the marks"
+              [ Eq "Actor" "cara", Match "mark.q" ]
+              [ Delete "mark.q" ]
+          , action "[Actor]: take a seat"
+              [ Eq "Actor" "dan", Not "chair.Actor" ]
+              [ Insert "chair.Actor" ]
+          , action "[Actor]: polish the small mark"
+              [ Eq "Actor" "eve", Not "mark.s" ]
+              [ Insert "mark.s" ]
+          ] }
+
 -- Entry point ----------------------------------------------------------------
 
 main :: IO ()
@@ -779,4 +1218,4 @@ main = do
            , "  prax-oracle trace <world> --turns N [--idle NAME] [--depth D] --mode decisions|state|view"
            , "  prax-oracle randtrace <world> --seed S --cap N [--candidates]"
            , "  prax-oracle check <world>"
-           , "  prax-oracle fixtures db|el|query|derive|kin|div1|engine" ])
+           , "  prax-oracle fixtures db|el|query|derive|kin|div1|engine|planner" ])

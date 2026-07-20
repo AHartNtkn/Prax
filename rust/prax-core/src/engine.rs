@@ -619,6 +619,60 @@ impl State {
     pub(crate) fn liveness_of(&self, name: &str) -> Option<&crate::relevance::Liveness> {
         self.defs.compiled.liveness.get(name)
     }
+    /// The dead-now recipe table rendered by name — the planner corpus's
+    /// comparison channel (`Prax.Relevance.livenessOf`). Each entry is the
+    /// variant tag plus, for `GateCheck`, each gate's conjunct patterns as
+    /// dot-joined segment names. PANICS on a gate shape `liveness_of` does not
+    /// build (it emits single-`Match` gates only): a silently skipped conjunct
+    /// would hide a real divergence.
+    pub fn liveness_rendered(&self) -> BTreeMap<String, (String, Vec<Vec<String>>)> {
+        let mut out = BTreeMap::new();
+        for (name, l) in &self.defs.compiled.liveness {
+            let entry = match l {
+                crate::relevance::Liveness::FloorCheck => ("FloorCheck".to_owned(), Vec::new()),
+                crate::relevance::Liveness::AlwaysLive => ("AlwaysLive".to_owned(), Vec::new()),
+                crate::relevance::Liveness::GateCheck(gates) => (
+                    "GateCheck".to_owned(),
+                    gates
+                        .iter()
+                        .map(|g| g.iter().map(|c| self.render_gate_cond(c)).collect())
+                        .collect(),
+                ),
+            };
+            out.insert(name.clone(), entry);
+        }
+        out
+    }
+
+    fn render_gate_cond(&self, c: &Cond) -> String {
+        match c {
+            Cond::Match(segs) => self.render_segs(segs),
+            other => panic!("liveness gate carries an unexpected condition: {other:?}"),
+        }
+    }
+
+    /// A pattern rendered by name: interned segment names joined by `.` — the
+    /// one rendering the corpus compares (compiled conditions carry no `!`/`.`
+    /// punctuation, so none is rendered).
+    pub fn render_segs(&self, segs: &[Sym]) -> String {
+        segs.iter()
+            .map(|s| self.interner.resolve(*s))
+            .collect::<Vec<_>>()
+            .join(".")
+    }
+
+    /// The bearing table (`Prax.Relevance.bearingTemplates`) — per character,
+    /// the affordance templates whose outcomes could touch their wants.
+    pub fn cares_about_table(&self) -> &BTreeMap<String, Vec<String>> {
+        &self.defs.compiled.cares_about
+    }
+
+    /// [`State::mover_read_anchors_of`], rendered by name.
+    pub fn mover_read_anchor_names(&mut self, actor: &str, mover: &str) -> Vec<String> {
+        let anchors = self.mover_read_anchors_of(actor, mover);
+        anchors.iter().map(|a| self.render_segs(a)).collect()
+    }
+
     /// A character's standing intention, if any (a clone off the runtime map).
     pub fn intention_of(&self, name: &str) -> Option<Intention> {
         self.rt.intentions.get(name).cloned()
