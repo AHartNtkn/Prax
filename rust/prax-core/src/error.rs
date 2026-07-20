@@ -39,4 +39,64 @@ pub enum WorldError {
         "Prax condition: a Subquery is nested inside another Subquery's where-clause -- subqueries may not nest"
     )]
     NestedSubquery,
+
+    /// Two actions in one practice share a name. Action names are lookup keys
+    /// (delta anchors, standing intentions), so a duplicate would make one
+    /// unreachable (`Prax.Engine.definePractice`).
+    #[error(
+        "Prax.Engine.definePractice: practice {practice:?} declares two actions named {action:?} -- action names are lookup keys; rename one"
+    )]
+    DuplicateActionName { practice: String, action: String },
+
+    /// A function name is already registered — within one `define_functions`
+    /// batch, or against the already-registered set. `Call` resolution is by
+    /// bare name (`Prax.Engine.defineFunctions`), so a duplicate collides.
+    #[error(
+        "Prax.Engine.define_functions: function {function:?} is already registered -- Call resolution is by bare name; rename one"
+    )]
+    DuplicateFunctionName { function: String },
+
+    /// A schedule-rule name collides — within a batch or across BOTH doors
+    /// (the authoring door and the compiler door share one globally-keyed rule
+    /// table, and the dues map is keyed by name). (`Prax.Engine.addScheduleRules`.)
+    #[error(
+        "Prax.Engine: duplicate schedule-rule name {name:?} would share one due key -- rule names are globally keyed across both registration doors; rename one"
+    )]
+    DuplicateScheduleRuleName { name: String },
+
+    /// A schedule-rule name is not a single path segment. A multi-segment name
+    /// would corrupt the by-name due keying (`Prax.Engine.addScheduleRules`).
+    #[error("Prax.Engine: schedule rule name must be a single segment: {name:?}")]
+    MultiSegmentRuleName { name: String },
+
+    /// A schedule rule's period is not positive (`Prax.Engine.addScheduleRules`).
+    #[error("Prax.Engine: schedule rule {name:?} needs a positive period")]
+    NonPositivePeriod { name: String },
+
+    /// An authored fragment uses a reserved variable at a combinator/install
+    /// boundary: the `Prax` namespace (all machinery variables) or a name the
+    /// combinator itself binds in the same splice (the v40 hygiene boundary,
+    /// `Prax.Types.authoredVarClash`). `context` names the boundary that caught it.
+    #[error(
+        "Prax {context}: a fragment authors {var:?} -- the Prax namespace is reserved for engine machinery{extra}"
+    )]
+    ReservedVarClash {
+        context: String,
+        var: String,
+        /// A boundary-specific tail (e.g. `set_schedule`'s Actor note); empty
+        /// otherwise.
+        extra: String,
+    },
+
+    /// A die seed lies outside the stream's domain: `0` and multiples of the
+    /// modulus are fixed points (`Prax.Engine.seedDie`, `Prax.Rng.seedBounds`).
+    #[error(
+        "Prax.Engine.seed_die: seed {seed} lies outside the die's domain [{lo}, {hi}] -- 0 and multiples of the modulus are fixed points (a die that always rolls the same face)"
+    )]
+    SeedOutOfDomain { seed: i64, lo: i64, hi: i64 },
+
+    /// A `draw`'s odds are not a real chance (`0 < num < den`): certainty and
+    /// impossibility are authored dishonesty (`Prax.Rng.draw`).
+    #[error("Prax.Rng: draw odds {num}/{den} must satisfy 0 < num < den")]
+    DrawOdds { num: i64, den: i64 },
 }

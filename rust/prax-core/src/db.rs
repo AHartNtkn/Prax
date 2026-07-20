@@ -448,6 +448,38 @@ impl Db {
     }
 }
 
+/// Substitute bound values into a tokenized path's variable segments, producing
+/// a grounded [`CompiledPath`] — no string round trip (`Prax.Db.groundTokens`).
+/// The `excl` bitmask (the path's `!`/`.` labels) is carried through unchanged.
+/// An unbound head variable grounds to its own name; a bound value substitutes
+/// via [`val_to_sym`] (a [`Val::Sym`] as-is, any other value rendered then
+/// interned). Bindings are separator-free (every unify-produced value is a single
+/// trie key; a `Num` renders as a decimal, a `Set` as an opaque marker), so the
+/// segment count is preserved and the bitmask stays aligned (`debug_assert`ed).
+pub fn ground_tokens(interner: &mut Interner, path: &CompiledPath, b: &Bindings) -> CompiledPath {
+    let mut segs: SmallVec<[Sym; 6]> = SmallVec::with_capacity(path.segs.len());
+    for &seg in &path.segs {
+        let s = if seg.is_var() {
+            match b.get(seg) {
+                Some(v) => val_to_sym(interner, v),
+                None => seg,
+            }
+        } else {
+            seg
+        };
+        debug_assert!(
+            !interner.resolve(s).contains(['.', '!']),
+            "a grounded binding must be separator-free (groundTokens invariant): {:?}",
+            interner.resolve(s)
+        );
+        segs.push(s);
+    }
+    CompiledPath {
+        segs,
+        excl: path.excl,
+    }
+}
+
 /// Substitute bound variables into a tokenized path, preserving `.`/`!`, and
 /// re-emit as a sentence (`Prax.Db.ground` / `groundTokens` +
 /// `tokensToSentence`). An unbound variable grounds to its own name; a bound

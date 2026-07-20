@@ -36,12 +36,12 @@
 
 use smallvec::SmallVec;
 
-use crate::db::{Bindings, Db, ground, val_to_sym};
+use crate::db::{Bindings, Db, ground};
 use crate::el::{leq, meet};
 use crate::error::WorldError;
-use crate::interner::Interner;
+use crate::interner::{Interner, Sym};
 use crate::path::{CompiledPath, tokenize};
-use crate::query::{Cond, Condition, compile_condition, query};
+use crate::query::{CmpOp, Cond, Condition, compile_condition, query, read_anchors};
 
 /// A detected contradiction (`⊥`): the rendered head sentence whose assertion
 /// was incompatible with the model (`Prax.Derive.Contradiction`). The string is
@@ -143,27 +143,7 @@ fn classify(body: &[Cond]) -> RuleKind {
 /// preserved and the bitmask stays aligned (`debug_assert`ed, and pinned by the
 /// `ground_head_carries_the_head_excl_bitmask` law).
 fn ground_head(interner: &mut Interner, head: &CompiledPath, b: &Bindings) -> CompiledPath {
-    let mut segs: SmallVec<[crate::interner::Sym; 6]> = SmallVec::with_capacity(head.segs.len());
-    for &seg in &head.segs {
-        let s = if seg.is_var() {
-            match b.get(seg) {
-                Some(v) => val_to_sym(interner, v),
-                None => seg,
-            }
-        } else {
-            seg
-        };
-        debug_assert!(
-            !interner.resolve(s).contains(['.', '!']),
-            "a head binding must be separator-free (groundTokens invariant): {:?}",
-            interner.resolve(s)
-        );
-        segs.push(s);
-    }
-    CompiledPath {
-        segs,
-        excl: head.excl,
-    }
+    crate::db::ground_tokens(interner, head, b)
 }
 
 /// The label-faithful rendering of a grounded head — `!`/`.` preserved
@@ -387,6 +367,159 @@ pub fn naive_closure(
         }
         model = next_model;
     }
+}
+
+// ---- the axiom-derived analysis tables (S4 OWNS these; consumed by the engine
+// router and the planner's reuse cone) --------------------------------------
+
+/// Every path pattern the axioms can read or write: body atoms at any polarity
+/// (including inside `Absent`/`Exists`/`Or`/`Subquery` — the [`read_anchors`]
+/// walk) and head templates (`Prax.Derive.axiomFootprint`). Any □-lifted rules a
+/// deontic world declared are ordinary rules in the list, so they need no second
+/// enumeration. A ground delta that may-unify none of these commutes with
+/// closure (the engine's delta-irrelevance fast path).
+pub fn axiom_footprint(rules: &[CompiledRule]) -> Vec<SmallVec<[Sym; 6]>> {
+    let mut out = Vec::new();
+    for r in rules {
+        out.extend(read_anchors(&r.body));
+        for h in &r.heads {
+            out.push(h.segs.clone());
+        }
+    }
+    out
+}
+
+/// Every pattern under a negation in any body (`Prax.Derive.axiomNegPatterns`):
+/// inserting a fact these match can UN-fire a rule (retraction), so such facts
+/// never take the continuation tier. `Not` contents and everything inside an
+/// `Absent` (a `¬∃`); positive atoms are excluded.
+pub fn axiom_neg_patterns(rules: &[CompiledRule]) -> Vec<SmallVec<[Sym; 6]>> {
+    let mut out = Vec::new();
+    for r in rules {
+        for c in &r.body {
+            neg_of(c, &mut out);
+        }
+    }
+    out
+}
+
+fn neg_of(c: &Cond, out: &mut Vec<SmallVec<[Sym; 6]>>) {
+    match c {
+        Cond::Not(p) => out.push(p.clone()),
+        Cond::Absent(cs) => out.extend(read_anchors(cs)), // everything inside a ¬∃
+        Cond::Exists(cs) => {
+            for c in cs {
+                neg_of(c, out);
+            }
+        }
+        Cond::Or(clauses) => {
+            for cl in clauses {
+                for c in cl {
+                    neg_of(c, out);
+                }
+            }
+        }
+        Cond::Subquery { where_, .. } => {
+            for c in where_ {
+                neg_of(c, out);
+            }
+        }
+        Cond::Match(_)
+        | Cond::Eq(..)
+        | Cond::Neq(..)
+        | Cond::Cmp(..)
+        | Cond::Calc(..)
+        | Cond::Count(..) => {}
+    }
+}
+
+/// Every head template the axioms can write (`Prax.Derive.axiomHeadPatterns`) —
+/// any □-lifted rules a deontic world declared included, since they are ordinary
+/// rules. A delta that feeds some axiom can change derived facts only in these
+/// families. (The engine appends the `contradiction` witness to this.)
+pub fn axiom_head_patterns(rules: &[CompiledRule]) -> Vec<SmallVec<[Sym; 6]>> {
+    rules
+        .iter()
+        .flat_map(|r| r.heads.iter().map(|h| h.segs.clone()))
+        .collect()
+}
+
+/// Is the axiom set continuation-safe: does adding base facts only ever ADD
+/// derived facts (given the caller also avoids negated patterns)?
+/// (`Prax.Derive.monotoneAxioms`, the frozen accept/reject decision table
+/// verbatim.) Conditions must be monotone-up: `Match`/`Not`/`Absent` (negations
+/// handled via [`axiom_neg_patterns`]), recursion through `Exists`/`Or`/
+/// `Subquery`, `Count` freely, `Cmp` only in the grows-only direction (the count
+/// side growing past a numeric literal — `Gt`/`Gte` with the literal right,
+/// `Lt`/`Lte` with it left), and `Eq`/`Neq` only over pattern-bound variables. An
+/// `Eq`/`Neq` over an aggregate-bound variable (a `Count` result or a `Subquery`
+/// set) expresses exactly-k/not-k, anti-monotone as the aggregate grows past k.
+/// `Calc` (and any other `Cmp` shape) disables the tier for the world.
+pub fn monotone_axioms(interner: &Interner, rules: &[CompiledRule]) -> bool {
+    rules.iter().all(|r| {
+        let aggs = agg_vars(&r.body);
+        r.body.iter().all(|c| cond_ok(interner, &aggs, c))
+    })
+}
+
+/// Every variable bound by an aggregate anywhere in the body (a body shares one
+/// binding environment, so a `Count`/`Subquery` result nested under
+/// `Exists`/`Or`/`Subquery` is still visible to an `Eq`/`Neq` elsewhere).
+fn agg_vars(body: &[Cond]) -> Vec<Sym> {
+    let mut out = Vec::new();
+    for c in body {
+        collect_agg(c, &mut out);
+    }
+    out
+}
+
+fn collect_agg(c: &Cond, out: &mut Vec<Sym>) {
+    match c {
+        Cond::Count(r, _) => out.push(*r),
+        Cond::Subquery { set, where_, .. } => {
+            out.push(*set);
+            for c in where_ {
+                collect_agg(c, out);
+            }
+        }
+        Cond::Exists(cs) => {
+            for c in cs {
+                collect_agg(c, out);
+            }
+        }
+        Cond::Or(clauses) => {
+            for cl in clauses {
+                for c in cl {
+                    collect_agg(c, out);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn cond_ok(interner: &Interner, aggs: &[Sym], c: &Cond) -> bool {
+    match c {
+        Cond::Match(_) | Cond::Not(_) | Cond::Absent(_) | Cond::Count(..) => true,
+        Cond::Eq(l, r) | Cond::Neq(l, r) => !aggs.contains(l) && !aggs.contains(r),
+        Cond::Exists(cs) => cs.iter().all(|c| cond_ok(interner, aggs, c)),
+        Cond::Or(clauses) => clauses
+            .iter()
+            .all(|cl| cl.iter().all(|c| cond_ok(interner, aggs, c))),
+        Cond::Subquery { where_, .. } => where_.iter().all(|c| cond_ok(interner, aggs, c)),
+        Cond::Cmp(op, l, r) => match op {
+            CmpOp::Gt | CmpOp::Gte => numeric_literal(interner, *r),
+            CmpOp::Lt | CmpOp::Lte => numeric_literal(interner, *l),
+        },
+        Cond::Calc(..) => false,
+    }
+}
+
+/// Whether a symbol's name is a non-empty run of ASCII digits (the frozen
+/// `numeric` test — a numeric literal on the safe side of a threshold).
+fn numeric_literal(interner: &Interner, x: Sym) -> bool {
+    let s = interner.resolve(x);
+    !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit())
 }
 
 #[cfg(test)]
@@ -630,5 +763,105 @@ mod tests {
         let g = ground_head(&mut i, &head, &b);
         assert_eq!(render_head(&i, &g), "status.bex!married");
         assert_eq!(g.excl, head.excl);
+    }
+
+    // ---- the S4 analysis-table builders (owed:S4 discharges) ----------------
+    //
+    // axiomFootprint (incl. the obligedClose-lifted-forms clause) lives in
+    // prax-vocab::deontic, where obligedClose is in scope; axiomNegPatterns and
+    // monotoneAxioms are pure over CompiledRule and are pinned here.
+
+    use crate::query::{CalcOp, CmpOp};
+
+    /// Whether a pattern list contains the tokenized segments of `s`.
+    fn has_path(i: &mut Interner, ps: &[SmallVec<[Sym; 6]>], s: &str) -> bool {
+        let segs = tokenize(i, s).unwrap().segs;
+        ps.contains(&segs)
+    }
+
+    // H: DeriveSpec.hs "axiomNegPatterns collects exactly the negated interiors"
+    #[test]
+    fn axiom_neg_patterns_collects_exactly_the_negated_interiors() {
+        let mut i = Interner::new();
+        let axs = [rule(
+            &mut i,
+            &[m("a.X"), Condition::Absent(vec![m("b.X"), Condition::Not("c.X".into())])],
+            &["d.X"],
+        )];
+        let np = axiom_neg_patterns(&axs);
+        assert!(has_path(&mut i, &np, "b.X"), "Absent interior");
+        assert!(has_path(&mut i, &np, "c.X"), "Not inside Absent");
+        assert!(!has_path(&mut i, &np, "a.X"), "positive atom is NOT negated");
+    }
+
+    // H: DeriveSpec.hs "monotoneAxioms accepts the count-threshold shape and rejects anti-monotone"
+    #[test]
+    fn monotone_axioms_accepts_count_threshold_and_rejects_anti_monotone() {
+        let mut i = Interner::new();
+        let mono = |i: &mut Interner, body: &[Condition], heads: &[&str]| {
+            let r = [rule(i, body, heads)];
+            monotone_axioms(i, &r)
+        };
+        let sub = |set: &str, find: &[&str], where_: Vec<Condition>| Condition::Subquery {
+            set: set.into(),
+            find: find.iter().map(|s| s.to_string()).collect(),
+            where_,
+        };
+
+        assert!(mono(&mut i, &[m("a.X")], &["b.X"]), "Match-only is safe");
+        assert!(
+            mono(
+                &mut i,
+                &[sub("Rs", &["W"], vec![m("r.W.T")]),
+                  Condition::Count("N".into(), "Rs".into()),
+                  Condition::Cmp(CmpOp::Gte, "N".into(), "3".into())],
+                &["n.T"]
+            ),
+            "the notoriety shape (Subquery+Count+Cmp Gte literal) is safe"
+        );
+        assert!(
+            !mono(
+                &mut i,
+                &[Condition::Count("N".into(), "Rs".into()),
+                  Condition::Cmp(CmpOp::Lt, "N".into(), "3".into())],
+                &["q.T"]
+            ),
+            "Cmp Lt with the literal on the right is anti-monotone"
+        );
+        assert!(
+            !mono(
+                &mut i,
+                &[Condition::Calc("M".into(), CalcOp::Add, "N".into(), "1".into())],
+                &["q.M"]
+            ),
+            "Calc disables the tier"
+        );
+        assert!(
+            !mono(
+                &mut i,
+                &[sub("Rs", &["W"], vec![m("r.W.T")]),
+                  Condition::Count("N".into(), "Rs".into()),
+                  Condition::Eq("N".into(), "3".into())],
+                &["n.T"]
+            ),
+            "Eq over a count-bound variable is anti-monotone (exactly-k)"
+        );
+        assert!(
+            !mono(
+                &mut i,
+                &[Condition::Count("N".into(), "Rs".into()),
+                  Condition::Neq("N".into(), "3".into())],
+                &["q.T"]
+            ),
+            "Neq over a count-bound variable is anti-monotone too"
+        );
+        assert!(
+            mono(
+                &mut i,
+                &[m("a.X"), m("b.Y"), Condition::Eq("X".into(), "Y".into())],
+                &["c.X"]
+            ),
+            "Eq over Match-bound names stays monotone"
+        );
     }
 }

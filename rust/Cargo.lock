@@ -180,6 +180,7 @@ name = "prax-vocab"
 version = "0.1.0"
 dependencies = [
  "prax-core",
+ "smallvec",
 ]
 
 [[package]]

@@ -26,7 +26,7 @@ const MAX_SEGMENTS: usize = 32;
 /// iff the separator following segment `i` is `!` (segment `i`'s node is
 /// exclusive). The final segment has no following separator, so its bit is
 /// always clear.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CompiledPath {
     pub segs: SmallVec<[Sym; 6]>,
     pub excl: u32,

@@ -21,6 +21,7 @@
 //! Each module below is the home of one frozen-library concern; they are filled
 //! in stage by stage (S1 Sym+Db+EL, S2 Query, S3 Derive+view, …).
 
+pub mod compilepipe;
 pub mod db;
 pub mod derive;
 pub mod el;
@@ -38,3 +39,4 @@ pub mod sight;
 pub mod turn;
 pub mod typecheck;
 pub mod types;
+pub mod vocab_consts;

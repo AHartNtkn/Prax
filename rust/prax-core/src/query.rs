@@ -554,6 +554,61 @@ fn collect_anchors(c: &Cond, out: &mut Vec<SmallVec<[Sym; 6]>>) {
     }
 }
 
+// ---- cooked-condition grounding (the compile pipe's ForEach-guard grounder) --
+
+/// Substitute a single symbol: replaced iff it is a variable and bound (via
+/// [`val_to_sym`]), otherwise left as-is (`Prax.Query.substSym`).
+pub fn subst_sym(interner: &mut Interner, b: &Bindings, s: Sym) -> Sym {
+    if s.is_var() {
+        match b.get(s) {
+            Some(v) => val_to_sym(interner, v),
+            None => s,
+        }
+    } else {
+        s
+    }
+}
+
+/// Substitute bindings into a list of symbols — no string round trip
+/// (`Prax.Query.groundNames`). Used for a `Call`'s args and a cooked pattern's
+/// segments.
+pub fn ground_names(interner: &mut Interner, b: &Bindings, syms: &[Sym]) -> Vec<Sym> {
+    syms.iter().map(|&s| subst_sym(interner, b, s)).collect()
+}
+
+/// Substitute bindings into a runtime [`Cond`], mirroring [`ground_condition`]
+/// over the interned form (`Prax.Query.groundCookedCondition`) — the grounder the
+/// engine applies to a `ForEach`/`Roll` guard before snapshotting its bindings.
+pub fn ground_cond(interner: &mut Interner, b: &Bindings, c: &Cond) -> Cond {
+    match c {
+        Cond::Match(ns) => Cond::Match(ground_names(interner, b, ns).into()),
+        Cond::Not(ns) => Cond::Not(ground_names(interner, b, ns).into()),
+        Cond::Eq(x, y) => Cond::Eq(subst_sym(interner, b, *x), subst_sym(interner, b, *y)),
+        Cond::Neq(x, y) => Cond::Neq(subst_sym(interner, b, *x), subst_sym(interner, b, *y)),
+        Cond::Cmp(op, x, y) => Cond::Cmp(*op, subst_sym(interner, b, *x), subst_sym(interner, b, *y)),
+        Cond::Calc(r, op, x, y) => Cond::Calc(
+            subst_sym(interner, b, *r),
+            *op,
+            subst_sym(interner, b, *x),
+            subst_sym(interner, b, *y),
+        ),
+        Cond::Count(r, s) => Cond::Count(subst_sym(interner, b, *r), subst_sym(interner, b, *s)),
+        Cond::Subquery { set, find, where_ } => Cond::Subquery {
+            set: subst_sym(interner, b, *set),
+            find: find.iter().map(|&f| subst_sym(interner, b, f)).collect(),
+            where_: where_.iter().map(|c| ground_cond(interner, b, c)).collect(),
+        },
+        Cond::Or(clauses) => Cond::Or(
+            clauses
+                .iter()
+                .map(|cl| cl.iter().map(|c| ground_cond(interner, b, c)).collect())
+                .collect(),
+        ),
+        Cond::Absent(cs) => Cond::Absent(cs.iter().map(|c| ground_cond(interner, b, c)).collect()),
+        Cond::Exists(cs) => Cond::Exists(cs.iter().map(|c| ground_cond(interner, b, c)).collect()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // H: QuerySpec.hs "Prax.Query"

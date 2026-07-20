@@ -24,6 +24,10 @@ mod gate {
         "QuerySpec.hs",
         "CookedSpec.hs",
         "DeriveSpec.hs",
+        // S4:
+        "EngineSpec.hs",
+        "RngSpec.hs",
+        "GateSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {

@@ -8,3 +8,6 @@ description = "The durable social vocabulary: pure value-builders (practices, ax
 
 [dependencies]
 prax-core = { path = "../prax-core" }
+
+[dev-dependencies]
+smallvec = { workspace = true }
