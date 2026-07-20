@@ -731,9 +731,11 @@ mod tests {
     /// left-to-right never-rescan scan — including at the one input where a
     /// naive fixpoint replacement would diverge.
     ///
-    /// REDDENS UNDER: rewriting `bake_actor` as `format!("{spk}: {label}")` (the
-    /// mid-label case), or looping `replace` to a fixpoint (the self-referential
-    /// speaker case).
+    /// REDDENS UNDER (both verified): rewriting `bake_actor` as a
+    /// `starts_with` + `format!` prefix, which is wrong for the mid-label case;
+    /// and looping `replace` to a fixpoint, which on the self-referential
+    /// speaker does not merely differ — it does not TERMINATE, and the pin is
+    /// what turns a hang into a named failure.
     #[test]
     fn bake_actor_replaces_every_occurrence_left_to_right_without_rescanning() {
         assert_eq!(bake_actor("q", "[Actor]: greet"), "q: greet");

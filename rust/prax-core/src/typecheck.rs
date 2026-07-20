@@ -76,10 +76,12 @@ mod tests {
     /// contract, and the S9 checker will be written against it, so it is pinned
     /// here by content and by ORDER (the order a diagnostic would enumerate).
     ///
-    /// REDDENS UNDER: dropping `SCENE_PATIENCE_FAMILY` from the array (the
-    /// [D-C2] failure mode — a checker that no longer refuses an authored
-    /// patience write), or seeding the list per-world so a non-script world sees
-    /// only two members.
+    /// REDDENS UNDER (both verified): replacing `SCENE_PATIENCE_FAMILY` with a
+    /// look-alike — the [D-C2] failure mode, a checker that no longer refuses an
+    /// authored patience write — and reordering the four. DROPPING a member does
+    /// not reach this assertion at all: the fixed-length `[&str; 4]` makes it a
+    /// compile error, which is the stronger outcome and is why the type is an
+    /// array rather than a slice.
     #[test]
     fn the_reserved_family_list_is_the_frozen_four_in_order() {
         assert_eq!(
