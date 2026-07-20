@@ -75,7 +75,13 @@ not by the public authoring surface.
   invariant breaches panic; contradiction = queryable fact, never an error.
 - Scores: i32 utilities × f64 0.9/0.5 discounts, accumulation order PINNED
   (mirrors the Haskell fold order → bit-exact decision parity; ordering is
-  the contract, decimals never pinned).
+  the contract, decimals never pinned). STATED BOUND (S6): the frozen
+  `wantUtility` is `Int` (64-bit); Rust's is `i32`. Authored weights are
+  small integers (nothing shipped exceeds two digits), evaluation accumulates
+  in i64, and the narrowing is loud at the builder — a bound in the
+  32-segment-path-cap sense, not an observable divergence. Recorded because
+  it is what makes the fold-order canary's "large base" formulation
+  infeasible (see S06-design [S-I2]).
 - RNG: MINSTD bit-exact in i64. Persist: serde JSON, versioned, facts as
   labeled sentences; loud version rejection.
 

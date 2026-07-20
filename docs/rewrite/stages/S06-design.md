@@ -115,7 +115,20 @@ sightRule landed S5. S6 owns Sight.hs's remainder: `sighted_within(h)` (the atSi
 
 - **[S-C1] The memo's cross-lineage invariant, STATED and enforced**: predictAt's may_unify compares walk-lineage delta Syms against st0-clone-lineage read-anchor Syms — sound iff EVERY CONSTANT read anchor is st0-resident (recompile-interned before any clone; the sole post-clone read name, the PraxD wildcard, is a variable and never id-compared). This is now an invariant, not an accident: mover_read_anchors sources the scope template from Compiled.scope (never re-cooks raw prediction_scope), and the planner corpus gains the collision fixture (a runtime-minted constant — Calc/Count result — colliding by name with a scope-read literal; a wrong impl misses the match and reuses unsoundly). st0.clone() remains the fill basis (frozen's rootReads are st0-based).
 - **[S-I1] still_offered's soundness surface**: the id-sorted-SmallVec + derived-Eq Bindings representation is PINNED as load-bearing (content-canonical equality under a monotonic interner); the S9 persist-reload reintern hazard is flagged forward (a loud note in the S9 stage inputs: intentions' GroundedActions must re-associate by rendered content, not raw ids).
-- **[S-I2] The canary, self-validating**: base = 2^53-adjacent utilities, ≥3 movers, a Nothing-skip vs 0.0-term discriminator, and a 0.9-placement discriminator; no-FMA/contraction flags verified on BOTH the corpus generator build and the replay build; score channel pinned "as aeson/show emits" only as prose — the COMPARISON channel is raw bits [D-I1]: the oracle dumps castDoubleToWord64 (u64) per score; the replay compares u64 == to_bits. No decimal round-trip in the trusted base.
+- **[S-I2 — CORRECTED BY THE IMPLEMENTER'S ARITHMETIC; this recipe governs]**
+  The panel's "2^53-adjacent utilities" is INFEASIBLE and unnecessary: authored
+  utilities are small ints (i32 here, Int in frozen — see the recorded bound in
+  ARCHITECTURE), so reaching a 2^53 base would need ~2.1M satisfying bindings.
+  A search of the world-realizable payoff space found NO discrimination at
+  small base with acc a multiple of 0.5 and v an integer, and 4132
+  discriminating sets once the NESTED 0.9 carries a full mantissa (at depth 2
+  the inner score is itself `base1 + (acc1 + 0.9*base0)`). The canary pins the
+  smallest: **base = 12, acc = 3.5 (>=3 movers summing to 7), v = 0.9 (depth-1
+  = 0 + (0 + 0.9*1))** — the two associations land exactly 1 ULP apart
+  (4625284074552279695 vs ...696). Base must be COMPARABLE TO `acc + 0.9v`,
+  not large. Any world-driven corpus canary uses these payoffs. Also required:
+  ≥3 movers, a Nothing-skip vs 0.0-term discriminator, and a 0.9-placement
+  discriminator; no-FMA/contraction flags verified on BOTH the corpus generator build and the replay build; score channel pinned "as aeson/show emits" only as prose — the COMPARISON channel is raw bits [D-I1]: the oracle dumps castDoubleToWord64 (u64) per score; the replay compares u64 == to_bits. No decimal round-trip in the trusted base.
 - **[S-I3] The gate's corpus fixtures, explicit**: the cone-mediated case (mover reads derived head H only; candidate inserts base B; extendDelta's fold adds H) AND the eviction-shadow (PraxEvicted) variant are named planner.json fixtures.
 - **[S-I4 + D-I2] NO production reuse flag**: the `reuse: bool` driver switch is dead. The net is at the reuse SITE — debug_assert (test builds) that a reused step equals the live stepPredict when the gate fires — which both removes the prod hook and PROVES the generator reaches reuse (the assert's hit-count is asserted nonzero in the proptest).
 - **[D-C1] planner.json emits scoreActions rows in NATIVE result order** — a stated exception to the oracle's sort-everything convention (the ordering IS the observable under test); the exception is scoped to the scored tables alone.
