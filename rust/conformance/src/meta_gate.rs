@@ -17,7 +17,13 @@ mod gate {
 
     /// Spec-file basenames whose pins this stage must account for. Extend per
     /// stage (S2 adds QuerySpec.hs / CookedSpec.hs, …).
-    const ALLOWLIST: &[&str] = &["SymSpec.hs", "DbSpec.hs", "ELSpec.hs"];
+    const ALLOWLIST: &[&str] = &[
+        "SymSpec.hs",
+        "DbSpec.hs",
+        "ELSpec.hs",
+        "QuerySpec.hs",
+        "CookedSpec.hs",
+    ];
 
     fn repo_root() -> PathBuf {
         // rust/conformance -> rust -> repo root

@@ -224,4 +224,254 @@ mod replay {
             );
         }
     }
+
+    // FIXTURE REPLAY: query.json — parse each Haskell-`show` condition string,
+    // compile it, evaluate over the built db from the initial binding, and match
+    // the recorded result rows byte-for-byte (name-order branching and the
+    // fold's left-to-right threading are both under test).
+    #[test]
+    fn query_replay() {
+        use prax_core::query::{Cond, compile_condition, query};
+
+        let data = load("query.json");
+        for case in data["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let mut i = Interner::new();
+            let db = build(&mut i, &strs(&case["facts"]));
+
+            // The seed binding: initial values are symbols (the corpus carries no
+            // numeric/set initials).
+            let mut seed = Bindings::new();
+            for (var, val) in case["initial"].as_object().unwrap() {
+                let key = i.intern(var);
+                seed.insert(key, Val::Sym(i.intern(val.as_str().unwrap())));
+            }
+
+            let conds: Vec<Cond> = strs(&case["conds"])
+                .iter()
+                .map(|s| {
+                    let authored = parse_condition(s)
+                        .unwrap_or_else(|| panic!("parsing condition {s:?} in '{name}'"));
+                    compile_condition(&mut i, &authored)
+                        .unwrap_or_else(|e| panic!("compiling {s:?} in '{name}': {e}"))
+                })
+                .collect();
+
+            let got: Vec<BTreeMap<String, String>> = query(&mut i, &db, &conds, &seed)
+                .iter()
+                .map(|b| binding_map(&i, b))
+                .collect();
+            let want: Vec<BTreeMap<String, String>> = case["results"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(json_binding)
+                .collect();
+            assert_eq!(got, want, "query results mismatch in '{name}'");
+        }
+    }
+
+    // ---- Haskell-`show` condition parser (fixture-consumption only) ----------
+    //
+    // The query fixtures serialize `Prax.Query.Condition` via Haskell `show`
+    // (e.g. `Subquery {subSet = "Dancers", subFind = ["Dancer"], subWhere =
+    // [...]}`). A small recursive-descent reader turns each back into the Rust
+    // authoring `Condition`. Operand strings never contain embedded quotes, so a
+    // literal is `"` … `"` with no escape handling.
+    use prax_core::query::{CalcOp, CmpOp, Condition};
+
+    struct Reader<'a> {
+        bytes: &'a [u8],
+        pos: usize,
+    }
+
+    impl<'a> Reader<'a> {
+        fn new(s: &'a str) -> Reader<'a> {
+            Reader {
+                bytes: s.as_bytes(),
+                pos: 0,
+            }
+        }
+
+        fn skip_ws(&mut self) {
+            while self.pos < self.bytes.len() && self.bytes[self.pos].is_ascii_whitespace() {
+                self.pos += 1;
+            }
+        }
+
+        fn peek(&mut self) -> Option<u8> {
+            self.skip_ws();
+            self.bytes.get(self.pos).copied()
+        }
+
+        fn eat(&mut self, tok: &str) -> bool {
+            self.skip_ws();
+            if self.bytes[self.pos..].starts_with(tok.as_bytes()) {
+                self.pos += tok.len();
+                true
+            } else {
+                false
+            }
+        }
+
+        fn expect(&mut self, tok: &str) -> Option<()> {
+            if self.eat(tok) { Some(()) } else { None }
+        }
+
+        /// A double-quoted operand string (no escapes in the corpus).
+        fn string(&mut self) -> Option<String> {
+            self.skip_ws();
+            if self.bytes.get(self.pos)? != &b'"' {
+                return None;
+            }
+            self.pos += 1;
+            let start = self.pos;
+            while self.pos < self.bytes.len() && self.bytes[self.pos] != b'"' {
+                self.pos += 1;
+            }
+            let s = std::str::from_utf8(&self.bytes[start..self.pos]).ok()?.to_owned();
+            self.pos += 1; // closing quote
+            Some(s)
+        }
+
+        /// A bare identifier (constructor / operator name).
+        fn ident(&mut self) -> Option<String> {
+            self.skip_ws();
+            let start = self.pos;
+            while self.pos < self.bytes.len()
+                && (self.bytes[self.pos].is_ascii_alphanumeric() || self.bytes[self.pos] == b'_')
+            {
+                self.pos += 1;
+            }
+            if self.pos == start {
+                None
+            } else {
+                Some(String::from_utf8_lossy(&self.bytes[start..self.pos]).into_owned())
+            }
+        }
+
+        /// A `["a", "b", ...]` list of quoted strings.
+        fn string_list(&mut self) -> Option<Vec<String>> {
+            self.expect("[")?;
+            let mut out = Vec::new();
+            if self.peek() == Some(b']') {
+                self.expect("]")?;
+                return Some(out);
+            }
+            loop {
+                out.push(self.string()?);
+                if self.eat(",") {
+                    continue;
+                }
+                break;
+            }
+            self.expect("]")?;
+            Some(out)
+        }
+
+        /// A `[cond, cond, ...]` list of conditions.
+        fn cond_list(&mut self) -> Option<Vec<Condition>> {
+            self.expect("[")?;
+            let mut out = Vec::new();
+            if self.peek() == Some(b']') {
+                self.expect("]")?;
+                return Some(out);
+            }
+            loop {
+                out.push(self.condition()?);
+                if self.eat(",") {
+                    continue;
+                }
+                break;
+            }
+            self.expect("]")?;
+            Some(out)
+        }
+
+        fn cmp_op(&mut self) -> Option<CmpOp> {
+            match self.ident()?.as_str() {
+                "Lt" => Some(CmpOp::Lt),
+                "Lte" => Some(CmpOp::Lte),
+                "Gt" => Some(CmpOp::Gt),
+                "Gte" => Some(CmpOp::Gte),
+                _ => None,
+            }
+        }
+
+        fn calc_op(&mut self) -> Option<CalcOp> {
+            match self.ident()?.as_str() {
+                "Add" => Some(CalcOp::Add),
+                "Sub" => Some(CalcOp::Sub),
+                "Mul" => Some(CalcOp::Mul),
+                "Mod" => Some(CalcOp::Mod),
+                _ => None,
+            }
+        }
+
+        fn condition(&mut self) -> Option<Condition> {
+            self.skip_ws();
+            let ctor = self.ident()?;
+            match ctor.as_str() {
+                "Match" => Some(Condition::Match(self.string()?)),
+                "Not" => Some(Condition::Not(self.string()?)),
+                "Eq" => Some(Condition::Eq(self.string()?, self.string()?)),
+                "Neq" => Some(Condition::Neq(self.string()?, self.string()?)),
+                "Cmp" => {
+                    let op = self.cmp_op()?;
+                    Some(Condition::Cmp(op, self.string()?, self.string()?))
+                }
+                "Calc" => {
+                    let r = self.string()?;
+                    let op = self.calc_op()?;
+                    Some(Condition::Calc(r, op, self.string()?, self.string()?))
+                }
+                "Count" => Some(Condition::Count(self.string()?, self.string()?)),
+                "Subquery" => {
+                    self.expect("{")?;
+                    self.expect("subSet")?;
+                    self.expect("=")?;
+                    let set = self.string()?;
+                    self.expect(",")?;
+                    self.expect("subFind")?;
+                    self.expect("=")?;
+                    let find = self.string_list()?;
+                    self.expect(",")?;
+                    self.expect("subWhere")?;
+                    self.expect("=")?;
+                    let where_ = self.cond_list()?;
+                    self.expect("}")?;
+                    Some(Condition::Subquery { set, find, where_ })
+                }
+                "Or" => {
+                    // Or [[..],[..]] — a bracketed list of condition lists.
+                    self.expect("[")?;
+                    let mut clauses = Vec::new();
+                    if self.peek() == Some(b']') {
+                        self.expect("]")?;
+                        return Some(Condition::Or(clauses));
+                    }
+                    loop {
+                        clauses.push(self.cond_list()?);
+                        if self.eat(",") {
+                            continue;
+                        }
+                        break;
+                    }
+                    self.expect("]")?;
+                    Some(Condition::Or(clauses))
+                }
+                "Absent" => Some(Condition::Absent(self.cond_list()?)),
+                "Exists" => Some(Condition::Exists(self.cond_list()?)),
+                _ => None,
+            }
+        }
+    }
+
+    fn parse_condition(s: &str) -> Option<Condition> {
+        let mut r = Reader::new(s);
+        let c = r.condition()?;
+        r.skip_ws();
+        // The whole string must be consumed.
+        if r.pos == r.bytes.len() { Some(c) } else { None }
+    }
 }
