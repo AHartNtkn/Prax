@@ -18,6 +18,7 @@ pub mod engine_replay;
 pub mod fixtures;
 pub mod loop_advance;
 pub mod meta_gate;
+pub mod npc_replay;
 pub mod planner_replay;
 pub mod schedule_rule_spec;
 pub mod schedule_spec;

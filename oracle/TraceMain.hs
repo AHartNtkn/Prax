@@ -40,7 +40,7 @@ import           Prax.Engine (possibleActions, performAction, currentTurn,
                               performOutcome, definePractice, definePractices,
                               defineFunctions, setAxioms, setCharacters,
                               setDesires, setSchedule, seedDie)
-import           Prax.Loop (advance, npcAct)
+import           Prax.Loop (advance, npcAct, runNpcTicks)
 import           Prax.TypeCheck (TypeError (..), typeCheck)
 import           Prax.EL (meet, leq)
 import           Prax.Query (Condition (..), CookedCondition (..), CmpOp (..),
@@ -340,8 +340,9 @@ runFixtures name = case name of
   "div1"   -> putJSON div1Fixture
   "engine" -> putJSON engineFixture
   "planner" -> putJSON plannerFixture
+  "npc"     -> putJSON npcFixture
   _        -> dieMsg ("unknown fixture " ++ show name
-                      ++ " (one of db el query derive kin div1 engine planner)")
+                      ++ " (one of db el query derive kin div1 engine planner npc)")
 
 -- An axiom rendered for a fixture: the body conditions via Haskell `show` (the
 -- same serialization the query corpus uses) and the head sentence templates.
@@ -1210,6 +1211,120 @@ wCanary = perf
               [ Insert "mark.s" ]
           ] }
 
+-- npc corpus (S6) -------------------------------------------------------------
+--
+-- 'Prax.Loop.runNpcTicks' end to end, before any shipped world exists: the
+-- narration of a 24-turn run over a synthetic cast, plus the full final engine
+-- dump, the standing-intention map, and who is still alive. The three scenarios
+-- cover the loop's whole S6 surface — round boundaries firing on the rotation
+-- wrap, a death mid-run (the corpse is skipped for the rest of the run), and the
+-- v35 commitment semantics in both directions: intentions HOLDING through quiet
+-- rounds and WAKING when a SCHEDULE rule changes the world under them (the v37
+-- wake: a gated desire's liveness flips, so the motive signature no longer
+-- matches the standing intention's basis).
+
+intentionJSON :: Intention -> Value
+intentionJSON i = object
+  [ "act"   .= fmap gaLabel (intentAct i)
+  , "basis" .= sigJSON (intentBasis i) ]
+
+npcScenarioJSON :: (String, Int, Int, PraxState) -> Value
+npcScenarioJSON (nm, depth, steps, st0) = object
+  [ "name"       .= nm
+  , "depth"      .= depth
+  , "steps"      .= steps
+  , "narration"  .= narration
+  , "final"      .= engineDump stF
+  , "intentions" .= object [ K.fromString k .= intentionJSON v
+                           | (k, v) <- Map.toList (intentions stF) ]
+  , "alive"      .= [ charName c | c <- characters stF
+                    , not (exists (deadSentence (charName c)) (db stF)) ]
+  ]
+  where (narration, stF) = runNpcTicks depth steps st0
+
+npcFixture :: Value
+npcFixture = object
+  [ "format"    .= (1 :: Int)
+  , "scenarios" .= map npcScenarioJSON npcScenarios ]
+
+npcScenarios :: [(String, Int, Int, PraxState)]
+npcScenarios =
+  [ ("npc: boundaries and quiet holds", 2, 24, nQuiet)
+  , ("npc: a death mid-run", 2, 24, nDeath)
+  , ("npc: the schedule-gated wake", 2, 24, nWake)
+  ]
+
+-- N1: three characters, two small wants, no schedule. Every rotation wrap fires
+-- a round boundary (the clock advances); once each want is satisfied the cast
+-- idles and every standing intention HOLDS — the narration goes quiet and stays
+-- quiet, which is exactly what commitment looks like.
+nQuiet :: PraxState
+nQuiet = perf [ Insert "practice.yard.here" ]
+  (setCharacters [ alice, bob, character "cara" ]
+     (definePractices [yardP] emptyState))
+  where
+    alice = (character "alice") { charWants = [ Want [ Match "swept.alice" ] 2 ] }
+    bob   = (character "bob")   { charWants = [ Want [ Match "swept.bob" ] 2 ] }
+
+yardP :: Practice
+yardP = practice
+  { practiceId = "yard", roles = ["R"]
+  , actions =
+      [ action "[Actor]: sweep the step"
+          [ Not "swept.Actor" ] [ Insert "swept.Actor" ]
+      , action "[Actor]: idle about" [] [] ]
+  }
+
+-- N2: a death mid-run. cara wants bob dead and can strike him; from the turn
+-- the mark lands, 'Prax.Loop.advance' skips the corpse and 'candidateActions'
+-- gives him nothing — he appears in no further narration line and in no
+-- prediction.
+nDeath :: PraxState
+nDeath = perf [ Insert "practice.duel.here" ]
+  (setCharacters [ alice, character "bob", cara ]
+     (definePractices [duelP] emptyState))
+  where
+    alice = (character "alice") { charWants = [ Want [ Match "swept.alice" ] 2 ] }
+    cara  = (character "cara")  { charWants = [ Want [ Match "dead.bob" ] 9 ] }
+    duelP = practice
+      { practiceId = "duel", roles = ["R"]
+      , actions =
+          [ action "[Actor]: strike bob"
+              [ Eq "Actor" "cara", Not "dead.bob" ] [ Insert "dead.bob" ]
+          , action "[Actor]: sweep the step"
+              [ Not "swept.Actor" ] [ Insert "swept.Actor" ]
+          , action "[Actor]: idle about" [] [] ]
+      }
+
+-- N3: THE SCHEDULE-GATED WAKE. alice holds a desire gated on @marketDay@ — a
+-- fact NO mover action inserts and no axiom derives, so 'Prax.Relevance.livenessOf'
+-- classifies it @GateCheck@ and it reads DEAD while the gate is shut. She commits
+-- to idling. Three boundaries in, the schedule rule opens the market: her live
+-- desire set gains @wants-market@, her motive signature no longer equals her
+-- standing intention's basis, and she deliberates afresh — and sells.
+nWake :: PraxState
+nWake = perf [ Insert "practice.square.here" ]
+  (setSchedule [ marketRule ]
+     (setDesires vocab
+        (setCharacters [ alice, bob, character "cara" ]
+           (definePractices [squareP] emptyState))))
+  where
+    alice = (character "alice") { charDesires = ["wants-market"] }
+    bob   = (character "bob")   { charWants = [ Want [ Match "swept.bob" ] 2 ] }
+    vocab = [ Desire "wants-market" (Want [ Match "marketDay", Match "sold.Owner" ] 5) ]
+    marketRule = ScheduleRule
+      { srName = "market", srPeriod = 3
+      , srBody = [ ([ Not "marketDay" ], [ Insert "marketDay" ]) ] }
+    squareP = practice
+      { practiceId = "square", roles = ["R"]
+      , actions =
+          [ action "[Actor]: sell at the market"
+              [ Match "marketDay", Not "sold.Actor" ] [ Insert "sold.Actor" ]
+          , action "[Actor]: sweep the step"
+              [ Not "swept.Actor" ] [ Insert "swept.Actor" ]
+          , action "[Actor]: idle about" [] [] ]
+      }
+
 -- Entry point ----------------------------------------------------------------
 
 main :: IO ()
@@ -1225,4 +1340,4 @@ main = do
            , "  prax-oracle trace <world> --turns N [--idle NAME] [--depth D] --mode decisions|state|view"
            , "  prax-oracle randtrace <world> --seed S --cap N [--candidates]"
            , "  prax-oracle check <world>"
-           , "  prax-oracle fixtures db|el|query|derive|kin|div1|engine|planner" ])
+           , "  prax-oracle fixtures db|el|query|derive|kin|div1|engine|planner|npc" ])
