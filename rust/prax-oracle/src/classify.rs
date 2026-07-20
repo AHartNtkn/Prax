@@ -10,13 +10,14 @@
 //!
 //! | rung | fires when | points at |
 //! |---|---|---|
-//! | **TERMINATION** | the streams stop differently, or one is short | the three stop rules |
+//! | **TERMINATION** | the streams stop differently, one is short, or `passes` differs | the three stop rules |
 //! | **TURN** | `actor`/`cursor`/`idle`/`t` differ | `advance`: cursor arithmetic, the `i <= cursor` wrap, aliveness, post-boundary re-selection |
 //! | **ENUMERATION** | `candidates` differ | `possible_actions` ordering/filters — or a world-port error (§2) |
-//! | **DECISION** | candidates equal, `action`/`identity` differs | MODE-DEPENDENT [D-C2] |
+//! | **DECISION** | candidates equal, `action`/`identity`/`scores`/`intention_*` differs | MODE-DEPENDENT [D-C2] |
 //! | **RNG** | action equal, `rng`/`walkSeed`/`draws` differ | `CRoll` execution, or the walk's own `pick`/LCG |
 //! | **SCHEDULE** | action+rng equal, `boundary`/`dues`/`expiries` differ | boundary firing, re-arming, expiry arm/cancel/purge, v44 supersession |
 //! | **STATE** | all above equal, `facts` differ | perform semantics, spawn, ForEach snapshot, Call's base-db quirk, closure |
+//! | **STATE(view)** | `view` differs and `facts` does NOT (here, or at t−1) | derivation: axiom heads, defeater names, closure completeness |
 //! | **UNCLASSIFIED** | differs but matches NO rung | THE COMPARATOR ITSELF — fails loud |
 //!
 //! Three amendments carry most of the classifier's value:
@@ -126,13 +127,39 @@ pub struct Ctx {
 }
 
 /// Fields grouped by rung, in ladder order.
+///
+/// THE UNION OF THESE SETS MUST COVER EVERY KEY THE ORACLE CAN EMIT. A field
+/// that is emitted and claimed by no rung reports as UNCLASSIFIED — which sends
+/// an implementer looking at `classify.rs` for what is a genuine engine
+/// divergence. `rung_field_sets_cover_every_emitted_key` in
+/// [`crate::harness_tests`] drives the frozen oracle with every emission flag on
+/// and asserts the coverage, so a field added to the emission cannot land
+/// without a rung.
 const TURN_FIELDS: &[&str] = &["actor", "cursor", "idle", "t"];
 const ENUMERATION_FIELDS: &[&str] = &["candidates"];
-const DECISION_FIELDS: &[&str] = &["action", "identity"];
+const DECISION_FIELDS: &[&str] = &[
+    "action",
+    "identity",
+    "scores",
+    "intention_before",
+    "intention_after",
+];
 const RNG_FIELDS: &[&str] = &["rng", "walkSeed", "draws"];
 const SCHEDULE_FIELDS: &[&str] = &["boundary", "dues", "expiries", "boundary_log"];
 const STATE_FIELDS: &[&str] = &["facts", "view"];
-const TERMINATION_FIELDS: &[&str] = &["end", "reason", "ending", "records"];
+const TERMINATION_FIELDS: &[&str] = &["end", "reason", "ending", "records", "passes"];
+
+/// Every rung's fields, in ladder order — the totality test's subject.
+#[cfg(test)]
+pub const RUNGS: &[(&str, &[&str])] = &[
+    ("TERMINATION", TERMINATION_FIELDS),
+    ("TURN", TURN_FIELDS),
+    ("ENUMERATION", ENUMERATION_FIELDS),
+    ("DECISION", DECISION_FIELDS),
+    ("RNG", RNG_FIELDS),
+    ("SCHEDULE", SCHEDULE_FIELDS),
+    ("STATE", STATE_FIELDS),
+];
 
 /// Classify one divergent record pair.
 ///
@@ -184,13 +211,23 @@ pub fn classify(ctx: &Ctx, d: &RecordDiff, frozen: &Value, rust: &Value) -> Resu
             ),
         ));
     }
+    // Every field on this rung is stop-rule bookkeeping. `end`/`reason`/
+    // `ending`/`records` exist only on a terminal record; `passes` rides every
+    // randtrace turn record and is the counter the `passes > living` dead-end
+    // rule reads. So the rung is NOT gated on the record being terminal —
+    // otherwise a turn pair differing only in `passes` matches no rung at all.
+    // It outranks TURN safely: the run stops at the FIRST divergent record, so a
+    // `passes` difference with every earlier record equal (including `idle`)
+    // cannot be downstream of a turn divergence — it is the counter's own
+    // arithmetic.
     let term = hit(TERMINATION_FIELDS);
-    if is_end(frozen) && !term.is_empty() {
+    if !term.is_empty() {
         return Ok(verdict(
             Class::Termination,
             term,
-            "the stop rule itself: which of cap / ending / extinct / deadend fired, and after \
-             how many records"
+            "the stop rule itself: which of cap / ending / extinct / deadend fired, after how \
+             many records, and the `passes` counter the dead-end rule reads (it advances only on \
+             an idle pass, and the cap decrements only on an action)"
                 .to_owned(),
         ));
     }
@@ -249,8 +286,11 @@ pub fn classify(ctx: &Ctx, d: &RecordDiff, frozen: &Value, rust: &Value) -> Resu
             // gate, the intention hold.
             Walk::Trace =>
                 "the planner: fold association, the 0.9/0.5 discounts, the label tiebreak, the \
-                 v34 reuse gate, the v35 intention hold. If the score tables are identical and \
-                 the action still differs, it is the INTENTION, not the planner [M4]."
+                 v34 reuse gate, the v35 intention hold. The score table and the intention are on \
+                 THIS rung because they are the planner's own evidence: if the score tables are \
+                 identical and the action still differs, it is the INTENTION, not the planner \
+                 [M4]; and a `scores` difference that does not move the argmax is a scoring bug \
+                 whose action agrees."
                     .to_owned(),
             // The planner did NOT run [D-C2].
             Walk::Randtrace =>
@@ -295,6 +335,20 @@ pub fn classify(ctx: &Ctx, d: &RecordDiff, frozen: &Value, rust: &Value) -> Resu
 
     let state = hit(STATE_FIELDS);
     if !state.is_empty() {
+        // [I1] The DIV-1 shape AT ITS OWN RECORD. `view` differing while `facts`
+        // agrees is a DERIVATION divergence here and now — it needs no t−1 flag
+        // to say so, and handling it only one record late would point the reader
+        // at perform semantics for a closure bug.
+        if state.iter().any(|f| f == "view") && !state.iter().any(|f| f == "facts") {
+            return Ok(verdict(
+                Class::StateView,
+                state,
+                "the base dbs AGREE and only the closed VIEW differs — a DERIVATION divergence \
+                 (axiom heads, defeater names, closure completeness), at its own record. This is \
+                 the DIV-1 shape; nothing in perform semantics can produce it."
+                    .to_owned(),
+            ));
+        }
         if ctx.view_differs_at_previous {
             return Ok(verdict(
                 Class::StateView,

@@ -277,42 +277,103 @@ pub fn run_one(spec: &RunSpec, reg: &Register) -> Result<(compare::Outcome, Shap
         ));
     }
     let shape = Shape::Green(rev);
-    let frozen = drive_frozen::run_jsonl(&spec.frozen_args(spec.mode))?;
-    let rust = rust_stream(spec)?;
-    let ctx = Ctx {
+    let mut frozen = drive_frozen::run_jsonl(&spec.frozen_args(spec.mode))?;
+    let mut rust = rust_stream(spec)?;
+    let mut ctx = Ctx {
         walk: spec.walk,
         shape: shape.clone(),
         view_differs_at_previous: false,
     };
-    let outcome =
+    let mut outcome =
         compare::compare_streams(&frozen, &rust, &ctx, reg, &spec.world, spec.sub(), spec.seed)?;
+
+    // [§1.4] THE LOCALIZATION RERUN. `compare` and `matrix` run the matrix
+    // emission (candidates only [S-I4]), under which RNG and SCHEDULE cannot
+    // reach their own pointers: `CRoll` advances the stream unconditionally, so
+    // taken-vs-not leaves `rng` EQUAL, and an expiry firing on the wrong subtree
+    // leaves `expiries` equal — both would report STATE and point at four
+    // innocent subsystems [S-C5]. So on ANY divergence both sides are rerun with
+    // the FULL emission (the draw log, the boundary log, the score table, the
+    // action identity), truncated to the divergent ordinal, and RE-CLASSIFIED.
+    // The richer emission can only reveal the divergence at or before the
+    // ordinal the coarse pass found; the truncation stops it from wandering past
+    // it, which is what makes the rerun a localization and not a second run.
+    if let Some(ordinal) = divergent_ordinal(&outcome)
+        && spec.emit != Emit::all()
+    {
+        let (f, r) = localization_streams(spec, ordinal)?;
+        outcome =
+            compare::compare_streams(&f, &r, &ctx, reg, &spec.world, spec.sub(), spec.seed)?;
+        frozen = f;
+        rust = r;
+        // The full emission is a SUPERSET of the coarse one, so the rerun must
+        // still find the divergence. If it does not, the two emissions disagree
+        // about the same walk — a comparator bug, and it says so rather than
+        // reporting the run clean.
+        if divergent_ordinal(&outcome).is_none() {
+            return Err(format!(
+                "the localization rerun at ordinal {ordinal} found NO divergence under the full \
+                 emission, while the matrix emission found one. The two emissions describe the \
+                 same walk, so this is a bug in prax-oracle, not in either engine."
+            ));
+        }
+    }
+
     // [§1.3(a)] THE VIEW-MODE RECLASSIFICATION — the DIV-1 shape and the single
     // most valuable rule in the classifier. A view-only divergence is invisible
     // in `state` mode and surfaces a turn later as ENUMERATION/DECISION/STATE, so
     // on ANY divergence both sides are rerun in `--mode view`; if the views
     // differ at t−1 while the base dbs agree, the class becomes STATE(view).
-    if let compare::Outcome::Divergent(d) = &outcome
+    if let Some(ordinal) = divergent_ordinal(&outcome)
         && spec.mode != Mode::View
-        && let Some(differs) = view_divergence_at(spec, d.ordinal)?
+        && let Some(differs) = view_divergence_at(spec, ordinal)?
         && differs
     {
-        let ctx2 = Ctx {
-            walk: spec.walk,
-            shape: shape.clone(),
-            view_differs_at_previous: true,
-        };
-        let outcome2 = compare::compare_streams(
+        ctx.view_differs_at_previous = true;
+        outcome = compare::compare_streams(
             &frozen,
             &rust,
-            &ctx2,
+            &ctx,
             reg,
             &spec.world,
             spec.sub(),
             spec.seed,
         )?;
-        return Ok((outcome2, shape));
     }
     Ok((outcome, shape))
+}
+
+/// Both sides of the run re-driven with the FULL localization emission and
+/// truncated to `ordinal` — the [§1.4] rerun's two properties in one place.
+///
+/// # Errors
+/// If either side cannot be re-driven.
+pub fn localization_streams(
+    spec: &RunSpec,
+    ordinal: usize,
+) -> Result<(Vec<Value>, Vec<Value>), String> {
+    let loc = RunSpec {
+        emit: Emit::all(),
+        ..spec.clone()
+    };
+    let frozen = truncate(drive_frozen::run_jsonl(&loc.frozen_args(loc.mode))?, ordinal);
+    let rust = truncate(rust_stream(&loc)?, ordinal);
+    Ok((frozen, rust))
+}
+
+/// Keep the header and records `1..=ordinal` — the localization rerun's
+/// truncation to the divergent record.
+fn truncate(mut stream: Vec<Value>, ordinal: usize) -> Vec<Value> {
+    stream.truncate(ordinal + 1);
+    stream
+}
+
+/// The ordinal a divergent outcome localized to.
+fn divergent_ordinal(o: &compare::Outcome) -> Option<usize> {
+    match o {
+        compare::Outcome::Divergent(d) => Some(d.ordinal),
+        _ => None,
+    }
 }
 
 /// Did the VIEWs differ at the record BEFORE `ordinal` while the base dbs

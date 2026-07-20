@@ -140,6 +140,101 @@ fn the_die_seed_override_agrees() {
 }
 
 #[test]
+fn the_localization_rerun_carries_the_full_emission_truncated_to_the_ordinal() {
+    // [C1]'s two properties, over both engines. `compare`/`matrix` run the
+    // matrix emission (candidates only), under which the draw log and the
+    // boundary log do not exist — so RNG and SCHEDULE cannot reach their own
+    // pointers [S-C5] and an RNG bug arrives labelled STATE. `run_one` reruns
+    // through this function on ANY divergence; what it must produce is BOTH
+    // sides at the full emission, truncated to the divergent record.
+    let ordinal = 6;
+    let (frozen, rust) =
+        crate::localization_streams(&spec(Walk::Randtrace, 25, Some(3)), ordinal)
+            .expect("both sides re-drive");
+    assert_eq!(frozen.len(), ordinal + 1, "the frozen side is truncated");
+    assert_eq!(rust.len(), ordinal + 1, "the rust side is truncated");
+    for (side, stream) in [("frozen", &frozen), ("rust", &rust)] {
+        let turn = stream[ordinal].as_object().expect("a record object");
+        println!("{side} @ord {ordinal}: {:?}", turn.keys().collect::<Vec<_>>());
+        for field in ["candidates", "draws", "identity"] {
+            assert!(
+                turn.contains_key(field),
+                "the {side} localization record is missing `{field}` — the rerun did not turn \
+                 the full emission on, and RNG/SCHEDULE cannot reach their pointers without it"
+            );
+        }
+    }
+}
+
+#[test]
+fn rung_field_sets_cover_every_emitted_key() {
+    // [C2] THE LADDER'S TOTALITY, asserted against the EMISSION rather than
+    // against a list someone maintained by hand. A field that is emitted and
+    // claimed by no rung classifies as UNCLASSIFIED — which tells an implementer
+    // to go fix `classify.rs` for what is a genuine engine divergence. That is
+    // [S-C1]'s defect, and it came back once already when this slice added
+    // `scores`/`intention_before`/`intention_after`/`passes` to the emission.
+    // So the coverage is checked by DRIVING the frozen oracle with every
+    // emission flag on, over both walks and the richest mode, and taking the
+    // union of the keys it actually produces.
+    use crate::classify::RUNGS;
+    use std::collections::BTreeSet;
+
+    let claimed: BTreeSet<&str> = RUNGS.iter().flat_map(|(_, fs)| fs.iter().copied()).collect();
+    let runs: Vec<Vec<String>> = vec![
+        crate::RunSpec {
+            mode: Mode::View,
+            emit: Emit::all(),
+            ..spec(Walk::Trace, 16, None)
+        }
+        .frozen_args(Mode::View),
+        crate::RunSpec {
+            mode: Mode::View,
+            emit: Emit::all(),
+            ..spec(Walk::Randtrace, 25, Some(3))
+        }
+        .frozen_args(Mode::View),
+    ];
+
+    let mut emitted: BTreeSet<String> = BTreeSet::new();
+    for args in &runs {
+        let stream = crate::drive_frozen::run_jsonl(args).expect("the frozen oracle runs");
+        for rec in &stream {
+            let obj = rec.as_object().expect("every record is an object");
+            // The header is compared on its own and reported as SHAPE-DIVERGENT
+            // [M1]; it never reaches the classifier.
+            if obj.contains_key("format") {
+                continue;
+            }
+            emitted.extend(obj.keys().cloned());
+        }
+    }
+    assert!(
+        !emitted.is_empty(),
+        "no records were collected — the coverage assertion would be vacuous"
+    );
+    println!("emitted keys ({}): {emitted:?}", emitted.len());
+
+    let unclaimed: Vec<&String> = emitted.iter().filter(|k| !claimed.contains(k.as_str())).collect();
+    assert!(
+        unclaimed.is_empty(),
+        "the oracle emits {unclaimed:?}, which NO rung of the ladder claims. A record pair \
+         differing only in one of them classifies as UNCLASSIFIED and points the reader at \
+         classify.rs instead of at the engine. Put each field on the rung whose evidence it is \
+         (see classify::RUNGS)."
+    );
+
+    // The converse, so the rung sets cannot rot into fiction: every claimed
+    // field must be one the oracle can actually emit.
+    let phantom: Vec<&&str> = claimed.iter().filter(|k| !emitted.contains(**k)).collect();
+    assert!(
+        phantom.is_empty(),
+        "the ladder claims {phantom:?}, which the oracle never emits over either walk at the \
+         full emission — a rung field that describes nothing"
+    );
+}
+
+#[test]
 fn a_world_that_is_not_ported_yet_is_a_loud_error_naming_its_slice() {
     let e = worlds::build("village").expect_err("village is not ported in slice 0");
     println!("{e}");

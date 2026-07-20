@@ -280,6 +280,75 @@ fn state_view_reclassifies_when_the_view_diverged_a_turn_earlier() {
 }
 
 #[test]
+fn decision_a_scoring_bug_that_does_not_move_the_argmax() {
+    // [C2]. `scores` is the planner's OWN evidence, and a scoring bug that leaves
+    // the argmax where it was has an EQUAL `action`. Before this rung claimed
+    // `scores`, this pair — the exact one `explain` is run to produce — reported
+    // UNCLASSIFIED and sent the reader to classify.rs.
+    let row = |bits: u64| json!([{"depth": 0, "rows": [{"label": "vera: brag", "bits": bits}]}]);
+    let a = with(base(), "scores", row(4_607_182_418_800_017_408));
+    let b = with(base(), "scores", row(4_611_686_018_427_387_904));
+    let v = verdict("DECISION / scores, action equal", &ctx(Walk::Trace), &a, &b);
+    assert_eq!(v, Class::Decision);
+}
+
+#[test]
+fn decision_the_intention_differs_while_the_action_agrees() {
+    // [M4]'s tell, made classifiable: the DECISION pointer advertises "if the
+    // score tables are identical and the action still differs, it is the
+    // INTENTION" — so the intention has to sit on the rung that says so.
+    let a = with(base(), "intention_after", json!({"label": "vera: brag", "left": 2}));
+    let b = with(base(), "intention_after", json!({"label": "vera: brag", "left": 1}));
+    assert_eq!(
+        verdict("DECISION / intention_after", &ctx(Walk::Trace), &a, &b),
+        Class::Decision
+    );
+}
+
+#[test]
+fn termination_two_records_differing_only_in_passes() {
+    // [C2]. `passes` is the counter the `passes > living` dead-end rule reads.
+    // It rides every randtrace TURN record as well as the terminal one, so the
+    // rung cannot be gated on the record being terminal.
+    let a = json!({"end": true, "reason": "cap", "ending": null, "passes": 4, "records": 12});
+    let b = json!({"end": true, "reason": "cap", "ending": null, "passes": 3, "records": 12});
+    assert_eq!(
+        verdict("TERMINATION / passes, terminal", &ctx(Walk::Randtrace), &a, &b),
+        Class::Termination
+    );
+    let c = with(base(), "passes", json!(2));
+    let e = with(base(), "passes", json!(1));
+    assert_eq!(
+        verdict("TERMINATION / passes, turn record", &ctx(Walk::Randtrace), &c, &e),
+        Class::Termination
+    );
+}
+
+#[test]
+fn state_view_fires_at_its_own_record_without_the_previous_turn_flag() {
+    // [I1]. `view` differing while `facts` agrees is a DERIVATION divergence
+    // HERE — axiom heads, defeater names, closure completeness. Requiring the
+    // t−1 flag handled the DIV-1 shape one record late and pointed the reader at
+    // perform semantics, spawn and the ForEach snapshot for a closure bug.
+    let a = with(base(), "view", json!(["char.vera", "trusts.vera.otto"]));
+    let b = with(base(), "view", json!(["char.vera"]));
+    let d = diff_records(&a, &b);
+    let v = classify(&ctx(Walk::Trace), &d, &a, &b).expect("classifies");
+    println!("[STATE(view) / at its own record]");
+    for l in render(&v) {
+        println!("  {l}");
+    }
+    assert_eq!(v.class, Class::StateView);
+    assert!(v.pointer.contains("base dbs AGREE"), "{}", v.pointer);
+    // …and `facts` ALSO differing is a base-db divergence, not a view one.
+    let b2 = with(b, "facts", json!(["char.vera"]));
+    assert_eq!(
+        verdict("STATE / facts and view both", &ctx(Walk::Trace), &a, &b2),
+        Class::State
+    );
+}
+
+#[test]
 fn unclassified_fails_loud_rather_than_mislabelling() {
     // [S-C1]'s terminal class. A field added to the emission without being added
     // to the ladder must report as a COMPARATOR bug — not be folded into STATE,
