@@ -31,3 +31,19 @@ thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 proptest = "1.5"
+
+# The dev/test profile is OPTIMIZED. S7 slice 4 lands the village — the
+# mechanism-densest world — whose conformance suite drives several hundred
+# depth-2 planner turns over a six-character cast (`VillageSpec` alone shares two
+# ~100-step free-play trajectories, exactly as the frozen spec does). Measured:
+# unoptimized, `cargo test -p conformance village::` had not finished after 37
+# MINUTES; at opt-level 2 it is minutes. `scripts/verify.sh` runs `cargo test`
+# without a profile flag, so an unoptimized default would make the program's
+# standing gate unusable at exactly the stage that needs it most.
+#
+# `debug-assertions` stays ON: the planner's reuse-hit counter and the
+# `debug_assert`ed reuse==live equality are `cfg(debug_assertions)` and are what
+# the flagship proptest checks [S-I4]. Only the code generator changes; nothing
+# semantic does.
+[profile.dev]
+opt-level = 2

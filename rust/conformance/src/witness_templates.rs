@@ -11,9 +11,12 @@
 //! identical to the literal.
 //!
 //! `conformance` depends on both crates, so here it closes by CONSTRUCTION: the
-//! equality runs over [`prax_worlds::bar::together`] itself. If a world's
-//! co-presence changed shape, the WitnessSpec pin would keep testing the old one
-//! while still passing; this one would not.
+//! equality runs over [`prax_worlds::bar::together`] and
+//! [`prax_worlds::village::together`] themselves. If a world's co-presence changed
+//! shape, the WitnessSpec pin would keep testing the old one while still passing;
+//! these would not. The village's matters most: it is the world with the MOST
+//! `as_role` call sites behind it (Rumor's gossip, Deceit's lie, Confession's
+//! confess, and Blackmail's trigger AND punish).
 
 #[cfg(test)]
 mod tests {
@@ -21,7 +24,8 @@ mod tests {
     use prax_core::interner::Interner;
     use prax_core::query::{Condition, ground_condition};
     use prax_vocab::witness::{CoPresence, as_role};
-    use prax_worlds::bar::together;
+    use prax_worlds::bar::together as bar_together;
+    use prax_worlds::village::together as village_together;
 
     /// The frozen implementation, transcribed from `src/Prax/Witness.hs`:
     /// `map (groundCondition (Map.singleton (intern "Witness") (VSym (intern v))))`.
@@ -39,21 +43,22 @@ mod tests {
     }
 
     #[test]
-    fn as_role_agrees_with_ground_condition_on_the_bar_worlds_own_co_presence() {
-        let template = together();
-        assert!(
-            !template.is_empty(),
-            "an empty co-presence would make this pin vacuous"
-        );
-        // Every role the shipped call sites retarget to: Rumor/Deceit/
-        // Confession use `Hearer`, Blackmail's trigger uses the victim's own
-        // bound variable, and `Witness` is the identity case.
-        for role in ["Hearer", "V", "Witness"] {
-            assert_eq!(
-                as_role(role, &template),
-                ground_reference(role, &template),
-                "as_role({role:?}) diverges from groundCondition on bar's own `together`"
+    fn as_role_agrees_with_ground_condition_on_every_shipped_worlds_own_co_presence() {
+        for (world, template) in [("bar", bar_together()), ("village", village_together())] {
+            assert!(
+                !template.is_empty(),
+                "an empty co-presence would make this pin vacuous ({world})"
             );
+            // Every role the shipped call sites retarget to: Rumor/Deceit/
+            // Confession use `Hearer`, Blackmail's trigger uses the victim's own
+            // bound variable, and `Witness` is the identity case.
+            for role in ["Hearer", "V", "Witness"] {
+                assert_eq!(
+                    as_role(role, &template),
+                    ground_reference(role, &template),
+                    "as_role({role:?}) diverges from groundCondition on {world}'s own `together`"
+                );
+            }
         }
     }
 }
