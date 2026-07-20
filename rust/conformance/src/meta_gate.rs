@@ -28,6 +28,10 @@ mod gate {
         "EngineSpec.hs",
         "RngSpec.hs",
         "GateSpec.hs",
+        // S5:
+        "LoopSpec.hs",
+        "ScheduleSpec.hs",
+        "ScheduleRuleSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {
