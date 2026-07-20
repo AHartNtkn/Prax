@@ -23,7 +23,7 @@ comparator.
 | S5 | Loop + Schedule + Rng (stream landed S4) | DONE | [S05](reports/S05-loop-schedule.md) |
 | S6 | Planner + Minds + Relevance + Sight (design-heavy; fidelity summit) | DONE | [S06](reports/S06-planner.md) |
 | S7 | Vertical world slices: Feud → Intrigue → Bar → Village (Audience → S8, [A1]) | SLICES 1-4 LANDED, slice-4 fix wave applied; slice-4 evidence report outstanding | [S07-1](reports/S07-slice1-feud.md) [S07-2](reports/S07-slice2-intrigue.md) [S07-3](reports/S07-slice3-bar.md) |
-| S8 | Script + Play + Audience ([A1]) | IN PROGRESS (design) | — |
+| S8 | Script + Play + Audience ([A1]) | IMPLEMENTED; evidence report outstanding | — |
 | S9 | TypeCheck + AnalysisTable + Stress + Persist + Inspect + CLI | — | — |
 | S10 | Hardening + cut-over | — | — |
 
@@ -47,55 +47,86 @@ Rust is right — so `DIVERGENCES.md` is the wrong home. Each entry names the la
 what covers it, what does NOT, and where it is due. **A gap still open at S10
 must appear in the cut-over criteria as a stated limit of coverage.**
 
-### CG-1 — the v44 SUPERSESSION law has no AUTHORED-DATA net at world scale
+**Open gaps: NONE.** CG-1 was the only one, and S8 closed it.
+
+### CG-1 — the v44 SUPERSESSION law had no AUTHORED-DATA net at world scale — **CLOSED at S8**
 
 **The law.** A BARE insert onto a path already carrying a pending expiry CANCELS
 that expiry, so the fact stands permanently
 (`prax-core/src/engine.rs`, `Effect::Insert`). A re-`InsertFor` on the same path
 routes through the same branch and then re-arms: a REFRESH, not a supersession.
 
-**What covers it.**
+**What the gap was.** The law had an ENGINE-scale net from S5
+(`schedule_spec::law_3_bare_re_insert_cancels_the_timer` and
+`engine_replay::engine_scenarios_replay_byte_for_byte`, both over a bare
+`State::new()`), and a WORLD-scale net from the S7 fix wave
+(`supersession_world`, the same law over the real compiled `village_world()`,
+with a control and the refresh trap beside it). But in both, the bare insert is
+performed BY THE TEST. No shipped world reached the case through its own
+AUTHORED data, so a supersession bug that only manifested through authoring had
+no net — measured slice by slice: bar/dm/village write `*.feels.*` through
+exactly two routes, `feel_toward_for` (an `InsertFor`) and `unfeel_toward` (a
+`Delete`), and a 42-turn village trace hit `expiries.remove` 100 times, all
+refreshes, zero bare supersessions.
 
-- **Engine scale, S5**: `conformance::schedule_spec::law_3_bare_re_insert_cancels_the_timer`
-  and `conformance::engine_replay::engine_scenarios_replay_byte_for_byte`.
-  Re-verified in the slice-4 fix wave: with `rt.expiries.remove(path)` deleted,
-  `cargo test --workspace` gives **exactly those two REDs** (138 passed, 2
-  failed) and nothing else. Real detectors — but they drive a bare
-  `State::new()`: no practices, no rules, no derived view, no eviction shadows.
-- **World scale, S7 fix wave**: `conformance::supersession_world` — the same law
-  over the real compiled `village_world()`, through the village's own emotion
-  vocabulary, with a control (a timer left alone still fires) and the refresh
-  case pinned beside it so the trap cannot be mistaken for the law. Reddens
-  under the same deletion.
+**What closed it.** S8's `conformance::script_supersession`, driving
+`conformance/fixtures/cg1_supersession.json` — a real authored play-script whose
+scene setup arms its OWN timer (`{"insertFor":{"rounds":3,"sentence":
+"lantern.lit"}}`) and whose one beat bare-inserts that same path. Left alone the
+lantern goes out at boundary 3 and the junction reading its absence ends the
+story; shielded, the pending expiry is cancelled, the fact stands eight
+boundaries later — more than twice the authored lifetime — and the ending never
+comes. Supersession, from authored data, at world scale, through the JSON door,
+with the CONTROL and the REFRESH trap pinned beside it.
 
-**What does NOT cover it.** No shipped world reaches the case through its own
-AUTHORED data, so a supersession bug that only manifests through authoring has
-no net. Measured, slice by slice:
+**The claim that had to be broken first.** Both this file and the S8 design
+asserted the gap could not close at S8: *"`Prax.Script.compile` REFUSES at
+construction any authored condition or outcome headed `scenePatience` — so a
+bare insert onto a live script timer is not merely absent from S8's worlds, it
+is inexpressible in a script."* **That is FALSE.** The refusal covers only the
+compiler-owned `scenePatience` family. `InsertFor` is in the AUTHORED `Outcome`
+surface: `sceneSetup` accepts it (`Script.hs:105`), `beatEffects` accepts it
+(`Script.hs:120`), and `Prax.Script.Json` spells it directly
+(`Json.hs:139-140`). A script can arm a timer on any path it likes and then
+cancel it, and `compile` never looks. The S8 soundness panel found this, and it
+was re-measured independently on the FROZEN engine over the same committed file
+before any Rust was written:
 
-- **bar / dm (slice 3)** and **village (slice 4)** write `*.feels.*` through
-  exactly two routes — `feel_toward_for` (an `InsertFor`) and `unfeel_toward` (a
-  `Delete`). There is no bare-insert route to the family in either. Instrumented
-  over village: a 42-turn trace hits `expiries.remove` 100 times, **all
-  refreshes, zero bare supersessions**; 60 randtrace seeds, zero. With the line
-  deleted, `worldshape village --check`, the trace, 60 randtrace seeds and the
-  300-seed matrix all stay CLEAN.
-- **S07-design §13 asserted village writes the family "through more than one
-  route" and made a slice-4 mutation RED binding on that premise. The premise is
-  FALSE**; §13 is struck and corrected, and §14 records the measurement.
-- **S8 (Audience, Play, Script) does NOT reach it either, and cannot.** Checked
-  in the fix wave: neither `src/Prax/Worlds/Audience.hs` nor
-  `src/Prax/Worlds/Play.hs` calls any timer-arming combinator; the only timer in
-  the script machinery is `InsertFor n scenePatience.<sid>.<j>`
-  (`src/Prax/Script.hs:398`), armed by the compiler, and Audience does arm one
-  (`timeout "dismissed" 5`). But `Prax.Script.compile` REFUSES at construction
-  any authored condition or outcome headed `scenePatience`
-  (`scenePatienceOffenders`, `Script.hs:282`) — so a bare insert onto a live
-  script timer is not merely absent from S8's worlds, it is inexpressible in a
-  script. S8 will not close this gap.
+```
+compile ACCEPTED the authored InsertFor + a bare Insert of the same path
+control    (i, lantern.lit, ending) = [(0,True,Nothing),(1,True,Nothing),(2,True,Nothing),
+                                       (3,False,Just "darkness"),(4,False,Just "darkness"), …]
+supersede  expiries after the beat  = []
+supersede  (i, lantern.lit, ending) = [(0,True,Nothing) … (8,True,Nothing)]
+```
 
-**Disposition.** Carried to **S10**. Nothing before it can close it: the
-remaining stages add no world whose authored data reaches the case. S10 either
-authors a world that does, or states in the cut-over criteria that the law's
-world-scale coverage is engine-driven (`supersession_world`) and not
-authored-data-driven, and that a supersession bug reachable only through
-authoring would ship unnetted.
+**The mutation evidence.** With `rt.expiries.remove(path)` deleted from
+`prax-core`'s `Effect::Insert` arm, `cargo test --workspace --no-fail-fast`
+gives exactly FOUR REDs and nothing else:
+
+```
+schedule_spec::tests::law_3_bare_re_insert_cancels_the_timer                        (S5, engine scale)
+engine_replay::replay::engine_scenarios_replay_byte_for_byte                        (S5, engine scale)
+supersession_world::tests::a_bare_insert_onto_a_live_village_timer_supersedes_it    (S7, world scale, driven externally)
+script_supersession::tests::a_beats_bare_insert_supersedes_the_scripts_own_authored_timer   (S8, AUTHORED)
+```
+
+The fourth is the new one, and it is the one the gap was about. The control
+(`the_authored_timer_fires_on_schedule_when_nothing_touches_it`) stays GREEN
+under that deletion, as it must — deleting the cancellation does not stop
+expiries firing — which is what makes the pair a measurement rather than a
+coincidence.
+
+**Differential.** The same committed file is the `cg1` world on BOTH engines —
+the frozen oracle reads it at `oracle/TraceMain.hs`'s `cg1ScriptPath`, the Rust
+registry embeds it at `prax_oracle::worlds::CG1_SCRIPT_JSON` — so the two cannot
+be driven by different scripts. It is a FIXTURE, not shipped content, so it is
+absent from `allWorldNames` exactly as `probe` and `bigfeud` are.
+
+**The REFRESH half** is covered twice over at S8: by the authored re-arm
+(`re_arming_the_authored_timer_refreshes_rather_than_supersedes`) and by scene
+RE-ENTRY re-arming a patience marker through the compiler's scene-entry fold,
+reached by an authored `goto`
+(`conformance::script_spec::re_entry_resets_a_timed_junction`).
+
+**Disposition.** CLOSED. Nothing carries to S10.

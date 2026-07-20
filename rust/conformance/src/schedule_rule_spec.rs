@@ -350,6 +350,31 @@ mod tests {
         assert!(b.engine_rule_names().is_empty());
     }
 
+    // H: ScheduleRuleSpec.hs "adding an authored 'story' rule to a compiled script world is a loud collision"
+    //
+    // The owed:S8 discharge. The two doors write ONE globally-keyed rule table
+    // (the dues map is keyed by name), so a compiled SCRIPT world — which
+    // pre-registers `story` through the compiler door — refuses an authored rule
+    // of the same name. Only this direction is reachable for a compiled world;
+    // the converse and the bare-state case are pinned above at S5.
+    //
+    // The pin's HOME stays here, at the frozen label's own spec file, rather
+    // than moving to the script suite: a `// H:` label is a claim about
+    // provenance, and this label is `ScheduleRuleSpec`'s.
+    #[test]
+    fn adding_an_authored_story_rule_to_a_compiled_script_world_is_a_loud_collision() {
+        let mut play = prax_worlds::play::play_world();
+        assert_eq!(
+            play.engine_rule_names(),
+            ["story"],
+            "precondition: the compiled world already holds the engine `story` rule"
+        );
+        assert!(matches!(
+            play.set_schedule(vec![ScheduleRule::new("story", 2)]),
+            Err(WorldError::DuplicateScheduleRuleName { name }) if name == "story"
+        ));
+    }
+
     // H: ScheduleRuleSpec.hs "a duplicate name through the engine door alone still errors loudly (the record-update forces the guard)"
     #[test]
     fn a_duplicate_name_through_the_engine_door_alone_still_errors_loudly() {

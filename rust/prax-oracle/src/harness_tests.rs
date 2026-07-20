@@ -344,23 +344,30 @@ fn rung_field_sets_cover_every_emitted_key() {
     );
 }
 
-/// Slice 4 lands the last S7 world, so the invariant this test guards flips from
-/// "an unported world refuses loudly" to "every S7 world BUILDS, and only an
-/// unknown name refuses". Both halves are asserted: a silent skip on either side
-/// is what the original test existed to prevent.
+/// Every registered world BUILDS, and only an unknown name refuses. Both halves
+/// are asserted: a silent skip on either side is what the original test existed
+/// to prevent. S8 folds its two script worlds and the CG-1 fixture into the same
+/// sweep — a world that is listed but does not build, or builds but is not
+/// listed, is exactly the drift the matrix would then sweep past.
 #[test]
-fn every_s7_world_builds_and_only_an_unknown_name_is_a_loud_error() {
-    for w in worlds::S7_WORLDS {
+fn every_registered_world_builds_and_only_an_unknown_name_is_a_loud_error() {
+    for w in worlds::ported() {
         assert!(
             worlds::build(w).is_ok(),
-            "S7 world `{w}` must build now that slice 4 has landed"
-        );
-        assert!(
-            worlds::ported().contains(w),
-            "S7 world `{w}` must be listed as ported"
+            "registered world `{w}` must build"
         );
     }
-    let e = worlds::build("audience").expect_err("audience is S8's, not S7's");
+    for w in worlds::S7_WORLDS.iter().chain(worlds::S8_WORLDS) {
+        assert!(
+            worlds::ported().contains(w),
+            "world `{w}` must be listed as ported"
+        );
+    }
+    assert!(
+        worlds::ported().contains(&worlds::CG1_WORLD),
+        "the CG-1 fixture world must be listed as ported"
+    );
+    let e = worlds::build("nosuchworld").expect_err("an unknown name refuses loudly");
     println!("{e}");
     assert!(e.contains("unknown world"), "{e}");
 }

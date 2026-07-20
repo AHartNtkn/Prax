@@ -68,6 +68,9 @@ mod gate {
         // Per-file: GoldenDriveSpec's three world labels span slices 2-4, but no
         // stage boundary intervenes (S7 design §5).
         "GoldenDriveSpec.hs",
+        // S8 (script + play + audience):
+        "ScriptSpec.hs",
+        "JsonSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {
@@ -125,8 +128,14 @@ mod gate {
     }
 
     /// Every `// H: <SpecFile> "<label>"` occurrence across `rust/`, as
-    /// `(basename, label)`. Only the label's surrounding double quotes delimit
-    /// it; S1 labels contain no embedded quotes.
+    /// `(basename, label)`.
+    ///
+    /// The label is delimited by double quotes, and a `\"` inside it is part of
+    /// the label rather than its terminator — S8's `Script/JsonSpec` labels are
+    /// the first that quote a JSON field name (`… a removed \"memories\" field
+    /// …`), and the manifest carries those two characters verbatim. Closing on
+    /// the first `"` regardless would truncate the label to a prefix that names
+    /// no pin, which is a silent accounting hole disguised as a typo report.
     fn collect_h_comments() -> Vec<(String, String)> {
         let mut out = Vec::new();
         let mut files = Vec::new();
@@ -143,7 +152,7 @@ mod gate {
                 };
                 let spec = rest[..open].trim();
                 let after = &rest[open + 1..];
-                let Some(close) = after.find('"') else {
+                let Some(close) = unescaped_quote(after) else {
                     continue;
                 };
                 let label = &after[..close];
@@ -151,6 +160,20 @@ mod gate {
             }
         }
         out
+    }
+
+    /// The byte offset of the first `"` NOT preceded by a backslash.
+    fn unescaped_quote(s: &str) -> Option<usize> {
+        let bytes = s.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' => i += 2,
+                b'"' => return Some(i),
+                _ => i += 1,
+            }
+        }
+        None
     }
 
     fn collect_rs_files(dir: &Path, out: &mut Vec<PathBuf>) {

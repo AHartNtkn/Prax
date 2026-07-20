@@ -272,3 +272,56 @@ not-yet-due descendant's QUEUE entry; because due entries leave the queue
 before any firing, the purge set is the same whichever order the due set
 fires in — the surviving queue, not just the surviving facts, is
 order-independent (pinned by the mixed-lifetime commutation proptest).
+
+## DIV-5 (S8): the `"memories"` guard — a guard whose whole purpose is loudness — is silent on an explicit `null`
+
+**What**: `Prax.Script.Json`'s `FromJSON Scene` rejects a scene object carrying
+the pre-v46 `"memories"` key, LOUDLY, because the decoder otherwise ignores
+unknown keys and a script authored against the deleted memory feature would
+decode with its content quietly dropped — the same "same bytes, different
+meaning" stance `Prax.Persist`'s v3 format bump takes for saves. The guard is
+`hasMemories <- isJust <$> (o .:? "memories" :: Parser (Maybe Value))`
+(`Json.hs:207`).
+
+aeson's `.:?` maps an explicit JSON `null` to `Nothing` exactly as it maps a
+MISSING key. So the guard does not fire on `"memories": null`. Measured on the
+frozen decoder:
+
+```
+{"id":"a","memories":[]}    -> Left "… Scene's \"memories\" field is no longer supported …"
+{"id":"a","memories":null}  -> Right (Script {…, sceneId = "a", sceneOpening = "", …})
+```
+
+The hole sits at precisely the JSON spelling an author is most likely to leave
+behind when half-deleting a field.
+
+**What the Rust does**: `prax_script::json`'s `check_no_memories` fires on the
+KEY BEING PRESENT, `null` included. The Rust rejects a strict superset of what
+the frozen rejects, in the direction the guard was written for.
+
+**Spec authority**: the guard's own stated purpose. Its documentation says it
+exists so a pre-v46 script cannot decode "with that content quietly dropped" —
+a guard against silent key-dropping that is itself silent on one spelling does
+not do the job it declares. This is an implementation bug in a loudness
+mechanism, not a contract: the program's ruling that Haskell bugs are never
+reproduced applies to it cleanly.
+
+It applies FAR more cleanly here than to the neighbouring
+ignore-unknown-keys behaviour, and the two must not be fused. Tolerating unknown
+keys IS the frozen contract — a `deny_unknown_fields` port would reject
+forward-compatible files the frozen accepts, which is a strictness FORK question
+(S10's, if anyone's), not hygiene. The Rust reproduces ignore-unknown-keys
+exactly (`prax_script::json::tests::unknown_keys_are_ignored_except_memories`)
+and strengthens only the one guard whose declared job is to be loud.
+
+**Fiction consequence**: none. No shipped file carries the key in any spelling
+(`grep -rn "emor" src/ app/ test/ examples/` finds only the guard and its own
+test), and a file that did was already broken content under either engine — the
+difference is whether the author is told.
+
+**Comparator posture**: no suppression. The divergence is unreachable from any
+trace: it is a decode-time rejection, and no shipped world is loaded from a file
+carrying the key. Pinned in both directions by
+`conformance::script_json_spec::a_scene_json_carrying_a_removed_memories_field_is_rejected_loudly`,
+which asserts the array spelling (where the two engines agree) and the `null`
+spelling (where they do not) side by side.

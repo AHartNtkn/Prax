@@ -36,6 +36,7 @@ import           Data.Maybe (isNothing, listToMaybe, fromMaybe)
 import qualified Data.Map.Strict as Map
 import           Data.Word (Word64)
 import           GHC.Float (castDoubleToWord64)
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Data.Aeson (Value, object, (.=), toJSON, encode)
 import qualified Data.Aeson.Key as K
@@ -67,6 +68,8 @@ import qualified Prax.Worlds.Play as Play
 import qualified Prax.Worlds.Feud as Feud
 import qualified Prax.Worlds.Audience as Audience
 import qualified Prax.Worlds.Village as Village
+import           Prax.Script (compile)
+import           Prax.Script.Json (decodeScript)
 
 -- Worlds ---------------------------------------------------------------------
 
@@ -102,6 +105,36 @@ worldNamed n = case n of
 -- ('deriveFixture') enumerate this list.
 allWorldNames :: [String]
 allWorldNames = ["bar", "dm", "intrigue", "play", "feud", "audience", "village"]
+
+-- | The CG-1 fixture world: a play-script, authored entirely through JSON,
+-- whose scene setup arms its OWN timer (@insertFor@) and whose one beat
+-- bare-inserts the same path. It is the counterexample to the S8 design's claim
+-- that a bare insert onto a live script timer is "inexpressible in a script" —
+-- 'Prax.Types.InsertFor' is in the authored @Outcome@ surface, @sceneSetup@ and
+-- @beatEffects@ both accept it, and "Prax.Script.Json" spells it directly, so a
+-- script can arm a timer and then cancel it. Left alone the lantern goes out at
+-- boundary 3 and the story ends; shielded, the v44 supersession law cancels the
+-- pending expiry and the ending never comes.
+--
+-- It is a FIXTURE, not content (hence its absence from 'allWorldNames'), and it
+-- is read from the SAME committed file the Rust conformance fixture reads, so
+-- the two engines cannot be driven by different scripts.
+cg1World :: String
+cg1World = "cg1"
+
+cg1ScriptPath :: FilePath
+cg1ScriptPath = "conformance/fixtures/cg1_supersession.json"
+
+-- | 'worldNamed', plus the one world that comes from a FILE rather than a
+-- module. Everything downstream of world selection goes through here.
+buildWorld :: String -> IO (Maybe (PraxState, String))
+buildWorld n
+  | n == cg1World = do
+      raw <- BL.readFile cg1ScriptPath
+      case decodeScript raw of
+        Left err -> dieMsg (cg1ScriptPath ++ ": " ++ err)
+        Right sc -> pure (Just (compile sc, "p"))
+  | otherwise = pure (worldNamed n)
 
 -- probe: the harness's self-test world ----------------------------------------
 --
@@ -437,7 +470,7 @@ factFields View      st = [ "facts" .= dbToLabeledSentences (db st)
                           , "view"  .= dbToLabeledSentences (readView st) ]
 
 runTrace :: String -> [String] -> IO ()
-runTrace world args = case worldNamed world of
+runTrace world args = buildWorld world >>= \built -> case built of
   Nothing -> dieMsg ("unknown world " ++ show world ++ " (one of "
                      ++ unwords allWorldNames ++ ")")
   Just (st0, _) -> do
@@ -531,7 +564,7 @@ endingReached st =
                   , Just e <- [valToString <$> Map.lookup (intern "E") b] ]
 
 runRandtrace :: String -> [String] -> IO ()
-runRandtrace world args = case worldNamed world of
+runRandtrace world args = buildWorld world >>= \built -> case built of
   Nothing -> dieMsg ("unknown world " ++ show world)
   Just (st0, _) -> do
     seed <- intFlag "--seed" args
@@ -794,7 +827,7 @@ bodiesJSON st = object
   ]
 
 runWorldshape :: String -> IO ()
-runWorldshape world = case worldNamed world of
+runWorldshape world = buildWorld world >>= \built -> case built of
   Nothing       -> dieMsg ("unknown world " ++ show world ++ " (one of "
                            ++ unwords allWorldNames ++ ")")
   Just (st, _)  -> do
@@ -808,7 +841,7 @@ runWorldshape world = case worldNamed world of
 -- check ----------------------------------------------------------------------
 
 runCheckCmd :: String -> IO ()
-runCheckCmd world = case worldNamed world of
+runCheckCmd world = buildWorld world >>= \built -> case built of
   Nothing        -> dieMsg ("unknown world " ++ show world)
   Just (st0, _)  -> putJSON (toJSON (sort (map describe (typeCheck st0))))
 

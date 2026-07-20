@@ -13,4 +13,6 @@ path = "src/main.rs"
 [dependencies]
 prax-core = { path = "../prax-core" }
 prax-worlds = { path = "../prax-worlds" }
+# the CG-1 fixture world is compiled from a committed JSON script
+prax-script = { path = "../prax-script" }
 serde_json = { workspace = true }
