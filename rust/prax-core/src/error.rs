@@ -99,4 +99,24 @@ pub enum WorldError {
     /// impossibility are authored dishonesty (`Prax.Rng.draw`).
     #[error("Prax.Rng: draw odds {num}/{den} must satisfy 0 < num < den")]
     DrawOdds { num: i64, den: i64 },
+
+    /// [`crate::schedule::lasts`] was handed something other than an `Insert`. A
+    /// lifetime on a `Delete`/`Call`/`ForEach`/`Roll` has no meaning — the one
+    /// expiry mechanism arms an asserted fact, nothing else (`Prax.Schedule.lasts`).
+    #[error(
+        "Prax.Schedule.lasts: only an Insert can carry a lifetime, got: {outcome} -- a lifetime on a Delete/Call/ForEach/Roll has no meaning"
+    )]
+    LifetimeOnNonInsert { outcome: String },
+
+    /// A [`crate::schedule::gathering`]'s duration is not `0 < duration < period`:
+    /// a gathering that never opens, or one whose opening never lapses before the
+    /// next, is not a gathering (`Prax.Schedule.gathering`).
+    #[error(
+        "Prax.Schedule.gathering {name:?} needs 0 < duration < period, got duration {duration} / period {period}"
+    )]
+    GatheringDuration {
+        name: String,
+        period: i64,
+        duration: i64,
+    },
 }

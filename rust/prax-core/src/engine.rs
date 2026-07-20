@@ -389,6 +389,20 @@ impl State {
         current_turn(interner, &self.rt.db)
     }
 
+    /// One round boundary (`Prax.Engine.roundBoundary`, v44): advance the clock,
+    /// fire due expiries, then due schedule rules in DECLARATION order, re-arming
+    /// each a period out from NOW. A pure function of the state; the loop
+    /// ([`crate::turn::advance`]) runs it at each rotation wrap.
+    ///
+    /// **Expiries fire BEFORE rules** for a stated reason (the ghost-observation
+    /// law): a fact with lifetime `n` is present rounds `onset..onset+n-1` and GONE
+    /// at the boundary — rules-first would let a period-1 rule stamp a belief about
+    /// a fact expiring that instant.
+    pub fn round_boundary(&mut self) {
+        let interner = Arc::make_mut(&mut self.interner);
+        round_boundary_impl(interner, &self.defs, &mut self.rt);
+    }
+
     // ---- observation (for the fixture replay and diagnostics) ---------------
 
     /// The base facts as labeled sentences (`!`/`.` preserved), sorted.
@@ -401,6 +415,20 @@ impl State {
     }
     pub fn cursor(&self) -> i32 {
         self.rt.cursor
+    }
+    /// Set the round-robin cursor. Crate-internal: only [`crate::turn::advance`]
+    /// moves the cursor (the loop's one writer); worlds never touch it.
+    pub(crate) fn set_cursor(&mut self, cursor: i32) {
+        self.rt.cursor = cursor;
+    }
+    /// The character roster in declaration order (`Prax.Types.characters`).
+    pub fn characters(&self) -> &[Character] {
+        &self.defs.characters
+    }
+    /// The names of rules registered through the compiler-level door (v53
+    /// provenance) — the reserved-family scan's exemption list (consumed at S9).
+    pub fn engine_rule_names(&self) -> &[String] {
+        &self.defs.engine_rule_names
     }
     pub fn rng_seed(&self) -> Option<i64> {
         self.rt.rng_seed
@@ -600,6 +628,76 @@ fn perform_for_each(
         for e in effs {
             let g = ground_effect(interner, e, &b);
             perform_effect(interner, defs, rt, &g);
+        }
+    }
+}
+
+/// One round boundary over the split state (`Prax.Engine.roundBoundary`). Advance
+/// the clock, fire due expiries, then due schedule rules — see
+/// [`State::round_boundary`] for the ghost-observation ordering law.
+fn round_boundary_impl(interner: &mut Interner, defs: &Defs, rt: &mut Runtime) {
+    let now = current_turn(interner, &rt.db) + 1;
+    // Advance the clock on the ordinary insert path: the seeded `!` in `turn!now`
+    // excludes `turn!prev`, so relevance/closure tiers apply.
+    let clock = tokenize(interner, &format!("turn!{now}")).expect("turn!<n> is a valid path");
+    perform_effect(interner, defs, rt, &Effect::Insert(clock));
+
+    // Fire due expiries (due <= now) BEFORE any rule. Drop them from the queue
+    // first; fire in RENDERED-NAME order (the determinism contract). That order is
+    // UNOBSERVABLE — guarded subtree-retracts COMMUTE — so it is a posture note,
+    // not a divergence from the frozen intern-id firing order (DIVERGENCES.md).
+    let mut due: Vec<(String, CompiledPath)> = rt
+        .expiries
+        .iter()
+        .filter(|&(_, &d)| d <= now)
+        .map(|(k, _)| (ground(interner, k, &Bindings::new()), k.clone()))
+        .collect();
+    rt.expiries.retain(|_, &mut d| d > now);
+    due.sort_by(|a, b| a.0.cmp(&b.0));
+    let ordered: Vec<CompiledPath> = due.into_iter().map(|(_, p)| p).collect();
+    fire_due_expiries_in(interner, defs, rt, &ordered);
+
+    // Fire due schedule rules in DECLARATION order (the compiled-schedule order),
+    // re-arming each `period` boundaries out from NOW. The due membership is read
+    // from the dues as they stand (rule names are unique, so a re-arm never moves
+    // another rule in or out). Each clause fires exactly as a `ForEach`.
+    for rule in &defs.compiled.schedule {
+        if rt.schedule_dues.get(&rule.name).copied().unwrap_or(i64::MAX) > now {
+            continue;
+        }
+        let period = defs
+            .schedule
+            .iter()
+            .find(|r| r.name == rule.name)
+            .map(|r| r.period)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Prax.Engine.round_boundary: no schedule rule {:?} to resolve its period",
+                    rule.name
+                )
+            });
+        for (conds, effs) in &rule.body {
+            perform_for_each(interner, defs, rt, conds, effs);
+        }
+        rt.schedule_dues.insert(rule.name.clone(), now + period);
+    }
+}
+
+/// Fire a set of due expiries in the given order, each guarded by CURRENT
+/// existence (`Prax.Engine.roundBoundary`'s `expireOne`): an entry whose exact
+/// fact was evicted since drops silently — no retract, no recompute. The order is
+/// the caller's choice because guarded subtree-retracts COMMUTE (a delete of an
+/// ancestor subsumes its descendants; a later guard then finds them gone) — the
+/// law the commutation proptest pins, and the reason S5 fires in name order.
+fn fire_due_expiries_in(
+    interner: &mut Interner,
+    defs: &Defs,
+    rt: &mut Runtime,
+    ordered: &[CompiledPath],
+) {
+    for path in ordered {
+        if rt.db.exists(interner, &path.segs) {
+            perform_effect(interner, defs, rt, &Effect::Delete(path.clone()));
         }
     }
 }
@@ -1411,5 +1509,66 @@ mod tests {
             State::new().seed_die(-5),
             Err(WorldError::SeedOutOfDomain { .. })
         ));
+    }
+}
+
+#[cfg(test)]
+mod boundary_props {
+    //! The round boundary's own laws under randomization: expiry-fire commutation
+    //! (the S5 adjudication's justification — the frozen fires due expiries in
+    //! intern-id order, the Rust in rendered-name order, and the result is the same
+    //! because guarded subtree-retracts COMMUTE). Homed in-crate because it drives
+    //! [`fire_due_expiries_in`] with two different firing orders on the SAME due
+    //! set, which the public API deliberately does not expose.
+    use super::*;
+    use crate::types::insert_for;
+    use proptest::prelude::*;
+
+    /// Arm every path with lifetime 1 (all due at boundary 1), then fire the due
+    /// expiries in rendered-name order — ascending if `ascending`, else descending.
+    /// The two orders are genuine permutations of one another whenever ≥2 distinct
+    /// paths are due, so agreement pins commutation.
+    fn fire_all_due(st: &mut State, ascending: bool) {
+        let interner = Arc::make_mut(&mut st.interner);
+        let defs = st.defs.clone();
+        let mut named: Vec<(String, CompiledPath)> = st
+            .rt
+            .expiries
+            .keys()
+            .map(|k| (ground(interner, k, &Bindings::new()), k.clone()))
+            .collect();
+        named.sort_by(|a, b| a.0.cmp(&b.0));
+        if !ascending {
+            named.reverse();
+        }
+        let ordered: Vec<CompiledPath> = named.into_iter().map(|(_, p)| p).collect();
+        fire_due_expiries_in(interner, defs.as_ref(), &mut st.rt, &ordered);
+    }
+
+    proptest! {
+        #[test]
+        fn expiry_firing_commutes(
+            idxs in prop::sample::subsequence(vec![0usize, 1, 2, 3, 4, 5, 6], 1..=7)
+        ) {
+            // A pool mixing disjoint leaves, an ancestor/descendant pair (the only
+            // NON-disjoint case, where firing order could matter), and `!` siblings.
+            const POOL: [&str; 7] = [
+                "feels.anger", "feels.anger.toward.bob", "feels.joy",
+                "mood!a", "mood!b", "at.home", "at.home.since!noon",
+            ];
+            let build = || {
+                let mut st = State::new();
+                for &i in &idxs {
+                    st.perform_outcome(&insert_for(1, POOL[i])).unwrap();
+                }
+                st
+            };
+            let mut asc = build();
+            fire_all_due(&mut asc, true);
+            let mut desc = build();
+            fire_all_due(&mut desc, false);
+            prop_assert_eq!(asc.labeled_facts(), desc.labeled_facts());
+            prop_assert_eq!(asc.labeled_view(), desc.labeled_view());
+        }
     }
 }
