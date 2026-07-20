@@ -11,5 +11,11 @@ smallvec = { workspace = true }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 
+[features]
+# The test-only naive-closure oracle (derive::naive_closure), asserted equal to
+# production in the conformance property suite. Off in shipped builds; the
+# conformance crate turns it on.
+testkit = []
+
 [dev-dependencies]
 proptest = { workspace = true }
