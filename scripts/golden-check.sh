@@ -10,8 +10,17 @@
 # immutable by scripts/freeze-check.sh, so "edit the golden" would mean editing
 # the freeze, which fails loudly one step earlier.
 #
-# Three assertions, in order:
+# That guarantee is only real if this script ENFORCES it, so step 0 runs
+# freeze-check.sh itself — mirroring drive_frozen.rs, which calls freeze_check()
+# inside run_raw before even the cache read. Run from verify.sh the check would
+# have happened one step earlier anyway; run directly — which --update's own
+# usage invites — it would otherwise extract from whatever is in test/ right now,
+# and --update would then write that into the committed goldens and their hashes.
 #
+# Four assertions, in order:
+#
+#   0. FREEZE — src/ app/ test/ are byte-identical to the tag. The goldens are
+#      extracted from test/, so an edited freeze is an edited golden.
 #   1. EXTRACTION — each golden file is byte-identical to the literal in its
 #      frozen spec file. A zero-line extraction fails loud (an empty extraction
 #      would make this comparison vacuous — [D-C3(c)], the meta-gate's
@@ -61,6 +70,15 @@ trap 'rm -rf "$tmp"' EXIT
 fail() { echo "GOLDEN CHECK FAILED: $*" >&2; exit 1; }
 
 mkdir -p "$GOLDENS_DIR"
+
+# ---- 0. the freeze ---------------------------------------------------------
+# FIRST, before a single line is extracted or a hash written. The goldens are
+# derived from the frozen tree; deriving them from an edited one would launder
+# the edit into the committed goldens.
+./scripts/freeze-check.sh || fail "the frozen Haskell tree is not byte-identical to the tag, so \
+the goldens cannot be derived from it. The goldens are EXTRACTED from test/; extracting from an \
+edited tree (or rewriting them with --update from one) would launder the edit into the committed \
+goldens and their hashes."
 
 # ---- 1. extraction ---------------------------------------------------------
 for row in "${GOLDENS[@]}"; do
