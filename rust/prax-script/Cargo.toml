@@ -8,3 +8,12 @@ description = "The Prompter authoring layer: scene/act scripts compiled to engin
 
 [dependencies]
 prax-core = { path = "../prax-core" }
+# The frozen `Prax.Script` imports `Prax.Core.coreFns` and installs it in every
+# compiled world; prax-vocab is that module's Rust home, and it depends only on
+# prax-core, so no cycle forms.
+prax-vocab = { path = "../prax-vocab" }
+# serde_json ONLY, deliberately NOT `serde`'s derive: the encoder must emit
+# SORTED keys (aeson 2 `ordered-keymap`) to stay byte-compatible with
+# `examples/play.json`, and `#[derive(Serialize)]` emits declaration order.
+serde = { workspace = true }
+serde_json = { workspace = true }

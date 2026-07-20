@@ -121,9 +121,6 @@ pub struct Defs {
     prediction_scope: Vec<Condition>,
     /// v53 provenance; door-only writes.
     engine_rule_names: Vec<String>,
-    /// Seeded `["turn", "contradiction"]`; door-grown (§4). Enforcement is
-    /// STATIC (S9): S4 does not block reserved writes at perform.
-    reserved_families: Vec<String>,
     compiled: Compiled,
 }
 
@@ -185,7 +182,6 @@ impl State {
             sorts: Vec::new(),
             prediction_scope: Vec::new(),
             engine_rule_names: Vec::new(),
-            reserved_families: vec!["turn".to_owned(), "contradiction".to_owned()],
             compiled: Compiled::default(),
         };
         rebuild(&mut interner, &mut defs).expect("empty recompile cannot fail");
@@ -624,13 +620,6 @@ pub mod door {
         st.add_schedule_rules(rules)?;
         Arc::make_mut(&mut st.defs).engine_rule_names.extend(names);
         Ok(())
-    }
-
-    /// Grow the reserved-family list (§4): prax-script content (scenePatience/
-    /// currentScene) registers its own reserved namespaces through this door, so
-    /// the S9 checker reads the state's own list. Enforcement stays STATIC (S9).
-    pub fn register_reserved_families(st: &mut State, families: Vec<String>) {
-        Arc::make_mut(&mut st.defs).reserved_families.extend(families);
     }
 }
 

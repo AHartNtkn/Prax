@@ -144,6 +144,47 @@ pub enum WorldError {
     )]
     NotASinglePathSegment { context: String, name: String },
 
+    /// Two junctions of one scene share a name (`Prax.Script.compile`, guard 1).
+    /// Each timed junction keys its own patience marker
+    /// ([`crate::typecheck::scene_patience_path`]), so names must be unique
+    /// within a scene — and same-named junctions are authored ambiguity
+    /// regardless.
+    #[error(
+        "Prax.Script.compile: scene {scene:?} has two junctions named {junction:?} -- junction names must be unique within a scene (each timed junction keys its own patience marker)"
+    )]
+    DuplicateJunctionName { scene: String, junction: String },
+
+    /// A timed junction declares a delay below one round
+    /// (`Prax.Script.compile`, guard 2). A zero-delay "timed" junction is a
+    /// plain junction (spec v50 §2), and is exactly where the marker form would
+    /// diverge.
+    #[error(
+        "Prax.Script.compile: scene {scene:?}'s junction {junction:?} has a timed delay of {delay} -- a timed junction needs at least one round (n=0 is a plain junction)"
+    )]
+    ZeroDelayJunction {
+        scene: String,
+        junction: String,
+        delay: i64,
+    },
+
+    /// An authored condition or outcome is headed by a compiler-owned family
+    /// (`Prax.Script.compile`, guard 3 — the collision hole). `site` is the
+    /// frozen guard's own labelling of the offending list, so the diagnostic
+    /// names which of the five swept lists carried it.
+    #[error(
+        "Prax.Script.compile: {site} authors {sentence:?} -- the {family:?} family is reserved for the timed-junction machinery"
+    )]
+    ReservedFamilyAuthored {
+        site: String,
+        sentence: String,
+        family: String,
+    },
+
+    /// A script declares no playable cast member (`Prax.Script.scriptPlayer`,
+    /// a frozen `error`). The CLI needs a seat for the human to sit in.
+    #[error("Prax.Script.script_player: no playable cast member")]
+    NoPlayableCastMember,
+
     /// An authored PATTERN does not name the variables the combinator needs to
     /// splice its axiom together — e.g. `Prax.Faction.factionStanding` reads the
     /// pattern's first variable as the offender and its second as the victim, so
