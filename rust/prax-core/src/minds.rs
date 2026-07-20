@@ -3,7 +3,9 @@
 //! cooked-want plumbers `evaluateCooked` scores. The string-surfaced diagnostics
 //! (`wantFor`/`selfWants`) and the common-knowledge axiom builders
 //! (`professed`/`conventional`) are the frozen library surface and live in
-//! `prax_vocab::minds`, pinned by `MindsSpec` there.
+//! `prax_vocab::minds`, where most `MindsSpec` pins land; the two that read this
+//! crate's internals (`believedWants`' provenance law and the compiled
+//! want/desire tables) are pinned here.
 //!
 //! Frozen reference: `src/Prax/Minds.hs`
 //! (`believedDesires`/`cookedDesiresFor`/`cookedSelfWants`).
@@ -87,4 +89,181 @@ pub(crate) fn cooked_self_wants(
         .collect();
     out.extend(cooked_desires_for(interner, desires_cooked, &c.name, &held));
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+    use crate::db::Db;
+    use crate::engine::State;
+    use crate::interner::Interner;
+    use crate::query::matches;
+    use crate::types::{Want, insert, rename_vars};
+
+    /// The frozen vocabulary of two desires: ida's sweet tooth is
+    /// `Owner`-templated; rex's grudge names him outright.
+    fn vocab() -> Vec<Desire> {
+        vec![
+            Desire::new(
+                "sweet-tooth",
+                Want::new(vec![matches("holding.Owner.cake")], 5),
+            ),
+            Desire::new("grudge-rex", Want::new(vec![matches("shamed.rex")], 7)),
+        ]
+    }
+
+    /// `Prax.Minds.believedWants`: the predictor's believed model of the mover —
+    /// every vocabulary desire the predictor believes (ANY provenance) the mover
+    /// to have, instantiated for the mover. In the one compiled representation
+    /// this is [`believed_desires`] composed with the `Owner` grounding
+    /// `prax_vocab::minds::want_for` performs.
+    fn believed_wants(
+        interner: &mut Interner,
+        view: &Db,
+        desires: &[Desire],
+        p: &str,
+        m: &str,
+    ) -> Vec<Want> {
+        let subst = BTreeMap::from([("Owner".to_owned(), m.to_owned())]);
+        believed_desires(interner, view, desires, p, m)
+            .iter()
+            .map(|d| Want::new(rename_vars(&subst, &d.want.when), d.want.utility))
+            .collect()
+    }
+
+    // H: MindsSpec.hs "believedWants reads any provenance, and only believed desires"
+    #[test]
+    fn believed_wants_reads_any_provenance_and_only_believed_desires() {
+        let mut i = Interner::new();
+        let vocab = vocab();
+        // The world as the profession leaves it: rex PRESUMES ida's sweet tooth
+        // (a derived, `.presumed` motive-belief); nobody believes anything of rex.
+        let base = Db::empty()
+            .insert_str(&mut i, "rex.believes.desires.ida.sweet-tooth.presumed")
+            .unwrap();
+
+        assert_eq!(
+            believed_wants(&mut i, &base, &vocab, "ida", "rex"),
+            Vec::<Want>::new(),
+            "ida believes no desire of rex's, so she models nothing"
+        );
+
+        // A `.heard.<src>` provenance is read exactly like any other.
+        let told = base
+            .insert_str(&mut i, "ida.believes.desires.rex.grudge-rex.heard.sam")
+            .unwrap();
+        assert_eq!(
+            believed_wants(&mut i, &told, &vocab, "ida", "rex"),
+            vec![Want::new(vec![matches("shamed.rex")], 7)],
+            "hearsay counts — and ONLY the believed desire, not the whole vocabulary"
+        );
+
+        // And presumption counts too, grounded to the mover.
+        assert_eq!(
+            believed_wants(&mut i, &base, &vocab, "rex", "ida"),
+            vec![Want::new(vec![matches("holding.ida.cake")], 5)]
+        );
+    }
+
+    // H: MindsSpec.hs "setCharacters retables cookedWants; retable tracks cookedDesires"
+    #[test]
+    fn set_characters_retables_cooked_wants_and_retable_tracks_cooked_desires() {
+        // `cookedWants` is keyed by character name, each want's conditions
+        // precooked in `charWants`' own order and paired with that want's utility;
+        // `cookedDesires` is keyed by desire name, the vocabulary's
+        // `Owner`-template cooked ONCE, independent of who holds it. Both tables
+        // are private to the compile pipeline, so they are read where the engine
+        // reads them: through `cooked_self_wants`, which the scorer runs.
+        let mut st = State::new();
+        st.set_desires(vocab()).unwrap();
+        let rex = Character::new("rex")
+            .want(Want::new(vec![matches("x")], 1))
+            .want(Want::new(vec![matches("y.Z")], 2))
+            .holds("grudge-rex");
+        st.set_characters(vec![Character::new("ida"), rex.clone()])
+            .unwrap();
+
+        for o in [
+            insert("x"),
+            insert("y.a"),
+            insert("y.b"),
+            insert("shamed.rex"),
+            insert("holding.ida.cake"),
+        ] {
+            st.perform_outcome(&o).unwrap();
+        }
+
+        // The tables themselves, by name: `cookedWants` is keyed by character —
+        // ida is KEYED with an empty list, not absent — and rex's two wants are
+        // cooked in `charWants`' own order, the variable `Z` surviving cooking.
+        let wants = st.compiled_wants_rendered();
+        assert_eq!(wants.keys().collect::<Vec<_>>(), ["ida", "rex"]);
+        assert_eq!(wants["ida"], Vec::<Vec<String>>::new());
+        assert_eq!(
+            wants["rex"],
+            vec![vec!["Match x".to_owned()], vec!["Match y.Z".to_owned()]]
+        );
+        // `cookedDesires` is keyed by DESIRE name, the vocabulary's
+        // Owner-template cooked once — independent of who holds it.
+        let desires = st.compiled_desires_rendered();
+        assert_eq!(
+            desires.keys().collect::<Vec<_>>(),
+            ["grudge-rex", "sweet-tooth"]
+        );
+        assert_eq!(desires["grudge-rex"], ["Match shamed.rex".to_owned()]);
+        assert_eq!(desires["sweet-tooth"], ["Match holding.Owner.cake".to_owned()]);
+
+        // And the tables are what the scorer actually reads: ida scores nothing.
+        assert_eq!(st.evaluate_self_wants(&Character::new("ida")), 0);
+        // rex: `x`×1 (one binding) + `y.Z`×2 (TWO bindings — the variable survived
+        // cooking) + the grudge desire's 7, i.e. charWants in order, each paired
+        // with its own utility, plus the held vocabulary desire.
+        assert_eq!(st.evaluate_self_wants(&rex), 1 + 2 * 2 + 7);
+
+        // `cookedDesires` is keyed by DESIRE name and `Owner`-templated: nobody in
+        // the cast holds `sweet-tooth`, yet the table grounds it for any owner.
+        assert_eq!(
+            st.evaluate_self_wants(&Character::new("ida").holds("sweet-tooth")),
+            5
+        );
+
+        // setCharacters RETABLES: rex's want list is replaced wholesale, and the
+        // cooked conditions follow. A stale table (old cooked conditions zipped
+        // against the new utilities) would score `x`×1 + 7 = 8.
+        let rex2 = Character::new("rex")
+            .want(Want::new(vec![matches("y.Z")], 1))
+            .holds("grudge-rex");
+        st.set_characters(vec![Character::new("ida"), rex2.clone()])
+            .unwrap();
+        assert_eq!(
+            st.evaluate_self_wants(&rex2),
+            2 + 7,
+            "the cooked want table was rebuilt, not reused (a stale table would \
+             pair the old `x` conditions with the new utility and score 8)"
+        );
+    }
+
+    /// A silence the tests above would not otherwise state: `believed_desires`
+    /// returns the vocabulary's order, not the belief facts' order.
+    #[test]
+    fn believed_desires_is_in_vocabulary_order() {
+        let mut i = Interner::new();
+        let mut db = Db::empty();
+        for f in [
+            "ida.believes.desires.rex.grudge-rex.seen",
+            "ida.believes.desires.rex.sweet-tooth.seen",
+        ] {
+            db = db.insert_str(&mut i, f).unwrap();
+        }
+        let names: Vec<String> = believed_desires(&mut i, &db, &vocab(), "ida", "rex")
+            .into_iter()
+            .map(|d| d.name)
+            .collect();
+        assert_eq!(
+            names,
+            vec!["sweet-tooth".to_owned(), "grudge-rex".to_owned()]
+        );
+    }
 }

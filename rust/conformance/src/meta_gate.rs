@@ -32,6 +32,11 @@ mod gate {
         "LoopSpec.hs",
         "ScheduleSpec.hs",
         "ScheduleRuleSpec.hs",
+        // S6:
+        "PlannerSpec.hs",
+        "MindsSpec.hs",
+        "RelevanceSpec.hs",
+        "SightSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {

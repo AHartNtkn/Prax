@@ -127,6 +127,49 @@ mod tests {
         ));
     }
 
+    // H: SightSpec.hs "the schedule setter guards the sighting template (re-homed from the v40/v43 sightP guard)"
+    //
+    // The v40/v43 guard now lives on the SETTER, not on `sight_rule`: the
+    // authored sighting is an ordinary rule body, so `set_schedule`'s splice
+    // check (the `Prax` namespace, plus `Actor` — reserved for movers, and a
+    // schedule rule has no actor) is what rejects a capturing template.
+    mod sighting_template_guard {
+        use super::*;
+        use crate::engine::State;
+        use crate::query::matches;
+
+        fn set(sighting: Vec<Condition>) -> Result<(), WorldError> {
+            State::new().set_schedule(vec![sight_rule(sighting)])
+        }
+
+        // H: SightSpec.hs "a sighting template authoring the Prax namespace is a loud construction-time error"
+        #[test]
+        fn a_prax_namespaced_sighting_template_is_rejected() {
+            assert!(matches!(
+                set(vec![matches("at.PraxN!Spot"), matches("at.Seen!Spot")]),
+                Err(WorldError::ReservedVarClash { ref var, .. }) if var == "PraxN"
+            ));
+        }
+
+        // H: SightSpec.hs "Seer/Seen/Spot remain legal -- they are the contract, not forbidden"
+        #[test]
+        fn seer_seen_spot_remain_legal() {
+            assert!(
+                set(vec![matches("at.Seer!Spot"), matches("at.Seen!Spot")]).is_ok(),
+                "the ordinary Seer/Seen/Spot fixture is NOT rejected"
+            );
+        }
+
+        // H: SightSpec.hs "a sighting template authoring Actor is a loud construction-time error"
+        #[test]
+        fn an_actor_authoring_sighting_template_is_rejected() {
+            assert!(matches!(
+                set(vec![matches("at.Actor!Spot"), matches("at.Seen!Spot")]),
+                Err(WorldError::ReservedVarClash { ref var, .. }) if var == "Actor"
+            ));
+        }
+    }
+
     #[test]
     fn sight_rule_stamps_the_clock_and_the_believes_outcomes() {
         let r = sight_rule(vec![Condition::Match("at.Seer!Spot".to_owned())]);

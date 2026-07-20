@@ -614,6 +614,77 @@ impl State {
         let interner = Arc::make_mut(&mut self.interner);
         tokenize(interner, s).expect("probe path").segs
     }
+    /// Does an authored conjunction have any solution against the closed view,
+    /// with `binds` first SUBSTITUTED into it (`Prax.Query.groundCondition` then
+    /// `query`, exactly the mechanism `Prax.Planner.inScope` uses)? The scope
+    /// fragments' one live observable, for the SightSpec window pin.
+    #[cfg(test)]
+    pub(crate) fn conditions_hold(&mut self, conds: &[Condition], binds: &[(&str, &str)]) -> bool {
+        let State { interner, rt, .. } = self;
+        let interner = Arc::make_mut(interner);
+        let mut b = Bindings::new();
+        for (k, v) in binds {
+            let key = interner.intern(k);
+            let val = interner.intern(v);
+            b.insert(key, Val::Sym(val));
+        }
+        let grounded: Vec<Cond> = conds
+            .iter()
+            .map(|c| {
+                let g = crate::query::ground_condition(interner, &b, c).expect("groundable");
+                crate::query::compile_condition(interner, &g).expect("compilable")
+            })
+            .collect();
+        !query(interner, rt.view(), &grounded, &Bindings::new()).is_empty()
+    }
+
+    /// The compiled want table rendered by name (`Prax.Types.cookedWants`):
+    /// character → one entry per `charWants` want, in that list's own order,
+    /// each want's conditions rendered. Exposed for the MindsSpec retable pin —
+    /// the table itself is compile-pipeline private.
+    #[cfg(test)]
+    pub(crate) fn compiled_wants_rendered(&self) -> BTreeMap<String, Vec<Vec<String>>> {
+        self.defs
+            .compiled
+            .wants
+            .iter()
+            .map(|(k, ws)| {
+                (
+                    k.clone(),
+                    ws.iter()
+                        .map(|cs| cs.iter().map(|c| self.render_cond(c)).collect())
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    /// The compiled desire table rendered by name (`Prax.Types.cookedDesires`):
+    /// desire name → its `Owner`-templated conditions, cooked once and
+    /// independent of which characters hold it.
+    #[cfg(test)]
+    pub(crate) fn compiled_desires_rendered(&self) -> BTreeMap<String, Vec<String>> {
+        self.defs
+            .compiled
+            .desires
+            .iter()
+            .map(|(k, cs)| (k.clone(), cs.iter().map(|c| self.render_cond(c)).collect()))
+            .collect()
+    }
+
+    /// One compiled condition rendered by name. Total over the pattern-bearing
+    /// constructors the want/desire pins use; PANICS on anything else rather
+    /// than emitting a Debug blob with raw interner ids in it — a renderer that
+    /// silently degrades would make a divergence unreadable.
+    #[cfg(test)]
+    fn render_cond(&self, c: &Cond) -> String {
+        match c {
+            Cond::Match(p) => format!("Match {}", self.render_segs(p)),
+            Cond::Not(p) => format!("Not {}", self.render_segs(p)),
+            other => panic!("render_cond: extend me for {other:?}"),
+        }
+    }
+
     /// The integer utility of the current view to a character's own wants —
     /// `Prax.Planner.evaluate` over `Prax.Minds.selfWants`, which in the one
     /// compiled representation is exactly `evaluate_compiled` over
