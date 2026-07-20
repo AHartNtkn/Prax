@@ -9,16 +9,26 @@
 --   * @trace \<world\> --turns N [--idle \<name\>] [--depth D] --mode M@ — replay
 --     the @Prax.GoldenDriveSpec.driveLabels@ walk (advance → npcAct, optional
 --     idler skip), one JSONL record per turn.
---   * @randtrace \<world\> --seed S --cap N [--candidates]@ — replay
+--   * @randtrace \<world\> --seed S --cap N [--mode M] [--die-seed S]@ — replay
 --     @Prax.Stress.runRandom@ step-for-step, full state per turn.
+--   * @worldshape \<world\>@ — the world's authored SHAPE and BODIES as canonical
+--     JSON (S7 design §2): the fidelity gate every trace runs behind.
 --   * @check \<world\>@ — @Prax.TypeCheck.typeCheck@ as a sorted JSON array of
 --     rendered errors.
 --   * @fixtures \<name\>@ — deterministic unit-fixture corpora (@db@\/@el@\/
 --     @query@\/@derive@) as one JSON value on stdout.
 --
--- Every list that could carry run-dependent order (a fact set, a binding row,
--- a candidate list) is sorted by rendered name before emission, so the bytes
--- are a pure function of the inputs.
+-- THE ORACLE CANON (S7 design [D-C1]), which every emission here obeys:
+-- facts, dues and expiries are NAME-SORTED (genuinely unordered); candidate
+-- lists and score rows are NATIVE-ORDER and their order is part of the
+-- comparison. A second, sorted candidate field would be a dual system, so the
+-- sort that used to sit on @randtrace --candidates@ is gone rather than
+-- doubled.
+--
+-- The localization emissions (@--candidates@, @--scores@, @--identity@,
+-- @--logs@) are additive flags: the comparator turns them on for the rerun at
+-- the divergent record, and matrix mode always runs with @--candidates@
+-- ([S-I4]).
 module Main (main) where
 
 import           Data.List (foldl', intercalate, sort, sortOn)
@@ -37,9 +47,10 @@ import           Prax.Db
 import           Prax.Sym (Sym, intern, symName)
 import           Prax.Types
 import           Prax.Engine (possibleActions, performAction, currentTurn,
-                              performOutcome, definePractice, definePractices,
-                              defineFunctions, setAxioms, setCharacters,
-                              setDesires, setSchedule, seedDie)
+                              performOutcome, groundOutcome, definePractice,
+                              definePractices, defineFunctions, setAxioms,
+                              setCharacters, setDesires, setSchedule, seedDie)
+import           Prax.Rng (rollStep)
 import           Prax.Loop (advance, npcAct, runNpcTicks)
 import           Prax.TypeCheck (TypeError (..), typeCheck)
 import           Prax.EL (meet, leq)
@@ -140,6 +151,145 @@ stateFields st =
   , "dues"     .= duesJSON (scheduleDues st)
   , "expiries" .= expiriesJSON (expiries st) ]
 
+-- localization emission ------------------------------------------------------
+
+-- | Which localization fields a walk emits. All four are off by default (the
+-- matrix runs cheap); the comparator turns them on for the rerun at the
+-- divergent record. @--candidates@ is the exception: matrix mode always passes
+-- it, because ENUMERATION cannot fire without it ([S-I4]).
+data Emit = Emit
+  { eCands  :: Bool   -- ^ @--candidates@: the actor's candidate labels, NATIVE order
+  , eScores :: Bool   -- ^ @--scores@: the scoreActions table at depths 0..D
+  , eIdent  :: Bool   -- ^ @--identity@: the acted GroundedAction's identity
+  , eLogs   :: Bool   -- ^ @--logs@: the per-turn draw log and boundary log
+  }
+
+parseEmit :: [String] -> Emit
+parseEmit args = Emit
+  { eCands  = hasFlag "--candidates" args
+  , eScores = hasFlag "--scores" args
+  , eIdent  = hasFlag "--identity" args
+  , eLogs   = hasFlag "--logs" args }
+
+emitFlagsJSON :: Emit -> [(K.Key, Value)]
+emitFlagsJSON em =
+  [ "candidates" .= eCands em, "scores" .= eScores em
+  , "identity" .= eIdent em, "logs" .= eLogs em ]
+
+-- | An action's IDENTITY, not its rendered label ([S-C3]): distinct
+-- 'GroundedAction's can share a label, and the planner's stable tiebreak lets
+-- candidate ORDER decide between them — so a label-only record cannot tell a
+-- tiebreak bug from an enumeration bug.
+identityJSON :: GroundedAction -> Value
+identityJSON ga = object
+  [ "practice_id" .= gaPracticeId ga
+  , "instance_id" .= gaInstanceId ga
+  , "action_id"   .= gaActionId ga
+  , "bindings"    .= bindingJSON (gaBindings ga) ]
+
+-- | The score table at depths @0..d@ for one actor, each row @(label, bits)@ in
+-- NATIVE result order [D-C1], each score as its raw IEEE-754 bit pattern
+-- ('castDoubleToWord64') so no decimal enters the comparison.
+scoresJSON :: Int -> PraxState -> Character -> Value
+scoresJSON d st c = toJSON
+  [ object [ "depth" .= dd
+           , "rows" .= [ object [ "label" .= gaLabel ga, "bits" .= bitsJSON s ]
+                       | (ga, s) <- scoreActions dd st c ] ]
+  | dd <- [0 .. d] ]
+
+-- | A standing intention, or JSON null ([M4]): the tell that separates "the
+-- score tables agree but the action differs" into intention-vs-planner.
+maybeIntentionJSON :: Maybe Intention -> Value
+maybeIntentionJSON = maybe (toJSON (Nothing :: Maybe ())) intentionJSON
+
+-- | The number of Lehmer steps between two stream positions, and the values
+-- passed through. Loud past the bound: an unbounded search would hang, and a
+-- silent @Nothing@ would hide exactly the RNG divergence this log exists for.
+streamSteps :: Maybe Integer -> Maybe Integer -> [Integer]
+streamSteps (Just a) (Just b) = go (0 :: Int) a
+  where
+    go n s
+      | s == b     = []
+      | n >= 4096  = error ("prax-oracle: the rng stream moved more than 4096 steps \
+                            \in one outcome (from " ++ show a ++ " to " ++ show b ++ ")")
+      | otherwise  = let s' = rollStep s in s' : go (n + 1) s'
+streamSteps _ _ = []
+
+-- | Every @Roll@'s odds in an outcome subtree, in traversal order (the static
+-- half of the draw log: which draws this outcome COULD make).
+rollOdds :: Outcome -> [(Int, Int)]
+rollOdds o = case o of
+  ForEach _ os     -> concatMap rollOdds os
+  Roll n d _ os    -> (n, d) : concatMap rollOdds os
+  _                -> []
+
+-- | THE DRAW LOG ([S-C5]). @CRoll@ advances the stream unconditionally, so
+-- taken-vs-not leaves @rng@ EQUAL and a draw bug reports as STATE. This log
+-- reaches the pointer by REPLAYING the performed action outcome by outcome
+-- through the engine's own public door ('groundOutcome' then 'performOutcome',
+-- which is exactly 'performAction'\'s fold), recording for every outcome whose
+-- subtree can draw: its authored odds, the stream values it consumed, and
+-- whether it CHANGED the db (the instrumented half — a hit applies its body, a
+-- miss does not).
+--
+-- The replay is verified, not assumed: its end state is compared against the
+-- engine's own and a mismatch dies loudly, so the log can never quietly
+-- describe a different execution than the one the record reports.
+drawLogJSON :: PraxState -> GroundedAction -> PraxState -> Value
+drawLogJSON st0 ga stEnd =
+  case Map.lookup (gaPracticeId ga) (practiceDefs st0) of
+    Nothing -> error ("prax-oracle: draw log for an unknown practice "
+                      ++ show (gaPracticeId ga))
+    Just p -> case filter ((== gaActionId ga) . actionName) (actions p) of
+      []      -> error ("prax-oracle: draw log for an unknown action "
+                        ++ show (gaActionId ga))
+      (a : _) ->
+        let grounded = [ groundOutcome o (gaBindings ga) | o <- actionOutcomes a ]
+            (entries, stFinal) = foldl' step ([], st0) (zip [0 :: Int ..] grounded)
+        in if stateDigest stFinal /= stateDigest stEnd
+             then error "prax-oracle: the draw-log replay diverged from performAction \
+                        \(the cook/ground mirror law is broken) -- refusing to emit a \
+                        \log that describes a different execution"
+             else toJSON (reverse entries)
+  where
+    step (acc, st) (i, o)
+      | null (rollOdds o) = (acc, performOutcome o st)
+      | otherwise =
+          let st' = performOutcome o st
+              vals = streamSteps (rngSeed st) (rngSeed st')
+              entry = object
+                [ "i"       .= i
+                , "odds"    .= [ [n, d] | (n, d) <- rollOdds o ]
+                , "before"  .= rngJSON (rngSeed st)
+                , "after"   .= rngJSON (rngSeed st')
+                , "values"  .= vals
+                , "changed" .= (dbToLabeledSentences (db st)
+                                /= dbToLabeledSentences (db st')) ]
+          in (entry : acc, st')
+
+-- | The comparable digest of a state: everything the trace records report.
+stateDigest :: PraxState -> Value
+stateDigest st = object (("facts" .= dbToLabeledSentences (db st)) : stateFields st)
+
+-- | THE BOUNDARY LOG ([S-C5]). An expiry firing on the wrong subtree, or
+-- dropping silently, leaves the @expiries@ MAP equal — so the pointer has to
+-- come from what fired, not from what remains. Read off the pre-boundary state
+-- exactly as 'Prax.Engine.roundBoundary' reads it (due rules in DECLARATION
+-- order, due expiries by their queue entry), with each due expiry's existence
+-- guard and its post-boundary presence OBSERVED on the two states.
+boundaryLogJSON :: PraxState -> PraxState -> Value
+boundaryLogJSON stPre stPost = object
+  [ "now" .= now
+  , "due_rules" .= [ csrName r | r <- cookedSchedule stPre
+                   , Map.findWithDefault maxBound (csrName r) (scheduleDues stPre) <= now ]
+  , "due_expiries" .=
+      [ object [ "path" .= s, "due" .= v
+               , "existed_before" .= exists s (db stPre)
+               , "present_after"  .= exists s (db stPost) ]
+      | (k, v) <- Map.toList (expiries stPre), v <= now
+      , let s = tokensToSentence k ] ]
+  where now = currentTurn stPre + 1
+
 -- trace ----------------------------------------------------------------------
 
 data Mode = Decisions | State | View deriving (Eq)
@@ -172,41 +322,72 @@ runTrace world args = case worldNamed world of
     turns <- intFlag "--turns" args
     let idle  = flagVal "--idle" args
         depth = fromMaybe 2 (flagVal "--depth" args >>= readInt)
+        em    = parseEmit args
     mode <- case flagVal "--mode" args of
       Nothing -> pure Decisions
       Just m  -> maybe (dieMsg ("bad --mode " ++ show m)) pure (parseMode m)
-    let header = object
+    let header = object $
           [ "format" .= (1 :: Int), "engine" .= ("haskell" :: String)
           , "world" .= world, "turns" .= turns, "idle" .= idle
           , "depth" .= depth, "mode" .= modeStr mode
           , "seed" .= (Nothing :: Maybe Integer) ]
-    putJSONL (header : traceWalk depth turns idle mode st0)
+          ++ emitFlagsJSON em
+    putJSONL (header : traceWalk em depth turns idle mode st0)
 
 -- | One record per turn, faithfully mirroring
 -- 'Prax.GoldenDriveSpec.driveLabels': advance, and unless the actor is the
 -- idler, have them act ('npcAct'). The state fields report the carry-forward
 -- state (post-action), and @boundary@ is whether 'advance' fired a round
--- boundary (the engine clock ticked).
-traceWalk :: Int -> Int -> Maybe String -> Mode -> PraxState -> [Value]
-traceWalk depth total idle mode = go 1
+-- boundary (the engine clock ticked). The walk ends with a TERMINATION record
+-- ([S-I3]) so a stream-length divergence carries its own evidence.
+traceWalk :: Emit -> Int -> Int -> Maybe String -> Mode -> PraxState -> [Value]
+traceWalk em depth total idle mode = go 1
   where
     go t st
-      | t > total = []
+      | t > total = [stopJSON "turns" Nothing 0 (t - 1)]
       | otherwise =
-          let before        = currentTurn st
-              (actor, st1)   = advance st
-              boundary       = currentTurn st1 /= before
-              nm             = charName actor
+          let before       = currentTurn st
+              (actor, st1) = advance st
+              boundary     = currentTurn st1 /= before
+              nm           = charName actor
+              blog         = [ "boundary_log" .= boundaryLogJSON st st1
+                             | eLogs em, boundary ]
           in if Just nm == idle
-               then record t boundary nm ("-" :: String) True st1 : go (t + 1) st1
-               else case npcAct depth actor st1 of
+               then record t boundary nm "-" True st1 blog [] : go (t + 1) st1
+               else
+                 let cands = candidateActions st1 actor
+                     pre   = [ "candidates" .= map gaLabel cands | eCands em ]
+                          ++ [ "scores" .= scoresJSON depth st1 actor | eScores em ]
+                          ++ [ "intention_before"
+                                 .= maybeIntentionJSON (Map.lookup nm (intentions st1))
+                             | eScores em ]
+                 in case npcAct depth actor st1 of
                       (mga, st2) ->
-                        record t boundary nm (maybe "-" gaLabel mga) (isNothing mga) st2
-                          : go (t + 1) st2
-    record t boundary actor action idled st = object $
+                        let post = [ "identity" .= maybe (toJSON (Nothing :: Maybe ()))
+                                                         identityJSON mga
+                                   | eIdent em ]
+                                ++ [ "intention_after"
+                                       .= maybeIntentionJSON (Map.lookup nm (intentions st2))
+                                   | eScores em ]
+                                ++ [ "draws" .= maybe (toJSON ([] :: [Value]))
+                                                      (\ga -> drawLogJSON st1 ga st2) mga
+                                   | eLogs em ]
+                        in record t boundary nm (maybe "-" gaLabel mga) (isNothing mga)
+                                  st2 (blog ++ pre) post
+                             : go (t + 1) st2
+    record t boundary actor action idled st before after = object $
       [ "t" .= t, "boundary" .= boundary, "actor" .= actor
-      , "action" .= action, "idle" .= idled ]
-      ++ stateFields st ++ factFields mode st
+      , "action" .= (action :: String), "idle" .= idled ]
+      ++ before ++ after ++ stateFields st ++ factFields mode st
+
+-- | The terminal record every walk ends with ([S-I3]): why the stream stopped,
+-- how many consecutive idle passes had accumulated, and how many turn records
+-- preceded it. Without it a shorter stream on one side has no class and no
+-- evidence — the comparator classifies a mismatch here as TERMINATION.
+stopJSON :: String -> Maybe String -> Int -> Int -> Value
+stopJSON reason ending passes recs = object
+  [ "end" .= True, "reason" .= reason, "ending" .= ending
+  , "passes" .= passes, "records" .= recs ]
 
 -- randtrace ------------------------------------------------------------------
 
@@ -233,56 +414,78 @@ runRandtrace world args = case worldNamed world of
   Just (st0, _) -> do
     seed <- intFlag "--seed" args
     cap  <- intFlag "--cap" args
-    let cands  = hasFlag "--candidates" args
-        header = object
+    let em      = parseEmit args
+        dieSeed = flagVal "--die-seed" args >>= readInt
+    mode <- case flagVal "--mode" args of
+      Nothing -> pure State
+      Just m  -> maybe (dieMsg ("bad --mode " ++ show m)) pure (parseMode m)
+    let st1 = maybe st0 (\s -> seedDie (fromIntegral s) st0) dieSeed
+        header = object $
           [ "format" .= (1 :: Int), "engine" .= ("haskell" :: String)
           , "world" .= world, "seed" .= seed, "cap" .= cap
-          , "candidates" .= cands ]
-    putJSONL (header : randWalk cands cap (fromIntegral seed) st0)
+          , "mode" .= modeStr mode, "dieSeed" .= dieSeed ]
+          ++ emitFlagsJSON em
+    putJSONL (header : randWalk em mode cap (fromIntegral seed) st1)
 
 -- | Replay 'Prax.Stress.runRandom' step-for-step, emitting one record per
--- advance (idle passes included). Control flow and arithmetic are copied
--- verbatim from that function; the coverage-family tracking (which does not
--- affect the walk) is dropped.
-randWalk :: Bool -> Int -> Word64 -> PraxState -> [Value]
-randWalk cands cap seed0 = stepWith (0 :: Int) (1 :: Int) cap seed0
+-- advance (idle passes included) and one terminal record naming the stop rule
+-- that ended it ([S-I3]). Control flow and arithmetic are copied verbatim from
+-- that function; the coverage-family tracking (which does not affect the walk)
+-- is dropped.
+--
+-- 'randWalk' never touches 'Prax.Planner' — it selects with 'possibleActions'
+-- and 'pick'. That is why the classifier is MODE-PARAMETERISED [D-C2]: here
+-- "candidates equal, action differs" is an ordering or @pick@ bug, never a
+-- planner bug.
+randWalk :: Emit -> Mode -> Int -> Word64 -> PraxState -> [Value]
+randWalk em mode cap seed0 = stepWith (0 :: Int) (1 :: Int) cap seed0 (0 :: Int)
   where
-    stepWith passes t k s st
-      | k == 0 = []
+    stepWith passes t k s recs st
+      | k == 0 = [stopJSON "cap" Nothing passes recs]
       | otherwise = case endingReached st of
-          Just _ -> []
+          Just e -> [stopJSON "ending" (Just e) passes recs]
           Nothing
-            | null living            -> []
-            | passes > length living -> []                       -- true dead end
+            | null living            -> [stopJSON "extinct" Nothing passes recs]
+            | passes > length living -> [stopJSON "deadend" Nothing passes recs]
             | otherwise ->
                 let before       = currentTurn st
                     (actor, st1) = advance st
                     boundary     = currentTurn st1 /= before
                     nm           = charName actor
                     acts         = possibleActions st1 nm
+                    blog         = [ "boundary_log" .= boundaryLogJSON st st1
+                                   | eLogs em, boundary ]
                 in case acts of
-                     [] -> recIdle t boundary nm st1
-                             : stepWith (passes + 1) t k s st1
+                     [] -> recIdle t boundary nm passes st1 blog
+                             : stepWith (passes + 1) t k s (recs + 1) st1
                      _  -> let (i, s') = pick (length acts) s
                                ga      = acts !! i
                                st2     = performAction st1 ga
-                           in recAct t boundary nm ga acts s' st2
-                                : stepWith 0 (t + 1) (k - 1) s' st2
+                           in recAct t boundary nm ga acts s' passes st2 blog
+                                (drawsOf st1 ga st2)
+                                : stepWith 0 (t + 1) (k - 1) s' (recs + 1) st2
           where living = livingCharacters st
-    recIdle t boundary nm st = object $
+    drawsOf st1 ga st2 = [ "draws" .= drawLogJSON st1 ga st2 | eLogs em ]
+    recIdle t boundary nm passes st blog = object $
       [ "t" .= t, "boundary" .= boundary, "actor" .= nm
       , "action" .= (Nothing :: Maybe String), "idle" .= True
+      , "passes" .= passes
       , "walkSeed" .= toWordJSON Nothing ]
-      ++ stateFields st
-      ++ [ "facts" .= dbToLabeledSentences (db st) ]
-      ++ [ "candidates" .= ([] :: [String]) | cands ]
-    recAct t boundary nm ga acts s' st = object $
+      ++ blog ++ stateFields st ++ factFields mode st
+      ++ [ "candidates" .= ([] :: [String]) | eCands em ]
+      ++ [ "identity" .= (Nothing :: Maybe ()) | eIdent em ]
+    recAct t boundary nm ga acts s' passes st blog draws = object $
       [ "t" .= t, "boundary" .= boundary, "actor" .= nm
       , "action" .= gaLabel ga, "idle" .= False
+      , "passes" .= passes
       , "walkSeed" .= toWordJSON (Just s') ]
-      ++ stateFields st
-      ++ [ "facts" .= dbToLabeledSentences (db st) ]
-      ++ [ "candidates" .= sort (map gaLabel acts) | cands ]
+      ++ blog ++ draws ++ stateFields st ++ factFields mode st
+      -- NATIVE order [D-C1]/[S-C2]: the walk indexes this list, so its order is
+      -- part of the comparison. Sorting it here made an order-only enumeration
+      -- bug compare equal on candidates AND walkSeed and report as DECISION,
+      -- pointing at a planner `randWalk` never invokes.
+      ++ [ "candidates" .= map gaLabel acts | eCands em ]
+      ++ [ "identity" .= identityJSON ga | eIdent em ]
 
 -- | A 'Word64' walk-seed as JSON (an 'Integer' to stay exact across the
 -- 64-bit range).
@@ -291,6 +494,174 @@ toWordJSON = toJSON . fmap (toInteger :: Word64 -> Integer)
 
 readInt :: String -> Maybe Int
 readInt s = case reads s of [(n, "")] -> Just n; _ -> Nothing
+
+-- worldshape ------------------------------------------------------------------
+--
+-- Worlds are authored DATA, and a mis-transcribed label, swapped role, weight
+-- typo or dropped setup fact presents at trace time exactly like an engine
+-- divergence. `worldshape` turns every such port error into a ONE-LINE
+-- STRUCTURAL DIFF before a turn runs (S7 design §2), and ENUMERATION is only
+-- reportable behind a green one ([S-I2]).
+--
+-- Two top-level keys so a shape mismatch reports differently from a body one:
+--
+--   * @shape@ — the world's skeleton AND its full post-setup state. [S-C6]
+--     killed the "setup db as a set suffices" claim: two setup orders can
+--     produce an identical sentence set with different expiries, a different
+--     stream position, or a different schedule firing order — so the state
+--     fields go in VERBATIM (cursor, rng, dues, expiries), and schedule rules
+--     are listed in DECLARATION order with their periods [D-I5].
+--   * @bodies@ — every Condition and Outcome under a canonical encoder
+--     implemented on BOTH sides. Haskell `show` versus Rust `Debug` must never
+--     be the channel: it would report a formatting difference as a port error
+--     and hide a real one behind an accidental match.
+
+-- | The canonical Condition encoding: a JSON array whose head is the
+-- constructor name. Total — every constructor is listed, so a new one is a
+-- compile error on this side and a parse error on the other, never a silent
+-- omission.
+condJSON :: Condition -> Value
+condJSON c = case c of
+  Match s        -> arr ["Match", str s]
+  Not s          -> arr ["Not", str s]
+  Eq a b         -> arr ["Eq", str a, str b]
+  Neq a b        -> arr ["Neq", str a, str b]
+  Cmp op a b     -> arr ["Cmp", str (show op), str a, str b]
+  Calc r op a b  -> arr ["Calc", str r, str (show op), str a, str b]
+  Count r s      -> arr ["Count", str r, str s]
+  Subquery s f w -> arr ["Subquery", str s, toJSON f, conds w]
+  Or cls         -> arr ["Or", toJSON (map conds cls)]
+  Absent cs      -> arr ["Absent", conds cs]
+  Exists cs      -> arr ["Exists", conds cs]
+  where
+    arr = toJSON :: [Value] -> Value
+    str = toJSON :: String -> Value
+
+conds :: [Condition] -> Value
+conds = toJSON . map condJSON
+
+-- | The canonical Outcome encoding, same discipline as 'condJSON'.
+outcomeJSON :: Outcome -> Value
+outcomeJSON o = case o of
+  Insert s        -> arr ["Insert", str s]
+  Delete s        -> arr ["Delete", str s]
+  InsertFor n s   -> arr ["InsertFor", toJSON n, str s]
+  Call fn as      -> arr ["Call", str fn, toJSON as]
+  ForEach cs os   -> arr ["ForEach", conds cs, outs os]
+  Roll n d cs os  -> arr ["Roll", toJSON n, toJSON d, conds cs, outs os]
+  where
+    arr = toJSON :: [Value] -> Value
+    str = toJSON :: String -> Value
+
+outs :: [Outcome] -> Value
+outs = toJSON . map outcomeJSON
+
+-- | Does any outcome in this subtree draw? The static half of the zero-setup-
+-- rolls assertion below.
+outcomeDraws :: Outcome -> Bool
+outcomeDraws = not . null . rollOdds
+
+-- | A world's SHAPE: its skeleton plus the whole post-setup state.
+shapeJSON :: PraxState -> Value
+shapeJSON st = object
+  [ "practices" .=
+      [ object
+          [ "id"            .= practiceId p
+          , "name"          .= practiceName p
+          , "roles"         .= roles p
+          , "action_labels" .= map actionName (actions p)   -- DECLARATION order
+          , "data_facts"    .= dataFacts p
+          , "init_sentences" .= outcomeSents (initOutcomes p) ]
+      | (_, p) <- Map.toList (practiceDefs st) ]            -- practice-id order
+  , "characters" .=
+      [ object
+          [ "name"           .= charName c
+          , "bound_to"       .= charBoundTo c
+          , "want_utilities" .= map wantUtility (charWants c)
+          , "desires"        .= charDesires c ]
+      | c <- characters st ]                                -- declaration order
+  , "desires"  .= [ desireName d | d <- desires st ]
+  , "schedule" .= [ object [ "name" .= srName r, "period" .= srPeriod r ]
+                  | r <- schedule st ]                      -- DECLARATION order
+  , "engine_rules" .= engineRuleNames st
+  , "functions"    .= [ fnName f | f <- worldFns st ]
+  , "sorts"        .= sorts st
+  , "axiom_heads"  .= map (intercalate "." . map symName) (axiomHeads st)
+  , "prediction_scope_size" .= length (predictionScope st)
+    -- The full post-setup state, verbatim [S-C6]: a mis-transcribed period or a
+    -- setup-order difference becomes a shape diff here instead of a t=0
+    -- SCHEDULE divergence [D-I5].
+  , "state"    .= object (stateFields st)
+  , "setup_db" .= dbToLabeledSentences (db st)
+    -- The set comparison above is only sufficient because nothing in setup
+    -- consumes the die [D-I5]. That is ASSERTED, not assumed: no practice's
+    -- init outcomes may draw. (Init outcomes are the one authored code path a
+    -- world's setup runs; schedule rules and actions fire only under the loop.)
+  , "setup_rolls_zero" .= True
+  ]
+
+-- | Die loudly if any practice's init outcomes can draw — the assumption
+-- 'shapeJSON' publishes as @setup_rolls_zero@. A world that broke it would make
+-- the setup db's SET comparison insufficient (two setup orders could then land
+-- on different stream positions), so it must stop the gate, not footnote it.
+checkSetupRollsZero :: String -> PraxState -> IO ()
+checkSetupRollsZero world st =
+  case [ practiceId p | (_, p) <- Map.toList (practiceDefs st)
+       , any outcomeDraws (initOutcomes p) ] of
+    []  -> pure ()
+    pss -> dieMsg ("worldshape " ++ world ++ ": setup draws from the die -- \
+                   \practice init outcomes " ++ show pss ++ " contain a Roll. \
+                   \The setup-db set comparison is only sound for a world whose \
+                   \setup consumes no rolls (S7 design [D-I5]).")
+
+-- | A world's BODIES: every Condition and Outcome it authored.
+bodiesJSON :: PraxState -> Value
+bodiesJSON st = object
+  [ "practices" .= object
+      [ K.fromString pid .= object
+          [ "actions" .= [ object [ "label" .= actionName a
+                                  , "when"  .= conds (actionConditions a)
+                                  , "then"  .= outs (actionOutcomes a) ]
+                         | a <- actions p ]
+          , "inits" .= outs (initOutcomes p) ]
+      | (pid, p) <- Map.toList (practiceDefs st) ]
+  , "characters" .= object
+      [ K.fromString (charName c) .= [ object [ "utility" .= wantUtility w
+                                              , "when"    .= conds (wantConditions w) ]
+                                     | w <- charWants c ]
+      | c <- characters st ]
+  , "desires" .= object
+      [ K.fromString (desireName d)
+          .= object [ "utility" .= wantUtility (desireWant d)
+                    , "when"    .= conds (wantConditions (desireWant d)) ]
+      | d <- desires st ]
+  , "schedule" .= object
+      [ K.fromString (srName r)
+          .= [ object [ "when" .= conds cs, "then" .= outs os ] | (cs, os) <- srBody r ]
+      | r <- schedule st ]
+  , "functions" .= object
+      [ K.fromString (fnName f) .= object
+          [ "params" .= fnParams f
+          , "cases"  .= [ object [ "when" .= conds (caseConditions cse)
+                                 , "then" .= outs (caseOutcomes cse) ]
+                        | cse <- fnCases f ] ]
+      | f <- worldFns st ]
+  , "axioms" .= [ object [ "when" .= conds whenC, "then" .= thenH ]
+                | Axiom whenC thenH <- axioms st ]
+  , "prediction_scope" .= conds (predictionScope st)
+  ]
+
+runWorldshape :: String -> IO ()
+runWorldshape world = case worldNamed world of
+  Nothing       -> dieMsg ("unknown world " ++ show world ++ " (one of "
+                           ++ unwords allWorldNames ++ ")")
+  Just (st, _)  -> do
+    checkSetupRollsZero world st
+    putJSON (object
+      [ "format" .= (1 :: Int), "engine" .= ("haskell" :: String)
+      , "world"  .= world
+      , "shape"  .= shapeJSON st
+      , "bodies" .= bodiesJSON st ])
 
 -- check ----------------------------------------------------------------------
 
@@ -1342,11 +1713,15 @@ main = do
   case args of
     ("trace" : world : rest)     -> runTrace world rest
     ("randtrace" : world : rest) -> runRandtrace world rest
+    ("worldshape" : world : _)   -> runWorldshape world
     ("check" : world : _)        -> runCheckCmd world
     ("fixtures" : name : _)      -> runFixtures name
     _ -> dieMsg (unlines
            [ "usage:"
-           , "  prax-oracle trace <world> --turns N [--idle NAME] [--depth D] --mode decisions|state|view"
-           , "  prax-oracle randtrace <world> --seed S --cap N [--candidates]"
+           , "  prax-oracle trace <world> --turns N [--idle NAME] [--depth D] --mode decisions|state|view [LOC]"
+           , "  prax-oracle randtrace <world> --seed S --cap N [--mode M] [--die-seed S] [LOC]"
+           , "  prax-oracle worldshape <world>"
            , "  prax-oracle check <world>"
-           , "  prax-oracle fixtures db|el|query|derive|kin|div1|engine|planner|npc" ])
+           , "  prax-oracle fixtures db|el|query|derive|kin|div1|engine|planner|npc"
+           , ""
+           , "  LOC (localization emission) = [--candidates] [--scores] [--identity] [--logs]" ])
