@@ -176,3 +176,73 @@ was specified against an IDEALIZED record, never against the fields
   — the empty-register prediction is now CHECKED: both shipped aggregate axiom
   bodies read the same family as their Match seed, so DIV-1's disjointness
   precondition never holds in any shipped world [M5].
+
+## 9. PANEL RULINGS — design/completeness lens (binding; with §8 governs over §§1-7)
+
+Verdict FLAWED + GAPS; three Criticals, and C-1 CONVERGES with [S-C2] — both
+lenses independently found the candidate-order defect.
+
+- **[D-C1] Candidate lists and score rows are ORDER-BEARING; the oracle canon is
+  RESTATED.** `TraceMain.hs:285` emits `sort (map gaLabel acts)` while the walk
+  indexes the UNSORTED list — so a same-set/different-order enumeration bug
+  compares EQUAL on candidates AND walkSeed, differs only in `action`, and gets
+  classified DECISION pointing at planner machinery `randWalk` never invokes.
+  The canon becomes: **facts, dues and expiries are name-sorted (genuinely
+  unordered); candidates and score rows are NATIVE-ORDER and order is part of
+  the comparison.** Fix at the source — remove the `sort` in oracle/ (the
+  permitted additive surface, NOT frozen); a second sorted field would be a dual
+  system.
+- **[D-C2] The classifier is MODE-PARAMETERISED.** `randWalk` never touches
+  `Prax.Planner` — it selects via `possibleActions` + `pick`. So in randtrace
+  mode "candidates equal + action differs" is DEFINITIONALLY an ordering or
+  `pick`/LCG bug, never a planner bug: the DECISION row's pointer column differs
+  by mode (trace → the planner; randtrace → enumeration order or pick). Plus
+  `randtrace --mode` is added (already required by [S-C4]).
+- **[D-C3] `golden-check.sh` gets a designed LIFETIME and its bypass closed.**
+  (a) Its source of truth is the frozen literals, which the cut-over DELETES —
+  so a `conformance/goldens/SHA256SUMS` is committed WHILE THE FREEZE LIVES and
+  the check retargets to hashes at deletion (a guarantee whose expiry is not
+  designed is not a guarantee). (b) The check relates goldens↔frozen but nothing
+  relates goldens↔the Rust assertion: the Rust golden tests must LOAD
+  `conformance/goldens/<name>.txt`, plus a gate rejecting multi-line inline
+  expected-narration literals in those tests. The FOUR goldens are named
+  explicitly: village-21, bar-12, intrigue-12 (GoldenDriveSpec) and loop-bar-25
+  (LoopSpec). (c) The extractor fails LOUD on a zero-line extraction (the
+  meta-gate's `stage_states_or_die` idiom), and cross-derives the same sequences
+  from `prax-oracle trace` — two independent derivations of one file.
+- **[D-I1] worldshape does NOT discharge the five village RelevanceSpec rows.**
+  They assert NAMED CONTENT (`clean-conscience`, `spites-carol`,
+  `pursues-earnBread`; floors-for-consciences); a worldshape diff asserts only
+  equal-to-frozen — which inverts the program's authority (the Haskell would
+  become the contract), evaporates at cut-over, and is the wrong net (a
+  misclassified floor that frozen ALSO misclassifies passes). They are NATIVE
+  RUST assertions over `village_world()`, like the four LoopSpec rows. The
+  worldshape table dump stays as an early net (nearly free; localizes a table
+  divergence to shape-time).
+- **[D-I5] worldshape's `shape` gains the initial dues/expiries maps and the
+  clock fields**, else a mis-transcribed period presents as a t=0 SCHEDULE
+  divergence rather than a one-line shape diff — defeating the section's own
+  claim. Note the lens CONFIRMS set-comparison suffices for the db (`!` slots
+  evict, so an order difference that changes anything changes the set) with one
+  carve-out: a setup that consumes the die. No shipped world does; worldshape
+  ASSERTS zero setup rolls rather than relying on that shape luck.
+- **[D-I6] Keep `--die-seed`, fix its justification.** Measured: village's whole
+  Roll space is two arms of one action, and at the shipped seed both hit and
+  miss/advance-on-miss execute within any walk containing ≥2 shuns — so the
+  sweep is NOT rescuing an untested class (RngSpec's 26 labels are already
+  re-expressed at S4). What it buys is INTEGRATION coverage: two draws in one
+  outcome list (stream-step order within one performAction), stream position
+  across turns and boundaries, Roll-inside-ForEach. ~10 LOC, keep at 20×20; drop
+  the overstated claim. And NO synthetic draw-world (a second world corpus with
+  no pin behind it is a dual system).
+- **[D-I7] Planner depth is PINNED at 2 across the design** (the goldens are
+  `npcAct 2` / `runNpcTicks 2 25`; `trace --depth` defaults to 2) — stated once,
+  and the comparator compares headers so a depth drift is SHAPE-DIVERGENT [M1].
+- **[D-I8/I9] Slice completeness**: `bigFeud` joins slice 1 (it was missing);
+  `dm` (barDirector) coverage is specified explicitly rather than implied — its
+  own worldshape, its own randtrace budget, and the director practice's
+  metalevel affordances named as slice-3 risk.
+- **[D-I2] Counts corrected**: the module list and the ~410 label estimate are
+  re-derived from the actual spec files at slice start (one was already wrong);
+  the per-slice allowlist assignment VERIFIED by the lens, as did the nine
+  owed:S7 rows' slice mapping.
