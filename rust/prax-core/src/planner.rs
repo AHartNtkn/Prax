@@ -597,6 +597,10 @@ mod smoke {
         st
     }
 
+    // H: PlannerSpec.hs "Prax.Planner"
+    // H: PlannerSpec.hs "pickAction chooses the want-satisfying order over the alternatives"
+    // H: PlannerSpec.hs "top-scoring order beats the others; non-cider orders score 0"
+    // H: PlannerSpec.hs "lookahead: walking up is worthless immediately but valuable at depth 1"
     #[test]
     fn tendbar_pick_and_scores() {
         let mut walked = bar_state();
@@ -633,6 +637,85 @@ mod smoke {
         );
     }
 
+    // H: PlannerSpec.hs "evaluate sums utility over satisfying instantiations"
+    #[test]
+    fn evaluate_sums_utility_over_satisfying_instantiations() {
+        // The frozen pin's own pair: the want is worth nothing until the cider
+        // order exists, and exactly its utility once it does.
+        let mut walked = bar_state();
+        walked
+            .perform_outcome(&insert("practice.tendBar.ada.customer.beth"))
+            .unwrap();
+        let beth = beth();
+        assert_eq!(walked.evaluate_self_wants(&beth), 0);
+        walked
+            .perform_outcome(&insert(
+                "practice.tendBar.ada.customer.beth!order!cider",
+            ))
+            .unwrap();
+        assert_eq!(walked.evaluate_self_wants(&beth), 10);
+
+        // …and it is a SUM over satisfying instantiations, not a boolean: one
+        // want of utility 3 over three bindings is 9. (A presence test would
+        // read 3 here — this is the discriminating half.)
+        let counter = Character::new("counter").want(want1("guest.G", 3));
+        let mut st = State::new();
+        st.set_characters(vec![counter.clone()]).unwrap();
+        assert_eq!(st.evaluate_self_wants(&counter), 0);
+        for g in ["guest.a", "guest.b", "guest.c"] {
+            st.perform_outcome(&insert(g)).unwrap();
+        }
+        assert_eq!(st.evaluate_self_wants(&counter), 9);
+    }
+
+    // H: PlannerSpec.hs "a universally-quantified desire drives the planner to complete it"
+    #[test]
+    fn a_universal_want_drives_the_planner_to_complete_it() {
+        // A host who wants EVERY guest to have a drink, with one guest short:
+        // the ∀ scores nothing until it is COMPLETE, so the planner pours for
+        // the one who needs it (pouring for a guest who has one is not offered
+        // at all, and resting leaves the universal unsatisfied).
+        let serve = Practice::new("serve")
+            .name("[Host] hosts")
+            .roles(["Host"])
+            .action(
+                Action::new("[Actor]: pour a drink for [Guest]")
+                    .when([m("guest.Guest"), not_("hasDrink.Guest")])
+                    .then([insert("hasDrink.Guest")]),
+            )
+            .action(Action::new("[Actor]: rest"));
+        let host = Character::new("host").want(Want::new(
+            vec![crate::query::for_all(
+                vec![m("guest.G")],
+                vec![m("hasDrink.G")],
+            )],
+            10,
+        ));
+        let mut st = State::new();
+        st.define_practices([serve]).unwrap();
+        st.set_characters(vec![host.clone()]).unwrap();
+        for o in [
+            insert("guest.a"),
+            insert("guest.b"),
+            insert("hasDrink.a"),
+            insert("practice.serve.host"),
+        ] {
+            st.perform_outcome(&o).unwrap();
+        }
+        assert_eq!(st.evaluate_self_wants(&host), 0, "b still lacks a drink");
+        assert_eq!(
+            st.pick_action(1, &host).map(|g| g.label),
+            Some("host: pour a drink for b".to_owned())
+        );
+        let pour = st
+            .possible_actions("host")
+            .into_iter()
+            .find(|g| g.label == "host: pour a drink for b")
+            .expect("pour-for-b offered");
+        st.perform_action(&pour);
+        assert_eq!(st.evaluate_self_wants(&host), 10, "now the universal holds");
+    }
+
     // ---- believed-mind prediction ------------------------------------------
 
     fn cider_vocab() -> Vec<Desire> {
@@ -657,6 +740,8 @@ mod smoke {
         st
     }
 
+    // H: PlannerSpec.hs "predictMove is belief-relative: no belief, no prediction"
+    // H: PlannerSpec.hs "predictMove with a believed motive is the mover's motivated best"
     #[test]
     fn predict_move_is_belief_relative_and_motivated() {
         let ada = Character::new("ada");
@@ -690,6 +775,36 @@ mod smoke {
         assert_eq!(st.predict_move(&ada, &beth), None);
     }
 
+    // H: PlannerSpec.hs "a false belief predicts a move the mover would never take"
+    #[test]
+    fn a_false_belief_predicts_a_move_the_mover_would_never_take() {
+        // ada believes beth craves cider; beth actually wants nothing at all.
+        // The prediction is the PREDICTOR's, so it fires anyway — and beth
+        // herself is completely unmoved by what ada believes.
+        let ada = Character::new("ada");
+        let plain_beth = Character::new("beth");
+        let mut told = bar_state();
+        told.perform_outcome(&insert("practice.tendBar.ada.customer.beth"))
+            .unwrap();
+        told.set_desires(cider_vocab()).unwrap();
+        told.set_characters(vec![plain_beth.clone(), Character::new("ada")])
+            .unwrap();
+        let mut untold = told.clone();
+        told.perform_outcome(&insert("ada.believes.desires.beth.cider-craving.presumed"))
+            .unwrap();
+        assert_eq!(
+            told.predict_move(&ada, &plain_beth).map(|g| g.label),
+            Some("beth: Order cider".to_owned()),
+            "the false belief still drives the prediction"
+        );
+        assert_eq!(
+            told.pick_action(0, &plain_beth),
+            untold.pick_action(0, &plain_beth),
+            "beth's own choice is untouched by what ada believes"
+        );
+    }
+
+    // H: PlannerSpec.hs "the dead are predicted to do nothing"
     #[test]
     fn dead_are_predicted_to_do_nothing() {
         let ada = Character::new("ada");
@@ -739,6 +854,7 @@ mod smoke {
         st
     }
 
+    // H: PlannerSpec.hs "the round-walk credits a predicted enabling world (secret coordination)"
     #[test]
     fn round_walk_credits_a_predicted_enabling_world() {
         let olaf = Character::new("olaf").want(want1("grabbed.inge", 6));
@@ -759,6 +875,7 @@ mod smoke {
         );
     }
 
+    // H: PlannerSpec.hs "prediction scope gates participation"
     #[test]
     fn scope_gates_participation() {
         let olaf = Character::new("olaf").want(want1("grabbed.inge", 6));
@@ -789,6 +906,7 @@ mod smoke {
         );
     }
 
+    // H: PlannerSpec.hs "the round is sequential: the second prediction sees the first's effects"
     #[test]
     fn sequential_chain_credits_signal_at_14() {
         let chain = Practice::new("chain")
@@ -845,6 +963,7 @@ mod smoke {
         assert_eq!(s0.1, 0.0);
     }
 
+    // H: PlannerSpec.hs "a mid-round death silences the rest of the imagined round"
     #[test]
     fn mid_round_death_silences_the_rest_of_the_round() {
         let duel = Practice::new("duel")
@@ -891,8 +1010,9 @@ mod smoke {
 
     // ---- dead-now -----------------------------------------------------------
 
+    // H: PlannerSpec.hs "deadNow (floor): a markless conscience skips; one lied-mark goes live"
     #[test]
-    fn dead_now_floor_and_gate() {
+    fn dead_now_floor_markless_skips_one_mark_goes_live() {
         // Floor: a markless conscience skips; one lied-mark goes live.
         let confess = Practice::new("confess")
             .roles(["R"])
@@ -921,6 +1041,7 @@ mod smoke {
         );
     }
 
+    // H: PlannerSpec.hs "deadNow (conservative): an axiom-derivable gate candidate never skips"
     #[test]
     fn dead_now_conservative_axiom_derivable_never_skips() {
         let toil = Practice::new("toil")
@@ -946,8 +1067,167 @@ mod smoke {
         );
     }
 
+    // H: PlannerSpec.hs "deadNow (gate): absent hunger skips; the hunger fact goes live"
+    #[test]
+    fn dead_now_gate_absent_hunger_skips_the_fact_goes_live() {
+        // A positive want-kind gated on `hungry.Owner`: no authored outcome
+        // inserts `hungry.*` (only `meal.*`), so it is a pure ENVIRONMENT gate
+        // — dead while the fact is absent, live the moment it appears.
+        let eatery = Practice::new("eatery")
+            .roles(["R"])
+            .action(
+                Action::new("[Actor]: eat lunch")
+                    .when([m("practice.eatery.here")])
+                    .then([insert("meal.Actor")]),
+            )
+            .action(Action::new("[Actor]: Wait about"));
+        let priya = Character::new("priya");
+        let beth = Character::new("beth");
+        let mut st = State::new();
+        st.define_practices([eatery]).unwrap();
+        st.set_characters(vec![priya.clone(), beth.clone()]).unwrap();
+        st.set_desires(vec![Desire::new(
+            "wants-food",
+            Want::new(vec![m("hungry.Owner"), m("meal.M")], 5),
+        )])
+        .unwrap();
+        st.perform_outcome(&insert("practice.eatery.here")).unwrap();
+        st.perform_outcome(&insert(
+            "priya.believes.desires.beth.wants-food.heard.gossip",
+        ))
+        .unwrap();
+        assert_eq!(
+            st.predict_move(&priya, &beth),
+            None,
+            "no hunger fact: the gate is empty and the pair skips"
+        );
+        st.perform_outcome(&insert("hungry.beth")).unwrap();
+        assert_eq!(
+            st.predict_move(&priya, &beth).map(|g| g.label),
+            Some("beth: eat lunch".to_owned()),
+            "the gate opens and the full model sees the improvement"
+        );
+    }
+
+    // H: PlannerSpec.hs "deadNow gates the SKIP, never the model: a mixed model evaluates in FULL, dead deterrent included"
+    #[test]
+    fn dead_now_gates_the_skip_never_the_model() {
+        // `wants-treasure` is AlwaysLive, so this pair is never skipped; the
+        // question is whether the floor-DEAD `hates-lying` still costs what it
+        // should once the model is evaluated. Markless: grabbing boldly mints a
+        // NEW lie, priced at -6 against grabbing openly's clean +5, so honesty
+        // wins 5 > -1. An implementation that dropped a dead-now desire from
+        // the SCORED model (rather than only from the skip check) would tie
+        // both grabs at 5 and break alphabetically toward "grab boldly".
+        let treasure = Practice::new("treasure")
+            .roles(["R"])
+            .action(Action::new("[Actor]: grab openly").then([insert("has.Actor.treasure")]))
+            .action(
+                Action::new("[Actor]: grab boldly")
+                    .when([not_("lied.Actor")])
+                    .then([insert("has.Actor.treasure"), insert("lied.Actor")]),
+            )
+            .action(
+                Action::new("[Actor]: confess")
+                    .when([m("lied.Actor")])
+                    .then([crate::types::delete("lied.Actor")]),
+            )
+            .action(Action::new("[Actor]: Wait about"));
+        let priya = Character::new("priya");
+        let beth = Character::new("beth");
+        let mut st = State::new();
+        st.define_practices([treasure]).unwrap();
+        st.set_characters(vec![priya.clone(), beth.clone()]).unwrap();
+        st.set_desires(vec![
+            desire("wants-treasure", "has.Owner.treasure", 5),
+            desire("hates-lying", "lied.Owner", -6),
+        ])
+        .unwrap();
+        for o in [
+            insert("practice.treasure.here"),
+            insert("priya.believes.desires.beth.wants-treasure.heard.gossip"),
+            insert("priya.believes.desires.beth.hates-lying.heard.gossip"),
+        ] {
+            st.perform_outcome(&o).unwrap();
+        }
+        assert_eq!(
+            st.predict_move(&priya, &beth).map(|g| g.label),
+            Some("beth: grab openly".to_owned()),
+            "the dead deterrent still prices the new lie"
+        );
+        // Marked: the deterrent is now LIVE (an existing, unrelated lie), and
+        // relief (6) beats a clean grab (5) — the same never-skipped mixed
+        // model, a different answer, with deadNow gating no skip at all.
+        st.perform_outcome(&insert("lied.beth")).unwrap();
+        assert_eq!(
+            st.predict_move(&priya, &beth).map(|g| g.label),
+            Some("beth: confess".to_owned())
+        );
+    }
+
+    // ---- the v35 motive signature -------------------------------------------
+
+    // H: PlannerSpec.hs "motiveSignature: options, satisfaction, live desires, known motives"
+    #[test]
+    fn motive_signature_options_satisfaction_live_desires_known_motives() {
+        let mess = Practice::new("mess")
+            .roles(["R"])
+            .action(
+                Action::new("[Actor]: eat lunch")
+                    .when([m("hungry.Actor")])
+                    .then([insert("meal.Actor")]),
+            )
+            .action(Action::new("[Actor]: idle about"));
+        let beth = Character::new("beth")
+            .want(want1("meal.beth", 10))
+            .holds("wants-food");
+        let mut st = State::new();
+        st.define_practices([mess]).unwrap();
+        st.set_characters(vec![beth.clone()]).unwrap();
+        st.set_desires(vec![Desire::new(
+            "wants-food",
+            Want::new(vec![m("hungry.Owner"), m("meal.Owner")], 5),
+        )])
+        .unwrap();
+        st.perform_outcome(&insert("practice.mess.here")).unwrap();
+
+        let sig_a = st.motive_signature(&beth);
+        // Bearing: eating inserts meal.* (which beth's wants read) so it IS
+        // want-bearing — but it is not yet OFFERED; idling is offered and bears
+        // nothing.
+        assert_eq!(sig_a.bearing, Vec::<String>::new());
+        // Satisfaction: TWO own wants (the meal.beth charWant and the held
+        // desire), both with zero satisfying bindings.
+        assert_eq!(sig_a.satisfaction, vec![0, 0]);
+        // Live desires: wants-food is improvable but gated shut (nothing in the
+        // vocabulary inserts hungry.*, so it is an environment gate).
+        assert_eq!(sig_a.live_desires, Vec::<String>::new());
+        assert_eq!(sig_a.known_motives, Vec::<(String, String)>::new());
+
+        st.perform_outcome(&insert("hungry.beth")).unwrap();
+        let sig_b = st.motive_signature(&beth);
+        // The hunger fact opens the gate AND grounds the want-bearing eat.
+        assert_eq!(sig_b.bearing, vec!["[Actor]: eat lunch".to_owned()]);
+        assert_eq!(sig_b.live_desires, vec!["wants-food".to_owned()]);
+
+        st.perform_outcome(&insert(
+            "beth.believes.desires.carl.wants-food.heard.gossip",
+        ))
+        .unwrap();
+        let sig_c = st.motive_signature(&beth);
+        assert_eq!(
+            sig_c.known_motives,
+            vec![("carl".to_owned(), "wants-food".to_owned())]
+        );
+        // Each of the three states carries a DIFFERENT signature — which is
+        // what makes a standing intention wake.
+        assert_ne!(sig_a, sig_b);
+        assert_ne!(sig_b, sig_c);
+    }
+
     // ---- v34 reuse ----------------------------------------------------------
 
+    // H: PlannerSpec.hs "prediction reuse: a base-fact delta that enables the mover is recomputed, not reused"
     #[test]
     fn reuse_base_fact_delta_recomputed_not_reused() {
         let p = Practice::new("mess")
@@ -986,6 +1266,7 @@ mod smoke {
         );
     }
 
+    // H: PlannerSpec.hs "prediction reuse: a DERIVED-fact flip (the cone) is recomputed, not reused"
     #[test]
     fn reuse_derived_cone_flip_recomputed_not_reused() {
         let p = Practice::new("court")
@@ -1023,6 +1304,28 @@ mod smoke {
             st.pick_action(2, &priya).map(|g| g.label),
             Some("priya: denounce beth".to_owned()),
             "the cone must be recomputed, not reused"
+        );
+    }
+
+    // H: PlannerSpec.hs "prediction reuse: a mid-path death is recomputed (the dead anchor)"
+    #[test]
+    fn a_mid_path_death_is_in_every_movers_read_anchors() {
+        // The read-set half of the mid-round-death behaviour: the mover's death
+        // mark is unconditionally one of their read anchors, so a kill anywhere
+        // on the path intersects the delta and no reuse can survive it.
+        let priya = Character::new("priya");
+        let beth = Character::new("beth");
+        let mut st = State::new();
+        st.set_characters(vec![priya, beth]).unwrap();
+        let dead = st.intern_segs("dead.beth");
+        let anchors = st.mover_read_anchors_of("priya", "beth");
+        assert!(
+            anchors.contains(&dead),
+            "dead.beth must be a read anchor of the pair; got {:?}",
+            anchors
+                .iter()
+                .map(|a| st.render_segs(a))
+                .collect::<Vec<_>>()
         );
     }
 

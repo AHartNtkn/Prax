@@ -614,6 +614,19 @@ impl State {
         let interner = Arc::make_mut(&mut self.interner);
         tokenize(interner, s).expect("probe path").segs
     }
+    /// The integer utility of the current view to a character's own wants —
+    /// `Prax.Planner.evaluate` over `Prax.Minds.selfWants`, which in the one
+    /// compiled representation is exactly `evaluate_compiled` over
+    /// `cooked_self_wants`. Exposed for the PlannerSpec `evaluate` pin.
+    #[cfg(test)]
+    pub(crate) fn evaluate_self_wants(&mut self, c: &Character) -> i64 {
+        let State { interner, defs, rt } = self;
+        let interner = Arc::make_mut(interner);
+        let comp = defs.compiled();
+        let model =
+            crate::minds::cooked_self_wants(interner, &comp.wants, &comp.desires, defs.desires(), c);
+        planner::evaluate_compiled(interner, rt.view(), &model)
+    }
     /// A named desire's dead-now recipe (`Prax.Relevance.livenessOf`).
     #[cfg(test)]
     pub(crate) fn liveness_of(&self, name: &str) -> Option<&crate::relevance::Liveness> {
