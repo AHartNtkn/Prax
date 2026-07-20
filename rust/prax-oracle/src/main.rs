@@ -10,7 +10,7 @@
 //! prax-oracle compare <world> --mode trace|randtrace [--turns N|--cap N]
 //!                             [--seed S] [--die-seed S] [--depth D] [--emit view]
 //! prax-oracle explain <world> --mode M …          (compare with everything emitted)
-//! prax-oracle matrix [--worlds a,b] --seeds 0..99 --cap 50 [--format report]
+//! prax-oracle matrix [--worlds a,b] --seeds 0..99 --cap 50 [--jobs N] [--format report]
 //! ```
 //!
 //! The pieces: [`drive_frozen`] (subprocess + freeze-check + the freeze-rev-keyed
@@ -66,7 +66,7 @@ fn usage() -> String {
          \x20 prax-oracle compare <world> --mode trace|randtrace [--turns N] [--cap N] [--seed S]\n\
          \x20                             [--die-seed S] [--depth D] [--emit decisions|state|view]\n\
          \x20 prax-oracle explain <world> --mode M [same flags as compare]\n\
-         \x20 prax-oracle matrix [--worlds a,b,c] --seeds A..B --cap N [--format report]\n\
+         \x20 prax-oracle matrix [--worlds a,b,c] --seeds A..B --cap N [--jobs N] [--format report]\n\
          \n\
          ported worlds: {}",
         worlds::ported().join(" ")
@@ -276,7 +276,25 @@ pub fn run_one(spec: &RunSpec, reg: &Register) -> Result<(compare::Outcome, Shap
             Shape::NotChecked,
         ));
     }
-    let shape = Shape::Green(rev);
+    run_one_behind(spec, reg, &Shape::Green(rev))
+}
+
+/// One comparison run BEHIND an already-established `worldshape` verdict.
+///
+/// The shape check is per WORLD, not per (world, seed): it drives the frozen
+/// oracle and two `git` subprocesses, and at 100 seeds × 4 worlds re-running it
+/// per cell is ~400 redundant frozen invocations that say the same thing every
+/// time. `matrix` shape-checks each world once up front (§1.6) and passes the
+/// verdict here.
+///
+/// # Errors
+/// If either side cannot be driven, or the classifier refuses.
+pub fn run_one_behind(
+    spec: &RunSpec,
+    reg: &Register,
+    shape: &Shape,
+) -> Result<(compare::Outcome, Shape), String> {
+    let shape = shape.clone();
     let mut frozen = drive_frozen::run_jsonl(&spec.frozen_args(spec.mode))?;
     let mut rust = rust_stream(spec)?;
     let mut ctx = Ctx {

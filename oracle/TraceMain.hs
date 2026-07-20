@@ -76,6 +76,10 @@ import qualified Prax.Worlds.Village as Village
 worldNamed :: String -> Maybe (PraxState, String)
 worldNamed n = case n of
   "probe"    -> Just (probeWorld,            "quill")
+  -- The [M1] mutation fixture: a setup that draws THROUGH a Call. `worldshape`
+  -- must refuse it; it is a fixture, never content, and like `probe` it is
+  -- absent from 'allWorldNames'.
+  "probe-drawing-setup" -> Just (probeDrawingSetupWorld, "quill")
   "bar"      -> Just (Bar.barWorld,          Bar.playerName)
   "dm"       -> Just (Bar.barDirectorWorld,  Bar.directorName)
   "intrigue" -> Just (Intrigue.intrigueWorld, Intrigue.playerName)
@@ -133,6 +137,25 @@ probeWorld = perf
     noteFn = Function "note" ["Who"]
       [ FnCase [ Match "char.Who" ] [ Insert "noted.Who" ]
       , FnCase [] [ Insert "noted.nobody" ] ]
+
+-- | The probe world whose SETUP draws THROUGH A CALL — the mutation the
+-- zero-setup-rolls assertion exists to catch [M1]. Its practice's init outcome
+-- rolls nothing itself; it calls a function whose case body does. An assertion
+-- that stops at the call boundary passes this world while claiming to stop it,
+-- which is why the fixture exists on both sides: 'worldshape' must REFUSE it.
+--
+-- Registering a practice does not run its init outcomes, so nothing here
+-- consumes the die; the assertion is static, and so is the fixture.
+probeDrawingSetupWorld :: PraxState
+probeDrawingSetupWorld =
+  defineFunctions [riskyFn] (definePractices [gambleP] probeWorld)
+  where
+    riskyFn = Function "risky" ["Who"]
+      [ FnCase [] [ Roll 1 2 [ Match "char.Who" ] [ Insert "lucky.Who" ] ] ]
+    gambleP = practice { practiceId   = "gamble"
+                       , practiceName = "[G] gambles"
+                       , roles        = ["G"]
+                       , initOutcomes = [ Call "risky" ["G"] ] }
 
 probeAxioms :: [Axiom]
 probeAxioms =
@@ -649,8 +672,27 @@ outs = toJSON . map outcomeJSON
 
 -- | Does any outcome in this subtree draw? The static half of the zero-setup-
 -- rolls assertion below.
-outcomeDraws :: Outcome -> Bool
-outcomeDraws = not . null . rollOdds
+--
+-- TRANSITIVE THROUGH @Call@ [M1]. An init outcome that calls a function whose
+-- case body rolls consumes the die just as surely as one that rolls inline, and
+-- an assertion that stops at the call boundary passes a world it claims to stop.
+-- (This is why it does not simply reuse 'rollOdds': that one answers a different
+-- question — which draws THIS outcome makes, for the draw log's per-outcome
+-- entry — and a @Call@'s draws are made by the callee, not by it.) The @seen@
+-- list breaks recursion: re-entering a function cannot make a @Roll@ appear that
+-- the first visit did not see.
+outcomeDraws :: [Function] -> Outcome -> Bool
+outcomeDraws fns = go []
+  where
+    go seen o = case o of
+      Roll{}        -> True
+      ForEach _ os  -> any (go seen) os
+      Call n _
+        | n `elem` seen -> False
+        | otherwise     -> any (go (n : seen))
+                               [ x | f <- fns, fnName f == n
+                                   , c <- fnCases f, x <- caseOutcomes c ]
+      _             -> False
 
 -- | A world's SHAPE: its skeleton plus the whole post-setup state.
 shapeJSON :: PraxState -> Value
@@ -698,10 +740,11 @@ shapeJSON st = object
 checkSetupRollsZero :: String -> PraxState -> IO ()
 checkSetupRollsZero world st =
   case [ practiceId p | (_, p) <- Map.toList (practiceDefs st)
-       , any outcomeDraws (initOutcomes p) ] of
+       , any (outcomeDraws (worldFns st)) (initOutcomes p) ] of
     []  -> pure ()
     pss -> dieMsg ("worldshape " ++ world ++ ": setup draws from the die -- \
-                   \practice init outcomes " ++ show pss ++ " contain a Roll. \
+                   \practice init outcomes " ++ show pss ++ " contain a Roll, \
+                   \inline or through a Call [M1]. \
                    \The setup-db set comparison is only sound for a world whose \
                    \setup consumes no rolls (S7 design [D-I5]).")
 

@@ -112,9 +112,26 @@ fn cache_name(args: &[String]) -> String {
     s
 }
 
+thread_local! {
+    /// How many times THIS thread has asked the frozen oracle for a document,
+    /// cache hits included. The unit of cost the design cares about is the ASK,
+    /// not the subprocess: every one of them re-resolves the repository root
+    /// through `git`, and the redundancy [I4] closed was ~400 asks that could
+    /// only ever return the same worldshape. Per-thread so a test can read it
+    /// without racing the rest of the suite.
+    static CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// This thread's frozen-invocation count.
+#[cfg(test)]
+pub fn frozen_calls() -> usize {
+    CALLS.with(std::cell::Cell::get)
+}
+
 /// Run the frozen oracle and return its stdout, memoized under
 /// `target/oracle-cache/<freeze-rev>/`.
 fn run_raw(args: &[String]) -> Result<String, String> {
+    CALLS.with(|c| c.set(c.get() + 1));
     freeze_check()?;
     let root = repo_root()?;
     let dir = root.join("rust/target/oracle-cache").join(freeze_rev()?);

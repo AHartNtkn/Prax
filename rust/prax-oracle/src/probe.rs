@@ -197,6 +197,32 @@ pub(crate) fn probe_world_with_a_mistranscribed_label() -> State {
     st
 }
 
+/// The probe world whose SETUP draws THROUGH A CALL — the mutation the
+/// zero-setup-rolls assertion exists to catch [M1]. Its practice's init outcome
+/// rolls nothing itself; it calls a function whose case body does. An assertion
+/// that stops at the call boundary passes this world while claiming to stop it.
+/// The mirror of the oracle's `probeDrawingSetupWorld`, so `worldshape` must
+/// refuse it on BOTH sides.
+///
+/// Registering a practice does not run its init outcomes, so nothing here
+/// consumes the die: the assertion is static, and so is the fixture.
+#[cfg(test)]
+pub(crate) fn probe_world_with_a_drawing_setup() -> State {
+    let mut st = probe_world();
+    st.define_functions(vec![Function::new("risky", ["Who"]).case(
+        vec![],
+        draw(1, 2, vec![matches("char.Who")], vec![insert("lucky.Who")])
+            .expect("the fixture's odds"),
+    )])
+    .expect("the fixture's function");
+    st.define_practices([Practice::new("gamble")
+        .name("[G] gambles")
+        .roles(["G"])
+        .init([call("risky", vec!["G".to_owned()])])])
+        .expect("the fixture's practice");
+    st
+}
+
 /// Every condition constructor the probe names, for the encoder's own coverage
 /// assertion (a constructor the fixture never names is a constructor the
 /// canonical encoder ships unexercised).

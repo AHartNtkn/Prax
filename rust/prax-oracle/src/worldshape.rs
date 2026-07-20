@@ -22,8 +22,9 @@
 use crate::record::state_fields;
 use prax_core::engine::State;
 use prax_core::query::{CalcOp, CmpOp, Condition};
-use prax_core::types::{Outcome, Practice};
+use prax_core::types::{Function, Outcome, Practice};
 use serde_json::{Map, Value, json};
+use std::collections::BTreeSet;
 
 /// The canonical Condition encoding: a JSON array headed by the constructor
 /// name. TOTAL — every constructor is listed, so a new one is a compile error
@@ -131,11 +132,27 @@ fn cond_sents(cs: &[Condition]) -> Vec<String> {
 
 /// Can any outcome in this subtree draw? The static half of the
 /// zero-setup-rolls assertion.
-fn outcome_draws(o: &Outcome) -> bool {
+///
+/// TRANSITIVE THROUGH `Call` [M1]. An init outcome that calls a function whose
+/// case body rolls draws from the die just as surely as one that rolls inline,
+/// and an assertion that stops at the call boundary passes a world it claims to
+/// stop. `seen` breaks recursion: a function that calls itself is a fixpoint, and
+/// re-entering it cannot make a `Roll` appear that the first visit did not see.
+fn outcome_draws(o: &Outcome, fns: &[Function], seen: &mut BTreeSet<String>) -> bool {
     match o {
         Outcome::Roll(_, _, _, _) => true,
-        Outcome::ForEach(_, os) => os.iter().any(outcome_draws),
-        _ => false,
+        Outcome::ForEach(_, os) => os.iter().any(|x| outcome_draws(x, fns, seen)),
+        Outcome::Call(name, _) => {
+            if !seen.insert(name.clone()) {
+                return false;
+            }
+            fns.iter()
+                .filter(|f| &f.name == name)
+                .flat_map(|f| &f.cases)
+                .flat_map(|c| &c.outcomes)
+                .any(|x| outcome_draws(x, fns, seen))
+        }
+        Outcome::Insert(_) | Outcome::Delete(_) | Outcome::InsertFor(_, _) => false,
     }
 }
 
@@ -160,7 +177,11 @@ fn check_setup_rolls_zero(world: &str, st: &State) -> Result<(), String> {
     let offenders: Vec<&str> = st
         .practice_defs()
         .values()
-        .filter(|p| p.init_outcomes.iter().any(outcome_draws))
+        .filter(|p| {
+            p.init_outcomes
+                .iter()
+                .any(|o| outcome_draws(o, st.functions_src(), &mut BTreeSet::new()))
+        })
         .map(|p| p.id.as_str())
         .collect();
     if offenders.is_empty() {
@@ -168,8 +189,8 @@ fn check_setup_rolls_zero(world: &str, st: &State) -> Result<(), String> {
     } else {
         Err(format!(
             "worldshape {world}: setup draws from the die — practice init outcomes {offenders:?} \
-             contain a Roll. The setup-db set comparison is only sound for a world whose setup \
-             consumes no rolls (S7 design [D-I5])."
+             contain a Roll, inline or through a `Call` [M1]. The setup-db set comparison is \
+             only sound for a world whose setup consumes no rolls (S7 design [D-I5])."
         ))
     }
 }

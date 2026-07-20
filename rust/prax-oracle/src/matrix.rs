@@ -1,19 +1,28 @@
 //! Matrix mode: one line per (world, seed) — the report's only source of
 //! numbers.
 //!
-//! Worlds are shape-checked (§2) BEFORE any seed runs, so a world-port error
-//! costs one line rather than a hundred localizations. Every run carries
-//! `--candidates` [S-I4]: without it ENUMERATION can never fire and every
-//! enumeration bug reports as DECISION.
+//! Worlds are shape-checked (§2) ONCE, BEFORE any seed runs, so a world-port
+//! error costs one line rather than a hundred localizations — and the check does
+//! not repeat per cell, where at 100 seeds × 4 worlds it would be ~400 redundant
+//! frozen invocations plus ~800 `git` subprocesses saying the same thing. Every
+//! run carries `--candidates` [S-I4]: without it ENUMERATION can never fire and
+//! every enumeration bug reports as DECISION.
+//!
+//! `--jobs N` parallelizes over the seeds of one world (§1.8, mandatory at 100+
+//! seeds × 4 worlds): the frozen subprocess is the bottleneck and the cache is
+//! keyed by freeze rev and argv, so distinct seeds never contend. The OUTPUT is
+//! in seed order regardless of `N` — a matrix whose line order depended on
+//! scheduling could not be diffed between runs, and reports embed it verbatim.
 //!
 //! `--format report` emits the per-world block that stage reports embed
 //! VERBATIM. Reports never carry hand-typed matrix numbers — a number a human
 //! retyped is a number that can drift from the run that produced it.
 
-use crate::classify::Walk;
+use crate::classify::{Shape, Walk};
 use crate::compare::Outcome;
 use crate::record::{Emit, Mode};
-use crate::{RunSpec, load_register, run_one, shape_compare, worlds};
+use crate::register::Register;
+use crate::{RunSpec, drive_frozen, load_register, run_one_behind, shape_compare, worlds};
 
 /// One (world, seed) result.
 struct Cell {
@@ -44,10 +53,17 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
     let cap = crate::int_flag(args, "--cap", Some(50))?;
     let turns = crate::int_flag(args, "--turns", Some(24))?;
     let report_format = crate::flag(args, "--format") == Some("report");
+    let jobs = usize::try_from(crate::int_flag(args, "--jobs", Some(1))?)
+        .ok()
+        .filter(|j| *j >= 1)
+        .ok_or("--jobs expects a positive integer")?;
     let reg = load_register()?;
 
-    // Shape-check every world FIRST (§1.6). A shape divergence is one line, not
-    // a hundred seeds of noise.
+    // Shape-check every world FIRST (§1.6), ONCE. A shape divergence is one line,
+    // not a hundred seeds of noise — and the check is a property of the world at
+    // a freeze rev, so re-running it per (world, seed) would be ~400 frozen
+    // invocations that can only ever say the same thing.
+    let rev = drive_frozen::freeze_rev()?;
     let mut shapes = Vec::new();
     for w in &worlds_arg {
         let (green, lines) = shape_compare(w)?;
@@ -71,6 +87,7 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
             });
             continue;
         }
+        let shape = Shape::Green(rev.clone());
         // The trace walk once per world, then the randtrace walk per seed.
         let trace = RunSpec {
             world: w.clone(),
@@ -83,21 +100,23 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
             mode: Mode::State,
             emit: Emit::matrix(),
         };
-        let (o, _) = run_one(&trace, &reg)?;
+        let (o, _) = run_one_behind(&trace, &reg, &shape)?;
         println!("{}", line(w, None, "trace", &o));
         cells.push(Cell {
             world: w.clone(),
             outcome: o,
         });
-        for s in &seeds {
-            let spec = RunSpec {
+        let specs: Vec<RunSpec> = seeds
+            .iter()
+            .map(|s| RunSpec {
                 walk: Walk::Randtrace,
                 steps: cap,
                 seed: Some(*s),
                 ..trace.clone()
-            };
-            let (o, _) = run_one(&spec, &reg)?;
-            println!("{}", line(w, Some(*s), "randtrace", &o));
+            })
+            .collect();
+        for (spec, o) in specs.iter().zip(run_seeds(&specs, &reg, &shape, jobs)?) {
+            println!("{}", line(w, spec.seed, "randtrace", &o));
             cells.push(Cell {
                 world: w.clone(),
                 outcome: o,
@@ -112,6 +131,53 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
         }
     }
     Ok(!cells.iter().any(|c| c.outcome.is_failure()))
+}
+
+/// Run one world's seeds across `jobs` threads, returning the outcomes IN SEED
+/// ORDER (§1.8).
+///
+/// The frozen invocations are the bottleneck and each is an independent
+/// subprocess; the oracle cache is keyed by freeze rev and argv, and distinct
+/// seeds produce distinct argv, so two workers never contend for one entry. The
+/// results are collected and printed in order rather than as they land — a
+/// matrix whose line order depended on scheduling could not be diffed between
+/// runs, and stage reports embed its output verbatim.
+///
+/// # Errors
+/// The FIRST error in seed order, so `--jobs` cannot change which failure a run
+/// reports.
+pub fn run_seeds(
+    specs: &[RunSpec],
+    reg: &Register,
+    shape: &Shape,
+    jobs: usize,
+) -> Result<Vec<Outcome>, String> {
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let done: std::sync::Mutex<Vec<(usize, Result<Outcome, String>)>> =
+        std::sync::Mutex::new(Vec::new());
+    std::thread::scope(|scope| {
+        for _ in 0..jobs.min(specs.len()) {
+            let (next, done) = (&next, &done);
+            scope.spawn(move || {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let Some(spec) = specs.get(i) else { return };
+                    let r = run_one_behind(spec, reg, shape).map(|(o, _)| o);
+                    done.lock().expect("the results lock").push((i, r));
+                }
+            });
+        }
+    });
+    let mut landed = done.into_inner().expect("the results lock");
+    landed.sort_by_key(|(i, _)| *i);
+    assert_eq!(
+        landed.len(),
+        specs.len(),
+        "a worker dropped a seed: {} results for {} seeds",
+        landed.len(),
+        specs.len()
+    );
+    landed.into_iter().map(|(_, r)| r).collect()
 }
 
 fn line(world: &str, seed: Option<i64>, walk: &str, o: &Outcome) -> String {

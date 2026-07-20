@@ -140,6 +140,81 @@ fn the_die_seed_override_agrees() {
 }
 
 #[test]
+fn the_zero_setup_rolls_assertion_is_transitive_through_call_on_both_sides() {
+    // [M1]. The assertion licenses the setup db's SET comparison [D-I5], and it
+    // claimed to stop any world whose setup draws. Both sides stopped at the
+    // `Call` boundary, so an init outcome calling a rolling function passed a
+    // gate that said it could not. The fixture is that world, transcribed on
+    // both sides, and BOTH must refuse it.
+    let mut mutated = crate::probe::probe_world_with_a_drawing_setup();
+    let rust = crate::worldshape::worldshape("probe-drawing-setup", &mut mutated)
+        .expect_err("the Rust gate must refuse a setup that draws through a Call");
+    println!("rust  : {rust}");
+    assert!(rust.contains("gamble") && rust.contains("Call"), "{rust}");
+
+    let frozen = crate::drive_frozen::run_json(&[
+        "worldshape".to_owned(),
+        "probe-drawing-setup".to_owned(),
+    ])
+    .expect_err("the frozen gate must refuse it too");
+    println!("frozen: {frozen}");
+    assert!(frozen.contains("gamble") && frozen.contains("Call"), "{frozen}");
+
+    // …and the assertion still passes the world that only draws in an ACTION.
+    let mut clean = crate::probe::probe_world();
+    crate::worldshape::worldshape("probe", &mut clean).expect("the probe world still passes");
+}
+
+#[test]
+fn a_hoisted_worldshape_is_not_re_run_per_cell() {
+    // [I4]. `worldshape` is a property of a WORLD at a freeze rev; matrix mode
+    // establishes it once up front (§1.6) and every cell runs behind that
+    // verdict. Re-checking per (world, seed) was ~400 redundant frozen asks and
+    // ~800 `git` subprocesses at the specified 100 seeds × 4 worlds. The net:
+    // three seeds behind a hoisted verdict must cost exactly three frozen asks,
+    // one walk each.
+    let reg = load_register().expect("the register loads");
+    let shape = crate::classify::Shape::Green(
+        crate::drive_frozen::freeze_rev().expect("the freeze rev resolves"),
+    );
+    let before = crate::drive_frozen::frozen_calls();
+    for seed in 0..3 {
+        let (o, _) = crate::run_one_behind(&spec(Walk::Randtrace, 20, Some(seed)), &reg, &shape)
+            .expect("the run completes");
+        assert!(matches!(o, Outcome::Clean), "seed {seed}: {:?}", render(&o));
+    }
+    let asked = crate::drive_frozen::frozen_calls() - before;
+    println!("3 seeds behind a hoisted worldshape: {asked} frozen invocations");
+    assert_eq!(
+        asked, 3,
+        "three seeds cost {asked} frozen asks, not 3 — the worldshape gate is being re-run per \
+         cell instead of once per world"
+    );
+}
+
+#[test]
+fn matrix_jobs_do_not_change_the_result_or_its_order() {
+    // [I4]'s other half (§1.8). `--jobs N` parallelizes over seeds; the outcomes
+    // and their ORDER must not depend on N, because reports embed the matrix
+    // output verbatim and a scheduling-dependent line order cannot be diffed
+    // between runs.
+    let reg = load_register().expect("the register loads");
+    let shape = crate::classify::Shape::Green(
+        crate::drive_frozen::freeze_rev().expect("the freeze rev resolves"),
+    );
+    let specs: Vec<crate::RunSpec> = (0..6)
+        .map(|s| spec(Walk::Randtrace, 20, Some(s)))
+        .collect();
+    let serial = crate::matrix::run_seeds(&specs, &reg, &shape, 1).expect("serial");
+    let parallel = crate::matrix::run_seeds(&specs, &reg, &shape, 4).expect("parallel");
+    let cells = |v: &[Outcome]| v.iter().map(Outcome::cell).collect::<Vec<_>>();
+    println!("jobs 1: {:?}\njobs 4: {:?}", cells(&serial), cells(&parallel));
+    assert_eq!(serial.len(), 6, "every seed produced a cell");
+    assert_eq!(cells(&serial), cells(&parallel));
+    assert!(serial.iter().all(|o| matches!(o, Outcome::Clean)));
+}
+
+#[test]
 fn the_localization_rerun_carries_the_full_emission_truncated_to_the_ordinal() {
     // [C1]'s two properties, over both engines. `compare`/`matrix` run the
     // matrix emission (candidates only), under which the draw log and the
