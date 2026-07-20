@@ -14,10 +14,21 @@
 //! it: a pattern overlap covered entirely by variables carries no evidence the
 //! two patterns denote the same predicate, so it is discarded.
 
-use smallvec::SmallVec;
+use std::collections::BTreeMap;
 
+use smallvec::{SmallVec, smallvec};
+
+use crate::compilepipe::{CompiledFn, CompiledPractice, Effect};
+use crate::db::{Bindings, Val};
+use crate::derive::{CompiledRule, axiom_head_patterns};
 use crate::interner::{Interner, Sym};
 use crate::path::CompiledPath;
+use crate::query::{Cond, ground_cond, ground_names, read_anchors};
+use crate::types::{Character, Desire};
+
+/// A pattern anchor: a pre-split, pre-interned path (the shape [`may_unify_syms`]
+/// classifies). One name for the family that recurs through every S6 table.
+type Names = SmallVec<[Sym; 6]>;
 
 /// Could a grounded instance of one path pattern be an instance (or a
 /// prefix/extension) of the other, on pre-split, pre-interned paths
@@ -66,6 +77,456 @@ pub fn eviction_shadow_names(
     out
 }
 
+/// Each named desire's dead-now recipe (`Prax.Types.Liveness`): a negative
+/// want-kind's floor check (its own conditions), a positive want-kind's
+/// environment gates (each inner list is ONE gate conjunct, cooked and
+/// Owner-templated), or [`Liveness::AlwaysLive`] when no cheap state test
+/// applies. Consumed by the planner's `dead_now`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Liveness {
+    FloorCheck,
+    GateCheck(Vec<Vec<Cond>>),
+    AlwaysLive,
+}
+
+/// The Call-resolution pool: every registered function's cooked case outcomes,
+/// guards ignored (conservatively: all cases), keyed by fn name
+/// (`Prax.Relevance.cookedFnPool`). Reads the one registry directly — since v47
+/// functions have a single home, there is no practice fold and no
+/// resolution-order subtlety.
+pub(crate) fn cooked_fn_pool(fns: &BTreeMap<String, CompiledFn>) -> BTreeMap<String, Vec<Effect>> {
+    fns.iter()
+        .map(|(name, (_params, cases))| {
+            (
+                name.clone(),
+                cases.iter().flat_map(|(_, os)| os.iter().cloned()).collect(),
+            )
+        })
+        .collect()
+}
+
+/// The insert- and delete-shaped atoms an outcome can produce, resolving `Call`s
+/// through the pool (conservatively: all cases) — `Prax.Relevance.cookedOutcomeAtoms`.
+/// An exclusion insert both asserts its path and evicts that value's SIBLINGS
+/// (whose names appear nowhere in the outcome), so the delete side carries the
+/// path itself plus its eviction shadows. `None` = "unknown effects" (an
+/// unresolvable `Call`): the caller must treat that as improves-everything.
+pub(crate) fn cooked_outcome_atoms(
+    interner: &mut Interner,
+    fns: &BTreeMap<String, Vec<Effect>>,
+    visited: &[&str],
+    o: &Effect,
+) -> Option<(Vec<Names>, Vec<Names>)> {
+    match o {
+        Effect::Insert(p) => {
+            let names: Names = p.segs.clone();
+            if (0..p.segs.len()).any(|j| p.is_excl_after(j)) {
+                let mut dels = vec![names.clone()];
+                dels.extend(eviction_shadow_names(interner, p));
+                Some((vec![names], dels))
+            } else {
+                Some((vec![names], Vec::new()))
+            }
+        }
+        // The deferred retract is environment: same atoms as the bare insert.
+        Effect::InsertFor(_, p) => {
+            cooked_outcome_atoms(interner, fns, visited, &Effect::Insert(p.clone()))
+        }
+        Effect::Delete(p) => Some((Vec::new(), vec![p.segs.clone()])),
+        Effect::ForEach(_, outs) => mconcat_atoms(interner, fns, visited, outs),
+        // The body may fire (the roll may hit): its anchors count exactly as a ForEach's.
+        Effect::Roll(_, _, _, outs) => mconcat_atoms(interner, fns, visited, outs),
+        Effect::Call(fn_, _) => {
+            if visited.contains(&fn_.as_str()) {
+                Some((Vec::new(), Vec::new())) // cycle: already counted
+            } else {
+                match fns.get(fn_) {
+                    None => None, // unknown function: wild
+                    Some(outs) => {
+                        let mut v: Vec<&str> = visited.to_vec();
+                        v.push(fn_.as_str());
+                        mconcat_atoms(interner, fns, &v, outs)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The `mconcat'` of `Prax.Relevance.cookedOutcomeAtoms`: sequence the per-outcome
+/// results (any `None` ⇒ `None`), then concatenate the insert and delete sides.
+fn mconcat_atoms(
+    interner: &mut Interner,
+    fns: &BTreeMap<String, Vec<Effect>>,
+    visited: &[&str],
+    outs: &[Effect],
+) -> Option<(Vec<Names>, Vec<Names>)> {
+    let mut ins = Vec::new();
+    let mut del = Vec::new();
+    for o in outs {
+        let (i, d) = cooked_outcome_atoms(interner, fns, visited, o)?;
+        ins.extend(i);
+        del.extend(d);
+    }
+    Some((ins, del))
+}
+
+/// Positive and negated path patterns of a want's cooked conditions, plus an
+/// "uncertain" flag (satisfaction depends on machinery beyond pattern presence)
+/// — `Prax.Relevance.cookedWantPatterns`. `Absent` swaps polarity; `Exists`
+/// keeps it; `Or` unions; `Calc`/`Count`/`Subquery` taint. Only the SET of
+/// patterns and the flag are consumed (`any`/membership), so accumulation order
+/// is unobservable.
+fn cooked_want_patterns(conds: &[Cond]) -> (Vec<Names>, Vec<Names>, bool) {
+    let mut pos: Vec<Names> = Vec::new();
+    let mut neg: Vec<Names> = Vec::new();
+    let mut unc = false;
+    for c in conds {
+        match c {
+            Cond::Match(p) => pos.push(p.clone()),
+            Cond::Not(p) => neg.push(p.clone()),
+            Cond::Absent(cs) => {
+                let (p2, n2, u2) = cooked_want_patterns(cs);
+                pos.extend(n2);
+                neg.extend(p2);
+                unc |= u2;
+            }
+            Cond::Exists(cs) => {
+                let (p2, n2, u2) = cooked_want_patterns(cs);
+                pos.extend(p2);
+                neg.extend(n2);
+                unc |= u2;
+            }
+            Cond::Or(clauses) => {
+                for cl in clauses {
+                    let (p2, n2, u2) = cooked_want_patterns(cl);
+                    pos.extend(p2);
+                    neg.extend(n2);
+                    unc |= u2;
+                }
+            }
+            Cond::Eq(..) | Cond::Neq(..) | Cond::Cmp(..) => {}
+            Cond::Calc(..) | Cond::Count(..) | Cond::Subquery { .. } => unc = true,
+        }
+    }
+    (pos, neg, unc)
+}
+
+/// Every effect an authored MOVER action can cause, resolved once per world: the
+/// insert- and delete-shaped atom pools over every action's outcomes plus every
+/// practice's inits (`Prax.Relevance.worldAtomPools`), and whether any is "wild".
+/// Ranges over the practices movers can take — NOT the schedule surface (a desire
+/// only the schedule can improve has no improving mover action, so the static
+/// screen stays exact and its liveness becomes a `GateCheck` the pulse flips).
+struct AtomPools {
+    inserted: Vec<Names>,
+    deleted: Vec<Names>,
+    wild: bool,
+}
+
+fn world_atom_pools(
+    interner: &mut Interner,
+    defs: &BTreeMap<String, CompiledPractice>,
+    fns: &BTreeMap<String, Vec<Effect>>,
+) -> AtomPools {
+    let mut atoms: Vec<Option<(Vec<Names>, Vec<Names>)>> = Vec::new();
+    for cp in defs.values() {
+        for a in &cp.actions {
+            for o in &a.outs {
+                atoms.push(cooked_outcome_atoms(interner, fns, &[], o));
+            }
+        }
+    }
+    for cp in defs.values() {
+        for o in &cp.inits {
+            atoms.push(cooked_outcome_atoms(interner, fns, &[], o));
+        }
+    }
+    let wild = atoms.iter().any(Option::is_none);
+    let mut inserted = Vec::new();
+    let mut deleted = Vec::new();
+    for a in atoms.into_iter().flatten() {
+        inserted.extend(a.0);
+        deleted.extend(a.1);
+    }
+    AtomPools {
+        inserted,
+        deleted,
+        wild,
+    }
+}
+
+/// Axiom heads count as derivable (`Prax.Relevance.axiomDerivable`): a want (or
+/// gate candidate) over a derivable pattern is conservatively improvable / never
+/// a gate. `heads` is [`axiom_head_patterns`] of the world's rules (□-lifted
+/// forms included; the `contradiction` witness excluded, as frozen).
+fn axiom_derivable(heads: &[Names], p: &[Sym]) -> bool {
+    heads.iter().any(|h| may_unify_syms(p, h))
+}
+
+/// The names of the desires some authored action might improve
+/// (`Prax.Relevance.improvableDesires`). The analysis is conservative: it answers
+/// "not improvable" only when that is provable from the authored patterns.
+pub(crate) fn improvable_desires(
+    interner: &mut Interner,
+    defs: &BTreeMap<String, CompiledPractice>,
+    fn_pool: &BTreeMap<String, Vec<Effect>>,
+    rules: &[CompiledRule],
+    desires_cooked: &BTreeMap<String, Vec<Cond>>,
+    desires: &[Desire],
+) -> Vec<String> {
+    let pools = world_atom_pools(interner, defs, fn_pool);
+    let heads = axiom_head_patterns(rules);
+    let mut out = Vec::new();
+    for d in desires {
+        let conds = &desires_cooked[&d.name];
+        let (pos, neg, unc) = cooked_want_patterns(conds);
+        let u = d.want.utility;
+        let improvable = if u == 0 {
+            false
+        } else if pools.wild
+            || unc
+            || pos.iter().chain(neg.iter()).any(|p| axiom_derivable(&heads, p))
+        {
+            true
+        } else if u > 0 {
+            pools
+                .inserted
+                .iter()
+                .any(|i| pos.iter().any(|p| may_unify_syms(i, p)))
+                || pools
+                    .deleted
+                    .iter()
+                    .any(|dl| neg.iter().any(|p| may_unify_syms(dl, p)))
+        } else {
+            pools
+                .deleted
+                .iter()
+                .any(|dl| pos.iter().any(|p| may_unify_syms(dl, p)))
+                || pools
+                    .inserted
+                    .iter()
+                    .any(|i| neg.iter().any(|p| may_unify_syms(i, p)))
+        };
+        if improvable {
+            out.push(d.name.clone());
+        }
+    }
+    out
+}
+
+/// Classify every named desire's dead-now recipe (`Prax.Relevance.livenessOf`): a
+/// negative want-kind is unconditionally [`Liveness::FloorCheck`]; a positive
+/// want-kind gates on its top-level positive `Match` conjuncts that are neither
+/// action-insertable nor axiom-derivable; weight 0 (screened statically first) is
+/// [`Liveness::AlwaysLive`] defensively.
+pub(crate) fn liveness_of(
+    interner: &mut Interner,
+    defs: &BTreeMap<String, CompiledPractice>,
+    fn_pool: &BTreeMap<String, Vec<Effect>>,
+    rules: &[CompiledRule],
+    desires_cooked: &BTreeMap<String, Vec<Cond>>,
+    desires: &[Desire],
+) -> BTreeMap<String, Liveness> {
+    let pools = world_atom_pools(interner, defs, fn_pool);
+    let heads = axiom_head_patterns(rules);
+    let mut out = BTreeMap::new();
+    for d in desires {
+        let u = d.want.utility;
+        let lv = if u < 0 {
+            Liveness::FloorCheck
+        } else if u > 0 {
+            positive_liveness(&desires_cooked[&d.name], &pools, &heads)
+        } else {
+            Liveness::AlwaysLive
+        };
+        out.insert(d.name.clone(), lv);
+    }
+    out
+}
+
+fn positive_liveness(conds: &[Cond], pools: &AtomPools, heads: &[Names]) -> Liveness {
+    let (_, _, unc) = cooked_want_patterns(conds);
+    let gates: Vec<Vec<Cond>> = conds
+        .iter()
+        .filter_map(|c| match c {
+            Cond::Match(p) => Some(p),
+            _ => None,
+        })
+        .filter(|p| {
+            !pools.inserted.iter().any(|i| may_unify_syms(p, i)) && !axiom_derivable(heads, p)
+        })
+        .map(|p| vec![Cond::Match(p.clone())])
+        .collect();
+    if unc || pools.wild || gates.is_empty() {
+        Liveness::AlwaysLive
+    } else {
+        Liveness::GateCheck(gates)
+    }
+}
+
+/// Per character, the affordance templates whose authored outcomes could touch
+/// their own wants or held desires (`Prax.Relevance.bearingTemplates`) — the
+/// opportunity-relevance half of the v35 motive signature. Conservative: an
+/// unresolvable `Call` bears on everyone.
+pub(crate) fn bearing_templates(
+    interner: &mut Interner,
+    defs: &BTreeMap<String, CompiledPractice>,
+    fn_pool: &BTreeMap<String, Vec<Effect>>,
+    desires_cooked: &BTreeMap<String, Vec<Cond>>,
+    desires: &[Desire],
+    wants: &BTreeMap<String, Vec<Vec<Cond>>>,
+    characters: &[Character],
+) -> BTreeMap<String, Vec<String>> {
+    let mut action_atoms: Vec<(String, Option<Vec<Names>>)> = Vec::new();
+    for cp in defs.values() {
+        for a in &cp.actions {
+            action_atoms.push((a.name.clone(), action_atoms_of(interner, fn_pool, &a.outs)));
+        }
+    }
+    let mut out = BTreeMap::new();
+    for c in characters {
+        let pats = char_read_patterns(c, wants, desires_cooked, desires);
+        let bearing: Vec<String> = action_atoms
+            .iter()
+            .filter(|(_, m)| match m {
+                None => true,
+                Some(atoms) => atoms
+                    .iter()
+                    .any(|atom| pats.iter().any(|p| may_unify_syms(atom, p))),
+            })
+            .map(|(n, _)| n.clone())
+            .collect();
+        out.insert(c.name.clone(), bearing);
+    }
+    out
+}
+
+/// One action's atom pool (both sides concatenated) for [`bearing_templates`], or
+/// `None` if any outcome is wild (`bearingTemplates`'s `atoms`).
+fn action_atoms_of(
+    interner: &mut Interner,
+    fn_pool: &BTreeMap<String, Vec<Effect>>,
+    outs: &[Effect],
+) -> Option<Vec<Names>> {
+    let mut all = Vec::new();
+    for o in outs {
+        let (i, d) = cooked_outcome_atoms(interner, fn_pool, &[], o)?;
+        all.extend(i);
+        all.extend(d);
+    }
+    Some(all)
+}
+
+/// A character's read anchors: the anchors of their `charWants` conditions plus
+/// their held desires' cooked conditions (`bearingTemplates`'s `charPats`).
+fn char_read_patterns(
+    c: &Character,
+    wants: &BTreeMap<String, Vec<Vec<Cond>>>,
+    desires_cooked: &BTreeMap<String, Vec<Cond>>,
+    desires: &[Desire],
+) -> Vec<Names> {
+    let mut conds: Vec<Cond> = Vec::new();
+    if let Some(ws) = wants.get(&c.name) {
+        for w in ws {
+            conds.extend(w.iter().cloned());
+        }
+    }
+    for d in desires {
+        if c.desires.contains(&d.name) {
+            conds.extend(desires_cooked[&d.name].iter().cloned());
+        }
+    }
+    read_anchors(&conds)
+}
+
+/// Everything `Prax.Planner.predictMove` (scope gate included) can read when the
+/// pick's actor predicts mover `m`, as pattern anchors grounded to the pair
+/// (`Prax.Relevance.moverReadAnchors`): the prediction-scope template
+/// (Actor:=actor, Witness:=m); the believed-model source family; the mover's
+/// death mark; every practice's instance pattern, action conditions, and
+/// outcome-embedded conditions (Actor:=m); every function case (fully wild); and
+/// every vocabulary desire's conditions (Owner:=m).
+///
+/// [S-C1] The scope template is sourced from the already-compiled `scope`
+/// (`Compiled.scope`), never re-cooked from raw `prediction_scope`: every
+/// CONSTANT read anchor is thus interner-resident from recompile, so the delta-vs-
+/// read may-unify the planner runs is a same-interner id compare (the single
+/// planner interner makes the frozen "cross-lineage" hazard structurally absent).
+/// The sole post-recompile read name is the `PraxD` wildcard — a variable, never
+/// id-compared.
+pub(crate) fn mover_read_anchors(
+    interner: &mut Interner,
+    scope: &[Cond],
+    practices: &BTreeMap<String, CompiledPractice>,
+    fns: &BTreeMap<String, CompiledFn>,
+    desires_cooked: &BTreeMap<String, Vec<Cond>>,
+    actor: &str,
+    m: &str,
+) -> Vec<Names> {
+    let m_sym = interner.intern(m);
+    let actor_sym = interner.intern(actor);
+    let actor_key = interner.intern("Actor");
+    let owner_key = interner.intern("Owner");
+    let witness_key = interner.intern("Witness");
+    let mut actor_b = Bindings::new();
+    actor_b.insert(actor_key, Val::Sym(m_sym));
+    let mut owner_b = Bindings::new();
+    owner_b.insert(owner_key, Val::Sym(m_sym));
+    let mut scope_b = Bindings::new();
+    scope_b.insert(actor_key, Val::Sym(actor_sym));
+    scope_b.insert(witness_key, Val::Sym(m_sym));
+
+    let mut out: Vec<Names> = Vec::new();
+    out.extend(reads_of(interner, &scope_b, scope));
+    let believes = interner.intern("believes");
+    let desires_seg = interner.intern("desires");
+    let prax_d = interner.intern("PraxD");
+    out.push(smallvec![actor_sym, believes, desires_seg, m_sym, prax_d]);
+    let dead = interner.intern("dead");
+    out.push(smallvec![dead, m_sym]);
+    for cp in practices.values() {
+        out.push(ground_names(interner, &actor_b, &cp.instance_names).into());
+        for ca in &cp.actions {
+            out.extend(reads_of(interner, &actor_b, &ca.conds));
+            out.extend(outcome_cond_reads(interner, &actor_b, &ca.outs));
+        }
+        out.extend(outcome_cond_reads(interner, &Bindings::new(), &cp.inits));
+    }
+    for (_params, cases) in fns.values() {
+        for (cs, os) in cases {
+            out.extend(reads_of(interner, &Bindings::new(), cs));
+            out.extend(outcome_cond_reads(interner, &Bindings::new(), os));
+        }
+    }
+    for conds in desires_cooked.values() {
+        out.extend(reads_of(interner, &owner_b, conds));
+    }
+    out
+}
+
+/// `cookedReadAnchors (map (groundCookedCondition b) conds)` — ground then anchor.
+fn reads_of(interner: &mut Interner, b: &Bindings, conds: &[Cond]) -> Vec<Names> {
+    let grounded: Vec<Cond> = conds.iter().map(|c| ground_cond(interner, b, c)).collect();
+    read_anchors(&grounded)
+}
+
+/// Conditions embedded in outcomes (`ForEach`/`Roll` guards, recursively) — the
+/// imagined apply queries these (`Prax.Relevance.outcomeCondReads`).
+fn outcome_cond_reads(interner: &mut Interner, b: &Bindings, outs: &[Effect]) -> Vec<Names> {
+    let mut out = Vec::new();
+    for o in outs {
+        match o {
+            Effect::ForEach(cs, os) | Effect::Roll(_, _, cs, os) => {
+                out.extend(reads_of(interner, b, cs));
+                out.extend(outcome_cond_reads(interner, b, os));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     // RelevanceSpec proper lands at S6 with the planner; these are the two S4
@@ -104,6 +565,182 @@ mod tests {
         let short = segs(&mut i, "practice.tendBar");
         let long = segs(&mut i, "practice.tendBar.ada.customer.beth");
         assert!(may_unify_syms(&short, &long));
+    }
+
+    // ---- RelevanceSpec (synthetic fixtures) --------------------------------
+
+    mod spec {
+        use crate::engine::State;
+        use crate::query::{Condition, subquery};
+        use crate::relevance::Liveness;
+        use crate::types::{Action, Axiom, Character, Desire, Function, Practice, ScheduleRule, Want, insert};
+
+        fn m(s: &str) -> Condition {
+            Condition::Match(s.into())
+        }
+
+        // An exclusion insert counts as evicting ANY sibling on the delete side:
+        // a negative want on the displaced value is improvable only through that
+        // eviction, and the victim's name appears in no outcome.
+        #[test]
+        fn improvable_via_eviction_shadow() {
+            let shrine = Practice::new("shrine").roles(["R"]).action(
+                Action::new("[Actor]: enshrine the gem")
+                    .when([m("slot.stone")])
+                    .then([insert("slot!gem")]),
+            );
+            let mut st = State::new();
+            st.define_practices([shrine]).unwrap();
+            st.set_desires(vec![Desire::new(
+                "hates-the-stone",
+                Want::new(vec![m("slot.stone")], -2),
+            )])
+            .unwrap();
+            assert_eq!(st.improvables(), ["hates-the-stone"]);
+        }
+
+        #[test]
+        fn improvable_eviction_covers_whole_subtree() {
+            let temple = Practice::new("temple").roles(["R"]).action(
+                Action::new("[Actor]: rededicate the altar")
+                    .when([m("shrine.here")])
+                    .then([insert("altar!new.rite!dawn")]),
+            );
+            let mut st = State::new();
+            st.define_practices([temple]).unwrap();
+            st.set_desires(vec![Desire::new(
+                "mourns-the-relic",
+                Want::new(vec![m("altar.old.relic.jade")], -2),
+            )])
+            .unwrap();
+            assert_eq!(st.improvables(), ["mourns-the-relic"]);
+        }
+
+        #[test]
+        fn liveness_variants() {
+            // negative → FloorCheck.
+            let mut st = State::new();
+            st.set_desires(vec![Desire::new("hates-mud", Want::new(vec![m("muddy.Owner")], -3))])
+                .unwrap();
+            assert_eq!(st.liveness_of("hates-mud"), Some(&Liveness::FloorCheck));
+
+            // weight 0 → AlwaysLive (defensive).
+            let mut st0 = State::new();
+            st0.set_desires(vec![Desire::new("indifferent", Want::new(vec![m("whatever.Owner")], 0))])
+                .unwrap();
+            assert_eq!(st0.liveness_of("indifferent"), Some(&Liveness::AlwaysLive));
+
+            // positive with a ticker-only conjunct → GateCheck on it alone.
+            let bakery = Practice::new("bakery").roles(["R"]).action(
+                Action::new("[Actor]: bake")
+                    .when([m("practice.bakery.here")])
+                    .then([insert("meal.bread")]),
+            );
+            let mut stg = State::new();
+            stg.define_practices([bakery]).unwrap();
+            stg.set_desires(vec![Desire::new(
+                "pursues-lunch",
+                Want::new(vec![m("hungry.Owner"), m("meal.M")], 5),
+            )])
+            .unwrap();
+            match stg.liveness_of("pursues-lunch") {
+                Some(Liveness::GateCheck(gs)) => {
+                    assert_eq!(gs.len(), 1);
+                    assert_eq!(gs[0].len(), 1);
+                }
+                other => panic!("expected one gate, got {other:?}"),
+            }
+
+            // axiom-derivable candidate → AlwaysLive (conservative).
+            let mut sta = State::new();
+            sta.set_axioms(vec![Axiom::new(vec![m("starving.Owner")], ["hungry.Owner"])])
+                .unwrap();
+            sta.set_desires(vec![Desire::new("pursues-food", Want::new(vec![m("hungry.Owner")], 5))])
+                .unwrap();
+            assert_eq!(sta.liveness_of("pursues-food"), Some(&Liveness::AlwaysLive));
+
+            // Subquery-bearing → AlwaysLive (uncertainty always wins).
+            let mut sts = State::new();
+            sts.set_desires(vec![Desire::new(
+                "counts-friends",
+                Want::new(vec![subquery("Fs", vec!["F".into()], vec![m("friend.Owner.F")])], 5),
+            )])
+            .unwrap();
+            assert_eq!(sts.liveness_of("counts-friends"), Some(&Liveness::AlwaysLive));
+        }
+
+        // Schedule-moved facts are environment gates: only a schedule rule inserts
+        // festive.now, so it stays a GateCheck conjunct (the schedule is not a
+        // mover). A PERSON action inserting it launders it to AlwaysLive.
+        #[test]
+        fn schedule_moved_facts_are_gates() {
+            let build = |also_person: bool| {
+                let mut p = Practice::new("plaza").roles(["R"]).action(
+                    Action::new("[Actor]: stroll the plaza")
+                        .when([m("practice.plaza.here")])
+                        .then([insert("strolled.Actor")]),
+                );
+                if also_person {
+                    p = p.action(
+                        Action::new("[Actor]: light the lanterns")
+                            .when([m("practice.plaza.here")])
+                            .then([insert("festive.now")]),
+                    );
+                }
+                let mut st = State::new();
+                st.define_practices([p]).unwrap();
+                st.set_characters(vec![Character::new("ana")]).unwrap();
+                st.set_desires(vec![Desire::new(
+                    "loves-a-crowd",
+                    Want::new(vec![m("festive.now"), m("strolled.Owner")], 3),
+                )])
+                .unwrap();
+                st.set_schedule(vec![ScheduleRule::new("festival", 4)
+                    .clause(vec![], vec![insert("festive.now")])])
+                    .unwrap();
+                st
+            };
+            let gated = build(false);
+            assert!(matches!(gated.liveness_of("loves-a-crowd"), Some(Liveness::GateCheck(_))));
+            let laundered = build(true);
+            assert_eq!(laundered.liveness_of("loves-a-crowd"), Some(&Liveness::AlwaysLive));
+        }
+
+        // moverReadAnchors: scope, believes, death, affordances (incl. ForEach and
+        // function-body guards), desires — all grounded to the pair, never to the
+        // predictor.
+        #[test]
+        fn mover_read_anchors_grounds_to_the_pair() {
+            let eatery = Practice::new("eatery")
+                .roles(["R"])
+                .action(
+                    Action::new("[Actor]: eat")
+                        .when([m("hungry.Actor")])
+                        .then([
+                            crate::types::for_each(vec![m("crumb.C")], vec![crate::types::delete("crumb.C")]),
+                            insert("meal.Actor"),
+                        ]),
+                )
+                .action(Action::new("[Actor]: clean up").then([crate::types::call("tidy", vec!["Actor".into()])]));
+            let tidy = Function::new("tidy", ["Who"]).case(
+                vec![],
+                vec![crate::types::for_each(vec![m("dish.D")], vec![crate::types::delete("dish.D")])],
+            );
+            let mut st = State::new();
+            st.define_practices([eatery]).unwrap();
+            st.define_functions([tidy]).unwrap();
+            st.set_characters(vec![Character::new("priya"), Character::new("beth")]).unwrap();
+            st.set_desires(vec![Desire::new("wants-food", Want::new(vec![m("hungry.Owner")], 5))])
+                .unwrap();
+            let anchors = st.mover_read_anchors_of("priya", "beth");
+            let has = |st: &mut State, s: &str| anchors.contains(&st.intern_segs(s));
+            assert!(has(&mut st, "priya.believes.desires.beth.PraxD"), "believes family");
+            assert!(has(&mut st, "dead.beth"), "death mark");
+            assert!(has(&mut st, "hungry.beth"), "affordance/desire cond, Actor/Owner:=beth");
+            assert!(has(&mut st, "crumb.C"), "ForEach guard read");
+            assert!(has(&mut st, "dish.D"), "function-body ForEach guard read");
+            assert!(!has(&mut st, "hungry.priya"), "NOT grounded to the predictor");
+        }
     }
 
     #[test]

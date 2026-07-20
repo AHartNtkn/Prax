@@ -35,7 +35,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 use crate::compilepipe::{Compiled, Effect, compile_outcome, ground_effect, recompile};
@@ -44,6 +44,7 @@ use crate::derive::{CompiledRule, close, close_from};
 use crate::error::WorldError;
 use crate::interner::{Interner, Sym};
 use crate::path::{CompiledPath, segment_names, tokenize};
+use crate::planner::{self, Intention, MotiveSignature};
 use crate::query::{Cond, Condition, query};
 use crate::relevance::{eviction_shadow_names, may_unify_syms};
 use crate::rng::{SEED_BOUNDS, roll_step};
@@ -101,6 +102,12 @@ pub struct Runtime {
     /// and S5's firing sorts by rendered name explicitly.
     expiries: FxHashMap<CompiledPath, i64>,
     rng_seed: Option<i64>,
+    /// Each character's standing intention (`Prax.Loop.npcAct`, v35). Runtime state
+    /// like `cursor`: starts empty, never derived, never touched by recompile.
+    /// `Arc`-wrapped [D-I4] — planner forks never write it, so a fork's clone is a
+    /// refcount bump; `npc_act` writes through [`Arc::make_mut`]. Frozen Persist
+    /// saves it, so it is persist-shaped now (persistence itself is S9).
+    intentions: Arc<BTreeMap<String, Intention>>,
 }
 
 /// All state a running simulation needs (`Prax.Types.PraxState`, split three
@@ -152,6 +159,7 @@ impl State {
                 schedule_dues: BTreeMap::new(),
                 expiries: FxHashMap::default(),
                 rng_seed: None,
+                intentions: Arc::new(BTreeMap::new()),
             },
         }
     }
@@ -508,6 +516,309 @@ pub mod door {
 
 // ---- the perform core (free functions over the split state) ----------------
 
+// ---- planner seams (S6) -----------------------------------------------------
+
+impl Defs {
+    pub(crate) fn compiled(&self) -> &Compiled {
+        &self.compiled
+    }
+    pub(crate) fn characters(&self) -> &[Character] {
+        &self.characters
+    }
+    pub(crate) fn desires(&self) -> &[Desire] {
+        &self.desires
+    }
+}
+
+impl Runtime {
+    pub(crate) fn view(&self) -> &Db {
+        &self.view
+    }
+    pub(crate) fn db(&self) -> &Db {
+        &self.db
+    }
+    pub(crate) fn set_intention(&mut self, name: String, intent: Intention) {
+        Arc::make_mut(&mut self.intentions).insert(name, intent);
+    }
+}
+
+impl State {
+    /// The actor's best action (`Prax.Planner.pickAction`).
+    pub fn pick_action(&mut self, depth: i32, actor: &Character) -> Option<GroundedAction> {
+        let State { interner, defs, rt } = self;
+        let interner = Arc::make_mut(interner);
+        planner::pick_action(interner, defs.as_ref(), rt, depth, actor)
+    }
+    /// The full scored candidate table in NATIVE result order
+    /// (`Prax.Planner.scoreActions`) — the corpus/pin observable [D-C1].
+    pub fn score_actions(&mut self, depth: i32, actor: &Character) -> Vec<(GroundedAction, f64)> {
+        let State { interner, defs, rt } = self;
+        let interner = Arc::make_mut(interner);
+        planner::score_actions(interner, defs.as_ref(), rt, depth, actor)
+    }
+    /// The predictor's guess at the mover's motivated next move
+    /// (`Prax.Planner.predictMove`).
+    pub fn predict_move(
+        &mut self,
+        predictor: &Character,
+        mover: &Character,
+    ) -> Option<GroundedAction> {
+        let State { interner, defs, rt } = self;
+        let interner = Arc::make_mut(interner);
+        planner::predict_move(interner, defs.as_ref(), rt, predictor, mover)
+    }
+    /// The character's current motive signature (`Prax.Planner.motiveSignature`).
+    pub fn motive_signature(&mut self, actor: &Character) -> MotiveSignature {
+        let State { interner, defs, rt } = self;
+        let interner = Arc::make_mut(interner);
+        planner::motive_signature(interner, defs.as_ref(), rt, actor)
+    }
+    /// The actions a character may actually take (`Prax.Planner.candidateActions`).
+    pub fn candidate_actions(&mut self, actor: &Character) -> Vec<GroundedAction> {
+        let State { interner, defs, rt } = self;
+        let interner = Arc::make_mut(interner);
+        planner::candidate_actions(interner, defs.as_ref(), rt, actor)
+    }
+    /// The pair-grounded read anchors of a prediction (`Prax.Relevance.moverReadAnchors`)
+    /// — exposed for the RelevanceSpec/reuse-anchor pins.
+    pub fn mover_read_anchors_of(&mut self, actor: &str, mover: &str) -> Vec<SmallVec<[Sym; 6]>> {
+        let State { interner, defs, .. } = self;
+        let interner = Arc::make_mut(interner);
+        let c = defs.compiled();
+        crate::relevance::mover_read_anchors(
+            interner,
+            &c.scope,
+            &c.practices,
+            &c.fns,
+            &c.desires,
+            actor,
+            mover,
+        )
+    }
+    /// The insert/delete anchor families a grounded action's outcomes can touch
+    /// (`Prax.Engine.groundedDeltaAnchors`) — exposed for the EngineSpec pins.
+    pub fn grounded_delta_anchors_of(&mut self, ga: &GroundedAction) -> Option<Vec<SmallVec<[Sym; 6]>>> {
+        let State { interner, defs, .. } = self;
+        let interner = Arc::make_mut(interner);
+        grounded_delta_anchors(interner, defs.as_ref(), ga)
+    }
+    /// The improvable-desire table (`Prax.Relevance.improvableDesires`).
+    pub fn improvables(&self) -> &[String] {
+        &self.defs.compiled.improvables
+    }
+    /// Test-only: tokenize a sentence through this state's interner (the frozen
+    /// RelevanceSpec's `map intern (pathNames s)` — so an anchor-membership check
+    /// interns the probe in the same id space).
+    #[cfg(test)]
+    pub(crate) fn intern_segs(&mut self, s: &str) -> SmallVec<[Sym; 6]> {
+        let interner = Arc::make_mut(&mut self.interner);
+        tokenize(interner, s).expect("probe path").segs
+    }
+    /// A named desire's dead-now recipe (`Prax.Relevance.livenessOf`).
+    #[cfg(test)]
+    pub(crate) fn liveness_of(&self, name: &str) -> Option<&crate::relevance::Liveness> {
+        self.defs.compiled.liveness.get(name)
+    }
+    /// A character's standing intention, if any (a clone off the runtime map).
+    pub fn intention_of(&self, name: &str) -> Option<Intention> {
+        self.rt.intentions.get(name).cloned()
+    }
+    /// Store a character's standing intention (`Prax.Loop.npcAct`).
+    pub fn set_intention(&mut self, name: String, intent: Intention) {
+        self.rt.set_intention(name, intent);
+    }
+    /// The standing-intention map (read-only) — for the loop pins that graft it.
+    pub fn intentions_map(&self) -> &BTreeMap<String, Intention> {
+        &self.rt.intentions
+    }
+    /// Replace the standing-intention map wholesale — the loop pins' "keep the
+    /// stored intention, rewind the world" graft.
+    pub fn with_intentions(&mut self, intentions: BTreeMap<String, Intention>) {
+        self.rt.intentions = Arc::new(intentions);
+    }
+}
+
+/// Fork-perform: apply a grounded action's effects to a runtime in place
+/// (`Prax.Engine.performAction`), the planner's imagined-move primitive. The
+/// caller clones the runtime first; the single shared interner mints any new
+/// names in one id space, so the delta-vs-read may-unify the reuse gate runs is a
+/// same-lineage compare — the frozen "cross-lineage" hazard [S-C1] is absent by
+/// construction.
+pub(crate) fn perform_action_on(
+    interner: &mut Interner,
+    defs: &Defs,
+    rt: &mut Runtime,
+    ga: &GroundedAction,
+) {
+    let Some(cp) = defs.compiled.practices.get(&ga.practice_id) else {
+        return;
+    };
+    let Some(ca) = cp.actions.iter().find(|a| a.name == ga.action_id) else {
+        return;
+    };
+    for out in &ca.outs {
+        let g = ground_effect(interner, out, &ga.bindings);
+        perform_effect(interner, defs, rt, &g);
+    }
+}
+
+/// The insert/delete anchor families one grounded action's outcomes can touch
+/// (`Prax.Engine.groundedDeltaAnchors`), bounded statically per call by walking
+/// the same cooked outcomes `performAction` executes. `None` when the effects
+/// cannot be bounded: an unresolvable `Call`; an insert headed by the literal
+/// `practice`; an insert headed by a variable that is not a safe `ForEach` binder
+/// (it could ground to `practice` and spawn); or a path with no literal segment
+/// at all (evidence-free for [`may_unify_syms`]). The planner treats `None` as
+/// opaque: no reuse at or below the node.
+pub(crate) fn grounded_delta_anchors(
+    interner: &mut Interner,
+    defs: &Defs,
+    ga: &GroundedAction,
+) -> Option<Vec<SmallVec<[Sym; 6]>>> {
+    let cp = defs.compiled.practices.get(&ga.practice_id)?;
+    let ca = cp.actions.iter().find(|a| a.name == ga.action_id)?;
+    let grounded: Vec<Effect> = ca
+        .outs
+        .iter()
+        .map(|o| ground_effect(interner, o, &ga.bindings))
+        .collect();
+    outcome_delta_anchors(interner, defs, &[], &grounded)
+}
+
+fn outcome_delta_anchors(
+    interner: &mut Interner,
+    defs: &Defs,
+    visited: &[&str],
+    outs: &[Effect],
+) -> Option<Vec<SmallVec<[Sym; 6]>>> {
+    delta_go_prime(interner, defs, visited, &FxHashSet::default(), outs)
+}
+
+fn delta_go_prime(
+    interner: &mut Interner,
+    defs: &Defs,
+    visited: &[&str],
+    safe: &FxHashSet<Sym>,
+    outs: &[Effect],
+) -> Option<Vec<SmallVec<[Sym; 6]>>> {
+    let mut all = Vec::new();
+    for o in outs {
+        all.extend(delta_go(interner, defs, visited, safe, o)?);
+    }
+    Some(all)
+}
+
+fn delta_go(
+    interner: &mut Interner,
+    defs: &Defs,
+    visited: &[&str],
+    safe: &FxHashSet<Sym>,
+    o: &Effect,
+) -> Option<Vec<SmallVec<[Sym; 6]>>> {
+    match o {
+        Effect::Insert(p) => {
+            let names: SmallVec<[Sym; 6]> = p.segs.clone();
+            if might_spawn(interner, safe, &names) || unanchored(&names) {
+                None
+            } else {
+                let mut v = vec![names];
+                v.extend(eviction_shadow_names(interner, p));
+                Some(v)
+            }
+        }
+        // The deferred retract is environment: same anchors as the bare insert.
+        Effect::InsertFor(_, p) => delta_go(interner, defs, visited, safe, &Effect::Insert(p.clone())),
+        Effect::Delete(p) => {
+            let names: SmallVec<[Sym; 6]> = p.segs.clone();
+            if unanchored(&names) {
+                None
+            } else {
+                let mut v = vec![names];
+                v.extend(eviction_shadow_names(interner, p));
+                Some(v)
+            }
+        }
+        // The body may fire (a roll may hit); its anchors count as a ForEach's, and
+        // the roll's guard binds like a ForEach's.
+        Effect::ForEach(conds, os) | Effect::Roll(_, _, conds, os) => {
+            let mut safe2 = safe.clone();
+            safe2.extend(safe_binders(conds));
+            delta_go_prime(interner, defs, visited, &safe2, os)
+        }
+        Effect::Call(fn_, args) => {
+            if visited.contains(&fn_.as_str()) {
+                Some(Vec::new())
+            } else {
+                match defs.compiled.fns.get(fn_) {
+                    None => None,
+                    Some((params, cases)) => {
+                        let mut b = Bindings::new();
+                        for (&pn, &av) in params.iter().zip(args.iter()) {
+                            b.insert(pn, Val::Sym(av));
+                        }
+                        let mut vv: Vec<&str> = visited.to_vec();
+                        vv.push(fn_.as_str());
+                        let mut all = Vec::new();
+                        for (_cs, os) in cases {
+                            let grounded: Vec<Effect> =
+                                os.iter().map(|e| ground_effect(interner, e, &b)).collect();
+                            all.extend(outcome_delta_anchors(interner, defs, &vv, &grounded)?);
+                        }
+                        Some(all)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Could this insert head reach `spawnedInstanceNames` (`groundedDeltaAnchors`'s
+/// `mightSpawn`): a first-position variable that is not a safe binder, or the
+/// literal `practice`.
+fn might_spawn(interner: &mut Interner, safe: &FxHashSet<Sym>, names: &[Sym]) -> bool {
+    match names.first() {
+        None => false,
+        Some(&n) => {
+            if n.is_var() {
+                !safe.contains(&n)
+            } else {
+                n == interner.intern("practice")
+            }
+        }
+    }
+}
+
+/// A path with no literal segment carries no anchor evidence at all
+/// ([`may_unify_syms`] would clear it against every read pattern), so bounding it
+/// would license unsound reuse — opaque instead.
+fn unanchored(names: &[Sym]) -> bool {
+    names.iter().all(|s| s.is_var())
+}
+
+/// The `ForEach` binders that provably cannot take the value `practice`
+/// (`Prax.Engine.safeBinders`): variables bound at a NON-FIRST position of a
+/// top-level positive `Match` guard and never occurring at the first position of
+/// any such guard.
+fn safe_binders(conds: &[Cond]) -> FxHashSet<Sym> {
+    let mut bound_deep = FxHashSet::default();
+    let mut first_pos = FxHashSet::default();
+    for c in conds {
+        if let Cond::Match(p) = c {
+            for &v in p.iter().skip(1) {
+                if v.is_var() {
+                    bound_deep.insert(v);
+                }
+            }
+            if let Some(&v) = p.first()
+                && v.is_var()
+            {
+                first_pos.insert(v);
+            }
+        }
+    }
+    bound_deep.difference(&first_pos).copied().collect()
+}
+
 /// Apply a single already-grounded [`Effect`] — case-for-case with the frozen
 /// `performCooked`. The state is split (interner mutated, defs read-only during
 /// perform, runtime mutated), so this is a free function rather than a method.
@@ -749,7 +1060,7 @@ fn spawned_instance(
 /// (`Prax.Engine.possibleActions`). pids come in name order (`child_keys`),
 /// instance unification and the inner condition query both branch in name order,
 /// and actions run in declaration order — the determinism contract end to end.
-fn possible_actions_impl(
+pub(crate) fn possible_actions_impl(
     interner: &mut Interner,
     defs: &Defs,
     view: &Db,
@@ -1583,5 +1894,108 @@ mod boundary_props {
             // The surviving expiry QUEUE must also be order-independent.
             prop_assert_eq!(asc.expiries_rendered(), desc.expiries_rendered());
         }
+    }
+}
+
+#[cfg(test)]
+mod delta_anchor_spec {
+    // H: EngineSpec.hs "groundedDeltaAnchors: bounded effects, shadows, spawn
+    // opacity, Call resolution" + "groundedDeltaAnchors: safe ForEach binders
+    // bound; unsafe heads stay opaque". The v34 reuse anchor walk, discharged at
+    // its sole-consumer stage (S6). owed:S6 rows removed from KILLED.md.
+    use super::State;
+    use crate::query::Condition;
+    use crate::types::{Action, Function, Practice, call, delete, for_each, insert};
+
+    fn m(s: &str) -> Condition {
+        Condition::Match(s.into())
+    }
+
+    // Build a one-instance practice, ground the named action for `you`, and
+    // return the state + grounded action so the walk can be probed.
+    fn probe(action: Action, fns: Vec<Function>) -> (State, super::GroundedAction) {
+        let p = Practice::new("p").roles(["R"]).action(action);
+        let mut st = State::new();
+        st.define_practices([p]).unwrap();
+        for f in fns {
+            st.define_functions([f]).unwrap();
+        }
+        st.perform_outcome(&insert("practice.p.here")).unwrap();
+        let ga = st
+            .possible_actions("you")
+            .into_iter()
+            .next()
+            .expect("one grounded action");
+        (st, ga)
+    }
+
+    #[test]
+    fn bounded_insert_and_delete() {
+        let (mut st, ga) = probe(Action::new("[Actor]: act").then([insert("mark.Actor.foo")]), vec![]);
+        let anchors = st.grounded_delta_anchors_of(&ga).expect("bounded");
+        assert!(anchors.contains(&st.intern_segs("mark.you.foo")));
+
+        let (mut st2, ga2) = probe(Action::new("[Actor]: act").then([delete("gone.Actor")]), vec![]);
+        let a2 = st2.grounded_delta_anchors_of(&ga2).expect("delete bounded");
+        assert!(a2.contains(&st2.intern_segs("gone.you")));
+    }
+
+    #[test]
+    fn exclusion_insert_carries_shadows() {
+        let (mut st, ga) = probe(
+            Action::new("[Actor]: act").then([insert("slot!gem.Actor")]),
+            vec![],
+        );
+        let anchors = st.grounded_delta_anchors_of(&ga).expect("bounded");
+        // The path itself plus the eviction shadow (slot!PraxEvicted).
+        assert!(anchors.contains(&st.intern_segs("slot.gem.you")));
+        assert!(anchors.contains(&st.intern_segs("slot.PraxEvicted")));
+    }
+
+    #[test]
+    fn spawn_headed_inserts_are_opaque() {
+        // Literal `practice` head → could spawn → opaque.
+        let (mut st, ga) = probe(Action::new("[Actor]: act").then([insert("practice.Actor")]), vec![]);
+        assert!(st.grounded_delta_anchors_of(&ga).is_none());
+    }
+
+    #[test]
+    fn unknown_call_is_opaque_known_call_resolves() {
+        // Unknown function → wild → None.
+        let (mut st, ga) = probe(
+            Action::new("[Actor]: act").then([call("missing", vec!["Actor".into()])]),
+            vec![],
+        );
+        assert!(st.grounded_delta_anchors_of(&ga).is_none());
+
+        // Known function → resolves through its case outcomes.
+        let f = Function::new("tidy", ["Who"]).case(vec![], vec![insert("clean.Who")]);
+        let (mut st2, ga2) = probe(
+            Action::new("[Actor]: act").then([call("tidy", vec!["Actor".into()])]),
+            vec![f],
+        );
+        let anchors = st2.grounded_delta_anchors_of(&ga2).expect("call resolves");
+        assert!(anchors.contains(&st2.intern_segs("clean.you")));
+    }
+
+    #[test]
+    fn safe_foreach_binder_bounds_unsafe_head_opaque() {
+        // A ForEach binding X at a NON-first position of a positive Match, then an
+        // insert headed by X → safe binder → bounded (X kept as wildcard).
+        let safe = Action::new("[Actor]: act").then([for_each(
+            vec![m("item.Actor.X")],
+            vec![insert("X.done")],
+        )]);
+        let (mut st, ga) = probe(safe, vec![]);
+        assert!(st.grounded_delta_anchors_of(&ga).is_some(), "safe binder bounds the head");
+
+        // A ForEach binding X at the FIRST position → NOT safe → the X-headed
+        // insert could ground to `practice` → opaque.
+        let unsafe_ = Action::new("[Actor]: act").then([for_each(
+            vec![m("X.tag.Actor")],
+            vec![insert("X.done")],
+        )]);
+        let (mut st2, ga2) = probe(unsafe_, vec![]);
+        assert!(st2.grounded_delta_anchors_of(&ga2).is_none(), "first-position binder is unsafe");
     }
 }

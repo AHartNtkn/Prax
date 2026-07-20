@@ -28,6 +28,7 @@ pub mod el;
 pub mod engine;
 pub mod error;
 pub mod interner;
+pub mod minds;
 pub mod path;
 pub mod persist;
 pub mod planner;

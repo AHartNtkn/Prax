@@ -24,6 +24,9 @@ use crate::error::WorldError;
 use crate::interner::{Interner, Sym};
 use crate::path::{CompiledPath, tokenize};
 use crate::query::{Cond, Condition, compile_condition, ground_cond, ground_names};
+use crate::relevance::{
+    Liveness, bearing_templates, cooked_fn_pool, improvable_desires, liveness_of,
+};
 use crate::types::{Axiom, Character, Desire, Function, Outcome, Practice, ScheduleRule};
 
 /// The runtime effect family — the interned mirror of [`Outcome`]. `Insert`/
@@ -96,6 +99,15 @@ pub(crate) struct Compiled {
     pub(crate) axiom_heads: Vec<SmallVec<[Sym; 6]>>,
     pub(crate) neg_footprint: Vec<SmallVec<[Sym; 6]>>,
     pub(crate) cont_monotone: bool,
+    /// Names of desires some authored MOVER action may improve
+    /// (`Prax.Relevance.improvableDesires`); the planner skips predictions over
+    /// models with no improvable desire. Rebuilt AFTER the tables above (§4).
+    pub(crate) improvables: Vec<String>,
+    /// Each named desire's dead-now recipe (`Prax.Relevance.livenessOf`).
+    pub(crate) liveness: BTreeMap<String, Liveness>,
+    /// Per character, the want-bearing affordance templates
+    /// (`Prax.Relevance.bearingTemplates`) — the v35 motive signature's bearing set.
+    pub(crate) cares_about: BTreeMap<String, Vec<String>>,
 }
 
 /// Compile one [`Outcome`] to its runtime [`Effect`] (`Prax.Cooked.cookOutcome`),
@@ -268,6 +280,15 @@ pub(crate) fn recompile(
     let neg_footprint = axiom_neg_patterns(&rules);
     let cont_monotone = monotone_axioms(interner, &rules);
 
+    // The S6 relevance tables, rebuilt AFTER rules/practices/fns/wants/desires
+    // (`Prax.Engine.retable`'s order). Pure functions of the cooked tables above;
+    // the only name they mint is the idempotent `PraxEvicted` wildcard.
+    let fn_pool = cooked_fn_pool(&fns_c);
+    let improvables = improvable_desires(interner, &practices_c, &fn_pool, &rules, &desires_c, desires);
+    let cares_about =
+        bearing_templates(interner, &practices_c, &fn_pool, &desires_c, desires, &wants, characters);
+    let liveness = liveness_of(interner, &practices_c, &fn_pool, &rules, &desires_c, desires);
+
     Ok(Compiled {
         practices: practices_c,
         fns: fns_c,
@@ -280,6 +301,9 @@ pub(crate) fn recompile(
         axiom_heads,
         neg_footprint,
         cont_monotone,
+        improvables,
+        liveness,
+        cares_about,
     })
 }
 
