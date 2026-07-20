@@ -155,8 +155,23 @@ mod replay {
             let mut b = Bindings::new();
             for (var, val) in case["binding"].as_object().unwrap() {
                 let vs = i.intern(var);
-                let vv = i.intern(val.as_str().unwrap());
-                b.insert(vs, Val::Sym(vv));
+                let raw = val.as_str().unwrap();
+                // Bind by the value's REAL kind, not everything-as-Sym: the
+                // set-marker case must exercise Val::Set's rendering (the
+                // "<Set(n)>" opaque form), not trivially intern the marker
+                // text (S1 review M3).
+                let vv = if let Some(n) = raw
+                    .strip_prefix("<Set(")
+                    .and_then(|r| r.strip_suffix(")>"))
+                    .and_then(|n| n.parse::<usize>().ok())
+                {
+                    Val::Set(vec![Vec::new(); n])
+                } else if let Ok(num) = raw.parse::<i64>() {
+                    Val::Num(num)
+                } else {
+                    Val::Sym(i.intern(raw))
+                };
+                b.insert(vs, vv);
             }
             assert_eq!(
                 ground(&i, &path, &b),

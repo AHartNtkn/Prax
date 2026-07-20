@@ -491,6 +491,47 @@ mod tests {
         db
     }
 
+    /// The structural-sharing invariant the planner's apply-and-discard
+    /// depends on (ARCHITECTURE.md): a clone is a refcount bump, an insert
+    /// path-copies only the touched spine, and every untouched subtree stays
+    /// SHARED (pointer-equal) between the original and the derived state. A
+    /// representation change that silently deep-copies flips this red long
+    /// before it flips a profile.
+    #[test]
+    fn clone_is_refcount_bump_and_untouched_subtrees_stay_shared() {
+        let mut i = Interner::new();
+        let db = build(
+            &mut i,
+            &["deep.subtree.with.leaves", "deep.subtree.other", "elsewhere.branch"],
+        );
+
+        // Clone: the roots are one allocation.
+        let cloned = db.clone();
+        assert!(
+            Arc::ptr_eq(&db.0, &cloned.0),
+            "a Db clone must be a refcount bump, not a copy"
+        );
+
+        // Insert along `elsewhere.*`: the untouched `deep` subtree must remain
+        // pointer-shared between the original and the derived db.
+        let grown = db.insert_str(&mut i, "elsewhere.new.leaf").unwrap();
+        let deep = i.intern("deep");
+        let old_deep = db.child(deep).expect("deep in original");
+        let new_deep = grown.child(deep).expect("deep in derived");
+        assert!(
+            Arc::ptr_eq(&old_deep.0, &new_deep.0),
+            "an insert must path-copy only the touched spine; untouched subtrees stay shared"
+        );
+        // And the touched spine is NOT shared (the copy really happened).
+        let elsewhere = i.intern("elsewhere");
+        let old_e = db.child(elsewhere).expect("elsewhere in original");
+        let new_e = grown.child(elsewhere).expect("elsewhere in derived");
+        assert!(
+            !Arc::ptr_eq(&old_e.0, &new_e.0),
+            "the touched spine must be a fresh copy"
+        );
+    }
+
     /// Conjunctively unify a list of sentences, threading bindings
     /// (`Prax.Db.unifyAll`).
     fn unify_all(db: &Db, interner: &mut Interner, patterns: &[&str]) -> Vec<Bindings> {

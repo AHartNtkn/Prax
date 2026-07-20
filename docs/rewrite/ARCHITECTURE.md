@@ -31,8 +31,13 @@ not by the public authoring surface.
   separator after seg i is `!`. One tokenizer at the authoring boundary
   (trailing-operator rejection kept).
 - `Db(Arc<Node>)`, `Node { excl: bool, asserted: bool, kids: SmallVec<[(Sym,
-  Db);4]> sorted by id }` — persistence by Arc::make_mut path-copy; clone =
-  refcount bump (the planner's apply-and-discard depends on this). Corrected
+  Db);4]> sorted by id }` — persistence by Arc path-copy (fresh `Arc::new`
+  per touched node; `make_mut` is a banked micro-optimization for the
+  uniquely-owned case); clone = refcount bump (the planner's
+  apply-and-discard depends on this — GUARDED by the structural-sharing net
+  in db.rs's tests). Paths are capped at 32 segments (the excl bitmask's
+  width), rejected loudly at tokenize — a stated bound, not a divergence
+  (nothing shipped exceeds 7). Corrected
   `!` insert (clear siblings, keep survivor's subtree) and the v39
   asserted-flag law (no unasserted childless node; eager prune) verbatim.
   Deterministic-enumeration contract: name-order at unify's unbound branch,

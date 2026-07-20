@@ -16,7 +16,7 @@ comparator.
 | Stage | Scope | State | Report |
 |---|---|---|---|
 | S0 | freeze tag, oracle exe, fixtures, workspace scaffold, verify script | DONE | [S00](reports/S00-harness.md) |
-| S1 | Sym + Db + EL | IN PROGRESS | — |
+| S1 | Sym + Db + EL | DONE | [S01](reports/S01-sym-db-el.md) |
 | S2 | Query (one compiled path) | — | — |
 | S3 | Derive + view (design-heavy) | — | — |
 | S4 | Types + Engine + builder API (design-heavy) | — | — |
