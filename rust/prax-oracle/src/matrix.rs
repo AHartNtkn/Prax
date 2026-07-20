@@ -42,6 +42,19 @@
 //! SATURATION — no new distinct walk in [`saturation_run`] consecutive seeds.
 //! The report says which stopped it, so "375 seeds, 3,025 records, 4 distinct
 //! walks" cannot be read as coverage.
+//!
+//! **And no reported quantity may overstate its own basis** [I1, third
+//! recurrence]. Slice 1 printed the requested step count as the compared count;
+//! slice 2 let a record count certify duplication as coverage; slice 3 printed
+//! `min-records 3000 cleared` for a sweep in which the extension loop never ran —
+//! the declared range already exceeded the floor, so the floor stopped nothing
+//! and the number read as derived when it was chosen. Two structures answer the
+//! class rather than the instance: [`Provenance`]/[`Reported`], which make a
+//! number unrenderable without saying where it came from, and
+//! [`provenance_violations`], which re-checks the finished block before it is
+//! printed. The block also LEADS WITH ITS OWN INVOCATION, because a block whose
+//! seed range is invisible cannot be reproduced by the reader §1.8 wrote the
+//! no-hand-typed-numbers rule for.
 
 use crate::classify::{Shape, Walk};
 use crate::compare::Outcome;
@@ -59,14 +72,76 @@ struct Cell {
     walk: String,
 }
 
+/// Where a number in a report block came from.
+///
+/// **Why this is a type and not a convention.** Three slices running, a reported
+/// quantity was sourced from the operator's request and printed as though the run
+/// had derived it: slice-1 [I3] printed the REQUESTED step count as the compared
+/// count; slice-2 [I1] let a record count certify duplication as happily as
+/// coverage; slice-3 [I1] named the record floor as the stop reason when the
+/// extension loop never ran and the requested range is what ended the sweep.
+/// Three recurrences is a structural defect, not three lapses of attention — so
+/// provenance rides the value. [`Reported`] is the only way a number reaches a
+/// block and it cannot render without its tag, and
+/// [`provenance_violations`] re-checks the finished block before it is
+/// printed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Provenance {
+    /// Counted from cells that actually ran.
+    Measured,
+    /// NOT counted: it came from the invocation, or from a constant stated in
+    /// this file. A chosen number says nothing about what the run found.
+    Chosen,
+}
+
+impl Provenance {
+    /// The tag that must appear beside every number of this provenance.
+    fn tag(self) -> &'static str {
+        match self {
+            Provenance::Measured => "measured",
+            Provenance::Chosen => "chosen",
+        }
+    }
+
+    /// The two tags, for the block scanner.
+    const BOTH: [Provenance; 2] = [Provenance::Measured, Provenance::Chosen];
+}
+
+/// A number on its way into a report block, carrying where it came from.
+///
+/// The `Display` impl is the enforcement: there is no way to render the value
+/// without the tag, so a free-text report cell cannot name a number and leave the
+/// reader to guess whether the run measured it.
+struct Reported<T: std::fmt::Display>(T, Provenance);
+
+impl<T: std::fmt::Display> std::fmt::Display for Reported<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({})", self.0, self.1.tag())
+    }
+}
+
 /// What stopped a world's seed extension — printed in the report block, because
 /// "375 seeds" means one thing when the record floor stopped it and another when
 /// saturation did.
 enum BudgetStop {
     /// No `--min-records`: exactly the seeds that were asked for.
     SeedsAsRequested,
-    /// The record floor was cleared.
+    /// The seed range was EXTENDED, and the extension stopped when the record
+    /// floor cleared.
     MinRecords(usize),
+    /// The requested seed range already cleared the floor, so the extension loop
+    /// never ran and the REQUEST is what ended the sweep [I1]. Carries the floor,
+    /// the seed at which the running record count first met it, and how many
+    /// further seeds the operator asked for beyond that point.
+    RequestedExceedsFloor {
+        /// The `--min-records` floor.
+        floor: usize,
+        /// The seed at which the running record count first met the floor.
+        cleared_at_seed: i64,
+        /// Seeds run after the floor was already met — operator-requested
+        /// surplus, not budget the harness derived.
+        surplus_seeds: usize,
+    },
     /// No new distinct walk in this many consecutive seeds.
     Saturated(usize),
     /// A divergence — the finding, not the budget, ended the sweep.
@@ -76,10 +151,42 @@ enum BudgetStop {
 impl BudgetStop {
     fn describe(&self) -> String {
         match self {
-            BudgetStop::SeedsAsRequested => "--seeds as requested".to_owned(),
-            BudgetStop::MinRecords(n) => format!("min-records {n} cleared"),
-            BudgetStop::Saturated(n) => format!("saturated: no new walk in {n} seeds"),
-            BudgetStop::Divergent => "DIVERGENT — sweep stopped at the finding".to_owned(),
+            BudgetStop::SeedsAsRequested => {
+                "--seeds as requested; no record floor was asked for".to_owned()
+            }
+            BudgetStop::MinRecords(n) => format!(
+                "the seed range was EXTENDED until min-records {} cleared",
+                Reported(n, Provenance::Chosen)
+            ),
+            BudgetStop::RequestedExceedsFloor {
+                floor,
+                cleared_at_seed,
+                surplus_seeds: 0,
+            } => format!(
+                "the REQUESTED range ended the sweep, not the floor: min-records {} cleared at \
+                 seed {}, the last seed asked for — no extension ran",
+                Reported(floor, Provenance::Chosen),
+                Reported(cleared_at_seed, Provenance::Measured)
+            ),
+            BudgetStop::RequestedExceedsFloor {
+                floor,
+                cleared_at_seed,
+                surplus_seeds,
+            } => format!(
+                "the REQUESTED range ended the sweep, not the floor: min-records {} cleared at \
+                 seed {}, and the further {} seeds are operator-requested surplus — no extension \
+                 ran",
+                Reported(floor, Provenance::Chosen),
+                Reported(cleared_at_seed, Provenance::Measured),
+                Reported(surplus_seeds, Provenance::Measured)
+            ),
+            BudgetStop::Saturated(n) => format!(
+                "saturated: no new walk in {} consecutive seeds",
+                Reported(n, Provenance::Chosen)
+            ),
+            BudgetStop::Divergent => {
+                "DIVERGENT — the finding, not the budget, ended the sweep".to_owned()
+            }
         }
     }
 }
@@ -219,6 +326,13 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
         // seed order, which is the unit the criterion is stated in.
         let mut walks: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         let mut since_new = 0usize;
+        // [I1] Whether any batch beyond the DECLARED seed range ever ran, and the
+        // (seed, seeds-run-so-far) at which the running record count first met the
+        // floor. Without these the loop cannot tell "the floor stopped the sweep"
+        // from "the request already exceeded the floor and the floor stopped
+        // nothing" — and it printed the first when it meant the second.
+        let mut extended = false;
+        let mut cleared: Option<(i64, usize)> = None;
         let stop = loop {
             let specs: Vec<RunSpec> = batch
                 .iter()
@@ -235,6 +349,12 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
                 println!("{}", line(w, spec.seed, "randtrace", &r.outcome, fresh));
                 seeds_run += 1;
                 rand_records += r.outcome.records_compared();
+                if let Some(floor) = min_records
+                    && cleared.is_none()
+                    && rand_records >= floor
+                {
+                    cleared = Some((spec.seed.unwrap_or(0), seeds_run));
+                }
                 failed |= r.outcome.is_failure();
                 cells.push(Cell {
                     world: w.clone(),
@@ -258,7 +378,18 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
             let Some(needed) = seeds_still_needed(rand_records, seeds_run, floor)
                 .map_err(|e| format!("matrix {w}: {e}"))?
             else {
-                break BudgetStop::MinRecords(floor);
+                // [I1] The floor is met — but WHAT MET IT decides what the column
+                // may say. If no extension ever ran, the declared range is what
+                // ended the sweep and the floor stopped nothing; naming the floor
+                // there prints a stop that did not happen.
+                break match cleared {
+                    Some((seed, at)) if !extended => BudgetStop::RequestedExceedsFloor {
+                        floor,
+                        cleared_at_seed: seed,
+                        surplus_seeds: seeds_run - at,
+                    },
+                    _ => BudgetStop::MinRecords(floor),
+                };
             };
             // Never extend past the point where saturation would fire mid-batch:
             // the criterion counts consecutive seeds, and a batch that runs
@@ -270,13 +401,26 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
             })?;
             batch = (next_seed..next_seed + needed).collect();
             next_seed += needed;
+            extended = true;
         };
         stops.push((w.clone(), stop));
     }
 
     if report_format {
         println!();
-        for l in report_block(&cells, &stops) {
+        let block = report_block(&cells, &stops, args);
+        // The class-level guard, live rather than only in the test suite: a block
+        // that names a number without saying where it came from is a comparator
+        // bug, and it says so instead of being embedded in a stage report [I1].
+        let bad = provenance_violations(&block);
+        if !bad.is_empty() {
+            return Err(format!(
+                "the report block names a quantity without its provenance — a comparator bug, not \
+                 a run result (three slices running, a report overstated its own basis):\n  {}",
+                bad.join("\n  ")
+            ));
+        }
+        for l in block {
             println!("{l}");
         }
     }
@@ -379,6 +523,34 @@ fn line(world: &str, seed: Option<i64>, walk: &str, o: &Outcome, fresh: bool) ->
     )
 }
 
+/// The numeric columns of the per-world block, in order, each with the
+/// provenance of every value that can appear under it. The header is BUILT from
+/// this list, so a column cannot be added without stating where its numbers come
+/// from, and [`provenance_violations`] checks the rendered header against it.
+const COLUMNS: [(&str, Provenance); 7] = [
+    ("randtrace seeds", Provenance::Measured),
+    ("clean", Provenance::Measured),
+    ("clean-mod-adjudicated", Provenance::Measured),
+    ("DIVERGENT", Provenance::Measured),
+    ("SHAPE-DIVERGENT", Provenance::Measured),
+    ("records compared", Provenance::Measured),
+    ("distinct walks", Provenance::Measured),
+];
+
+/// The prefix of the invocation line. The line carries the request VERBATIM, so
+/// it is wholly chosen and labels itself as such.
+const INVOCATION_PREFIX: &str = "invocation (chosen, verbatim): prax-oracle matrix";
+
+/// One argument, safe to paste back into a shell.
+fn shell_quote(arg: &str) -> String {
+    let plain = |c: char| c.is_ascii_alphanumeric() || "_,.=:/+@-".contains(c);
+    if !arg.is_empty() && arg.chars().all(plain) {
+        arg.to_owned()
+    } else {
+        format!("'{}'", arg.replace('\'', r"'\''"))
+    }
+}
+
 /// The per-world block a stage report embeds VERBATIM.
 ///
 /// `distinct walks` is counted over the RANDTRACE cells only — the one trace
@@ -386,11 +558,26 @@ fn line(world: &str, seed: Option<i64>, walk: &str, o: &Outcome, fresh: bool) ->
 /// sweep bought. `budget stop` names what ended the extension, because "375
 /// seeds" means one thing when the record floor stopped it and another when
 /// saturation did [I1].
-fn report_block(cells: &[Cell], stops: &[(String, BudgetStop)]) -> Vec<String> {
+///
+/// The block LEADS WITH THE INVOCATION THAT PRODUCED IT [I1]. §1.8's rule — no
+/// hand-typed matrix numbers, ever — exists so a reader can reproduce the block;
+/// a block whose seed range, cap and floor are invisible in it cannot be
+/// reproduced, and the slice-3 block could not be: it was read as the documented
+/// 0..99 sweep and was in fact a 0..299 one.
+fn report_block(cells: &[Cell], stops: &[(String, BudgetStop)], argv: &[&str]) -> Vec<String> {
+    let mut invocation = INVOCATION_PREFIX.to_owned();
+    for a in argv {
+        invocation.push(' ');
+        invocation.push_str(&shell_quote(a));
+    }
+    let header: String = std::iter::once("| world".to_owned())
+        .chain(COLUMNS.iter().map(|(n, p)| format!(" | {n} ({})", p.tag())))
+        .chain(std::iter::once(" | budget stop |".to_owned()))
+        .collect();
     let mut out = vec![
-        "| world | randtrace seeds | clean | clean-mod-adjudicated | DIVERGENT | \
-         SHAPE-DIVERGENT | records compared | distinct walks | budget stop |"
-            .to_owned(),
+        invocation,
+        String::new(),
+        header,
         "|---|---|---|---|---|---|---|---|---|".to_owned(),
     ];
     let mut worlds: Vec<&String> = cells.iter().map(|c| &c.world).collect();
@@ -418,6 +605,107 @@ fn report_block(cells: &[Cell], stops: &[(String, BudgetStop)]) -> Vec<String> {
             mine.iter().map(|c| c.outcome.records_compared()).sum::<usize>(),
             distinct.len(),
         ));
+    }
+    out
+}
+
+/// THE CLASS-LEVEL GUARD [I1]: every quantity a report block prints must be
+/// attributable, from inside the block, to either the run or the request.
+///
+/// The rule, stated once so it can be checked rather than remembered:
+///
+/// 1. The **invocation line** is the request verbatim and says so in its prefix.
+/// 2. Every **numeric column** carries its provenance in the HEADER — built from
+///    [`COLUMNS`], so a new column must declare one — and its body cells are bare
+///    integers covered by that tag.
+/// 3. The **`budget stop`** cell is free text, so every number in it must be
+///    tagged WHERE IT STANDS: each run of digits is immediately followed by
+///    `(measured)` or `(chosen)`. [`Reported`] is the only renderer that produces
+///    that shape, which is what makes the rule cheap to obey.
+///
+/// A number that satisfies none of these is unattributed, and an unattributed
+/// number is exactly what let three consecutive slices report a basis they did
+/// not have. Returns one message per violation; empty means the block is sound.
+fn provenance_violations(block: &[String]) -> Vec<String> {
+    let mut bad = Vec::new();
+    for (i, line) in block.iter().enumerate() {
+        let at = |m: String| format!("line {i}: {m} — in `{line}`");
+        if line.is_empty() || line.starts_with(INVOCATION_PREFIX) || line.starts_with("|---") {
+            continue;
+        }
+        let Some(cells) = split_row(line) else {
+            bad.push(at("not a table row, an invocation line or a separator".to_owned()));
+            continue;
+        };
+        if cells.len() != COLUMNS.len() + 2 {
+            bad.push(at(format!(
+                "{} cells for {} columns",
+                cells.len(),
+                COLUMNS.len() + 2
+            )));
+            continue;
+        }
+        let is_header = cells[0] == "world";
+        for (cell, (name, prov)) in cells[1..=COLUMNS.len()].iter().zip(COLUMNS) {
+            if is_header {
+                if *cell != format!("{name} ({})", prov.tag()) {
+                    bad.push(at(format!(
+                        "column header `{cell}` does not declare its provenance as \
+                         `{name} ({})`",
+                        prov.tag()
+                    )));
+                }
+            } else if cell.parse::<u64>().is_err() {
+                bad.push(at(format!(
+                    "column `{name}` is declared {} but its cell `{cell}` is not a bare count",
+                    prov.tag()
+                )));
+            }
+        }
+        // The free-text stop cell: every number tagged where it stands.
+        let stop = cells[COLUMNS.len() + 1];
+        if is_header {
+            if stop != "budget stop" {
+                bad.push(at(format!("last column is `{stop}`, not `budget stop`")));
+            }
+            continue;
+        }
+        for n in untagged_numbers(stop) {
+            bad.push(at(format!(
+                "the budget-stop cell names `{n}` without saying whether it was measured or \
+                 chosen"
+            )));
+        }
+    }
+    bad
+}
+
+/// A markdown row's cells, trimmed. `None` if it is not a `|`-delimited row.
+fn split_row(line: &str) -> Option<Vec<&str>> {
+    let inner = line.strip_prefix('|')?.strip_suffix('|')?;
+    Some(inner.split('|').map(str::trim).collect())
+}
+
+/// Every run of digits in `s` NOT immediately followed by a provenance tag.
+fn untagged_numbers(s: &str) -> Vec<&str> {
+    let b = s.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if !b[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < b.len() && b[i].is_ascii_digit() {
+            i += 1;
+        }
+        let tagged = Provenance::BOTH
+            .iter()
+            .any(|p| s[i..].starts_with(&format!(" ({})", p.tag())));
+        if !tagged {
+            out.push(&s[start..i]);
+        }
     }
     out
 }
@@ -471,6 +759,10 @@ mod tests {
         }
     }
 
+    /// The block's first data row. Line 0 is the invocation, 1 is blank, 2 the
+    /// header, 3 the separator.
+    const ROW: usize = 4;
+
     #[test]
     fn the_report_block_counts_every_cell_exactly_once() {
         let cells = vec![
@@ -486,11 +778,153 @@ mod tests {
             ),
         ];
         let stops = vec![("probe".to_owned(), BudgetStop::MinRecords(16))];
-        let b = report_block(&cells, &stops);
+        let b = report_block(&cells, &stops, &[]);
+        assert_eq!(
+            b[ROW],
+            "| probe | 2 | 2 | 1 | 0 | 0 | 24 | 1 | the seed range was EXTENDED until min-records \
+             16 (chosen) cleared |"
+        );
+    }
+
+    #[test]
+    fn the_block_carries_the_invocation_that_produced_it() {
+        // [I1] The slice-3 block was read as the documented `0..99` sweep and was
+        // in fact a `0..299` one; nothing in the block said which. Now it does,
+        // verbatim and shell-pasteable.
+        let b = report_block(&[], &[], &[
+            "--worlds",
+            "bar,dm",
+            "--seeds",
+            "0..299",
+            "--cap",
+            "50",
+            "--min-records",
+            "3000",
+            "--format",
+            "report",
+        ]);
+        assert_eq!(
+            b[0],
+            "invocation (chosen, verbatim): prax-oracle matrix --worlds bar,dm --seeds 0..299 \
+             --cap 50 --min-records 3000 --format report"
+        );
+        assert_eq!(shell_quote("a b"), "'a b'", "an argument with a space is quoted");
+        assert_eq!(shell_quote("it's"), r"'it'\''s'");
+    }
+
+    #[test]
+    fn a_sweep_whose_requested_range_already_cleared_the_floor_says_the_floor_stopped_nothing() {
+        // [I1] THE INSTANCE. `--seeds 0..299 --min-records 3000` on bar: the floor
+        // is met around seed 45 and the extension loop never runs, so naming the
+        // floor as the stop names a stop that did not happen.
+        let stop = BudgetStop::RequestedExceedsFloor {
+            floor: 3000,
+            cleared_at_seed: 45,
+            surplus_seeds: 254,
+        };
+        assert_eq!(
+            stop.describe(),
+            "the REQUESTED range ended the sweep, not the floor: min-records 3000 (chosen) \
+             cleared at seed 45 (measured), and the further 254 (measured) seeds are \
+             operator-requested surplus — no extension ran"
+        );
+        // The boundary: the floor clears exactly at the last requested seed, so
+        // there is no surplus — and it is still the request that ended the sweep.
+        let exact = BudgetStop::RequestedExceedsFloor {
+            floor: 3000,
+            cleared_at_seed: 299,
+            surplus_seeds: 0,
+        };
+        assert!(
+            exact.describe().contains("the last seed asked for — no extension ran"),
+            "{}",
+            exact.describe()
+        );
+        // And the extended case still says the floor stopped it, because there it
+        // did.
+        assert!(
+            BudgetStop::MinRecords(3000)
+                .describe()
+                .contains("the seed range was EXTENDED until min-records 3000 (chosen) cleared")
+        );
+    }
+
+    #[test]
+    fn every_quantity_a_report_block_prints_is_attributable_to_the_run_or_the_request() {
+        // THE CLASS-LEVEL GUARD [I1], over EVERY `BudgetStop` variant — so a new
+        // stop reason cannot reach a stage report naming an untagged number.
+        let cells = vec![
+            cell(None, Outcome::Clean { records: 8 }, "trace-walk"),
+            cell(Some(0), Outcome::Clean { records: 8 }, "A|B|end"),
+        ];
+        for stop in [
+            BudgetStop::SeedsAsRequested,
+            BudgetStop::MinRecords(3000),
+            BudgetStop::RequestedExceedsFloor {
+                floor: 3000,
+                cleared_at_seed: 45,
+                surplus_seeds: 254,
+            },
+            BudgetStop::RequestedExceedsFloor {
+                floor: 3000,
+                cleared_at_seed: 299,
+                surplus_seeds: 0,
+            },
+            BudgetStop::Saturated(299),
+            BudgetStop::Divergent,
+        ] {
+            let rendered = stop.describe();
+            let b = report_block(&cells, &[("probe".to_owned(), stop)], &[
+                "--seeds", "0..299",
+            ]);
+            assert!(
+                provenance_violations(&b).is_empty(),
+                "unattributed quantity under `{rendered}`: {:?}",
+                provenance_violations(&b)
+            );
+        }
+        // The header declares a provenance for every numeric column.
+        let b = report_block(&cells, &[], &[]);
         assert_eq!(
             b[2],
-            "| probe | 2 | 2 | 1 | 0 | 0 | 24 | 1 | min-records 16 cleared |"
+            "| world | randtrace seeds (measured) | clean (measured) | \
+             clean-mod-adjudicated (measured) | DIVERGENT (measured) | \
+             SHAPE-DIVERGENT (measured) | records compared (measured) | \
+             distinct walks (measured) | budget stop |"
         );
+    }
+
+    #[test]
+    fn the_guard_catches_the_three_ways_a_block_has_actually_overstated_its_basis() {
+        // The guard's own RED set — a guard nobody has seen fail is a guard nobody
+        // knows works. Each string below is the shape of a real recurrence.
+        let header = report_block(&[], &[], &[])[2].clone();
+        let sep = "|---|---|---|---|---|---|---|---|---|".to_owned();
+        let sound = "| probe | 2 | 2 | 0 | 0 | 0 | 24 | 1 | saturated: no new walk in \
+                     299 (chosen) consecutive seeds |"
+            .to_owned();
+        assert!(provenance_violations(&[header.clone(), sep.clone(), sound]).is_empty());
+
+        // 1. Slice-3's shape: a free-text stop naming a number with no source.
+        let untagged = "| probe | 2 | 2 | 0 | 0 | 0 | 24 | 1 | min-records 3000 cleared |";
+        let v = provenance_violations(&[header.clone(), sep.clone(), untagged.to_owned()]);
+        assert_eq!(v.len(), 1, "{v:?}");
+        assert!(v[0].contains("names `3000` without saying whether it was measured or chosen"));
+
+        // 2. A column header that drops its tag — the way a new column would
+        //    arrive undeclared.
+        let stripped = header.replace("distinct walks (measured)", "distinct walks");
+        let v = provenance_violations(&[stripped, sep.clone()]);
+        assert_eq!(v.len(), 1, "{v:?}");
+        assert!(v[0].contains("does not declare its provenance"));
+
+        // 3. A numeric column carrying prose instead of a count — the way a
+        //    requested value sneaks in dressed as a measurement.
+        let prose = "| probe | 2 | 2 | 0 | 0 | 0 | as requested | 1 | \
+                     --seeds as requested; no record floor was asked for |";
+        let v = provenance_violations(&[header, sep, prose.to_owned()]);
+        assert_eq!(v.len(), 1, "{v:?}");
+        assert!(v[0].contains("is not a bare count"));
     }
 
     #[test]
@@ -505,10 +939,11 @@ mod tests {
             cell(Some(2), Outcome::Clean { records: 8 }, "A|B|end"),
         ];
         let stops = vec![("probe".to_owned(), BudgetStop::Saturated(299))];
-        let b = report_block(&cells, &stops);
+        let b = report_block(&cells, &stops, &[]);
         assert_eq!(
-            b[2],
-            "| probe | 3 | 4 | 0 | 0 | 0 | 32 | 1 | saturated: no new walk in 299 seeds |",
+            b[ROW],
+            "| probe | 3 | 4 | 0 | 0 | 0 | 32 | 1 | saturated: no new walk in 299 (chosen) \
+             consecutive seeds |",
             "three seeds replaying one walk must report ONE distinct walk"
         );
         // The trace cell is not a randtrace walk and is not counted as one, but
@@ -519,11 +954,11 @@ mod tests {
             cell(Some(1), Outcome::Clean { records: 8 }, "A|C|end"),
             cell(Some(2), Outcome::Clean { records: 8 }, "B|end"),
         ];
-        let b = report_block(&varied, &stops);
+        let b = report_block(&varied, &stops, &[]);
         assert!(
-            b[2].contains("| 32 | 3 |"),
+            b[ROW].contains("| 32 | 3 |"),
             "three different walks over the same record count: {}",
-            b[2]
+            b[ROW]
         );
     }
 
