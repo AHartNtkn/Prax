@@ -248,8 +248,18 @@ impl State {
         rebuild(interner, defs)
     }
 
-    /// The only sanctioned way to change the character roster.
+    /// The only sanctioned way to change the character roster. A character name
+    /// must be a SINGLE path segment (DIV-2): the engine splices it into
+    /// `dead.<name>`, `<p>.believes.desires.<name>.…` and every practice
+    /// instance path, so a `.`/`!` inside it is a path injection.
     pub fn set_characters(&mut self, characters: Vec<Character>) -> Result<(), WorldError> {
+        for c in &characters {
+            if segment_names(&c.name).len() != 1 {
+                return Err(WorldError::MultiSegmentCharacterName {
+                    name: c.name.clone(),
+                });
+            }
+        }
         let interner = Arc::make_mut(&mut self.interner);
         let defs = Arc::make_mut(&mut self.defs);
         defs.characters = characters;
@@ -1805,6 +1815,44 @@ mod tests {
             st.define_functions([Function::new("f", Vec::<String>::new())]),
             Err(WorldError::DuplicateFunctionName { .. })
         ));
+    }
+
+    // ===== the single-segment character-name guard (DIV-2) =====
+    // A character name is spliced into engine-built sentences (`dead.<name>`,
+    // `<p>.believes.desires.<name>.…`, every practice instance path), so a
+    // separator inside it nests the character's fact families under one another
+    // and splits its death mark and scope anchors across segment boundaries. The
+    // frozen engine has no such guard and behaves INCONSISTENTLY across its own
+    // planner sites when one is supplied (DIVERGENCES.md DIV-2); the Rust
+    // rejects the name loudly at the one door instead.
+
+    #[test]
+    fn a_plain_character_name_is_accepted() {
+        let mut st = State::new();
+        assert!(
+            st.set_characters(vec![Character::new("keeper"), Character::new("inge")])
+                .is_ok(),
+            "a single-segment name is a name"
+        );
+        assert_eq!(st.characters().len(), 2);
+    }
+
+    #[test]
+    fn a_separator_bearing_character_name_is_rejected() {
+        for bad in ["hall.keeper", "hall!keeper"] {
+            let mut st = State::new();
+            assert!(
+                matches!(
+                    st.set_characters(vec![Character::new(bad)]),
+                    Err(WorldError::MultiSegmentCharacterName { ref name }) if name == bad
+                ),
+                "{bad:?} is a path injection, not a name -- set_characters must reject it"
+            );
+            assert!(
+                st.characters().is_empty(),
+                "a rejected roster must not be installed"
+            );
+        }
     }
 
     // H: EngineSpec.hs "distinct function names across two calls register cleanly (accumulation)"

@@ -69,6 +69,18 @@ pub enum WorldError {
     #[error("Prax.Engine: schedule rule name must be a single segment: {name:?}")]
     MultiSegmentRuleName { name: String },
 
+    /// A character name is not a single path segment. A name is spliced into
+    /// engine-built sentences (`dead.<name>`, `<p>.believes.desires.<name>.…`,
+    /// `practice.<pid>.<role>.<name>`), so a separator inside it would nest the
+    /// character's fact families under one another and split its death mark and
+    /// scope anchors across segment boundaries — a path injection, not a name.
+    /// (DIV-2; single-segment naming is already the rule for schedule-rule
+    /// names.)
+    #[error(
+        "Prax.Engine.set_characters: character name must be a single segment: {name:?} -- a separator would nest this character's fact families and split its death mark and scope anchors"
+    )]
+    MultiSegmentCharacterName { name: String },
+
     /// A schedule rule's period is not positive (`Prax.Engine.addScheduleRules`).
     #[error("Prax.Engine: schedule rule {name:?} needs a positive period")]
     NonPositivePeriod { name: String },

@@ -22,7 +22,7 @@ use crate::compilepipe::{CompiledFn, CompiledPractice, Effect};
 use crate::db::{Bindings, Val};
 use crate::derive::{CompiledRule, axiom_head_patterns};
 use crate::interner::{Interner, Sym};
-use crate::path::CompiledPath;
+use crate::path::{CompiledPath, tokenize};
 use crate::query::{Cond, ground_cond, ground_names, read_anchors};
 use crate::types::{Character, Desire};
 
@@ -483,8 +483,16 @@ pub(crate) fn mover_read_anchors(
     let desires_seg = interner.intern("desires");
     let prax_d = interner.intern("PraxD");
     out.push(smallvec![actor_sym, believes, desires_seg, m_sym, prax_d]);
-    let dead = interner.intern("dead");
-    out.push(smallvec![dead, m_sym]);
+    // The death mark goes through the TOKENIZER, exactly as `candidate_actions`
+    // and `living_characters` build it (`Prax.Relevance.deadRead` is
+    // `pathNames (deadSentence …)`, which splits). A single-segment character
+    // name (DIV-2's guard) makes the two spellings coincide; the port is
+    // written so it would not matter if they did not.
+    out.push(
+        tokenize(interner, &format!("dead.{m}"))
+            .expect("dead path")
+            .segs,
+    );
     for cp in practices.values() {
         out.push(ground_names(interner, &actor_b, &cp.instance_names).into());
         for ca in &cp.actions {
@@ -541,6 +549,36 @@ mod tests {
 
     fn segs(i: &mut Interner, s: &str) -> Vec<Sym> {
         tokenize(i, s).unwrap().segs.to_vec()
+    }
+
+    // The death mark in `mover_read_anchors` is built by the SAME tokenizer that
+    // `candidate_actions` and `living_characters` use, so the three planner sites
+    // agree on how a name segments. The engine door forbids a separator-bearing
+    // character name (DIV-2), so this is unobservable through `State` — it is
+    // pinned here because the port must not be internally inconsistent where a
+    // guard happens to hide the difference.
+    #[test]
+    fn the_death_read_anchor_is_tokenized_like_every_other_death_sentence() {
+        let mut i = Interner::new();
+        let anchors = mover_read_anchors(
+            &mut i,
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            "olaf",
+            "hall.keeper",
+        );
+        let want = segs(&mut i, "dead.hall.keeper");
+        assert!(
+            anchors.iter().any(|a| a.as_slice() == want.as_slice()),
+            "the death anchor must SPLIT the mover name (3 segments: dead.hall.keeper), \
+             exactly as candidate_actions/living_characters tokenize it; got {:?}",
+            anchors
+                .iter()
+                .map(|a| a.len())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
