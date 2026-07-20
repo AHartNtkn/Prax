@@ -17,14 +17,25 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 
 /// What a run of the comparator concluded.
+///
+/// The clean outcomes carry the number of records actually COMPARED, never the
+/// number requested. §4 normalizes the whole slice budget on effective turns, and
+/// a world that dead-ends (feud dissolves when alice makes amends) compares a
+/// fraction of its cap — so the requested cap is the one number that cannot be
+/// used for the normalization the design runs on.
 #[derive(Clone, Debug)]
 pub enum Outcome {
     /// Every record agreed.
-    Clean,
+    Clean {
+        /// How many records were compared (the header excluded).
+        records: usize,
+    },
     /// Every divergent record was covered by the register.
     CleanModAdjudicated {
         /// The entry ids that did the covering.
         ids: Vec<String>,
+        /// How many records were compared (the header excluded).
+        records: usize,
     },
     /// The headers disagree — the two sides were not asked the same question,
     /// or one drifted in a parameter [M1].
@@ -64,7 +75,7 @@ impl Outcome {
     /// The one-word matrix cell.
     pub fn cell(&self) -> &'static str {
         match self {
-            Outcome::Clean => "clean",
+            Outcome::Clean { .. } => "clean",
             Outcome::CleanModAdjudicated { .. } => "clean-mod-adjudicated",
             Outcome::ShapeDivergent { .. } => "SHAPE-DIVERGENT",
             Outcome::Divergent(_) => "DIVERGENT",
@@ -73,6 +84,17 @@ impl Outcome {
     /// Does this outcome fail the run?
     pub fn is_failure(&self) -> bool {
         matches!(self, Outcome::ShapeDivergent { .. } | Outcome::Divergent(_))
+    }
+    /// How many records this run actually COMPARED — the §4 effective-turns
+    /// unit. A divergent run compared everything up to and including the
+    /// divergent record; a shape divergence compared none, because no turn runs
+    /// behind a red `worldshape`.
+    pub fn records_compared(&self) -> usize {
+        match self {
+            Outcome::Clean { records } | Outcome::CleanModAdjudicated { records, .. } => *records,
+            Outcome::ShapeDivergent { .. } => 0,
+            Outcome::Divergent(d) => d.ordinal,
+        }
     }
 }
 
@@ -107,6 +129,8 @@ pub fn compare_streams(
     let mut marks: Option<BTreeSet<String>> = None;
     let mut ids: BTreeSet<String> = BTreeSet::new();
     let n = frozen.len().max(rust.len());
+    // The header is record 0 and is not a compared record.
+    let records = n - 1;
     for i in 1..n {
         let a = frozen.get(i).unwrap_or(&Value::Null);
         let b = rust.get(i).unwrap_or(&Value::Null);
@@ -148,10 +172,11 @@ pub fn compare_streams(
         }
     }
     if ids.is_empty() {
-        Ok(Outcome::Clean)
+        Ok(Outcome::Clean { records })
     } else {
         Ok(Outcome::CleanModAdjudicated {
             ids: ids.into_iter().collect(),
+            records,
         })
     }
 }

@@ -10,7 +10,8 @@
 //! prax-oracle compare <world> --mode trace|randtrace [--turns N|--cap N]
 //!                             [--seed S] [--die-seed S] [--depth D] [--emit view]
 //! prax-oracle explain <world> --mode M …          (compare with everything emitted)
-//! prax-oracle matrix [--worlds a,b] --seeds 0..99 --cap 50 [--jobs N] [--format report]
+//! prax-oracle matrix [--worlds a,b] --seeds 0..99 --cap 50 [--jobs N]
+//!                    [--min-records N] [--format report]
 //! ```
 //!
 //! The pieces: [`drive_frozen`] (subprocess + freeze-check + the freeze-rev-keyed
@@ -66,7 +67,8 @@ fn usage() -> String {
          \x20 prax-oracle compare <world> --mode trace|randtrace [--turns N] [--cap N] [--seed S]\n\
          \x20                             [--die-seed S] [--depth D] [--emit decisions|state|view]\n\
          \x20 prax-oracle explain <world> --mode M [same flags as compare]\n\
-         \x20 prax-oracle matrix [--worlds a,b,c] --seeds A..B --cap N [--jobs N] [--format report]\n\
+         \x20 prax-oracle matrix [--worlds a,b,c] --seeds A..B --cap N [--jobs N]\n\
+         \x20                    [--min-records N] [--format report]\n\
          \n\
          ported worlds: {}",
         worlds::ported().join(" ")
@@ -546,16 +548,21 @@ fn cmd_explain(args: &[&str]) -> Result<bool, String> {
 
 fn report(spec: &RunSpec, outcome: &compare::Outcome, shape: &Shape) {
     match outcome {
-        compare::Outcome::Clean => println!(
-            "{} {}: clean ({} steps)",
+        // The COMPARED record count, never the requested one [I3]. A world that
+        // dead-ends compares a fraction of its cap, and §4 normalizes the slice
+        // budget on effective turns — so the request is the one number that
+        // cannot be used for it.
+        compare::Outcome::Clean { records } => println!(
+            "{} {}: clean ({records} records compared, cap {})",
             spec.world,
             spec.sub(),
             spec.steps
         ),
-        compare::Outcome::CleanModAdjudicated { ids } => println!(
-            "{} {}: clean-mod-adjudicated {ids:?}",
+        compare::Outcome::CleanModAdjudicated { ids, records } => println!(
+            "{} {}: clean-mod-adjudicated {ids:?} ({records} records compared, cap {})",
             spec.world,
-            spec.sub()
+            spec.sub(),
+            spec.steps
         ),
         compare::Outcome::ShapeDivergent { detail, .. } => {
             for l in detail {

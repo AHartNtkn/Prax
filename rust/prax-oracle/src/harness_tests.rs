@@ -73,7 +73,7 @@ fn the_trace_walk_agrees_record_for_record() {
     let (o, _) = run_one(&spec(Walk::Trace, 16, None), &reg).expect("the run completes");
     println!("trace: {}", o.cell());
     assert!(
-        matches!(o, Outcome::Clean),
+        matches!(o, Outcome::Clean { .. }),
         "the probe world's trace walk diverged: {:?}",
         render(&o)
     );
@@ -91,7 +91,7 @@ fn the_trace_walk_agrees_with_the_full_localization_emission() {
     let (o, _) = run_one(&s, &reg).expect("the run completes");
     println!("trace --localize: {}", o.cell());
     assert!(
-        matches!(o, Outcome::Clean),
+        matches!(o, Outcome::Clean { .. }),
         "the localization emission diverged: {:?}",
         render(&o)
     );
@@ -105,7 +105,7 @@ fn the_randtrace_walk_agrees_over_a_seed_sweep() {
             run_one(&spec(Walk::Randtrace, 25, Some(seed)), &reg).expect("the run completes");
         println!("randtrace seed {seed}: {}", o.cell());
         assert!(
-            matches!(o, Outcome::Clean),
+            matches!(o, Outcome::Clean { .. }),
             "seed {seed} diverged: {:?}",
             render(&o)
         );
@@ -121,7 +121,7 @@ fn the_randtrace_walk_agrees_in_view_mode() {
     s.mode = Mode::View;
     let (o, _) = run_one(&s, &reg).expect("the run completes");
     println!("randtrace --emit view: {}", o.cell());
-    assert!(matches!(o, Outcome::Clean), "{:?}", render(&o));
+    assert!(matches!(o, Outcome::Clean { .. }), "{:?}", render(&o));
 }
 
 #[test]
@@ -135,7 +135,7 @@ fn the_die_seed_override_agrees() {
         s.emit = Emit::all();
         let (o, _) = run_one(&s, &reg).expect("the run completes");
         println!("randtrace --die-seed {die}: {}", o.cell());
-        assert!(matches!(o, Outcome::Clean), "{:?}", render(&o));
+        assert!(matches!(o, Outcome::Clean { .. }), "{:?}", render(&o));
     }
 }
 
@@ -181,7 +181,7 @@ fn a_hoisted_worldshape_is_not_re_run_per_cell() {
     for seed in 0..3 {
         let (o, _) = crate::run_one_behind(&spec(Walk::Randtrace, 20, Some(seed)), &reg, &shape)
             .expect("the run completes");
-        assert!(matches!(o, Outcome::Clean), "seed {seed}: {:?}", render(&o));
+        assert!(matches!(o, Outcome::Clean { .. }), "seed {seed}: {:?}", render(&o));
     }
     let asked = crate::drive_frozen::frozen_calls() - before;
     println!("3 seeds behind a hoisted worldshape: {asked} frozen invocations");
@@ -211,7 +211,7 @@ fn matrix_jobs_do_not_change_the_result_or_its_order() {
     println!("jobs 1: {:?}\njobs 4: {:?}", cells(&serial), cells(&parallel));
     assert_eq!(serial.len(), 6, "every seed produced a cell");
     assert_eq!(cells(&serial), cells(&parallel));
-    assert!(serial.iter().all(|o| matches!(o, Outcome::Clean)));
+    assert!(serial.iter().all(|o| matches!(o, Outcome::Clean { .. })));
 }
 
 #[test]
@@ -482,7 +482,7 @@ fn the_feud_trace_agrees_record_for_record() {
             .expect("the run completes");
         println!("{world} trace: {}", o.cell());
         assert!(
-            matches!(o, Outcome::Clean),
+            matches!(o, Outcome::Clean { .. }),
             "{world} trace diverged: {:?}",
             render(&o)
         );
@@ -498,7 +498,7 @@ fn the_feud_randtrace_agrees_over_a_seed_sweep() {
                 .expect("the run completes");
             println!("{world} randtrace seed {seed}: {}", o.cell());
             assert!(
-                matches!(o, Outcome::Clean),
+                matches!(o, Outcome::Clean { .. }),
                 "{world} seed {seed} diverged: {:?}",
                 render(&o)
             );

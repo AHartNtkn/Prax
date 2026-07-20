@@ -16,7 +16,19 @@
 //!
 //! `--format report` emits the per-world block that stage reports embed
 //! VERBATIM. Reports never carry hand-typed matrix numbers — a number a human
-//! retyped is a number that can drift from the run that produced it.
+//! retyped is a number that can drift from the run that produced it. The block
+//! carries RECORDS COMPARED per world alongside the cell counts, because §4's
+//! budget is denominated in effective turns and a seed count cannot be converted
+//! to one without knowing how far each walk got.
+//!
+//! `--min-records N` makes that floor the parameter instead of a stated seed
+//! count [I2]. Worlds differ by 3x in records per seed — feud dead-ends at 8
+//! (alice makes amends and the feud dissolves), bigfeud runs 24 — so one seed
+//! range gives two worlds wildly different coverage, and "≥100 seeds" clears
+//! §4's 3,000-record floor for neither. Under `--min-records` each world's seed
+//! range is EXTENDED, in batches sized from the records per seed that world has
+//! actually produced, until it clears the floor. Nobody retypes a per-world seed
+//! count, and the floor is checked rather than assumed.
 
 use crate::classify::{Shape, Walk};
 use crate::compare::Outcome;
@@ -24,9 +36,10 @@ use crate::record::{Emit, Mode};
 use crate::register::Register;
 use crate::{RunSpec, drive_frozen, load_register, run_one_behind, shape_compare, worlds};
 
-/// One (world, seed) result.
+/// One (world, seed) result. `seed` is `None` for the world's single trace cell.
 struct Cell {
     world: String,
+    seed: Option<i64>,
     outcome: Outcome,
 }
 
@@ -50,6 +63,16 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
         None => worlds::ported().into_iter().map(str::to_owned).collect(),
     };
     let seeds = parse_seeds(crate::flag(args, "--seeds").unwrap_or("0..0"))?;
+    // [I2] The §4 budget is denominated in effective RECORDS, not seeds. Worlds
+    // differ by 3x in records per seed (feud dead-ends at 8; bigfeud runs 24), so
+    // one seed range cannot give two worlds the same coverage and a stated seed
+    // floor is not the operative gate. `--min-records N` makes the floor the
+    // parameter: each world's seed range is EXTENDED until it clears N.
+    let min_records = match crate::flag(args, "--min-records") {
+        Some(_) => Some(usize::try_from(crate::int_flag(args, "--min-records", None)?)
+            .map_err(|_| "--min-records expects a non-negative integer".to_owned())?),
+        None => None,
+    };
     let cap = crate::int_flag(args, "--cap", Some(50))?;
     let turns = crate::int_flag(args, "--turns", Some(24))?;
     let report_format = crate::flag(args, "--format") == Some("report");
@@ -80,6 +103,7 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
         if !green {
             cells.push(Cell {
                 world: w.clone(),
+                seed: None,
                 outcome: Outcome::ShapeDivergent {
                     fields: vec!["worldshape".to_owned()],
                     detail: Vec::new(),
@@ -104,23 +128,54 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
         println!("{}", line(w, None, "trace", &o));
         cells.push(Cell {
             world: w.clone(),
+            seed: None,
             outcome: o,
         });
-        let specs: Vec<RunSpec> = seeds
-            .iter()
-            .map(|s| RunSpec {
-                walk: Walk::Randtrace,
-                steps: cap,
-                seed: Some(*s),
-                ..trace.clone()
-            })
-            .collect();
-        for (spec, o) in specs.iter().zip(run_seeds(&specs, &reg, &shape, jobs)?) {
-            println!("{}", line(w, spec.seed, "randtrace", &o));
-            cells.push(Cell {
-                world: w.clone(),
-                outcome: o,
-            });
+        // The declared seeds first, then — under `--min-records` — as many more
+        // as the floor needs. Each extension is sized from the records per seed
+        // this world has ACTUALLY produced, so a world that dead-ends early gets
+        // proportionally more seeds and nobody retypes a per-world count.
+        let mut batch: Vec<i64> = seeds.clone();
+        let mut next_seed = seeds.last().map_or(0, |s| s + 1);
+        let (mut seeds_run, mut rand_records) = (0usize, 0usize);
+        let mut failed = false;
+        loop {
+            let specs: Vec<RunSpec> = batch
+                .iter()
+                .map(|s| RunSpec {
+                    walk: Walk::Randtrace,
+                    steps: cap,
+                    seed: Some(*s),
+                    ..trace.clone()
+                })
+                .collect();
+            for (spec, o) in specs.iter().zip(run_seeds(&specs, &reg, &shape, jobs)?) {
+                println!("{}", line(w, spec.seed, "randtrace", &o));
+                seeds_run += 1;
+                rand_records += o.records_compared();
+                failed |= o.is_failure();
+                cells.push(Cell {
+                    world: w.clone(),
+                    seed: spec.seed,
+                    outcome: o,
+                });
+            }
+            let Some(floor) = min_records else { break };
+            if failed {
+                // A divergence is the finding; grinding out more seeds behind one
+                // would bury it.
+                break;
+            }
+            let Some(needed) = seeds_still_needed(rand_records, seeds_run, floor)
+                .map_err(|e| format!("matrix {w}: {e}"))?
+            else {
+                break;
+            };
+            let needed = i64::try_from(needed).map_err(|_| {
+                format!("matrix --min-records {floor}: {w} needs more seeds than fit in i64")
+            })?;
+            batch = (next_seed..next_seed + needed).collect();
+            next_seed += needed;
         }
     }
 
@@ -180,6 +235,33 @@ pub fn run_seeds(
     landed.into_iter().map(|(_, r)| r).collect()
 }
 
+/// How many FURTHER seeds a world needs to clear `floor` records, sized from the
+/// records per seed it has already produced. `Ok(None)` when the floor is met.
+///
+/// The estimate rounds records-per-seed DOWN (a seed that produced fewer records
+/// than the running mean must not make the next batch too small) and the seed
+/// count UP, and the caller loops — so an underestimate costs another batch, not
+/// a silently-short run.
+///
+/// # Errors
+/// If seeds were run and produced no records at all. Every walk emits at least
+/// its terminal stop record, so this cannot happen; if it does, no number of
+/// further seeds could reach the floor and the run says so instead of looping.
+fn seeds_still_needed(records: usize, seeds_run: usize, floor: usize) -> Result<Option<usize>, String> {
+    if records >= floor {
+        return Ok(None);
+    }
+    let per_seed = records / seeds_run.max(1);
+    if per_seed == 0 {
+        return Err(format!(
+            "--min-records {floor}: {seeds_run} seed(s) produced {records} record(s) — fewer than \
+             one per seed, so no number of further seeds can reach the floor. Every walk emits a \
+             terminal stop record, so this is a comparator bug."
+        ));
+    }
+    Ok(Some((floor - records).div_ceil(per_seed)))
+}
+
 fn line(world: &str, seed: Option<i64>, walk: &str, o: &Outcome) -> String {
     let seed = seed.map_or_else(|| "-".to_owned(), |s| s.to_string());
     let detail = match o {
@@ -191,17 +273,23 @@ fn line(world: &str, seed: Option<i64>, walk: &str, o: &Outcome) -> String {
             d.t.1,
             d.diff.field_names()
         ),
-        Outcome::CleanModAdjudicated { ids } => format!("  {ids:?}"),
+        Outcome::CleanModAdjudicated { ids, .. } => format!("  {ids:?}"),
         _ => String::new(),
     };
-    format!("{world:<10} {walk:<10} seed {seed:>4}  {:<22}{detail}", o.cell())
+    format!(
+        "{world:<10} {walk:<10} seed {seed:>4}  {:<22}{:>5} rec{detail}",
+        o.cell(),
+        o.records_compared()
+    )
 }
 
 /// The per-world block a stage report embeds VERBATIM.
 fn report_block(cells: &[Cell]) -> Vec<String> {
     let mut out = vec![
-        "| world | clean | clean-mod-adjudicated | DIVERGENT | SHAPE-DIVERGENT |".to_owned(),
-        "|---|---|---|---|---|".to_owned(),
+        "| world | randtrace seeds | clean | clean-mod-adjudicated | DIVERGENT | \
+         SHAPE-DIVERGENT | records compared |"
+            .to_owned(),
+        "|---|---|---|---|---|---|---|".to_owned(),
     ];
     let mut worlds: Vec<&String> = cells.iter().map(|c| &c.world).collect();
     worlds.sort();
@@ -210,11 +298,13 @@ fn report_block(cells: &[Cell]) -> Vec<String> {
         let mine: Vec<&Cell> = cells.iter().filter(|c| &c.world == w).collect();
         let count = |f: fn(&Outcome) -> bool| mine.iter().filter(|c| f(&c.outcome)).count();
         out.push(format!(
-            "| {w} | {} | {} | {} | {} |",
-            count(|o| matches!(o, Outcome::Clean)),
+            "| {w} | {} | {} | {} | {} | {} | {} |",
+            mine.iter().filter(|c| c.seed.is_some()).count(),
+            count(|o| matches!(o, Outcome::Clean { .. })),
             count(|o| matches!(o, Outcome::CleanModAdjudicated { .. })),
             count(|o| matches!(o, Outcome::Divergent(_))),
             count(|o| matches!(o, Outcome::ShapeDivergent { .. })),
+            mine.iter().map(|c| c.outcome.records_compared()).sum::<usize>(),
         ));
     }
     out
@@ -231,24 +321,58 @@ mod tests {
     }
 
     #[test]
+    fn the_seed_extension_is_sized_from_the_records_per_seed_actually_observed() {
+        // [I2]. The two shipped slice-1 worlds differ by 3x in records per seed:
+        // feud dead-ends at 8 (alice makes amends), bigfeud runs 24. One seed
+        // range therefore cannot give both §4's 3,000-record floor, which is why
+        // the floor is the parameter and the seeds are derived from it.
+        assert_eq!(
+            seeds_still_needed(800, 100, 3000).expect("8 records/seed"),
+            Some(275),
+            "feud: 800 records over 100 seeds is 8/seed, and 2,200 more needs 275 seeds"
+        );
+        assert_eq!(
+            seeds_still_needed(2400, 100, 3000).expect("24 records/seed"),
+            Some(25),
+            "bigfeud: 2,400 over 100 seeds is 24/seed, and 600 more needs 25 seeds"
+        );
+        assert_eq!(
+            seeds_still_needed(3000, 375, 3000).expect("met"),
+            None,
+            "a met floor asks for no further seeds"
+        );
+        // A ragged mean rounds the per-seed rate DOWN, so the next batch is never
+        // too small; an overshoot is one extra seed, an undershoot is a short run.
+        assert_eq!(seeds_still_needed(23, 3, 30).expect("7/seed"), Some(1));
+        assert!(
+            seeds_still_needed(0, 4, 10).is_err(),
+            "zero records over four seeds can never reach a positive floor"
+        );
+    }
+
+    #[test]
     fn the_report_block_counts_every_cell_exactly_once() {
         let cells = vec![
             Cell {
                 world: "probe".into(),
-                outcome: Outcome::Clean,
+                seed: None,
+                outcome: Outcome::Clean { records: 8 },
             },
             Cell {
                 world: "probe".into(),
-                outcome: Outcome::Clean,
+                seed: Some(0),
+                outcome: Outcome::Clean { records: 8 },
             },
             Cell {
                 world: "probe".into(),
+                seed: Some(1),
                 outcome: Outcome::CleanModAdjudicated {
                     ids: vec!["DIV-9".into()],
+                    records: 8,
                 },
             },
         ];
         let b = report_block(&cells);
-        assert_eq!(b[2], "| probe | 2 | 1 | 0 | 0 |");
+        assert_eq!(b[2], "| probe | 2 | 2 | 1 | 0 | 0 | 24 |");
     }
 }

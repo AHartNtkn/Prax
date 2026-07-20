@@ -312,3 +312,20 @@ lenses independently found the candidate-order defect.
   of enumeration and planning, and it restates what `action` already carries.
   This is the same guard §1.3(b) applies to `walkSeed` with differing
   candidate-list length. [S-C1]'s TURN set becomes `actor`/`cursor`/`t`.
+- **The slice budget's unit is effective RECORDS, and the seed count is derived
+  from it, not stated** [slice-1 review I2]. §4's per-slice "randtrace 100 × 50"
+  is not the operative gate: measured on the shipped worlds, feud produces 8
+  records per seed (it dead-ends when alice makes amends) and bigfeud 24, so 100
+  seeds gives 800 and 2,400 against §4's 3,000-record floor — feud under by ~4x.
+  `matrix --min-records N` extends each world's seed range, in batches sized from
+  the records per seed that world has actually produced, until it clears N; the
+  per-world report block carries `randtrace seeds` and `records compared` so the
+  floor is checked from the run rather than assumed. The slice-1 invocation is
+  `matrix --worlds feud,bigfeud --seeds 0..99 --cap 50 --min-records 3000`, which
+  settles at 375 feud seeds and 125 bigfeud seeds. No per-world seed count is
+  written down anywhere; writing one down is how the floor stopped being checked.
+- **A clean run reports the COMPARED record count, never the requested one**
+  [slice-1 review I3]. `report` printed `spec.steps`, so a world that dead-ends
+  overstated its compared work by ~6x — and since §4 normalizes the budget on
+  effective turns, the single number an operator reads off a clean run was the
+  one number the normalization could not use.
