@@ -1,11 +1,11 @@
-//! The two relevance primitives the S4 engine router needs: [`may_unify_syms`]
-//! (the hot delta-vs-footprint classification) and [`eviction_shadow_names`] (the
-//! sibling shadows of an exclusion insert). The rest of `Prax.Relevance`
-//! (`improvableDesires`/`livenessOf`/`bearingTemplates`/the atom pools) is the
-//! planner's, and lands at S6 with its consumers — a present-but-empty table
-//! would invite an accidental consumer.
+//! The relevance analysis. Two primitives serve the engine router:
+//! [`may_unify_syms`] (the hot delta-vs-footprint classification) and
+//! [`eviction_shadow_names`] (the sibling shadows of an exclusion insert). The
+//! rest — [`improvable_desires`], [`liveness_of`], [`bearing_templates`],
+//! [`mover_read_anchors`] and the atom pools they share — is the planner's
+//! static screening apparatus.
 //!
-//! Frozen reference: `src/Prax/Relevance.hs` (`mayUnifySyms`, `evictionShadowNames`).
+//! Frozen reference: `src/Prax/Relevance.hs`.
 //!
 //! One stated invariant carries [`may_unify_syms`]'s conservativity (an
 //! assumption about authored worlds, not a construction guarantee): entity names
@@ -529,8 +529,13 @@ fn outcome_cond_reads(interner: &mut Interner, b: &Bindings, outs: &[Effect]) ->
 
 #[cfg(test)]
 mod tests {
-    // RelevanceSpec proper lands at S6 with the planner; these are the two S4
-    // primitives' own correctness tests (no frozen pin consumed here).
+    // H: RelevanceSpec.hs "Prax.Relevance"
+    //
+    // The frozen `Prax.RelevanceSpec`, re-expressed against the Rust analysis.
+    // Its five villageWorld-driven cases (the improvable table, the state field,
+    // delta relevance, monotone-insert classification and the liveness field)
+    // wait on the shipped world at S7 and are recorded in KILLED.md; every
+    // synthetic case is below, alongside the two primitives' own unit tests.
     use super::*;
     use crate::path::tokenize;
 
@@ -569,9 +574,36 @@ mod tests {
 
     // ---- RelevanceSpec (synthetic fixtures) --------------------------------
 
+    // The frozen case's own three fixtures, on deep paths: a variable-strewn
+    // pattern against its fully concrete instance, a shorter pattern against a
+    // longer insert (a `Match` sees subtrees), and two patterns whose leading
+    // literals differ. The two unit tests above use shallow paths and probe the
+    // clauses one at a time; this one pins the frozen assertions verbatim.
+    // H: RelevanceSpec.hs "mayUnifySyms: variables are wildcards, prefixes are compatible"
+    #[test]
+    fn may_unify_syms_wildcards_and_prefixes() {
+        let mut i = Interner::new();
+        let mut u = |a: &str, b: &str| {
+            let (x, y) = (segs(&mut i, a), segs(&mut i, b));
+            may_unify_syms(&x, &y)
+        };
+        assert!(
+            u("lied.Actor.H.stole.C.loaf", "lied.eve.dana.stole.carol.loaf"),
+            "var vs concrete"
+        );
+        assert!(
+            u("Hearer.believes.took.Culprit.gem.heard.Actor", "oz.believes.took.kit.gem"),
+            "prefix compatibility (longer insert, shorter pattern)"
+        );
+        assert!(
+            !u("regards.W.carol.thief", "practice.earnBread.Owner.did.P"),
+            "distinct constants do not unify"
+        );
+    }
+
     mod spec {
         use crate::engine::State;
-        use crate::query::{Condition, subquery};
+        use crate::query::{Condition, not_, subquery};
         use crate::relevance::Liveness;
         use crate::types::{Action, Axiom, Character, Desire, Function, Practice, ScheduleRule, Want, insert};
 
@@ -582,6 +614,7 @@ mod tests {
         // An exclusion insert counts as evicting ANY sibling on the delete side:
         // a negative want on the displaced value is improvable only through that
         // eviction, and the victim's name appears in no outcome.
+        // H: RelevanceSpec.hs "an exclusion insert counts as evicting ANY sibling on the delete side"
         #[test]
         fn improvable_via_eviction_shadow() {
             let shrine = Practice::new("shrine").roles(["R"]).action(
@@ -599,6 +632,10 @@ mod tests {
             assert_eq!(st.improvables(), ["hates-the-stone"]);
         }
 
+        // Two exclusion points: the first eviction clears everything under
+        // altar (arbitrary depth and shape), including branches that diverge
+        // from the insert's own path right after the '!'.
+        // H: RelevanceSpec.hs "eviction covers the WHOLE displaced subtree, not just the shadow's shape"
         #[test]
         fn improvable_eviction_covers_whole_subtree() {
             let temple = Practice::new("temple").roles(["R"]).action(
@@ -616,99 +653,184 @@ mod tests {
             assert_eq!(st.improvables(), ["mourns-the-relic"]);
         }
 
+        /// The one gate table entry, rendered by name: `(tag, gates)` where each
+        /// gate is its conjunct patterns dot-joined — the frozen
+        /// `GateCheck [[cookCondition (Match "…")]]` equality, conjunct text
+        /// included rather than merely counted.
+        fn rendered(st: &State, name: &str) -> (String, Vec<Vec<String>>) {
+            st.liveness_rendered()
+                .remove(name)
+                .unwrap_or_else(|| panic!("no liveness entry for {name}"))
+        }
+
+        // A negative want-kind is a floor check whatever the world affords: the
+        // recipe never consults the atom pools.
+        // H: RelevanceSpec.hs "livenessOf: a negative desire is FloorCheck unconditionally"
         #[test]
-        fn liveness_variants() {
-            // negative → FloorCheck.
+        fn liveness_negative_desire_is_floor_check() {
             let mut st = State::new();
             st.set_desires(vec![Desire::new("hates-mud", Want::new(vec![m("muddy.Owner")], -3))])
                 .unwrap();
             assert_eq!(st.liveness_of("hates-mud"), Some(&Liveness::FloorCheck));
+        }
 
-            // weight 0 → AlwaysLive (defensive).
-            let mut st0 = State::new();
-            st0.set_desires(vec![Desire::new("indifferent", Want::new(vec![m("whatever.Owner")], 0))])
+        // Weight 0 is screened out statically long before liveness runs; the
+        // defensive branch still has to answer, and answers AlwaysLive rather
+        // than gating on a conjunct nobody will consult.
+        // H: RelevanceSpec.hs "livenessOf: a weight-0 desire is AlwaysLive (defensive; screened statically first)"
+        #[test]
+        fn liveness_weight_zero_is_always_live() {
+            let mut st = State::new();
+            st.set_desires(vec![Desire::new("indifferent", Want::new(vec![m("whatever.Owner")], 0))])
                 .unwrap();
-            assert_eq!(st0.liveness_of("indifferent"), Some(&Liveness::AlwaysLive));
+            assert_eq!(st.liveness_of("indifferent"), Some(&Liveness::AlwaysLive));
+        }
 
-            // positive with a ticker-only conjunct → GateCheck on it alone.
+        // The only action in this world inserts meal.*, never hungry.* — so
+        // "hungry.Owner" is environment-gated (no authored outcome can raise it)
+        // while "meal.M" is action-insertable and so is NOT a gate. The gate list
+        // is exactly the one conjunct, by name.
+        // H: RelevanceSpec.hs "livenessOf: a positive desire with a ticker-only conjunct gates on it alone"
+        #[test]
+        fn liveness_positive_gates_on_the_ticker_only_conjunct() {
             let bakery = Practice::new("bakery").roles(["R"]).action(
                 Action::new("[Actor]: bake")
                     .when([m("practice.bakery.here")])
                     .then([insert("meal.bread")]),
             );
-            let mut stg = State::new();
-            stg.define_practices([bakery]).unwrap();
-            stg.set_desires(vec![Desire::new(
+            let mut st = State::new();
+            st.define_practices([bakery]).unwrap();
+            st.set_desires(vec![Desire::new(
                 "pursues-lunch",
                 Want::new(vec![m("hungry.Owner"), m("meal.M")], 5),
             )])
             .unwrap();
-            match stg.liveness_of("pursues-lunch") {
-                Some(Liveness::GateCheck(gs)) => {
-                    assert_eq!(gs.len(), 1);
-                    assert_eq!(gs[0].len(), 1);
-                }
-                other => panic!("expected one gate, got {other:?}"),
-            }
+            assert_eq!(
+                rendered(&st, "pursues-lunch"),
+                ("GateCheck".to_owned(), vec![vec!["hungry.Owner".to_owned()]])
+            );
+        }
 
-            // axiom-derivable candidate → AlwaysLive (conservative).
-            let mut sta = State::new();
-            sta.set_axioms(vec![Axiom::new(vec![m("starving.Owner")], ["hungry.Owner"])])
+        // "hungry.Owner" is never Inserted, but an axiom's head unifies it, so it
+        // is conservatively excluded from gating — and no other conjunct
+        // qualifies, so the whole want stays AlwaysLive.
+        // H: RelevanceSpec.hs "livenessOf: an axiom-derivable candidate gate never qualifies (conservative)"
+        #[test]
+        fn liveness_axiom_derivable_candidate_never_gates() {
+            let mut st = State::new();
+            st.set_axioms(vec![Axiom::new(vec![m("starving.Owner")], ["hungry.Owner"])])
                 .unwrap();
-            sta.set_desires(vec![Desire::new("pursues-food", Want::new(vec![m("hungry.Owner")], 5))])
+            st.set_desires(vec![Desire::new("pursues-food", Want::new(vec![m("hungry.Owner")], 5))])
                 .unwrap();
-            assert_eq!(sta.liveness_of("pursues-food"), Some(&Liveness::AlwaysLive));
+            assert_eq!(st.liveness_of("pursues-food"), Some(&Liveness::AlwaysLive));
+        }
 
-            // Subquery-bearing → AlwaysLive (uncertainty always wins).
-            let mut sts = State::new();
-            sts.set_desires(vec![Desire::new(
+        // Satisfaction depends on machinery beyond pattern presence, so no cheap
+        // state test can rule the want dead: uncertainty always wins.
+        // H: RelevanceSpec.hs "livenessOf: a Subquery-bearing want is AlwaysLive (uncertainty always wins)"
+        #[test]
+        fn liveness_subquery_bearing_want_is_always_live() {
+            let mut st = State::new();
+            st.set_desires(vec![Desire::new(
                 "counts-friends",
                 Want::new(vec![subquery("Fs", vec!["F".into()], vec![m("friend.Owner.F")])], 5),
             )])
             .unwrap();
-            assert_eq!(sts.liveness_of("counts-friends"), Some(&Liveness::AlwaysLive));
+            assert_eq!(st.liveness_of("counts-friends"), Some(&Liveness::AlwaysLive));
         }
 
-        // Schedule-moved facts are environment gates: only a schedule rule inserts
-        // festive.now, so it stays a GateCheck conjunct (the schedule is not a
-        // mover). A PERSON action inserting it launders it to AlwaysLive.
-        #[test]
-        fn schedule_moved_facts_are_gates() {
-            let build = |also_person: bool| {
-                let mut p = Practice::new("plaza").roles(["R"]).action(
-                    Action::new("[Actor]: stroll the plaza")
+        /// The plaza world both schedule cases share: a stroll affordance, a
+        /// festival schedule rule that inserts festive.now, and a want over both
+        /// conjuncts. `also_person` adds a PERSON action inserting festive.now.
+        fn plaza(also_person: bool) -> State {
+            let mut p = Practice::new("plaza").roles(["R"]).action(
+                Action::new("[Actor]: stroll the plaza")
+                    .when([m("practice.plaza.here")])
+                    .then([insert("strolled.Actor")]),
+            );
+            if also_person {
+                p = p.action(
+                    Action::new("[Actor]: light the lanterns")
                         .when([m("practice.plaza.here")])
-                        .then([insert("strolled.Actor")]),
+                        .then([insert("festive.now")]),
                 );
-                if also_person {
-                    p = p.action(
-                        Action::new("[Actor]: light the lanterns")
-                            .when([m("practice.plaza.here")])
-                            .then([insert("festive.now")]),
-                    );
-                }
-                let mut st = State::new();
-                st.define_practices([p]).unwrap();
-                st.set_characters(vec![Character::new("ana")]).unwrap();
-                st.set_desires(vec![Desire::new(
-                    "loves-a-crowd",
-                    Want::new(vec![m("festive.now"), m("strolled.Owner")], 3),
-                )])
-                .unwrap();
-                st.set_schedule(vec![ScheduleRule::new("festival", 4)
-                    .clause(vec![], vec![insert("festive.now")])])
-                    .unwrap();
-                st
-            };
-            let gated = build(false);
-            assert!(matches!(gated.liveness_of("loves-a-crowd"), Some(Liveness::GateCheck(_))));
-            let laundered = build(true);
-            assert_eq!(laundered.liveness_of("loves-a-crowd"), Some(&Liveness::AlwaysLive));
+            }
+            let mut st = State::new();
+            st.define_practices([p]).unwrap();
+            st.set_characters(vec![Character::new("ana")]).unwrap();
+            st.set_desires(vec![Desire::new(
+                "loves-a-crowd",
+                Want::new(vec![m("festive.now"), m("strolled.Owner")], 3),
+            )])
+            .unwrap();
+            st.set_schedule(vec![
+                ScheduleRule::new("festival", 4).clause(vec![], vec![insert("festive.now")]),
+            ])
+            .unwrap();
+            st
+        }
+
+        // "festive.now" is inserted ONLY by a schedule rule; the desire needs it
+        // plus an action-reachable conjunct. The schedule lives off the mover
+        // surface, so it never pollutes the insert pool — festive.now is the sole
+        // GateCheck conjunct, and strolled.Owner (action-insertable) is not.
+        // H: RelevanceSpec.hs "schedule-moved facts are environment gates (the schedule is not a mover)"
+        #[test]
+        fn schedule_moved_facts_are_environment_gates() {
+            let st = plaza(false);
+            assert_eq!(
+                rendered(&st, "loves-a-crowd"),
+                ("GateCheck".to_owned(), vec![vec!["festive.now".to_owned()]])
+            );
+        }
+
+        // Same shape, but a PERSON action also inserts festive.now (lighting the
+        // lanterns) — the mover pool sees it via that authored outcome, so no
+        // conjunct qualifies: AlwaysLive, conservative as ever. The schedule
+        // cannot launder an action-insertable fact into a gate.
+        // H: RelevanceSpec.hs "action-insertable facts still never gate; the schedule cannot launder them"
+        #[test]
+        fn action_insertable_facts_still_never_gate() {
+            let st = plaza(true);
+            assert_eq!(st.liveness_of("loves-a-crowd"), Some(&Liveness::AlwaysLive));
+        }
+
+        // The eatery shape: eating only inserts meal.Actor, never hungry.* —
+        // ONLY the schedule's guarded hunger rule inserts hungry.*. Because the
+        // schedule is off the mover surface, the clock-moved hungry.Owner keeps
+        // its GateCheck; meal.M, which the eat action does insert, does not
+        // qualify.
+        // H: RelevanceSpec.hs "the village hunger want-shape regains its gate under the reclassification"
+        #[test]
+        fn hunger_want_shape_regains_its_gate() {
+            let eatery = Practice::new("eatery").roles(["R"]).action(
+                Action::new("[Actor]: eat")
+                    .when([m("hungry.Actor")])
+                    .then([insert("meal.Actor")]),
+            );
+            let mut st = State::new();
+            st.define_practices([eatery]).unwrap();
+            st.set_characters(vec![Character::new("bob")]).unwrap();
+            st.set_desires(vec![Desire::new(
+                "wants-food",
+                Want::new(vec![m("hungry.Owner"), m("meal.M")], 5),
+            )])
+            .unwrap();
+            st.set_schedule(vec![ScheduleRule::new("hunger", 3).clause(
+                vec![m("appetite.X"), not_("hungry.X")],
+                vec![insert("hungry.X")],
+            )])
+            .unwrap();
+            assert_eq!(
+                rendered(&st, "wants-food"),
+                ("GateCheck".to_owned(), vec![vec!["hungry.Owner".to_owned()]])
+            );
         }
 
         // moverReadAnchors: scope, believes, death, affordances (incl. ForEach and
         // function-body guards), desires — all grounded to the pair, never to the
         // predictor.
+        // H: RelevanceSpec.hs "moverReadAnchors: scope, believes, death, affordances, desires — grounded to the pair"
         #[test]
         fn mover_read_anchors_grounds_to_the_pair() {
             let eatery = Practice::new("eatery")
