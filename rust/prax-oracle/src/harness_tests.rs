@@ -440,6 +440,72 @@ fn every_outcome_constructor_is_exercised_by_the_probe_world() {
     assert!(missing.is_empty(), "the probe world never names {missing:?}");
 }
 
+// ---- the slice-1 worlds: feud and bigfeud ----------------------------------
+//
+// The standing net for the FIRST ported content (S7 slice 1). The matrix is run
+// by hand at slice close over the full seed budget; these three tests are its
+// resident core, so a later change under `prax_core` that breaks the feud port
+// fails `cargo test` instead of waiting for the next matrix run. They are kept
+// small on purpose — the budget lives in the matrix, the regression net lives
+// here.
+
+fn feud_spec(world: &str, walk: Walk, steps: i64, seed: Option<i64>) -> RunSpec {
+    RunSpec {
+        world: world.to_owned(),
+        walk,
+        steps,
+        seed,
+        die_seed: None,
+        depth: 2,
+        idle: worlds::idler(world).map(str::to_owned),
+        mode: Mode::State,
+        emit: Emit::matrix(),
+    }
+}
+
+#[test]
+fn worldshape_agrees_on_both_slice_1_worlds() {
+    for world in ["feud", "bigfeud"] {
+        let (green, lines) = shape_compare(world).expect("both sides emit a worldshape");
+        for l in &lines {
+            println!("{l}");
+        }
+        assert!(green, "{world}: the two transcriptions of the world disagree");
+    }
+}
+
+#[test]
+fn the_feud_trace_agrees_record_for_record() {
+    let reg = load_register().expect("the register loads");
+    for world in ["feud", "bigfeud"] {
+        let (o, _) = run_one(&feud_spec(world, Walk::Trace, 24, None), &reg)
+            .expect("the run completes");
+        println!("{world} trace: {}", o.cell());
+        assert!(
+            matches!(o, Outcome::Clean),
+            "{world} trace diverged: {:?}",
+            render(&o)
+        );
+    }
+}
+
+#[test]
+fn the_feud_randtrace_agrees_over_a_seed_sweep() {
+    let reg = load_register().expect("the register loads");
+    for world in ["feud", "bigfeud"] {
+        for seed in 0..4 {
+            let (o, _) = run_one(&feud_spec(world, Walk::Randtrace, 50, Some(seed)), &reg)
+                .expect("the run completes");
+            println!("{world} randtrace seed {seed}: {}", o.cell());
+            assert!(
+                matches!(o, Outcome::Clean),
+                "{world} seed {seed} diverged: {:?}",
+                render(&o)
+            );
+        }
+    }
+}
+
 fn render(o: &Outcome) -> Vec<String> {
     match o {
         Outcome::Divergent(d) => crate::compare::render(d, &crate::classify::Shape::NotChecked),

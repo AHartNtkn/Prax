@@ -8,14 +8,22 @@
 
 use prax_core::engine::State;
 
-/// The shipped worlds S7 drives, in slice order. `probe` is not among them: it
-/// is the harness's own fixture (see [`crate::probe`]).
-pub const S7_WORLDS: &[&str] = &["feud", "intrigue", "bar", "dm", "village"];
+/// The worlds S7 drives, in slice order. `probe` is not among them: it is the
+/// harness's own fixture (see [`crate::probe`]). `bigfeud` is the scale variant
+/// of the feud that S7 design [D-I8] pulls into slice 1 — the frozen
+/// `Prax.Worlds.Feud.bigFeud` at the size `Prax.FeudSpec` pins (20), which is
+/// what the frozen oracle's own `bigfeud` entry builds.
+pub const S7_WORLDS: &[&str] = &["feud", "bigfeud", "intrigue", "bar", "dm", "village"];
+
+/// The size `bigfeud` is driven at, on BOTH sides: `Prax.FeudSpec`'s scale
+/// case. A different `n` on either side would be a shape divergence about
+/// nothing.
+pub const BIG_FEUD_N: usize = 20;
 
 /// The slice that lands each world (for the not-yet-ported message).
 fn slice_of(world: &str) -> Option<u8> {
     match world {
-        "feud" => Some(1),
+        "feud" | "bigfeud" => Some(1),
         "intrigue" => Some(2),
         "bar" | "dm" => Some(3),
         "village" => Some(4),
@@ -27,6 +35,8 @@ fn slice_of(world: &str) -> Option<u8> {
 pub fn build(name: &str) -> Result<State, String> {
     match name {
         "probe" => Ok(crate::probe::probe_world()),
+        "feud" => Ok(prax_worlds::feud::feud_world()),
+        "bigfeud" => Ok(prax_worlds::feud::big_feud(BIG_FEUD_N)),
         other => match slice_of(other) {
             Some(slice) => Err(format!(
                 "world `{other}` is not ported to Rust yet — it lands in S7 slice {slice}. \
@@ -45,6 +55,7 @@ pub fn build(name: &str) -> Result<State, String> {
 pub fn idler(name: &str) -> Option<&'static str> {
     match name {
         "probe" => Some(crate::probe::PROBE_IDLER),
+        "feud" | "bigfeud" => Some(prax_worlds::feud::PLAYER_NAME),
         "village" => Some("you"),
         _ => None,
     }
@@ -52,5 +63,5 @@ pub fn idler(name: &str) -> Option<&'static str> {
 
 /// Every world the Rust side can currently build.
 pub fn ported() -> Vec<&'static str> {
-    vec!["probe"]
+    vec!["probe", "feud", "bigfeud"]
 }

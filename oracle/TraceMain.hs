@@ -85,6 +85,14 @@ worldNamed n = case n of
   "intrigue" -> Just (Intrigue.intrigueWorld, Intrigue.playerName)
   "play"     -> Just (Play.playWorld,        Play.playerName)
   "feud"     -> Just (Feud.feudWorld,        Feud.playerName)
+  -- The feud's SCALE variant, pulled into slice 1 by S7 design [D-I8]. It is a
+  -- benchmark world rather than shipped content (hence its absence from
+  -- 'allWorldNames', like 'probe'), but it is authored DATA all the same and so
+  -- earns the same `worldshape` gate and randtrace budget. The size is
+  -- 'Prax.FeudSpec''s own scale case, 20; the Rust registry pins the same
+  -- constant, since a different @n@ per side would be a shape divergence about
+  -- nothing.
+  "bigfeud"  -> Just (Feud.bigFeud 20,       Feud.playerName)
   "audience" -> Just (Audience.audienceWorld, Audience.playerName)
   "village"  -> Just (Village.villageWorld,  Village.playerName)
   _          -> Nothing
