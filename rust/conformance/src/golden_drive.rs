@@ -58,4 +58,24 @@ mod tests {
             "the intrigue decision sequence must match the frozen golden turn for turn"
         );
     }
+
+    // H: GoldenDriveSpec.hs "bar: 12 turns, decision for decision"
+    #[test]
+    fn bar_twelve_turns_decision_for_decision() {
+        // `driveLabels 12 Nothing barWorld`: no idler, so the director's four
+        // turns show as `director: -` — it holds no available metalevel move
+        // while the room is still cold. That is the shape difference from
+        // `runNpcTicks`, which omits an idle turn entirely (see
+        // `crate::loop_bar`).
+        let mut st = prax_worlds::bar::bar_world();
+        let got = drive_labels(&mut st, 12, None);
+        for (i, line) in got.iter().enumerate() {
+            println!("{i:2}: {line}");
+        }
+        assert_eq!(
+            got,
+            load("bar-12"),
+            "the bar decision sequence must match the frozen golden turn for turn"
+        );
+    }
 }

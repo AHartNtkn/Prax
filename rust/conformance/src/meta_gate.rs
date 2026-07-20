@@ -46,7 +46,9 @@ mod gate {
         "EmotionSpec.hs",
         "BeliefsSpec.hs",
         "IntrigueSpec.hs",
-        // S7 slice 3 (bar + dm) — the vocab half:
+        // S7 slice 3 (bar + dm):
+        "BarSpec.hs",
+        "DirectorSpec.hs",
         "ReactionsSpec.hs",
         "DeonticSpec.hs",
         "ConversationSpec.hs",

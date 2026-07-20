@@ -38,6 +38,8 @@ pub fn build(name: &str) -> Result<State, String> {
         "feud" => Ok(prax_worlds::feud::feud_world()),
         "bigfeud" => Ok(prax_worlds::feud::big_feud(BIG_FEUD_N)),
         "intrigue" => Ok(prax_worlds::intrigue::intrigue_world()),
+        "bar" => Ok(prax_worlds::bar::bar_world()),
+        "dm" => Ok(prax_worlds::bar::bar_director_world()),
         other => match slice_of(other) {
             Some(slice) => Err(format!(
                 "world `{other}` is not ported to Rust yet — it lands in S7 slice {slice}. \
@@ -61,6 +63,13 @@ pub fn idler(name: &str) -> Option<&'static str> {
         // `driveLabels 12 Nothing`, so marcus is planner-driven like everyone
         // else. An idler here would make the trace differential a different walk
         // from the golden it has to agree with.
+        //
+        // The frozen `worldOf` (oracle/TraceMain.hs:83-84) pairs each bar world
+        // with its own player: `bar` idles `Bar.playerName`, and `dm` idles
+        // `Bar.directorName` — the DM is the human seat there, so idling `you`
+        // (who does not exist in `dm`) would be a different walk.
+        "bar" => Some(prax_worlds::bar::PLAYER_NAME),
+        "dm" => Some(prax_worlds::bar::DIRECTOR_NAME),
         "village" => Some("you"),
         _ => None,
     }
@@ -68,5 +77,5 @@ pub fn idler(name: &str) -> Option<&'static str> {
 
 /// Every world the Rust side can currently build.
 pub fn ported() -> Vec<&'static str> {
-    vec!["probe", "feud", "bigfeud", "intrigue"]
+    vec!["probe", "feud", "bigfeud", "intrigue", "bar", "dm"]
 }

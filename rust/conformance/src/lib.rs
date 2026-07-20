@@ -20,6 +20,7 @@ pub mod fixtures;
 pub mod golden_drive;
 pub mod goldens;
 pub mod loop_advance;
+pub mod loop_bar;
 pub mod meta_gate;
 pub mod npc_replay;
 pub mod planner_replay;
