@@ -4,3 +4,1022 @@
 //! clone model is a cheap structural share. Carries the corrected `!` semantics
 //! (siblings cleared, the surviving child's subtree preserved) and the v39
 //! asserted-flag law (no unasserted childless node survives).
+//!
+//! Frozen reference: `src/Prax/Db.hs`. The Haskell keys an `IntMap` on raw
+//! `symId`s and re-sorts BY NAME at every enumeration point; here children are a
+//! `SmallVec<[(Sym, Db); 4]>` kept sorted by `Sym` id (the internal key order),
+//! and every observable enumeration (unify's unbound branch, `child_keys`,
+//! `to_sentences`, `to_labeled_sentences`) sorts by name. `Sym` ids never leak
+//! into output — the determinism contract (PLAN.md).
+
+use std::sync::Arc;
+
+use smallvec::SmallVec;
+
+use crate::error::WorldError;
+use crate::interner::{Interner, Sym};
+use crate::path::{CompiledPath, tokenize};
+
+/// A value a logic variable can be bound to. [`unify`](Db::unify) only ever
+/// produces [`Val::Sym`] (trie keys are symbols); [`Val::Num`] and [`Val::Set`]
+/// arise from query operators (`calc`, subqueries) in the query layer.
+/// `Integer` becomes `i64` (a recorded deviation, ARCHITECTURE.md); arithmetic
+/// that touches it is checked at the query layer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Val {
+    Sym(Sym),
+    Num(i64),
+    Set(Vec<Vec<Sym>>),
+}
+
+/// Render a value the way `Prax.Db.valToString` does: a symbol resolves to its
+/// name, a number to its decimal, a set to the opaque `<Set(n)>` marker (sets
+/// are not meant to be grounded into sentences).
+pub fn val_to_string(interner: &Interner, v: &Val) -> String {
+    match v {
+        Val::Sym(s) => interner.resolve(*s).to_owned(),
+        Val::Num(n) => n.to_string(),
+        Val::Set(xs) => format!("<Set({})>", xs.len()),
+    }
+}
+
+/// The symbol a value substitutes as when grounding a token position
+/// (`Prax.Db.valToSym`): a bound [`Val::Sym`] is returned as-is (no
+/// render/re-intern round trip); any other value is rendered via
+/// [`val_to_string`] and interned. Consistent with [`val_to_string`] by
+/// construction, since interning is a deterministic injective map on strings.
+pub fn val_to_sym(interner: &mut Interner, v: &Val) -> Sym {
+    match v {
+        Val::Sym(s) => *s,
+        _ => {
+            let rendered = val_to_string(interner, v);
+            interner.intern(&rendered)
+        }
+    }
+}
+
+/// Map of logic-variable symbol to bound value — the representation the engine
+/// computes over natively (`Prax.Db.Bindings`). Kept sorted by `Sym` id so
+/// equality is insertion-order-independent; strings appear only at the
+/// authoring/display boundary.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Bindings(SmallVec<[(Sym, Val); 8]>);
+
+impl Bindings {
+    /// An empty binding set.
+    pub fn new() -> Bindings {
+        Bindings(SmallVec::new())
+    }
+
+    /// The value bound to `key`, if any.
+    pub fn get(&self, key: Sym) -> Option<&Val> {
+        match self.0.binary_search_by(|(s, _)| s.id().cmp(&key.id())) {
+            Ok(idx) => Some(&self.0[idx].1),
+            Err(_) => None,
+        }
+    }
+
+    /// Bind `key` to `value`, replacing any existing binding. Maintains the
+    /// sorted-by-id invariant.
+    pub fn insert(&mut self, key: Sym, value: Val) {
+        match self.0.binary_search_by(|(s, _)| s.id().cmp(&key.id())) {
+            Ok(idx) => self.0[idx].1 = value,
+            Err(idx) => self.0.insert(idx, (key, value)),
+        }
+    }
+
+    /// Iterate the bindings in `Sym`-id order.
+    pub fn iter(&self) -> impl Iterator<Item = (Sym, &Val)> {
+        self.0.iter().map(|(s, v)| (*s, v))
+    }
+
+    /// Whether there are no bindings.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// A trie node: whether its outgoing edges are exclusive (`!`), whether the path
+/// to it was itself asserted as a fact, and its children keyed by segment,
+/// sorted by `Sym` id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Node {
+    excl: bool,
+    asserted: bool,
+    kids: SmallVec<[(Sym, Db); 4]>,
+}
+
+/// The world state: an exclusion trie under `Arc` path-copy persistence. Cloning
+/// a `Db` bumps a refcount (the planner's apply-and-discard model depends on
+/// this); a mutation rebuilds only the nodes on the touched path, sharing the
+/// rest structurally.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Db(Arc<Node>);
+
+/// Locate the child slot for key `k` among sorted children (`Ok` = index of the
+/// existing child, `Err` = insertion point preserving id order).
+fn kid_index(kids: &[(Sym, Db)], k: Sym) -> Result<usize, usize> {
+    kids.binary_search_by(|(s, _)| s.id().cmp(&k.id()))
+}
+
+impl Db {
+    /// The empty database.
+    pub fn empty() -> Db {
+        Db(Arc::new(Node {
+            excl: false,
+            asserted: false,
+            kids: SmallVec::new(),
+        }))
+    }
+
+    /// Whether this node's outgoing edges are exclusive (`!`).
+    pub fn is_excl(&self) -> bool {
+        self.0.excl
+    }
+
+    /// Whether the path to this node was itself asserted as a fact.
+    pub fn is_asserted(&self) -> bool {
+        self.0.asserted
+    }
+
+    /// The child under segment `k`, if present.
+    fn child(&self, k: Sym) -> Option<&Db> {
+        kid_index(&self.0.kids, k)
+            .ok()
+            .map(|idx| &self.0.kids[idx].1)
+    }
+
+    /// The children as an id-sorted slice — for the lattice ([`crate::el`]),
+    /// which walks two tries in merge order.
+    pub(crate) fn kids(&self) -> &[(Sym, Db)] {
+        &self.0.kids
+    }
+
+    /// Construct a node from parts, sorting the children by id to preserve the
+    /// trie's internal key order — the constructor the lattice uses to rebuild
+    /// merged nodes.
+    pub(crate) fn from_parts(excl: bool, asserted: bool, mut kids: Vec<(Sym, Db)>) -> Db {
+        kids.sort_by(|(a, _), (b, _)| a.id().cmp(&b.id()));
+        Db(Arc::new(Node {
+            excl,
+            asserted,
+            kids: kids.into_iter().collect(),
+        }))
+    }
+
+    /// Whether a node may be eagerly pruned: unasserted AND childless (the v39
+    /// invariant's discriminator).
+    fn prunable(&self) -> bool {
+        !self.0.asserted && self.0.kids.is_empty()
+    }
+
+    // ---- insert ----------------------------------------------------------
+
+    /// Insert a tokenized path, with the corrected exclusion rule and v39
+    /// endpoint marking (`Prax.Db.insertToks`). `!` after a segment makes that
+    /// segment single-valued: its other children are cleared but the surviving
+    /// child's subtree is preserved. The endpoint node is marked asserted;
+    /// interior marks are carried through untouched.
+    pub fn insert(&self, path: &CompiledPath) -> Db {
+        self.insert_at(path, 0)
+    }
+
+    fn insert_at(&self, path: &CompiledPath, i: usize) -> Db {
+        let node = &*self.0;
+        if i == path.segs.len() {
+            // Endpoint: the path to here IS a fact — mark it, keep excl + kids.
+            return Db(Arc::new(Node {
+                excl: node.excl,
+                asserted: true,
+                kids: node.kids.clone(),
+            }));
+        }
+
+        let n = path.segs[i];
+        let child_excl = path.is_excl_after(i);
+
+        // The existing child under n (empty scaffold if absent). Its asserted
+        // mark is carried through; its children are the base we descend into.
+        let (existing_kids, existing_asserted): (SmallVec<[(Sym, Db); 4]>, bool) =
+            match kid_index(&node.kids, n) {
+                Ok(idx) => {
+                    let c = &node.kids[idx].1;
+                    (c.0.kids.clone(), c.0.asserted)
+                }
+                Err(_) => (SmallVec::new(), false),
+            };
+
+        // Exclusion: if this insert reaches n via `!` and there is a next
+        // segment, n keeps only that next child (with its subtree intact) and
+        // sheds its siblings.
+        let cleared_kids: SmallVec<[(Sym, Db); 4]> = if child_excl && i + 1 < path.segs.len() {
+            let next = path.segs[i + 1];
+            existing_kids
+                .into_iter()
+                .filter(|(s, _)| s.id() == next.id())
+                .collect()
+        } else {
+            existing_kids
+        };
+
+        let base = Db(Arc::new(Node {
+            excl: child_excl,
+            asserted: existing_asserted,
+            kids: cleared_kids,
+        }));
+        let new_child = base.insert_at(path, i + 1);
+
+        let mut kids = node.kids.clone();
+        match kid_index(&kids, n) {
+            Ok(idx) => kids[idx].1 = new_child,
+            Err(idx) => kids.insert(idx, (n, new_child)),
+        }
+        Db(Arc::new(Node {
+            excl: node.excl,
+            asserted: node.asserted,
+            kids,
+        }))
+    }
+
+    // ---- retract ---------------------------------------------------------
+
+    /// Retract the subtree named by `names` (operators are irrelevant to
+    /// retract), then eagerly prune every ancestor the deletion leaves
+    /// unasserted and childless (`Prax.Db.retractNames`). Establishes the v39
+    /// invariant: the trie never contains an unasserted childless node.
+    pub fn retract(&self, names: &[Sym]) -> Db {
+        self.retract_at(names, 0)
+    }
+
+    fn retract_at(&self, names: &[Sym], i: usize) -> Db {
+        let node = &*self.0;
+        if i == names.len() {
+            // retractNames [] db = db
+            return self.clone();
+        }
+        let n = names[i];
+
+        if i == names.len() - 1 {
+            // The [n] case: delete n's entry; the caller prunes if this leaves
+            // *its* node unasserted and childless.
+            let mut kids = node.kids.clone();
+            if let Ok(idx) = kid_index(&kids, n) {
+                kids.remove(idx);
+            }
+            return Db(Arc::new(Node {
+                excl: node.excl,
+                asserted: node.asserted,
+                kids,
+            }));
+        }
+
+        match kid_index(&node.kids, n) {
+            Err(_) => self.clone(), // path absent → no-op
+            Ok(idx) => {
+                let child = &node.kids[idx].1;
+                let child2 = child.retract_at(names, i + 1);
+                let mut kids = node.kids.clone();
+                if child2.prunable() {
+                    kids.remove(idx);
+                } else {
+                    kids[idx].1 = child2;
+                }
+                Db(Arc::new(Node {
+                    excl: node.excl,
+                    asserted: node.asserted,
+                    kids,
+                }))
+            }
+        }
+    }
+
+    // ---- unify / exists --------------------------------------------------
+
+    /// The unification core (`Prax.Db.unifySyms`): descend the trie by the
+    /// tokenized pattern, threading `bindings`. A constant or bound-variable
+    /// segment descends deterministically; an unbound variable branches over all
+    /// children IN NAME ORDER — the determinism contract. Yields every
+    /// consistent extension of `bindings`.
+    pub fn unify(
+        &self,
+        interner: &mut Interner,
+        segs: &[Sym],
+        bindings: Bindings,
+    ) -> Vec<Bindings> {
+        let mut worlds: Vec<(Db, Bindings)> = vec![(self.clone(), bindings)];
+        for &sym in segs {
+            let mut next: Vec<(Db, Bindings)> = Vec::new();
+            for (db, b) in worlds {
+                if sym.is_var() {
+                    match b.get(sym) {
+                        Some(v) => {
+                            let key = val_to_sym(interner, v);
+                            if let Some(sub) = db.child(key) {
+                                next.push((sub.clone(), b.clone()));
+                            }
+                        }
+                        None => {
+                            let mut kids: Vec<(Sym, Db)> = db.0.kids.to_vec();
+                            kids.sort_by(|(a, _), (c, _)| interner.cmp_by_name(*a, *c));
+                            for (k, sub) in kids {
+                                let mut b2 = b.clone();
+                                b2.insert(sym, Val::Sym(k));
+                                next.push((sub, b2));
+                            }
+                        }
+                    }
+                } else if let Some(sub) = db.child(sym) {
+                    next.push((sub.clone(), b.clone()));
+                }
+            }
+            worlds = next;
+        }
+        worlds.into_iter().map(|(_, b)| b).collect()
+    }
+
+    /// Whether any node exists at the given (constant) path — `Prax.Db.exists`,
+    /// which is `not (null (unify path db empty))`.
+    pub fn exists(&self, interner: &mut Interner, segs: &[Sym]) -> bool {
+        !self.unify(interner, segs, Bindings::new()).is_empty()
+    }
+
+    /// The keys directly beneath the node at a constant path, sorted by name, or
+    /// empty if the path is absent (`Prax.Db.childKeys`).
+    pub fn child_keys(&self, interner: &Interner, segs: &[Sym]) -> Vec<String> {
+        let mut cur = self;
+        for &n in segs {
+            match cur.child(n) {
+                Some(c) => cur = c,
+                None => return Vec::new(),
+            }
+        }
+        let mut names: Vec<String> = cur
+            .0
+            .kids
+            .iter()
+            .map(|(s, _)| interner.resolve(*s).to_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    // ---- enumeration -----------------------------------------------------
+
+    /// Enumerate the facts, sorted, joined by `.` (flattening the `.`/`!`
+    /// distinction) — `Prax.Db.dbToSentences`, for display, matching, tests.
+    /// A childless node is a fact; an asserted node with children emits both its
+    /// own path and its descendants'. Under the v39 invariant this reads
+    /// presence exactly.
+    pub fn to_sentences(&self, interner: &Interner) -> Vec<String> {
+        let mut out = Vec::new();
+        self.collect_sentences(interner, &mut out);
+        out.sort();
+        out
+    }
+
+    fn collect_sentences(&self, interner: &Interner, out: &mut Vec<String>) {
+        for (k, child) in self.0.kids.iter() {
+            let name = interner.resolve(*k);
+            let cnode = &*child.0;
+            if cnode.kids.is_empty() {
+                out.push(name.to_owned());
+            } else {
+                if cnode.asserted {
+                    out.push(name.to_owned());
+                }
+                let mut subs = Vec::new();
+                child.collect_sentences(interner, &mut subs);
+                for s in subs {
+                    out.push(format!("{name}.{s}"));
+                }
+            }
+        }
+    }
+
+    /// Like [`to_sentences`](Db::to_sentences) but label-faithful: each edge is
+    /// re-emitted with `!` when its child node is exclusive, else `.`; an
+    /// asserted interior node emits its own bare labeled path alongside its
+    /// descendants'. Inverse of insertion — the basis for exact serialization
+    /// (`Prax.Db.dbToLabeledSentences`).
+    pub fn to_labeled_sentences(&self, interner: &Interner) -> Vec<String> {
+        let mut out = Vec::new();
+        self.collect_labeled(interner, &mut out);
+        out.sort();
+        out
+    }
+
+    fn collect_labeled(&self, interner: &Interner, out: &mut Vec<String>) {
+        for (k, child) in self.0.kids.iter() {
+            let name = interner.resolve(*k);
+            let mut subs = Vec::new();
+            child.collect_labeled(interner, &mut subs);
+            if subs.is_empty() {
+                out.push(name.to_owned());
+            } else {
+                let sep = if child.0.excl { '!' } else { '.' };
+                for s in subs {
+                    out.push(format!("{name}{sep}{s}"));
+                }
+                if child.0.asserted {
+                    out.push(name.to_owned());
+                }
+            }
+        }
+    }
+
+    // ---- string-facing conveniences (authoring boundary) -----------------
+
+    /// Tokenize and insert a sentence — the authoring-boundary convenience.
+    pub fn insert_str(&self, interner: &mut Interner, sentence: &str) -> Result<Db, WorldError> {
+        let path = tokenize(interner, sentence)?;
+        Ok(self.insert(&path))
+    }
+
+    /// Tokenize and retract a sentence (operators ignored for retract).
+    pub fn retract_str(&self, interner: &mut Interner, sentence: &str) -> Result<Db, WorldError> {
+        let path = tokenize(interner, sentence)?;
+        Ok(self.retract(&path.segs))
+    }
+
+    /// Tokenize a constant path and test presence.
+    pub fn exists_str(&self, interner: &mut Interner, sentence: &str) -> Result<bool, WorldError> {
+        let path = tokenize(interner, sentence)?;
+        Ok(self.exists(interner, &path.segs))
+    }
+}
+
+/// Substitute bound variables into a tokenized path, preserving `.`/`!`, and
+/// re-emit as a sentence (`Prax.Db.ground` / `groundTokens` +
+/// `tokensToSentence`). An unbound variable grounds to its own name; a bound
+/// value renders via [`val_to_string`].
+pub fn ground(interner: &Interner, path: &CompiledPath, bindings: &Bindings) -> String {
+    let n = path.segs.len();
+    let mut out = String::new();
+    for (i, &seg) in path.segs.iter().enumerate() {
+        let rendered = if seg.is_var() {
+            match bindings.get(seg) {
+                Some(v) => val_to_string(interner, v),
+                None => interner.resolve(seg).to_owned(),
+            }
+        } else {
+            interner.resolve(seg).to_owned()
+        };
+        out.push_str(&rendered);
+        if i + 1 < n {
+            out.push(if path.is_excl_after(i) { '!' } else { '.' });
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    // H: DbSpec.hs "Prax.Db"
+    //
+    // The frozen `Prax.DbSpec`, re-expressed against the Rust engine. The
+    // tokenizer group ("tokens: trailing-operator rejection") lives with the
+    // tokenizer in `crate::path`; every other DbSpec group is below.
+    use super::*;
+    use crate::path::{path_names, tokenize};
+
+    /// Build a database from sentences inserted left to right (`DbSpec.build`).
+    fn build(interner: &mut Interner, sentences: &[&str]) -> Db {
+        let mut db = Db::empty();
+        for s in sentences {
+            db = db.insert_str(interner, s).unwrap();
+        }
+        db
+    }
+
+    /// Conjunctively unify a list of sentences, threading bindings
+    /// (`Prax.Db.unifyAll`).
+    fn unify_all(db: &Db, interner: &mut Interner, patterns: &[&str]) -> Vec<Bindings> {
+        let mut bss = vec![Bindings::new()];
+        for pat in patterns {
+            let path = tokenize(interner, pat).unwrap();
+            let mut next = Vec::new();
+            for b in bss {
+                next.extend(db.unify(interner, &path.segs, b));
+            }
+            bss = next;
+        }
+        bss
+    }
+
+    fn sym_name<'a>(interner: &'a Interner, v: Option<&Val>) -> &'a str {
+        match v {
+            Some(Val::Sym(s)) => interner.resolve(*s),
+            other => panic!("expected a bound VSym, got {other:?}"),
+        }
+    }
+
+    // ===== insert / dbToSentences =====
+    // H: DbSpec.hs "insert / dbToSentences"
+
+    // H: DbSpec.hs "basic multi-valued facts"
+    #[test]
+    fn basic_multi_valued_facts() {
+        let mut i = Interner::new();
+        let db = build(&mut i, &["foo.bar.baz", "foo.bar.woof", "foo.meow.woof"]);
+        assert_eq!(
+            db.to_sentences(&i),
+            ["foo.bar.baz", "foo.bar.woof", "foo.meow.woof"]
+        );
+    }
+
+    // H: DbSpec.hs "exclusion replaces the old single value (x.age!32 then x.age!33)"
+    #[test]
+    fn exclusion_replaces_old_single_value() {
+        let mut i = Interner::new();
+        let db = build(&mut i, &["x.age!32", "x.age!33"]);
+        assert_eq!(db.to_sentences(&i), ["x.age.33"]);
+    }
+
+    // H: DbSpec.hs "REGRESSION: re-asserting an ! parent preserves its existing subtree"
+    #[test]
+    fn regression_reasserting_bang_parent_preserves_subtree() {
+        // The Praxish `!` bug: inserting `foo!bar.meow` after `foo!bar.baz` must
+        // keep `baz` — the exclusion clears siblings of `bar`, not `bar`'s own
+        // subtree.
+        let mut i = Interner::new();
+        let db = build(&mut i, &["foo!bar.baz", "foo!bar.meow"]);
+        assert_eq!(db.to_sentences(&i), ["foo.bar.baz", "foo.bar.meow"]);
+    }
+
+    // H: DbSpec.hs "exclusion clears siblings when the ! child changes"
+    #[test]
+    fn exclusion_clears_siblings_when_bang_child_changes() {
+        let mut i = Interner::new();
+        let db = build(&mut i, &["p!a.x", "p!b.y"]);
+        assert_eq!(db.to_sentences(&i), ["p.b.y"]);
+    }
+
+    // H: DbSpec.hs "dot under an ! child accumulates"
+    #[test]
+    fn dot_under_bang_child_accumulates() {
+        let mut i = Interner::new();
+        let db = build(&mut i, &["g!closingStar!prebeginning"]);
+        assert_eq!(db.to_sentences(&i), ["g.closingStar.prebeginning"]);
+    }
+
+    // ===== retract =====
+    // H: DbSpec.hs "retract"
+
+    // H: DbSpec.hs "removes a subtree by prefix"
+    #[test]
+    fn retract_removes_subtree_by_prefix() {
+        let mut i = Interner::new();
+        let db = build(&mut i, &["foo.bar.baz", "foo.meow.woof"]);
+        let db = db.retract_str(&mut i, "foo.bar").unwrap();
+        assert_eq!(db.to_sentences(&i), ["foo.meow.woof"]);
+    }
+
+    // H: DbSpec.hs "retracting a missing path is a no-op"
+    #[test]
+    fn retracting_missing_path_is_a_noop() {
+        let mut i = Interner::new();
+        let db = build(&mut i, &["foo.bar"]);
+        let db = db.retract_str(&mut i, "nope.nothere").unwrap();
+        assert_eq!(db.to_sentences(&i), ["foo.bar"]);
+    }
+
+    // H: DbSpec.hs "INSTANCE PERSISTENCE: an asserted instance survives its transient children draining to nothing"
+    #[test]
+    fn instance_persistence_asserted_instance_survives_drain() {
+        // Bar's `tendBarP` at the Db level: an instance fact asserted at spawn
+        // doubles as the parent namespace for fully-drainable transient state.
+        // Draining the last transient child must NOT take the instance with it.
+        let mut i = Interner::new();
+        let instance = "practice.tendBar.bar.ada";
+        let db = build(&mut i, &[instance]);
+        let db = db
+            .insert_str(&mut i, &format!("{instance}.customer.you!order!beer"))
+            .unwrap();
+        let db = db
+            .retract_str(&mut i, &format!("{instance}.customer.you!order"))
+            .unwrap();
+        let db = db
+            .insert_str(&mut i, &format!("{instance}.customer.you!beverage!beer"))
+            .unwrap();
+        let db = db
+            .retract_str(&mut i, &format!("{instance}.customer.you!beverage"))
+            .unwrap();
+
+        assert!(
+            db.exists_str(&mut i, instance).unwrap(),
+            "instance survives"
+        );
+        assert!(
+            !db.exists_str(&mut i, &format!("{instance}.customer.you"))
+                .unwrap(),
+            "drained transient scaffold is pruned"
+        );
+        assert_eq!(db.to_sentences(&i), [instance]);
+    }
+
+    // H: DbSpec.hs "sibling and shared ancestors survive retracting the other sibling"
+    #[test]
+    fn siblings_and_shared_ancestors_survive() {
+        let mut i = Interner::new();
+        let db = build(
+            &mut i,
+            &[
+                "eve.lied.dana.stole.carol.loaf",
+                "eve.lied.dana.stole.carol.purse",
+            ],
+        );
+        let db = db
+            .retract_str(&mut i, "eve.lied.dana.stole.carol.loaf")
+            .unwrap();
+        for (path, present) in [
+            ("eve.lied.dana.stole.carol.loaf", false),
+            ("eve.lied.dana.stole.carol.purse", true),
+            ("eve.lied.dana.stole.carol", true),
+            ("eve.lied.dana.stole", true),
+            ("eve.lied.dana", true),
+            ("eve.lied", true),
+            ("eve", true),
+        ] {
+            assert_eq!(db.exists_str(&mut i, path).unwrap(), present, "{path}");
+        }
+        assert_eq!(db.to_sentences(&i), ["eve.lied.dana.stole.carol.purse"]);
+    }
+
+    // H: DbSpec.hs "v38 repro: retracting the last targeted leaf prunes the drained `toward` ancestor"
+    #[test]
+    fn v38_repro_last_leaf_retract_prunes_toward_ancestor() {
+        let mut i = Interner::new();
+        let db = build(&mut i, &["carol.feels.angry.toward.bob"]);
+        let db = db
+            .retract_str(&mut i, "carol.feels.angry.toward.bob")
+            .unwrap();
+        assert!(!db.exists_str(&mut i, "carol.feels.angry.toward").unwrap());
+        assert!(!db.exists_str(&mut i, "carol.feels.angry").unwrap());
+        assert!(db.to_sentences(&i).is_empty());
+    }
+
+    // H: DbSpec.hs "re-asserted scaffold: an explicitly asserted prefix survives its deep leaf retract"
+    #[test]
+    fn reasserted_scaffold_survives_deep_leaf_retract() {
+        let mut i = Interner::new();
+        let db = build(
+            &mut i,
+            &["carol.feels.angry.toward.bob", "carol.feels.angry"],
+        );
+        let db = db
+            .retract_str(&mut i, "carol.feels.angry.toward.bob")
+            .unwrap();
+        assert!(db.exists_str(&mut i, "carol.feels.angry").unwrap());
+        assert!(!db.exists_str(&mut i, "carol.feels.angry.toward").unwrap());
+        assert_eq!(db.to_sentences(&i), ["carol.feels.angry"]);
+    }
+
+    // ===== serialization round-trips assertedness =====
+    // H: DbSpec.hs "serialization round-trips assertedness"
+
+    // H: DbSpec.hs "labeled: an asserted interior node with children round-trips exactly (marks included)"
+    #[test]
+    fn labeled_asserted_interior_round_trips_exactly() {
+        let mut i = Interner::new();
+        let db = build(
+            &mut i,
+            &[
+                "practice.tendBar.bar.ada",
+                "practice.tendBar.bar.ada.customer.you",
+                "note!seen",
+            ],
+        );
+        let labeled = db.to_labeled_sentences(&i);
+        let mut rebuilt = Db::empty();
+        for s in &labeled {
+            rebuilt = rebuilt.insert_str(&mut i, s).unwrap();
+        }
+        assert_eq!(rebuilt, db);
+    }
+
+    // H: DbSpec.hs "plain: a mark-bearing db rebuilds identically from its flattened sentences"
+    #[test]
+    fn plain_mark_bearing_db_rebuilds_identically() {
+        let mut i = Interner::new();
+        let db = build(
+            &mut i,
+            &[
+                "practice.tendBar.bar.ada",
+                "practice.tendBar.bar.ada.customer.you",
+            ],
+        );
+        let sentences = db.to_sentences(&i);
+        let mut rebuilt = Db::empty();
+        for s in &sentences {
+            rebuilt = rebuilt.insert_str(&mut i, s).unwrap();
+        }
+        assert_eq!(rebuilt, db);
+    }
+
+    // ===== unify =====
+    // H: DbSpec.hs "unify"
+
+    // H: DbSpec.hs "two-sentence join binds shared variable"
+    #[test]
+    fn two_sentence_join_binds_shared_variable() {
+        let mut i = Interner::new();
+        let db = build(
+            &mut i,
+            &[
+                "foo.bar.woof",
+                "foo.meow.woof",
+                "fizz.buzz.foo",
+                "some.other.woof",
+            ],
+        );
+        let x = i.intern("X");
+        let y = i.intern("Y");
+        let results = unify_all(&db, &mut i, &["X.Y.woof", "fizz.buzz.X"]);
+
+        let xs: Vec<&str> = results.iter().map(|b| sym_name(&i, b.get(x))).collect();
+        assert_eq!(xs, ["foo", "foo"]);
+
+        let mut ys: Vec<&str> = results
+            .iter()
+            .filter_map(|b| b.get(y))
+            .map(|v| match v {
+                Val::Sym(s) => i.resolve(*s),
+                other => panic!("expected VSym, got {other:?}"),
+            })
+            .collect();
+        ys.sort_unstable();
+        assert_eq!(ys, ["bar", "meow"]);
+    }
+
+    // H: DbSpec.hs "bound variable descends deterministically"
+    #[test]
+    fn bound_variable_descends_deterministically() {
+        let mut i = Interner::new();
+        let db = build(&mut i, &["char.tim", "char.kevin"]);
+        let path = tokenize(&mut i, "char.Who").unwrap();
+        assert_eq!(db.unify(&mut i, &path.segs, Bindings::new()).len(), 2);
+    }
+
+    // H: DbSpec.hs "constant that is absent yields no bindings"
+    #[test]
+    fn absent_constant_yields_no_bindings() {
+        let mut i = Interner::new();
+        let db = build(&mut i, &["char.tim"]);
+        let path = tokenize(&mut i, "char.nobody").unwrap();
+        assert!(db.unify(&mut i, &path.segs, Bindings::new()).is_empty());
+    }
+
+    // ===== ground =====
+    // H: DbSpec.hs "ground"
+
+    // H: DbSpec.hs "substitutes bound vars, preserves ! and ."
+    #[test]
+    fn ground_substitutes_bound_vars_preserving_operators() {
+        let mut i = Interner::new();
+        let (b_, c_, bev_) = (i.intern("B"), i.intern("C"), i.intern("Bev"));
+        let (ada, beth, cider) = (i.intern("ada"), i.intern("beth"), i.intern("cider"));
+        let mut b = Bindings::new();
+        b.insert(b_, Val::Sym(ada));
+        b.insert(c_, Val::Sym(beth));
+        b.insert(bev_, Val::Sym(cider));
+        let path = tokenize(&mut i, "practice.tendBar.B.customer.C!order!Bev").unwrap();
+        assert_eq!(
+            ground(&i, &path, &b),
+            "practice.tendBar.ada.customer.beth!order!cider"
+        );
+    }
+
+    // H: DbSpec.hs "unbound var grounds to its own name"
+    #[test]
+    fn ground_unbound_var_grounds_to_its_own_name() {
+        let mut i = Interner::new();
+        let path = tokenize(&mut i, "foo.Bar").unwrap();
+        assert_eq!(ground(&i, &path, &Bindings::new()), "foo.Bar");
+    }
+
+    // H: DbSpec.hs "set-valued binding renders as opaque marker"
+    #[test]
+    fn ground_set_valued_binding_renders_as_opaque_marker() {
+        let mut i = Interner::new();
+        let dancers = i.intern("Dancers");
+        let (a, b) = (i.intern("a"), i.intern("b"));
+        let mut binds = Bindings::new();
+        binds.insert(dancers, Val::Set(vec![vec![a], vec![b]]));
+        let path = tokenize(&mut i, "all.Dancers").unwrap();
+        assert_eq!(ground(&i, &path, &binds), "all.<Set(2)>");
+    }
+
+    // ===== unifyNames =====
+    // H: DbSpec.hs "unifyNames"
+
+    // H: DbSpec.hs "unifyNames is unify with the parse hoisted out"
+    #[test]
+    fn unify_is_invariant_under_hoisting_the_parse() {
+        // The Rust engine has ONE unify over pre-tokenized segments; the pin's
+        // content — hoisting the parse out of the per-binding loop changes
+        // nothing — holds because tokenization is a deterministic function.
+        let mut i = Interner::new();
+        let db = build(&mut i, &["at.bob!square", "at.eve!mill"]);
+        let path_a = tokenize(&mut i, "at.Who!Where").unwrap();
+        let inside = db.unify(&mut i, &path_a.segs, Bindings::new());
+        let path_b = tokenize(&mut i, "at.Who!Where").unwrap();
+        let hoisted = db.unify(&mut i, &path_b.segs, Bindings::new());
+        assert_eq!(inside, hoisted);
+        assert_eq!(inside.len(), 2);
+    }
+
+    // ===== groundTokens =====
+    // H: DbSpec.hs "groundTokens"
+
+    // H: DbSpec.hs "groundTokens substitutes bindings segment-wise, preserving operators"
+    #[test]
+    fn ground_over_tokens_preserves_operators_and_plain_paths() {
+        let mut i = Interner::new();
+        let (who, where_) = (i.intern("Who"), i.intern("Where"));
+        let (bob, square) = (i.intern("bob"), i.intern("square"));
+        let mut b = Bindings::new();
+        b.insert(who, Val::Sym(bob));
+        b.insert(where_, Val::Sym(square));
+        let path = tokenize(&mut i, "at.Who!Where").unwrap();
+        assert_eq!(ground(&i, &path, &b), "at.bob!square");
+        let plain = tokenize(&mut i, "plain.path").unwrap();
+        assert_eq!(ground(&i, &plain, &Bindings::new()), "plain.path");
+    }
+
+    // ===== internTokens / unifySyms =====
+    // H: DbSpec.hs "internTokens / unifySyms (the Sym-level cores unify/unifyNames delegate to)"
+
+    // H: DbSpec.hs "internTokens interns tokens' segment names, preserving operators"
+    #[test]
+    fn tokenize_interns_names_preserving_operators() {
+        let mut i = Interner::new();
+        let path = tokenize(&mut i, "at.Who!Where").unwrap();
+        assert_eq!(path_names(&i, &path), ["at", "Who", "Where"]);
+        // Operator after seg 0 is `.`, after seg 1 is `!`.
+        assert!(!path.is_excl_after(0));
+        assert!(path.is_excl_after(1));
+    }
+
+    // H: DbSpec.hs "unifySyms agrees with unifyNames (Bindings is Sym-keyed natively)"
+    #[test]
+    fn tokenized_query_agrees_with_manual_interning() {
+        // Rust has one Sym-level unify; the pin's guarantee (the Sym-level core
+        // agrees with the name-level surface) is that tokenizing a pattern and
+        // interning its names by hand yield the same segments, hence the same
+        // unify results.
+        let mut i = Interner::new();
+        let db = build(&mut i, &["at.bob!square", "at.eve!mill"]);
+        let tokenized = tokenize(&mut i, "at.Who!Where").unwrap();
+        let manual: Vec<Sym> = ["at", "Who", "Where"].iter().map(|n| i.intern(n)).collect();
+        assert_eq!(tokenized.segs.as_slice(), manual.as_slice());
+        assert_eq!(
+            db.unify(&mut i, &tokenized.segs, Bindings::new()),
+            db.unify(&mut i, &manual, Bindings::new())
+        );
+    }
+
+    // H: DbSpec.hs "unifySyms branches unbound variables in name order, not id (encounter) order"
+    #[test]
+    fn unify_branches_unbound_vars_in_name_order() {
+        // Insert children out of alphabetical order, so id (encounter) order !=
+        // name order; unify must branch in name order.
+        let mut i = Interner::new();
+        let db = build(&mut i, &["at.zeta", "at.alpha", "at.mu"]);
+        let who = i.intern("Who");
+        let path = tokenize(&mut i, "at.Who").unwrap();
+        let results = db.unify(&mut i, &path.segs, Bindings::new());
+        let names: Vec<&str> = results.iter().map(|b| sym_name(&i, b.get(who))).collect();
+        assert_eq!(names, ["alpha", "mu", "zeta"]);
+    }
+
+    // ===== child_keys (no DbSpec pin; S2 uses it) =====
+    #[test]
+    fn child_keys_are_name_sorted() {
+        let mut i = Interner::new();
+        let db = build(&mut i, &["at.zeta", "at.alpha", "at.mu"]);
+        let path = tokenize(&mut i, "at").unwrap();
+        assert_eq!(db.child_keys(&i, &path.segs), ["alpha", "mu", "zeta"]);
+    }
+}
+
+#[cfg(test)]
+mod proptest_laws {
+    //! Randomized trie laws (ARCHITECTURE.md's list): the v39 asserted-flag
+    //! invariant under arbitrary op sequences, `!` supersession preserving the
+    //! survivor subtree, insert/exists/retract round-trips, and enumeration
+    //! inverting insertion.
+    use super::*;
+    use proptest::prelude::*;
+
+    /// The v39 invariant: no unasserted childless node anywhere in the trie
+    /// (the root is exempt — it is never a fact and legitimately empty).
+    fn invariant_holds(db: &Db) -> bool {
+        fn walk(node: &Node) -> bool {
+            node.kids.iter().all(|(_, child)| {
+                let c = &*child.0;
+                let ok = c.asserted || !c.kids.is_empty();
+                ok && walk(c)
+            })
+        }
+        walk(&db.0)
+    }
+
+    /// A random segment from a tiny constant alphabet (lowercase ⇒ constant, so
+    /// these are ground facts, never variables).
+    fn seg() -> impl Strategy<Value = String> {
+        prop::sample::select(vec!["a", "b", "c", "d"]).prop_map(String::from)
+    }
+
+    /// A random dotted, ground path of 1–4 segments with `.`/`!` separators.
+    fn path() -> impl Strategy<Value = String> {
+        prop::collection::vec((seg(), prop::bool::ANY), 1..5).prop_map(|parts| {
+            let mut s = String::new();
+            for (idx, (name, bang)) in parts.iter().enumerate() {
+                if idx > 0 {
+                    s.push(if *bang { '!' } else { '.' });
+                }
+                s.push_str(name);
+            }
+            s
+        })
+    }
+
+    #[derive(Debug, Clone)]
+    enum Op {
+        Insert(String),
+        Retract(String),
+    }
+
+    fn op() -> impl Strategy<Value = Op> {
+        prop_oneof![path().prop_map(Op::Insert), path().prop_map(Op::Retract),]
+    }
+
+    proptest! {
+        // The v39 invariant holds after any sequence of inserts and retracts.
+        #[test]
+        fn invariant_survives_arbitrary_op_sequences(ops in prop::collection::vec(op(), 0..40)) {
+            let mut i = Interner::new();
+            let mut db = Db::empty();
+            for o in ops {
+                db = match o {
+                    Op::Insert(s) => db.insert_str(&mut i, &s).unwrap(),
+                    Op::Retract(s) => db.retract_str(&mut i, &s).unwrap(),
+                };
+                prop_assert!(invariant_holds(&db), "invariant broke after op; db = {:?}", db.to_labeled_sentences(&i));
+            }
+        }
+
+        // Enumeration inverts insertion: rebuilding from labeled sentences
+        // reproduces the database exactly.
+        #[test]
+        fn labeled_sentences_round_trip(paths in prop::collection::vec(path(), 0..12)) {
+            let mut i = Interner::new();
+            let mut db = Db::empty();
+            for p in &paths {
+                db = db.insert_str(&mut i, p).unwrap();
+            }
+            let labeled = db.to_labeled_sentences(&i);
+            let mut rebuilt = Db::empty();
+            for s in &labeled {
+                rebuilt = rebuilt.insert_str(&mut i, s).unwrap();
+            }
+            prop_assert_eq!(rebuilt, db);
+        }
+
+        // `!` supersession preserves the surviving child's subtree: after
+        // `p!c.x` then `p!c.y`, both x and y survive under c.
+        #[test]
+        fn bang_supersession_preserves_survivor_subtree(
+            p in seg(), c in seg(), x in seg(), y in seg()
+        ) {
+            prop_assume!(x != y);
+            let mut i = Interner::new();
+            let db = Db::empty()
+                .insert_str(&mut i, &format!("{p}!{c}.{x}")).unwrap()
+                .insert_str(&mut i, &format!("{p}!{c}.{y}")).unwrap();
+            let has_x = db.exists_str(&mut i, &format!("{p}.{c}.{x}")).unwrap();
+            let has_y = db.exists_str(&mut i, &format!("{p}.{c}.{y}")).unwrap();
+            prop_assert!(has_x, "survivor subtree lost x");
+            prop_assert!(has_y, "survivor subtree lost y");
+        }
+
+        // Insert/exists/retract round-trip for a dotted (non-exclusive) path
+        // over an empty db: after insert every prefix exists; after retract the
+        // db is empty again.
+        #[test]
+        fn insert_exists_retract_round_trip(parts in prop::collection::vec(seg(), 1..5)) {
+            // Dedupe consecutive equal segments so the path has distinct prefixes
+            // (a.a.a is a legitimate but degenerate path; keep it simple).
+            let mut i = Interner::new();
+            let full = parts.join(".");
+            let db = Db::empty().insert_str(&mut i, &full).unwrap();
+            // Every prefix of the inserted path exists.
+            for k in 1..=parts.len() {
+                let prefix = parts[..k].join(".");
+                prop_assert!(db.exists_str(&mut i, &prefix).unwrap(), "prefix {} missing", prefix);
+            }
+            let db = db.retract_str(&mut i, &full).unwrap();
+            prop_assert!(db.to_sentences(&i).is_empty(), "db not empty after retract: {:?}", db.to_sentences(&i));
+        }
+    }
+}
