@@ -27,6 +27,11 @@ use crate::types::Character;
 /// # Panics
 /// If the whole cast is dead (no living character to hand a turn).
 pub fn advance(st: &mut State) -> Character {
+    // Snapshot the roster BEFORE any boundary fires (S5 review M2): the wrap
+    // re-selects against this pre-boundary cast — schedule rules cannot add or
+    // remove characters (setters are the only cast writers, and no rule body
+    // reaches them), so the snapshot equals the post-boundary roster by the
+    // engine's own invariant; the capture order just makes that explicit.
     let names: Vec<String> = st.characters().iter().map(|c| c.name.clone()).collect();
     assert!(!names.is_empty(), "Prax.Loop.advance: the cast is empty");
     let cursor = st.cursor();

@@ -20,7 +20,7 @@ comparator.
 | S2 | Query (one compiled path) | DONE | [S02](reports/S02-query.md) |
 | S3 | Derive + view (design-heavy) | DONE | [S03](reports/S03-derive.md) |
 | S4 | Types + Engine + builder API (design-heavy) | DONE | [S04](reports/S04-engine.md) |
-| S5 | Loop + Schedule + Rng (stream landed S4) | IN PROGRESS | — |
+| S5 | Loop + Schedule + Rng (stream landed S4) | DONE | [S05](reports/S05-loop-schedule.md) |
 | S6 | Planner + Minds + Relevance + Sight (design-heavy; fidelity summit) | — | — |
 | S7 | Vertical world slices: Feud → Audience → Intrigue → Bar → Village | — | — |
 | S8 | Script + Play | — | — |

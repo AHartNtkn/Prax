@@ -87,3 +87,9 @@ order; Rust `compiled.schedule` order), pinned by ScheduleSpec law 8b
 period-1 opener whose effect a later same-boundary rule reads must fire first —
 so name-order would be WRONG there; only the expiry retracts, which commute,
 are reordered.
+
+The keep-entry case is covered explicitly: an ancestor firing purges a
+not-yet-due descendant's QUEUE entry; because due entries leave the queue
+before any firing, the purge set is the same whichever order the due set
+fires in — the surviving queue, not just the surviving facts, is
+order-independent (pinned by the mixed-lifetime commutation proptest).

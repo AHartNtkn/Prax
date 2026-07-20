@@ -1548,18 +1548,29 @@ mod boundary_props {
     proptest! {
         #[test]
         fn expiry_firing_commutes(
-            idxs in prop::sample::subsequence(vec![0usize, 1, 2, 3, 4, 5, 6], 1..=7)
+            idxs in prop::sample::subsequence(vec![0usize, 1, 2, 3, 4, 5, 6], 1..=7),
+            keeps in prop::sample::subsequence(vec![0usize, 1, 2], 0..=3)
         ) {
             // A pool mixing disjoint leaves, an ancestor/descendant pair (the only
-            // NON-disjoint case, where firing order could matter), and `!` siblings.
+            // NON-disjoint case, where firing order could matter), and `!` siblings —
+            // PLUS not-yet-due KEEP entries armed UNDER due ancestors (S5 review I1:
+            // a fired ancestor's retract purges the keep's queue entry; order
+            // independence must hold for the SURVIVING-queue shape too, which the
+            // all-lifetime-1 pool alone never exercises).
             const POOL: [&str; 7] = [
                 "feels.anger", "feels.anger.toward.bob", "feels.joy",
                 "mood!a", "mood!b", "at.home", "at.home.since!noon",
+            ];
+            const KEEPS: [&str; 3] = [
+                "feels.anger.toward.carol", "at.home.guest", "feels.joy.reason",
             ];
             let build = || {
                 let mut st = State::new();
                 for &i in &idxs {
                     st.perform_outcome(&insert_for(1, POOL[i])).unwrap();
+                }
+                for &k in &keeps {
+                    st.perform_outcome(&insert_for(5, KEEPS[k])).unwrap();
                 }
                 st
             };
@@ -1569,6 +1580,8 @@ mod boundary_props {
             fire_all_due(&mut desc, false);
             prop_assert_eq!(asc.labeled_facts(), desc.labeled_facts());
             prop_assert_eq!(asc.labeled_view(), desc.labeled_view());
+            // The surviving expiry QUEUE must also be order-independent.
+            prop_assert_eq!(asc.expiries_rendered(), desc.expiries_rendered());
         }
     }
 }
