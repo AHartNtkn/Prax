@@ -12,5 +12,6 @@
 //!   manifest and asserts every label appears in exactly one `// H:` comment OR
 //!   one `KILLED.md` row. Pin accounting is a red/green test, not a claim.
 
+pub mod derive_props;
 pub mod fixtures;
 pub mod meta_gate;

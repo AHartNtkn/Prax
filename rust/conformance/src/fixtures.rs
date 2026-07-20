@@ -14,6 +14,7 @@ mod replay {
     use std::path::PathBuf;
 
     use prax_core::db::{Bindings, Db, Val, ground, val_to_string};
+    use prax_core::derive::{CompiledRule, Contradiction, close, naive_closure};
     use prax_core::el::{leq, meet};
     use prax_core::interner::Interner;
     use prax_core::path::tokenize;
@@ -268,6 +269,109 @@ mod replay {
                 .map(json_binding)
                 .collect();
             assert_eq!(got, want, "query results mismatch in '{name}'");
+        }
+    }
+
+    // FIXTURE REPLAY: derive.json — for each shipped world, compile its axioms,
+    // close its base db, and match the closed model's labeled sentences
+    // byte-for-byte. feud (7→16) and village (22→34) are the multi-round /
+    // aggregate recursion cases (S03-design.md §9).
+    #[test]
+    fn derive_worlds_replay() {
+        let data = load("derive.json");
+        for w in data["worlds"].as_array().unwrap() {
+            let name = w["world"].as_str().unwrap();
+            let mut i = Interner::new();
+            check_closure_case(&mut i, name, &w["axioms"], &w["base"], &w["closure"]);
+        }
+    }
+
+    // FIXTURE REPLAY: kin.json — the Kin axioms' recursive closure (a derived
+    // `sibling` feeds a later `inLaw`, a genuine multi-round join). Byte-for-byte.
+    #[test]
+    fn kin_recursive_closure_replay() {
+        let data = load("kin.json");
+        let mut i = Interner::new();
+        check_closure_case(&mut i, "kin", &data["axioms"], &data["base"], &data["closure"]);
+    }
+
+    // FIXTURE REPLAY: div1.json — the DIV-1 negative fixture asserted BOTH ways.
+    // The Rust `close` must EQUAL the hand-derived correct closure (r.a present)
+    // and must NOT reproduce the frozen semi-naive under-derivation (r.a missing).
+    // The divergence is a committed red/green artifact (DIVERGENCES.md DIV-1).
+    #[test]
+    fn div1_negative_fixture_rust_beats_frozen() {
+        let data = load("div1.json");
+        let mut i = Interner::new();
+        let rules = compile_axioms(&mut i, &data["axioms"], "div1");
+        let base = build(&mut i, &strs(&data["base"]));
+
+        let closed = close(&mut i, &rules, &base).expect("div1 closes without ⊥");
+        let got = closed.to_labeled_sentences(&i);
+        let correct = strs(&data["correct"]);
+        let frozen = strs(&data["frozen"]["ok"]);
+
+        // GREEN: the Rust closure IS the correct least fixpoint.
+        assert_eq!(got, correct, "div1: Rust must derive the CORRECT closure");
+        // RED artifact: it DIVERGES from the frozen (buggy) output.
+        assert_ne!(got, frozen, "div1: Rust must NOT reproduce the frozen under-derivation");
+        assert!(
+            correct.contains(&"r.a".to_owned()) && !frozen.contains(&"r.a".to_owned()),
+            "div1: the fixture must pin r.a as the exact divergence"
+        );
+        // The divergence is not a close-vs-naive artifact: the naive oracle agrees
+        // with correct too.
+        let naive = naive_closure(&mut i, &rules, &base).expect("div1 naive closes");
+        assert_eq!(naive.to_labeled_sentences(&i), correct, "div1: naive == correct");
+    }
+
+    /// Compile a fixture's axiom array (`when` = Haskell-`show` conditions,
+    /// `then` = head sentences) into [`CompiledRule`]s.
+    fn compile_axioms(i: &mut Interner, axioms: &Value, ctx: &str) -> Vec<CompiledRule> {
+        axioms
+            .as_array()
+            .unwrap_or_else(|| panic!("axioms is an array in '{ctx}'"))
+            .iter()
+            .map(|ax| {
+                let body: Vec<Condition> = strs(&ax["when"])
+                    .iter()
+                    .map(|s| {
+                        parse_condition(s)
+                            .unwrap_or_else(|| panic!("parsing condition {s:?} in '{ctx}'"))
+                    })
+                    .collect();
+                let heads = strs(&ax["then"]);
+                let head_refs: Vec<&str> = heads.iter().map(String::as_str).collect();
+                CompiledRule::compile(i, &body, &head_refs)
+                    .unwrap_or_else(|e| panic!("compiling an axiom in '{ctx}': {e}"))
+            })
+            .collect()
+    }
+
+    /// Close the base under the axioms and match the recorded `closure` (an `ok`
+    /// labeled-sentence list, or a `contradiction` witness).
+    fn check_closure_case(i: &mut Interner, name: &str, axioms: &Value, base: &Value, closure: &Value) {
+        let rules = compile_axioms(i, axioms, name);
+        let db = build(i, &strs(base));
+        match close(i, &rules, &db) {
+            Ok(d) => {
+                assert!(
+                    closure["contradiction"].is_null(),
+                    "expected a ⊥ in '{name}', got a closed model"
+                );
+                assert_eq!(
+                    d.to_labeled_sentences(i),
+                    strs(&closure["ok"]),
+                    "closure mismatch in '{name}'"
+                );
+            }
+            Err(Contradiction(h)) => {
+                assert_eq!(
+                    closure["contradiction"].as_str(),
+                    Some(h.as_str()),
+                    "⊥ witness mismatch in '{name}'"
+                );
+            }
         }
     }
 

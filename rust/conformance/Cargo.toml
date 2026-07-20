@@ -7,7 +7,7 @@ authors.workspace = true
 description = "Cross-module and world conformance: fixture replay, the meta-gate pin accounting, and the // H: pin corpus."
 
 [dependencies]
-prax-core = { path = "../prax-core" }
+prax-core = { path = "../prax-core", features = ["testkit"] }
 prax-vocab = { path = "../prax-vocab" }
 prax-script = { path = "../prax-script" }
 prax-worlds = { path = "../prax-worlds" }

@@ -9,7 +9,10 @@ single `// H:` comment in `rust/`.
 Categories: `decimal` (a pin on exact decimal output whose contract is now the
 accumulation ORDER, not the decimals) · `implementation` (a pin on a
 Haskell-implementation shape the Rust design does not have) · `haskell-only` (a
-pin on a hazard that cannot exist in the Rust design).
+pin on a hazard that cannot exist in the Rust design) · `deferral` (a pin whose
+subject is real and WILL be re-expressed, but at a later stage that owns the
+surface it tests; each such row names the owing stage in a loud sentence — the
+stage is not done while its deferral rows stand).
 
 Format (one row per killed pin):
 
@@ -20,3 +23,7 @@ Format (one row per killed pin):
 | CookedSpec.hs | grounding cooked matches grounding strings (incl. '!' outcomes) | implementation | Same duality death: grounding runs once over one representation, so there is no cooked-vs-string pair to compare. Path grounding's `!`/`.` preservation is pinned by the DbSpec `ground` pins and by QuerySpec `groundCondition substitutes bindings through every constructor`. |
 | CookedSpec.hs | groundCookedCondition matches groundCondition for every remaining construct | implementation | Same duality death: there is no cooked mirror of `groundCondition`. Grounding over every Condition constructor is re-expressed directly in QuerySpec `groundCondition substitutes bindings through every constructor`. |
 | CookedSpec.hs | groundCookedOutcome matches groundOutcome for every remaining construct | implementation | Same duality death: there is no cooked mirror of `groundOutcome`. Outcome grounding is a Types/Engine concern (S4, where `Outcome` is born) and is re-expressed there against the one representation. **DEFERRAL — S4 MUST land a grounding pin covering this row's constructs; the S4 stage is not done while this sentence stands** (S2 review M3: the deferral is prose, so it is made loud here). |
+| DeriveSpec.hs | obligedClose: a domain rule (written once) also closes under obligation | deferral | Tests `Prax.Deontic.obligedClose` (the □-closure operator lives in vocab/deontic, S4), not the S3 closure surface — S3's `close`/`close_from` treat any □-lifted rules as ordinary rules (design §5, no lifting in derive). **DEFERRAL — S4 MUST land an obligedClose pin: closing over the expanded axiom list derives the sub-obligation, and bare closure does NOT lift. S4 is not done while this sentence stands.** |
+| DeriveSpec.hs | axiomFootprint collects bodies (any polarity) and heads; obligedClose adds the lifted forms | deferral | Tests `axiomFootprint`, an analysis-table builder consumed by `Engine.retable` (the S4 `compilepipe`), not the closure loop. Panel design I1: correctly out of S3. **DEFERRAL — S4 MUST land an axiomFootprint pin (body atoms at any polarity + heads; obligedClose contributes the lifted forms). S4 is not done while this sentence stands.** |
+| DeriveSpec.hs | axiomNegPatterns collects exactly the negated interiors | deferral | Tests `axiomNegPatterns`, an S4 analysis-table builder (the neg-footprint feeding the engine's continuation-tier router), not the closure loop. **DEFERRAL — S4 MUST land an axiomNegPatterns pin (exactly the interiors under a negation: `Absent`/`Not` contents, positive atoms excluded). S4 is not done while this sentence stands.** |
+| DeriveSpec.hs | monotoneAxioms accepts the count-threshold shape and rejects anti-monotone | deferral | Tests `monotoneAxioms`, the S4 analysis-table builder gating the engine's monotone continuation tier (`close_from`'s caller precondition, design §3), not the closure loop itself. **DEFERRAL — S4 MUST land a monotoneAxioms pin (Count+Cmp-Gte-literal safe; Cmp-Lt/anti-monotone, Calc, and Eq/Neq over an aggregate-bound var rejected). S4 is not done while this sentence stands.** |

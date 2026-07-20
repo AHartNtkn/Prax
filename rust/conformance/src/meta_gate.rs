@@ -23,6 +23,7 @@ mod gate {
         "ELSpec.hs",
         "QuerySpec.hs",
         "CookedSpec.hs",
+        "DeriveSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {
