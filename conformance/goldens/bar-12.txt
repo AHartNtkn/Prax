@@ -1,0 +1,12 @@
+you: you: Go to bar
+ada: ada: Greet you
+bex: bex: Go to bar
+director: -
+you: you: Go to entrance
+ada: ada: Greet bex
+bex: bex: Order beer
+director: -
+you: you: Go to bar
+ada: ada: Fulfill bex's order
+bex: bex: Greet ada back
+director: -

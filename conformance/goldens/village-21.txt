@@ -1,0 +1,21 @@
+you: -
+bob: bob: take up honest work at the stall
+carol: carol: Wait a moment
+dana: dana: Wait a moment
+eve: eve: whisper to dana that carol stole the loaf
+gale: gale: Go to square
+you: -
+bob: bob: sweep the square
+carol: carol: Wait a moment
+dana: dana: shun carol
+eve: eve: Go to square
+gale: gale: Go to mill
+you: -
+bob: bob: Go to mill
+carol: carol: Wait a moment
+dana: dana: Go to square
+eve: eve: Go to mill
+gale: gale: Go to square
+you: -
+bob: bob: fetch flour from the mill
+carol: carol: Wait a moment

@@ -5,36 +5,24 @@ on:
     branches: [master]
   pull_request:
 
+# ONE job, both toolchains, running scripts/verify.sh — the same entry point a
+# developer runs locally, so CI and `./scripts/verify.sh` cannot drift.
+#
+# The split into a rust job and a haskell job died at S7 slice 0: the
+# comparator's end-to-end harness tests DRIVE THE FROZEN ORACLE as a subprocess
+# (`cabal run -v0 prax-oracle`), and scripts/golden-check.sh re-derives the four
+# goldens from that same oracle. Splitting the toolchains would have meant
+# either skipping those tests in CI — an implicit skip, which is invisible
+# technical debt — or maintaining a second, weaker definition of "verified".
 jobs:
-  freeze-and-rust:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
-      - name: freeze check
-        run: bash scripts/freeze-check.sh
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
-      - name: rust build
-        run: cargo build --workspace --manifest-path rust/Cargo.toml
-      - name: rust clippy
-        run: cargo clippy --workspace --manifest-path rust/Cargo.toml -- -D warnings
-      - name: rust test
-        run: cargo test --workspace --manifest-path rust/Cargo.toml
 
-  haskell:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-      - name: freeze check
-        run: bash scripts/freeze-check.sh
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.10'
@@ -46,8 +34,14 @@ jobs:
             dist-newstyle
           key: cabal-${{ runner.os }}-${{ hashFiles('prax.cabal') }}
           restore-keys: cabal-${{ runner.os }}-
-      - name: frozen suite + oracle build
-        run: |
-          cabal update
-          cabal build all
-          cabal test
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: cabal update
+        run: cabal update
+
+      - name: verify (freeze-check, oracle, golden-check, cabal test, cargo)
+        run: ./scripts/verify.sh

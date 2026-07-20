@@ -1,0 +1,20 @@
+you: Go to bar
+ada: Greet you
+bex: Go to bar
+you: Go to entrance
+ada: Greet bex
+bex: Order beer
+you: Go to bar
+ada: Fulfill bex's order
+bex: Greet ada back
+you: Go to entrance
+ada: Wait a moment
+bex: Buy ada a drink
+director: turn ada against bex to stir up the evening
+you: Go to bar
+ada: Wait a moment
+bex: settle in, feeling you belong here
+you: Go to entrance
+ada: Wait a moment
+bex: Tip ada
+you: Go to bar
