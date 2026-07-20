@@ -64,7 +64,7 @@ Worlds are authored DATA; a mis-transcribed label, swapped role, weight typo or 
 **The five that are NOT mechanical:**
 1. **Coerce — `namespace_kernel`**: victim → PraxD; every other free var **in first-appearance order, excluding Owner** → PraxW, PraxW2, … (no PraxW1). `nub` is order-preserving dedup — a BTreeSet silently sorts and renames differently; verify `condition_vars`' per-constructor order against `conditionVars` first; the returned Desire's NAME feeds S9's CoercionUnmotivated lint.
 2. **Witness — CoPresence/as_role**: `pub type CoPresence = Vec<Condition>` (alias, not newtype). `asRole` uses `groundCondition`, but Rust's needs `&mut Interner` and returns Result — infecting every downstream signature. **Ruling**: implement `as_role` with S4's `rename_vars` (pure, infallible, operator-preserving), value-identical for the single-segment substitution that is the only case arising; pin the equivalence via WitnessSpec + worldshape bodies.
-3. **Project — `endeavor`**: generates two practices, a pursuit desire, per-part ledger keys, once-guards, dependency guards; generated **label order and guard order are golden-visible**. Transcribe literally, verify structurally via worldshape.
+3. **Project — `endeavor`**: generates two practices, a pursuit desire, per-part ledger keys, once-guards, dependency guards; generated **label order and guard order** must be held. ~~golden-visible~~ — **this claim is FALSE, measured (slice-4 review C2, §14)**: permuting either order leaves the village-21 golden, every frozen `ProjectSpec` pin and the whole conformance suite GREEN; only `worldshape` sees it, and that net evaporates at cut-over. Transcribe literally, verify structurally via worldshape, and hold both orders with NATIVE pins (`prax-vocab/src/project.rs`: `the_generated_part_actions_follow_the_authored_part_order`, `the_generated_part_guard_conjuncts_hold_their_order`).
 4. **Confession/Repute (and Faction/Kin/Persona) — axiom builders**: they change the VIEW, not just affordances. `incorrigible` builds a Count/Cmp threshold; `standingUnless`/`checkedDefeater` derive defeater head NAMES by string surgery over `subjectOf` — a one-character drift silently changes what the planner can read while rendering plausibly. **These are where DIV-1's shape lives** — §1.3's view-mode reclassification exists for them.
 5. **Deontic's computing half**: `conflicts`/`incompatiblePairs`/`obligationsOf` run a scratch Db. `conflicts` mints a **private throwaway Interner** (no id escapes; insert_all + two exists), preserving the frozen signature; `obligations_of(interner, db, who)` takes the CALLER's interner and is the one place prax-vocab touches the engine at runtime — flagged in the crate doc so nobody "cleans it up".
 Also: `Prax.Core.coreFns` ends in a `FnCase []` fallback and matching is FIRST-match — case order is observable.
@@ -407,12 +407,19 @@ lenses independently found the candidate-order defect.
   supersession at slice 3. The law is netted by the resident S4/S5 pins, which is
   a real net but a UNIT one: no world-scale walk exercises it, so a supersession
   bug that only manifests through authored data would survive all of S7 unless
-  slice 4 nets it. **Binding on slice 4**: village writes `*.feels.*` through more
-  than one route, so the slice-4 differential must include a walk in which a bare
-  insert lands on a path with a live timer, and must SAY SO with a mutation RED
-  (delete the `expiries.remove` and show a village walk reddening). If village
-  turns out not to reach it either, that is a finding to report at world scale,
-  not a gap to leave silent — the program never nets the law otherwise.
+  slice 4 nets it. ~~**Binding on slice 4**: village writes `*.feels.*` through
+  more than one route, so the slice-4 differential must include a walk in which a
+  bare insert lands on a path with a live timer~~ — **STRUCK: the premise is
+  FALSE, and the error is the design's own.** This clause was written from a
+  claim about village, not from a measurement of it; the measurement (slice-4
+  review C1, reproduced in §14) shows village writes `*.feels.*` through exactly
+  the same two routes bar does — `feel_toward_for` (an `InsertFor`) and
+  `unfeel_toward` (a `Delete`) — and has NO bare-insert route to the family. So
+  no village walk can reach the case, and no obligation to exhibit one was
+  dischargeable. What survives of this clause is its last sentence, which slice 4
+  DOES owe and §14 discharges: **if village does not reach it either, that is a
+  finding to report at world scale, not a gap to leave silent — the program never
+  nets the law otherwise.**
 
 - **A frozen pin may not be assumed to test the thing its label suggests**
   [slice-3 implementer disclosure, reproduced]. Neither frozen `DirectorSpec`
@@ -459,3 +466,79 @@ lenses independently found the candidate-order defect.
      carrying prose. A block that overstates its basis is now a comparator error
      with a nonzero exit, not a paragraph a reviewer has to catch. Three
      recurrences is a structural defect; the answer is structure.
+
+## 14. SLICE-4 AMENDMENTS (binding; recorded from the slice-4 review's fix wave)
+
+- **The v44 SUPERSESSION law is NOT netted at world scale by any slice of S7,
+  and §13's premise for expecting slice 4 to net it was FALSE** [slice-4 review
+  C1; the false premise is the design's own, written from a claim about village
+  rather than a measurement of it]. Village writes `*.feels.*` through exactly
+  the two routes bar does — `feel_toward_for` (an `InsertFor`) and
+  `unfeel_toward` (a `Delete`); `src/Prax/Worlds/Village.hs:48` imports precisely
+  those two and `rust/prax-worlds/src/village.rs:43` mirrors it. There is **no
+  bare-insert route to the family**, so no village walk can reach the case and
+  the mutation RED §13 made binding was never dischargeable. Measured three
+  ways, none argued:
+  1. *Instrumented.* `Effect::InsertFor` routes through `Effect::Insert`
+     (`engine.rs`), so a naive counter reports refreshes as supersessions — that
+     distinction is the whole trap. Separating them: `compare village --mode
+     trace --turns 42` gives **100 hits, all REFRESH** (70 ×
+     `carol.feels.angry.toward.dana`, 30 × `…toward.bob`), **zero bare
+     supersessions**; `--mode randtrace --seed 0..59 --cap 50` gives zero across
+     all 60 seeds.
+  2. *The mutation.* With `rt.expiries.remove(path)` deleted outright,
+     `worldshape village --check` is GREEN, the 42-turn trace is clean (43
+     records), six randtrace seeds are clean (51 records each), and the 300-seed
+     matrix is clean.
+  3. *What reddens instead.* `cargo test --workspace` gives **exactly two REDs**
+     — `schedule_spec::law_3_bare_re_insert_cancels_the_timer` and
+     `engine_replay::engine_scenarios_replay_byte_for_byte`, both S4/S5 UNIT
+     pins over a bare `State::new()`. Re-verified in this fix wave: 138 passed,
+     2 failed, no village pin, no worldshape, no trace, no randtrace.
+  **What the fix wave did about it.** (a) `conformance::supersession_world` — a
+  NATIVE world-scale pin driving the law over the real compiled
+  `village_world()` (rules, tiers, footprint, derived view, full roster) through
+  the village's own emotion vocabulary, with the control and the refresh case
+  pinned beside it; it reddens under the same deletion. (b) The residual gap —
+  **no shipped world reaches the case through AUTHORED data** — is recorded as
+  **CG-1 in `docs/rewrite/PROGRAM.md`'s CARRIED GAPS**, with the S8 finding
+  (Audience/Play arm no timers of their own; the only script timer is
+  compiler-armed `scenePatience`, and `Prax.Script.compile` REFUSES any authored
+  sentence headed `scenePatience`, so a bare insert onto a live script timer is
+  INEXPRESSIBLE — S8 will not close it) and the disposition: carried to S10, and
+  stated in the cut-over criteria as a limit of world-scale coverage if still
+  open.
+  **The standing rule this leaves**: a binding amendment may not rest on an
+  unmeasured factual claim about a world. State the measurement or state that it
+  is unmeasured; a rule written from a guess makes the next slice owe a debt it
+  cannot pay, and its non-payment then looks like non-compliance.
+
+- **§3.3's "golden-visible" claim for `endeavor` is measured FALSE; both
+  generated orders now carry NATIVE pins** [slice-4 review C2]. Two independent
+  mutations of `rust/prax-vocab/src/project.rs`:
+  (a) `for p in parts` → `parts.iter().rev()` and (b) the two leading `when`
+  conjuncts swapped with `needs`/`after` transposed. Under BOTH: `worldshape
+  village --check` reports SHAPE-DIVERGENT, while all 17 frozen `ProjectSpec`
+  pins, `cargo test -p conformance` (the village-21 golden included) and
+  `golden_drive::village_twenty_one_turns_of_free_play` stay GREEN. The sole net
+  was the shape gate — the net [D-I1] rules insufficient, because it asserts only
+  equal-to-frozen and EVAPORATES at cut-over. §13's second amendment therefore
+  applies exactly as written, and the slice owed a native pin. Landed:
+  `the_generated_part_actions_follow_the_authored_part_order` and
+  `the_generated_part_guard_conjuncts_hold_their_order`, each verified to redden
+  under its own mutation. §3.3 is corrected in place.
+  Note the contrast that made this an inconsistency rather than an oversight of
+  kind: the same reasoning WAS applied to the other non-mechanical port
+  (`coerce.rs`'s two native kernel pins, which say in the file why they carry no
+  frozen label) and simply was not applied to `endeavor`.
+
+- **The §4 / [D-I6] die-seed sweep is now a repeatable artifact, not an operator
+  action** [slice-4 review I2]. `scripts/die-seed-sweep.sh` IS the invocation
+  §13(2) requires a report block to carry: `scripts/die-seed-sweep.sh village 20
+  20 50` runs the mandated 20 die seeds × 20 walk seeds and prints its own
+  parameters. Run in this fix wave: **400/400 clean, 49s**. (Die seeds run 1..N:
+  `Prax.Engine.seedDie`'s domain is `[1, 2147483646]`, and the frozen oracle
+  refuses 0 loudly.) The harness test `the_die_seed_override_agrees` is widened
+  to a 4 × 4 grid and — the point — closed against VACUITY with an `assert_ne!`
+  that two die seeds move the record stream: agreement alone is satisfied by a
+  both-sides no-op, and only the inequality rules that out.
