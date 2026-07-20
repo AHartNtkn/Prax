@@ -37,6 +37,9 @@ cabal test
 step "5/5 cargo build + clippy + test (Rust workspace)"
 cargo build --manifest-path rust/Cargo.toml --workspace
 cargo clippy --manifest-path rust/Cargo.toml --workspace -- -D warnings
-cargo test --manifest-path rust/Cargo.toml --workspace
+# --no-fail-fast: without it one crate's failure suppresses every later crate,
+# and a fix wave reading this output sees a PARTIAL red set — it misjudges which
+# net caught what. The gate's exit code is unchanged; only its completeness is.
+cargo test --manifest-path rust/Cargo.toml --workspace --no-fail-fast
 
 printf '\nverify: all checks passed.\n'

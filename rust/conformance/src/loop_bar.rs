@@ -13,6 +13,17 @@
 //! (S7 design §5). A bug that moved an idle turn to a real one would be visible
 //! in both; a bug in how an idle turn is RENDERED is visible only in the other.
 //!
+//! THE ASSERTIONS ARE OVER `labeled_facts()`, WHERE THE FROZEN SPEC ASSERTS OVER
+//! `dbToSentences` — so three literals read `bex.arc!belonging` here and
+//! `"bex.arc.belonging"` there. `dbToSentences` FLATTENS the `!`/`.` operator
+//! distinction (`src/Prax/Db.hs:14`); `labeled_facts` preserves it. The shift is
+//! deliberate and strictly more precise — `arc_sentence` is the only writer of
+//! that family and it always writes `!`, so the labelled form names the fact the
+//! frozen assertion meant. The NEGATIVE assertions are correspondingly narrower:
+//! `!fs.contains("bex.arc!hopeful")` would not catch a hypothetical dot-written
+//! `bex.arc.hopeful`, which the flattened form would have. That is acceptable
+//! here precisely because there is one writer; it would not be if there were two.
+//!
 //! The expected narration is LOADED from `conformance/goldens/loop-bar-25.txt`
 //! ([`crate::goldens::load`]) and never typed here [D-C3(b)]; the repo-wide
 //! `no_inline_golden_literals` gate sweeps this file like every other.

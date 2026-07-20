@@ -63,7 +63,13 @@ const BUY_THRESHOLD: i32 = 15;
 // Practices -------------------------------------------------------------------
 
 /// Co-presence at the bar: sharing a place.
-fn together() -> CoPresence {
+///
+/// `pub` so `conformance::witness_templates` can run the [S-I6] `as_role`
+/// equality against THIS template rather than a copy of it — `prax-vocab` may
+/// not depend on `prax-worlds`, so without a conformance-side pin the equality
+/// closes by argument across two files and a world that changed shape would keep
+/// passing.
+pub fn together() -> CoPresence {
     vec![
         matches("practice.world.world.at.Actor!P"),
         matches("practice.world.world.at.Witness!P"),

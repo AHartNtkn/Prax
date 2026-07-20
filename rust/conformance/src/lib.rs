@@ -29,3 +29,4 @@ pub mod schedule_spec;
 pub mod source_sweep;
 pub mod unchecked_split_gate;
 pub mod view_invariant;
+pub mod witness_templates;
