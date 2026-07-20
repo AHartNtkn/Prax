@@ -1899,10 +1899,10 @@ mod boundary_props {
 
 #[cfg(test)]
 mod delta_anchor_spec {
-    // H: EngineSpec.hs "groundedDeltaAnchors: bounded effects, shadows, spawn
-    // opacity, Call resolution" + "groundedDeltaAnchors: safe ForEach binders
-    // bound; unsafe heads stay opaque". The v34 reuse anchor walk, discharged at
-    // its sole-consumer stage (S6). owed:S6 rows removed from KILLED.md.
+    // The v34 reuse anchor walk, discharged at its sole-consumer stage (S6);
+    // the owed:S6 rows are removed from KILLED.md.
+    // H: EngineSpec.hs "groundedDeltaAnchors: bounded effects, shadows, spawn opacity, Call resolution"
+    // H: EngineSpec.hs "groundedDeltaAnchors: safe ForEach binders bound; unsafe heads stay opaque"
     use super::State;
     use crate::query::Condition;
     use crate::types::{Action, Function, Practice, call, delete, for_each, insert};

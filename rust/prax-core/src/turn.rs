@@ -137,10 +137,10 @@ fn next_living(st: &mut State, names: &[String], cursor: i32) -> Option<usize> {
 #[cfg(test)]
 mod intention_spec {
     // The four owed:S6 LoopSpec intention pins, re-expressed natively [D-completeness]:
-    //  H: LoopSpec.hs "a quiet character acts their standing intention — even when fresh deliberation would differ"
-    //  H: LoopSpec.hs "each trigger reconsiders: options, satisfaction, live drive, learned motive"
-    //  H: LoopSpec.hs "a NON-bearing template appearing does not reconsider (irrelevant comings and goings)"
-    //  H: LoopSpec.hs "a standing action that is no longer offered forces re-deliberation"
+    // H: LoopSpec.hs "a quiet character acts their standing intention — even when fresh deliberation would differ"
+    // H: LoopSpec.hs "each trigger reconsiders: options, satisfaction, live drive, learned motive"
+    // H: LoopSpec.hs "a NON-bearing template appearing does not reconsider (irrelevant comings and goings)"
+    // H: LoopSpec.hs "a standing action that is no longer offered forces re-deliberation"
     //
     // The frozen tests isolate the "external event" via `st { intentions =
     // intentions stA }` — a graft that relies on Haskell's ONE global interner.
