@@ -41,6 +41,7 @@ import           Prax.TypeCheck (TypeError (..), typeCheck)
 import           Prax.EL (meet, leq)
 import           Prax.Query (Condition (..), CmpOp (..), CalcOp (..), query)
 import           Prax.Derive (Axiom (..), Contradiction (..), closure)
+import           Prax.Kin (kinAxioms)
 import qualified Prax.Worlds.Bar as Bar
 import qualified Prax.Worlds.Intrigue as Intrigue
 import qualified Prax.Worlds.Play as Play
@@ -327,8 +328,22 @@ runFixtures name = case name of
   "el"     -> putJSON elFixture
   "query"  -> putJSON queryFixture
   "derive" -> putJSON deriveFixture
+  "kin"    -> putJSON kinFixture
+  "div1"   -> putJSON div1Fixture
   _        -> dieMsg ("unknown fixture " ++ show name
-                      ++ " (one of db el query derive)")
+                      ++ " (one of db el query derive kin div1)")
+
+-- An axiom rendered for a fixture: the body conditions via Haskell `show` (the
+-- same serialization the query corpus uses) and the head sentence templates.
+axiomJSON :: Axiom -> Value
+axiomJSON (Axiom whenC thenH) =
+  object [ "when" .= map show whenC, "then" .= thenH ]
+
+-- A closure result: the sorted labeled sentences under "ok", or the ⊥ witness
+-- under "contradiction".
+closureJSON :: Either Contradiction Db -> Value
+closureJSON (Right d)                = object [ "ok" .= dbToLabeledSentences d ]
+closureJSON (Left (Contradiction h)) = object [ "contradiction" .= h ]
 
 -- A fact set as a fresh Db (facts inserted left to right).
 buildDb :: [String] -> Db
@@ -582,10 +597,46 @@ deriveFixture = object
       , "axioms"  .= map axiomJSON (axioms st)
       , "base"    .= dbToLabeledSentences (db st)
       , "closure" .= closureJSON (closure (axioms st) (db st)) ]
-    axiomJSON (Axiom whenC thenH) =
-      object [ "when" .= map show whenC, "then" .= thenH ]
-    closureJSON (Right d)               = object [ "ok" .= dbToLabeledSentences d ]
-    closureJSON (Left (Contradiction h)) = object [ "contradiction" .= h ]
+
+-- kin corpus: the Kin axioms' recursive closure over the KinSpec base (two
+-- generations plus a marriage into a stranger family) — a genuinely multi-round
+-- recursion (a derived `sibling` feeds a later `inLaw`). Emitted derive-shaped
+-- (axioms/base/closure) so the replay reuses the derive machinery.
+kinBase :: [String]
+kinBase =
+  [ "parent.gran.pat", "parent.pat.ana", "parent.pat.ben"
+  , "parent.mia.cass", "parent.mia.dan", "married.ana.chris" ]
+
+kinFixture :: Value
+kinFixture = object
+  [ "format"  .= (1 :: Int)
+  , "axioms"  .= map axiomJSON kinAxioms
+  , "base"    .= dbToLabeledSentences (buildDb kinBase)
+  , "closure" .= closureJSON (closure kinAxioms (buildDb kinBase)) ]
+
+-- DIV-1 negative fixture (docs/rewrite/DIVERGENCES.md): the probe on which the
+-- frozen semi-naive under-derives. `frozen` is what the buggy engine computes
+-- (r.a MISSING); `correct` is the hand-derived least fixpoint (r.a present),
+-- which the Rust `close` must equal. Recording both makes the divergence a
+-- committed red/green artifact rather than prose.
+div1Axioms :: [Axiom]
+div1Axioms =
+  [ axiom [ Match "p.X", Exists [ Match "q.Y" ] ] [ "r.X" ]  -- Exists reads DERIVED q
+  , axiom [ Match "trigger" ]                     [ "q.thing" ] ]
+  where axiom = Axiom
+
+div1Base :: [String]
+div1Base = [ "p.a", "trigger" ]
+
+div1Fixture :: Value
+div1Fixture = object
+  [ "format"  .= (1 :: Int)
+  , "note"    .= ("DIV-1: an independent Exists over a derived, disjoint predicate; \
+                  \frozen semi-naive drops r.a, the correct closure keeps it." :: String)
+  , "axioms"  .= map axiomJSON div1Axioms
+  , "base"    .= dbToLabeledSentences (buildDb div1Base)
+  , "frozen"  .= closureJSON (closure div1Axioms (buildDb div1Base))
+  , "correct" .= ([ "p.a", "q.thing", "r.a", "trigger" ] :: [String]) ]
 
 -- Entry point ----------------------------------------------------------------
 
@@ -602,4 +653,4 @@ main = do
            , "  prax-oracle trace <world> --turns N [--idle NAME] [--depth D] --mode decisions|state|view"
            , "  prax-oracle randtrace <world> --seed S --cap N [--candidates]"
            , "  prax-oracle check <world>"
-           , "  prax-oracle fixtures db|el|query|derive" ])
+           , "  prax-oracle fixtures db|el|query|derive|kin|div1" ])
