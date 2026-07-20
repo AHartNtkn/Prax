@@ -18,7 +18,7 @@ comparator.
 | S0 | freeze tag, oracle exe, fixtures, workspace scaffold, verify script | DONE | [S00](reports/S00-harness.md) |
 | S1 | Sym + Db + EL | DONE | [S01](reports/S01-sym-db-el.md) |
 | S2 | Query (one compiled path) | DONE | [S02](reports/S02-query.md) |
-| S3 | Derive + view (design-heavy) | IN PROGRESS | — |
+| S3 | Derive + view (design-heavy) | DONE | [S03](reports/S03-derive.md) |
 | S4 | Types + Engine + builder API (design-heavy) | — | — |
 | S5 | Loop + Schedule + Rng | — | — |
 | S6 | Planner + Minds + Relevance + Sight (design-heavy; fidelity summit) | — | — |
