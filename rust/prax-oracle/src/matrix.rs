@@ -225,6 +225,49 @@ fn parse_seeds(s: &str) -> Result<Vec<i64>, String> {
     Ok((a..=b).collect())
 }
 
+/// Resolve the `--capture-baseline` directory. A relative path is resolved
+/// against the REPOSITORY ROOT (not the process cwd), so the invocation the
+/// design states — `--capture-baseline conformance/oracle-baselines`, run from
+/// `rust/` under `cargo run` — lands in the repo-root `conformance/` data dir
+/// (§5c), not the `rust/conformance/` crate dir. An absolute path is used as-is.
+///
+/// # Errors
+/// If the repository root cannot be resolved.
+fn resolve_capture_dir(dir: &str) -> Result<std::path::PathBuf, String> {
+    let p = std::path::Path::new(dir);
+    if p.is_absolute() {
+        Ok(p.to_owned())
+    } else {
+        Ok(crate::repo_root()?.join(p))
+    }
+}
+
+/// Write one cell's Rust-side stream to `path` as JSONL — one compact JSON value
+/// per line, header record first. This is the [P4] baseline sink: `stream` is the
+/// EXACT `rust` the comparator just cleared against the frozen (reused from the
+/// [`Run`](crate::Run), never recomputed), so the committed corpus is
+/// byte-identically the stream the frozen certified this run.
+///
+/// # Errors
+/// If a parent directory cannot be created, a record cannot be serialized, or the
+/// file cannot be written — every failure is loud (a silently short baseline would
+/// be a false regression net forever after).
+fn write_baseline_cell(path: &std::path::Path, stream: &[serde_json::Value]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("cannot create baseline dir {}: {e}", parent.display()))?;
+    }
+    let mut body = String::new();
+    for rec in stream {
+        let line = serde_json::to_string(rec)
+            .map_err(|e| format!("cannot serialize a baseline record for {}: {e}", path.display()))?;
+        body.push_str(&line);
+        body.push('\n');
+    }
+    std::fs::write(path, &body)
+        .map_err(|e| format!("cannot write baseline cell {}: {e}", path.display()))
+}
+
 /// Run the matrix. Returns whether every cell passed.
 ///
 /// # Errors
@@ -252,6 +295,16 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
         .ok()
         .filter(|j| *j >= 1)
         .ok_or("--jobs expects a positive integer")?;
+    // [P4]/§1 THE BASELINE SINK. When set, every CLEAN cell's Rust-side stream —
+    // the exact `rust` the comparator just cleared against the frozen — is written
+    // to `<dir>/<world>/{trace.jsonl, randtrace-<seed>.jsonl}`, at randtrace
+    // granularity (one file per cell) so a randtrace-only regression cannot pass
+    // silently against a trace-only corpus. The bytes are the compared stream
+    // reused, never recomputed.
+    let capture_root = match crate::flag(args, "--capture-baseline") {
+        Some(dir) => Some(resolve_capture_dir(dir)?),
+        None => None,
+    };
     let reg = load_register()?;
 
     // Shape-check every world FIRST (§1.6), ONCE. A shape divergence is one line,
@@ -307,6 +360,11 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
         };
         let r = run_one_behind(&trace, &reg, &shape)?;
         println!("{}", line(w, None, "trace", &r.outcome, false));
+        if let Some(root) = &capture_root
+            && !r.outcome.is_failure()
+        {
+            write_baseline_cell(&root.join(w).join("trace.jsonl"), &r.rust)?;
+        }
         cells.push(Cell {
             world: w.clone(),
             seed: None,
@@ -347,6 +405,15 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
                 let fresh = !r.walk.is_empty() && walks.insert(r.walk.clone());
                 since_new = if fresh { 0 } else { since_new + 1 };
                 println!("{}", line(w, spec.seed, "randtrace", &r.outcome, fresh));
+                if let Some(root) = &capture_root
+                    && !r.outcome.is_failure()
+                {
+                    let seed = spec.seed.unwrap_or(0);
+                    write_baseline_cell(
+                        &root.join(w).join(format!("randtrace-{seed}.jsonl")),
+                        &r.rust,
+                    )?;
+                }
                 seeds_run += 1;
                 rand_records += r.outcome.records_compared();
                 if let Some(floor) = min_records
@@ -728,6 +795,46 @@ mod tests {
     fn seed_ranges_are_inclusive() {
         assert_eq!(parse_seeds("0..3").expect("parses"), vec![0, 1, 2, 3]);
         assert!(parse_seeds("0-3").is_err());
+    }
+
+    #[test]
+    fn the_baseline_sink_writes_exactly_the_stream_the_comparator_compared() {
+        // [P4]/§1. The captured corpus is the [`crate::Run`]'s `rust` field — the
+        // exact stream the comparator cleared against the frozen — written as
+        // JSONL and reused verbatim. This test proves the writer is LOSSLESS: the
+        // file it produces parses back to the identical record stream, and its
+        // bytes are exactly the compact-JSONL serialization (one record per line,
+        // header first). A writer that reordered, reformatted, or dropped a record
+        // would silently weaken `compare --baseline` into a false-green net.
+        use serde_json::json;
+        let stream = vec![
+            json!({"format": 1, "engine": "rust", "world": "probe", "seed": 0}),
+            json!({"t": 1, "actor": "a", "action": "a: greet", "boundary": false}),
+            json!({"end": true, "reason": "cap", "ending": null}),
+        ];
+        let dir = std::env::temp_dir().join(format!("prax-baseline-sink-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("probe").join("randtrace-0.jsonl");
+        write_baseline_cell(&path, &stream).expect("the sink writes");
+
+        // The bytes are exactly compact JSONL, header first, one record per line.
+        let raw = std::fs::read_to_string(&path).expect("the file exists");
+        let expected: String = stream
+            .iter()
+            .map(|r| format!("{}\n", serde_json::to_string(r).expect("serializes")))
+            .collect();
+        assert_eq!(raw, expected, "the sink must write compact JSONL verbatim");
+
+        // And it round-trips: reading the file back yields the identical stream,
+        // so `compare --baseline` will feed the comparator exactly what it cleared.
+        let readback: Vec<serde_json::Value> = raw
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| serde_json::from_str(l).expect("each line is one record"))
+            .collect();
+        assert_eq!(readback, stream, "the captured corpus round-trips to the compared stream");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

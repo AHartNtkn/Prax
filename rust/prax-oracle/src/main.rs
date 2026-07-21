@@ -374,6 +374,13 @@ pub struct Run {
     /// The frozen stream's [`compare::walk_identity`]; empty when no walk ran
     /// (a shape divergence).
     pub walk: String,
+    /// The EXACT Rust-side record stream this run compared — the header record
+    /// plus every walked record. On a CLEAN cell this is the full stream the
+    /// frozen just certified record-for-record, so it is what `--capture-baseline`
+    /// commits ([P4]/§1): the bytes are reused, never recomputed. On a divergent
+    /// cell it is the localization-truncated stream, which capture never writes
+    /// (§1 captures only the clean run).
+    pub rust: Vec<Value>,
 }
 
 /// Run one comparison, gating on `worldshape` FIRST (§1.6: worlds are
@@ -393,6 +400,7 @@ pub fn run_one(spec: &RunSpec, reg: &Register) -> Result<Run, String> {
             },
             shape: Shape::NotChecked,
             walk: String::new(),
+            rust: Vec::new(),
         });
     }
     run_one_behind(spec, reg, &Shape::Green(rev))
@@ -481,6 +489,7 @@ pub fn run_one_behind(spec: &RunSpec, reg: &Register, shape: &Shape) -> Result<R
         outcome,
         shape,
         walk,
+        rust,
     })
 }
 
