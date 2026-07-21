@@ -25,7 +25,7 @@ comparator.
 | S7 | Vertical world slices: Feud → Intrigue → Bar → Village (Audience → S8, [A1]) | SLICES 1-4 LANDED, slice-4 fix wave applied; slice-4 evidence report outstanding | [S07-1](reports/S07-slice1-feud.md) [S07-2](reports/S07-slice2-intrigue.md) [S07-3](reports/S07-slice3-bar.md) |
 | S8 | Script + Play + Audience ([A1]) | DONE | [S08](reports/S08-script-play-audience.md) |
 | S9 | TypeCheck + AnalysisTable + Stress + Persist + Inspect + CLI | DONE (owed:S9==0, whole ledger owes nothing; review APPROVE-WITH-MINORS) | [S09](reports/S09-tools-and-cutover-audit.md) |
-| S10 | Hardening + cut-over | IN PROGRESS (design) — see S10 CONTRACT below | — |
+| S10 | Hardening + cut-over | IN PROGRESS (panel done: correctness-at-deletion proven, 0 fatal; hardening next) — see S10 CONTRACT below | — |
 
 ## S10 CONTRACT — inherited obligations (from the S9 cut-over audit; binding)
 
