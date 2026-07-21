@@ -426,6 +426,43 @@ mod tests {
         );
     }
 
+    // The owed:S9 ScriptSpec persistence-symmetry pin (KILLED row 15). The
+    // patience marker is an ordinary fact; its PENDING expiry rides v44's due
+    // serialization ([`prax_core::persist`], S9), so a save partway through a
+    // timed scene resumes to the SAME dismissal boundary with no Persist code of
+    // its own. This is the claim that proves `expiries` round-trip is complete
+    // for a script world — it needs the persist machinery, so it lands with S9.
+    //
+    // H: ScriptSpec.hs "mid-scene save/resume reaches the same timeout boundary (persistence symmetry)"
+    #[test]
+    fn mid_scene_save_resume_reaches_the_same_timeout_boundary() {
+        use prax_core::persist::{deserialize_state, serialize_state};
+        // Boundary 2: mid-scene, the timed junction's patience marker armed and
+        // its expiry PENDING.
+        let mut mid = audience_world();
+        mid.round_boundary();
+        mid.round_boundary();
+        assert_eq!(ending_of(&mut mid), None, "no ending at boundary 2");
+
+        // Save and reload onto a fresh audience world.
+        let mut resumed =
+            deserialize_state(&serialize_state(&mid), audience_world()).expect("mid-scene round trip");
+        resumed.round_boundary();
+        resumed.round_boundary();
+        assert_eq!(
+            ending_of(&mut resumed),
+            None,
+            "still holds at absolute boundary 4 after reload"
+        );
+        resumed.round_boundary();
+        assert_eq!(
+            ending_of(&mut resumed).as_deref(),
+            Some("dismissed"),
+            "reaches dismissed at the SAME absolute boundary 5 (the pending \
+             patience expiry rode the save)"
+        );
+    }
+
     // H: ScriptSpec.hs "a timed 'after' goto fires at its delay boundary"
     #[test]
     fn a_timed_after_goto_fires_at_its_delay_boundary() {

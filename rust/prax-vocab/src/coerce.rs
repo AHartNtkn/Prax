@@ -861,6 +861,55 @@ mod tests {
         );
     }
 
+    // The owed:S9 CoerceSpec resume pins (KILLED rows 13/14), re-expressed HERE
+    // rather than in `conformance::persist_spec` because the cycling world and
+    // its `do_act`/`boundaries`/`offers` harness live in THIS module — putting
+    // the pin next to its world avoids duplicating the racket construction. The
+    // persist round-trip machinery (`serialize_state`/`deserialize_state`) is
+    // prax-core public API; the meta-gate accounts a `// H: CoerceSpec.hs` label
+    // wherever it appears.
+    //
+    // H: CoerceSpec.hs "v54: mid-racket save/resume (home: CoerceSpec — it exercises the racket's own cycle)"
+    // H: CoerceSpec.hs "a save carrying the pending complied-expiry reloads and the cycle resumes on schedule"
+    #[test]
+    fn mid_racket_save_resume_the_cycle_resumes_on_schedule() {
+        use prax_core::persist::{deserialize_state, serialize_state};
+        // Threaten then comply: the complied marker is armed with a PENDING
+        // 2-boundary expiry (the `InsertFor` due that must ride the save).
+        let mut complied = mk_turf_world(&cycling_racket());
+        do_act("mob", "threaten", &mut complied);
+        do_act("vic", "favor", &mut complied);
+        assert!(
+            !complied.expiries_rendered().is_empty(),
+            "the complied-expiry due is pending before save"
+        );
+
+        let mut reloaded =
+            deserialize_state(&serialize_state(&complied), mk_turf_world(&cycling_racket()))
+                .expect("mid-racket round trip");
+        assert!(
+            reloaded.db_has("complied.racket.mob.vic"),
+            "the complied marker reloaded"
+        );
+
+        do_act("mob", "threaten", &mut reloaded);
+        assert!(
+            !offers("vic", "favor", &mut reloaded),
+            "comply is BLOCKED right after reload (still within the bought period)"
+        );
+
+        boundaries(2, &mut reloaded);
+        assert!(
+            !reloaded.db_has("complied.racket.mob.vic"),
+            "the complied marker expired on schedule after reload (the pending \
+             expiry rode the save)"
+        );
+        assert!(
+            offers("vic", "favor", &mut reloaded),
+            "the cycle resumes: comply is available again"
+        );
+    }
+
     // H: CoerceSpec.hs "v54: the deal economics, as observed (the no-fiat ruling — no marker enforces the deal)"
     // H: CoerceSpec.hs "during the bought period the extorter's punish-vs-bide goes where the vengeance utilities point"
     #[test]
