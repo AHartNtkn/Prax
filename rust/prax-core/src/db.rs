@@ -88,6 +88,15 @@ impl Bindings {
         }
     }
 
+    /// Remove `key`'s binding if present. The backtracking primitive for the
+    /// DFS [`Db::unify_into`]: after an unbound-var branch exhausts its children,
+    /// the variable is unbound again so the parent frame is restored.
+    pub fn remove(&mut self, key: Sym) {
+        if let Ok(idx) = self.0.binary_search_by(|(s, _)| s.id().cmp(&key.id())) {
+            self.0.remove(idx);
+        }
+    }
+
     /// Iterate the bindings in `Sym`-id order.
     pub fn iter(&self) -> impl Iterator<Item = (Sym, &Val)> {
         self.0.iter().map(|(s, v)| (*s, v))
@@ -444,58 +453,58 @@ impl Db {
         bindings: Bindings,
         out: &mut Vec<Bindings>,
     ) {
-        // Scratch buffers stay on the stack for the overwhelmingly common
-        // low-fan-out match (a pattern that descends constants and branches at
-        // one or two vars); only a genuinely wide unbound branch spills to the
-        // heap. `unify_into` is the closure/planner's leaf, called an enormous
-        // number of times, so the removed per-call `Vec` allocation is the win.
-        let mut worlds: SmallVec<[(Db, Bindings); 8]> = SmallVec::new();
-        worlds.push((self.clone(), bindings));
-        for &sym in segs {
-            let mut next: SmallVec<[(Db, Bindings); 8]> = SmallVec::with_capacity(worlds.len());
-            for (db, b) in worlds {
-                if sym.is_var() {
-                    match b.get(sym) {
-                        Some(v) => {
-                            // Bound variable: descend deterministically; the binding
-                            // is unchanged, so MOVE it (no clone).
-                            let key = val_to_sym(interner, v);
-                            if let Some(sub) = db.child(key) {
-                                next.push((sub.clone(), b));
-                            }
-                        }
-                        None => {
-                            // Unbound variable: branch over children IN NAME ORDER.
-                            // Sort child INDICES (not a cloned child vector) to avoid
-                            // an owned `(Sym, Db)` copy of every child per node, and
-                            // MOVE `b` into the final branch (clone only the rest).
-                            let kids = &db.0.kids;
-                            let mut order: SmallVec<[usize; 8]> = (0..kids.len()).collect();
-                            order.sort_by(|&x, &y| interner.cmp_by_name(kids[x].0, kids[y].0));
-                            if let Some((&last_idx, rest)) = order.split_last() {
-                                for &idx in rest {
-                                    let (k, sub) = &kids[idx];
-                                    let mut b2 = b.clone();
-                                    b2.insert(sym, Val::Sym(*k));
-                                    next.push((sub.clone(), b2));
-                                }
-                                let (k, sub) = &kids[last_idx];
-                                let mut b = b;
-                                b.insert(sym, Val::Sym(*k));
-                                next.push((sub.clone(), b));
-                            }
-                        }
+        // A recursive DFS that threads ONE binding set through the descent,
+        // cloning it only at each result leaf (`out.push`) — never per internal
+        // branch. The old breadth-first form materialised a `(Db, Bindings)`
+        // world per branch and cloned the binding map at every fork; that
+        // per-branch clone was the bulk of `unify_into`'s self-time and a large
+        // share of the engine's allocation. DFS pre-order over children in NAME
+        // order enumerates leaves in the SAME order as the level-by-level BFS
+        // (both are lexicographic in the branch choices), so `out` is unchanged.
+        let mut b = bindings;
+        self.unify_dfs(interner, segs, 0, &mut b, out);
+    }
+
+    /// The descent for [`unify_into`]. At an unbound variable it binds the var to
+    /// each child in name order, recurses, then unbinds (backtrack) so the parent
+    /// frame is restored; a bound var or constant descends its single edge.
+    fn unify_dfs(
+        &self,
+        interner: &mut Interner,
+        segs: &[Sym],
+        i: usize,
+        b: &mut Bindings,
+        out: &mut Vec<Bindings>,
+    ) {
+        if i == segs.len() {
+            out.push(b.clone());
+            return;
+        }
+        let sym = segs[i];
+        if sym.is_var() {
+            match b.get(sym) {
+                Some(v) => {
+                    let key = val_to_sym(interner, v);
+                    if let Some(sub) = self.child(key) {
+                        sub.unify_dfs(interner, segs, i + 1, b, out);
                     }
-                } else if let Some(sub) = db.child(sym) {
-                    // Constant segment: the binding is unchanged, so MOVE it.
-                    next.push((sub.clone(), b));
+                }
+                None => {
+                    // Branch over children IN NAME ORDER. Sort indices (not a
+                    // cloned child vector); the recursion borrows each child.
+                    let kids = &self.0.kids;
+                    let mut order: SmallVec<[usize; 8]> = (0..kids.len()).collect();
+                    order.sort_by(|&x, &y| interner.cmp_by_name(kids[x].0, kids[y].0));
+                    for &idx in &order {
+                        let k = kids[idx].0;
+                        b.insert(sym, Val::Sym(k));
+                        kids[idx].1.unify_dfs(interner, segs, i + 1, b, out);
+                    }
+                    b.remove(sym);
                 }
             }
-            worlds = next;
-        }
-        out.reserve(worlds.len());
-        for (_, b) in worlds {
-            out.push(b);
+        } else if let Some(sub) = self.child(sym) {
+            sub.unify_dfs(interner, segs, i + 1, b, out);
         }
     }
 
