@@ -240,6 +240,39 @@ mod tests {
         );
     }
 
+    // H: IntrigueSpec.hs "the inspector explains why an action is (un)available"
+    //
+    // Owed row 11 discharged: `Prax.Inspect.explain` over the intrigue world.
+    // Before Marcus knows the plot, warning is blocked by the belief precondition
+    // (the reason names `believes`); once Cassia has confided, it is AVAILABLE.
+    #[test]
+    fn the_inspector_explains_why_an_action_is_unavailable() {
+        let before = prax_core::inspect::explain(&intrigue_world(), "marcus", "warn artus").join("");
+        assert!(
+            before.contains("blocked by") && before.contains("believes"),
+            "blocked, reason names the belief precondition: {before:?}"
+        );
+        let after = prax_core::inspect::explain(&after_confide(), "marcus", "warn artus").join("");
+        assert!(after.contains("AVAILABLE"), "now available: {after:?}");
+    }
+
+    // H: IntrigueSpec.hs "the inspector handles an instantiated zero-role practice"
+    //
+    // Owed row 12 discharged: a zero-role practice's instance fact is exactly
+    // `practice.<pid>`, and the inspector's instance query must NOT append a
+    // dangling separator (the v43 trailing-operator class). Built from the cooked
+    // `instance_names` segment list, it cannot.
+    #[test]
+    fn the_inspector_handles_an_instantiated_zero_role_practice() {
+        let mut w = intrigue_world();
+        let shrine = Practice::new("shrine")
+            .action(Action::new("[Actor]: kneel").then([insert("knelt.Actor")]));
+        w.define_practices([shrine]).unwrap();
+        w.perform_outcome(&insert("practice.shrine")).unwrap();
+        let out = prax_core::inspect::explain(&w, "marcus", "kneel").join("");
+        assert!(out.contains("AVAILABLE"), "kneel explained: {out:?}");
+    }
+
     // H: IntrigueSpec.hs "warning the patron reaches the loyalty ending, and he lives"
     #[test]
     fn warning_the_patron_reaches_the_loyalty_ending() {

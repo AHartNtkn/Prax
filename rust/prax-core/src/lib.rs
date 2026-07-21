@@ -27,6 +27,7 @@ pub mod derive;
 pub mod el;
 pub mod engine;
 pub mod error;
+pub mod inspect;
 pub mod interner;
 pub mod minds;
 pub mod path;

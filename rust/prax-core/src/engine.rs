@@ -774,6 +774,10 @@ impl State {
     pub(crate) fn compiled_tables(&self) -> &Compiled {
         self.defs.compiled()
     }
+    /// The base fact database (the inspector queries it directly).
+    pub(crate) fn base_db(&self) -> &Db {
+        &self.rt.db
+    }
     /// Would inserting or retracting `sentence` disturb the derived closure
     /// (`Prax.Relevance.relevantDelta`)? False is the FAST PATH the engine takes:
     /// the delta commutes with closure, so no reclose is needed. The eviction
