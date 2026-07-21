@@ -18,8 +18,8 @@ use std::collections::BTreeMap;
 
 use smallvec::{SmallVec, smallvec};
 
-use crate::compilepipe::{CompiledFn, CompiledPractice, Effect};
-use crate::db::{Bindings, Val};
+use crate::compilepipe::{CompiledFn, CompiledPractice, CompiledScheduleRule, Effect};
+use crate::db::{Bindings, Db, Val};
 use crate::derive::{CompiledRule, axiom_head_patterns};
 use crate::interner::{Interner, Sym};
 use crate::path::{CompiledPath, tokenize};
@@ -169,6 +169,62 @@ fn mconcat_atoms(
         del.extend(d);
     }
     Some((ins, del))
+}
+
+/// Everything the registered world can EVER contain, as pattern anchors
+/// (`Prax.Relevance.producibleAtoms`) — the dead-condition lint's whole
+/// foundation. The insert-side atoms of every practice action outcome, every
+/// practice init, AND every SCHEDULE rule body outcome (the one divergence from
+/// the movers-only [`world_atom_pools`]: the consumer asks "can this fact EVER
+/// exist", and schedule-moved facts — `marketDay.*`, expiring feelings — do
+/// exist), plus the initial db's facts, every axiom head ([`axiom_head_patterns`],
+/// □-lifted forms included; heads count regardless of whether their rule can
+/// fire — conservative, which here only ever SILENCES the lint), the engine
+/// `turn` clock, and the `contradiction` witness. `None` = wild: an unresolvable
+/// `Call` in any scanned OUTCOME (never in the db/head/clock appends) makes the
+/// whole pool opaque, silencing the dead-condition lint entirely (soundness: an
+/// unknowable producer means no atom can be proven dead).
+pub(crate) fn producible_atoms(
+    interner: &mut Interner,
+    defs: &BTreeMap<String, CompiledPractice>,
+    fn_pool: &BTreeMap<String, Vec<Effect>>,
+    schedule: &[CompiledScheduleRule],
+    rules: &[CompiledRule],
+    db: &Db,
+) -> Option<Vec<Names>> {
+    let mut out: Vec<Names> = Vec::new();
+    // The insert-half over every action outcome, every init, and — the term
+    // that differs from `world_atom_pools` — every schedule-rule body outcome.
+    // Any wild `Call` here (and only here) collapses the whole pool to `None`.
+    for cp in defs.values() {
+        for a in &cp.actions {
+            for o in &a.outs {
+                out.extend(cooked_outcome_atoms(interner, fn_pool, &[], o)?.0);
+            }
+        }
+    }
+    for cp in defs.values() {
+        for o in &cp.inits {
+            out.extend(cooked_outcome_atoms(interner, fn_pool, &[], o)?.0);
+        }
+    }
+    for csr in schedule {
+        for (_conds, outs) in &csr.body {
+            for o in outs {
+                out.extend(cooked_outcome_atoms(interner, fn_pool, &[], o)?.0);
+            }
+        }
+    }
+    // The initial db's facts, as interned name paths (`dbToSentences`).
+    let sentences = db.to_sentences(interner);
+    for s in &sentences {
+        out.push(tokenize(interner, s).expect("a db sentence always tokenizes").segs);
+    }
+    // Every axiom head (□-lifted forms included), then the clock and the witness.
+    out.extend(axiom_head_patterns(rules));
+    out.push(smallvec![interner.intern(crate::typecheck::TURN_PATH)]);
+    out.push(smallvec![interner.intern(crate::typecheck::CONTRADICTION_PATH)]);
+    Some(out)
 }
 
 /// Positive and negated path patterns of a want's cooked conditions, plus an
@@ -862,6 +918,41 @@ mod tests {
             assert_eq!(
                 rendered(&st, "wants-food"),
                 ("GateCheck".to_owned(), vec![vec!["hungry.Owner".to_owned()]])
+            );
+        }
+
+        // NATIVE PIN — no frozen label. `producibleAtoms` has no frozen suite
+        // pin of its own; the frozen tree exercises it ONLY through `typeCheck`'s
+        // dead-condition lint. This pins the [P1]/§1.2 discriminating claim
+        // DIRECTLY: a schedule rule's insert atom IS producible (the term that
+        // diverges from the movers-only `world_atom_pools`). A schedule-fed guard
+        // matching `marketDay.now` is therefore live, not dead.
+        //
+        // REDDENS UNDER: deleting the schedule-rule loop from `producible_atoms`
+        // — the pool then omits `marketDay.now`, which is exactly the wrong pool
+        // that would falsely flag a schedule-fed guard as a `DeadCondition`.
+        #[test]
+        fn producible_atoms_include_schedule_rule_inserts() {
+            let stall = Practice::new("stall").roles(["R"]).action(
+                Action::new("[Actor]: browse")
+                    .when([m("practice.stall.here")])
+                    .then([insert("browsed.Actor")]),
+            );
+            let mut st = State::new();
+            st.define_practices([stall]).unwrap();
+            st.set_schedule(vec![
+                ScheduleRule::new("market", 4).clause(vec![], vec![insert("marketDay.now")]),
+            ])
+            .unwrap();
+            let pool = st
+                .producible_atoms()
+                .expect("no wild Call anywhere, so the pool is Some");
+            let market = st.intern_segs("marketDay.now");
+            assert!(
+                pool.iter().any(|a| a.as_slice() == market.as_slice()),
+                "a SCHEDULE rule's insert atom must be producible (the schedule term \
+                 of producibleAtoms, absent from movers-only world_atom_pools); \
+                 without it a schedule-fed guard would be falsely flagged dead"
             );
         }
 

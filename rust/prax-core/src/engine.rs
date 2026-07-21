@@ -745,6 +745,25 @@ impl State {
             defs.desires(),
         )
     }
+    /// Everything this world can EVER contain, as pattern anchors
+    /// (`Prax.Relevance.producibleAtoms`) — the dead-condition lint's pool.
+    /// `None` = wild (an unresolvable `Call` in a scanned outcome). Computed on a
+    /// CLONE of the interner so the check is side-effect-free (the only symbol it
+    /// would mint is the idempotent `PraxEvicted` wildcard, and no lint pattern
+    /// ever contains it), honouring the `&State` charter of the checker.
+    pub(crate) fn producible_atoms(&self) -> Option<Vec<SmallVec<[Sym; 6]>>> {
+        let mut interner = (*self.interner).clone();
+        let comp = self.defs.compiled();
+        let fn_pool = crate::relevance::cooked_fn_pool(&comp.fns);
+        crate::relevance::producible_atoms(
+            &mut interner,
+            &comp.practices,
+            &fn_pool,
+            &comp.schedule,
+            &comp.rules,
+            self.rt.db(),
+        )
+    }
     /// Would inserting or retracting `sentence` disturb the derived closure
     /// (`Prax.Relevance.relevantDelta`)? False is the FAST PATH the engine takes:
     /// the delta commutes with closure, so no reclose is needed. The eviction
