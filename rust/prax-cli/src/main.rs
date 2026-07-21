@@ -322,22 +322,29 @@ mod tests {
         }
     }
 
-    // flow: deterministic; the durable structural net is the S8 flow_chart pin.
+    // flow ([P7]): byte-exact stdout golden. `prax flow` (no `.json` arg) prints
+    // `flow_chart(&play::play_script())`; the committed golden IS those exact
+    // bytes, captured while the frozen still certifies them. A durable resident
+    // net — a mid-output format drift reddens here, not only against the dying
+    // oracle differential. Golden lives beside the CLI goldens under
+    // `conformance/goldens/cli/`, held apart from the frozen-EXTRACTED
+    // decision-sequence goldens that `golden-check.sh` derives.
     #[test]
     fn flow_renders_the_default_play_script() {
-        let out = flow_chart(&play::play_script());
-        assert!(out.contains("confidence") || out.contains("banquet"), "names the scenes: {out}");
-        assert!(!out.is_empty());
+        let golden = include_str!("../../../conformance/goldens/cli/flow-play.txt");
+        assert_eq!(flow_chart(&play::play_script()), golden);
     }
 
-    // stress: deterministic format (structural net = the oracle differential).
+    // stress ([P7]): byte-exact stdout golden. `prax stress play` prints
+    // `render_stress("the conspiracy (a play)", &play::play_world())` — a
+    // deterministic 200-run report (fixed RNG). The committed golden IS those
+    // exact bytes; a drift in any of the endings/coverage/scenes/dead-ends lines
+    // reddens against a resident net, not the dying differential.
     #[test]
     fn stress_renders_a_deterministic_report() {
+        let golden = include_str!("../../../conformance/goldens/cli/stress-play.txt");
         let (name, world, _) = world_named(&["play".to_owned()]);
-        let out = render_stress(name, &world);
-        assert!(out.starts_with("stress-testing the conspiracy (a play) — 200 random runs, cap 50 turns\n"));
-        assert!(out.contains("  dead ends: 0\n"), "play has no dead ends: {out}");
-        assert!(out.contains("  endings:   [("), "endings render as a show'd assoc list: {out}");
+        assert_eq!(render_stress(name, &world), golden);
     }
 
     /// A no-op action (empty outcomes) is HIDDEN from the player but kept as an

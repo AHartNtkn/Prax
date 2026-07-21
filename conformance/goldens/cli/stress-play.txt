@@ -1,0 +1,6 @@
+stress-testing the conspiracy (a play) — 200 random runs, cap 50 turns
+  endings:   [("betrayal",63),("complicity",68),("loyalty",69)]
+  coverage:  5 distinct actions fired
+  scenes:    [("banquet",200),("confidence",200)] (runs visiting each)
+  dead ends: 0
+  no ending: 0 / 200 runs

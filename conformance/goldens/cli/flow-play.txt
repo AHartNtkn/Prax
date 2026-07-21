@@ -1,0 +1,8 @@
+graph TD
+  _start((start)) --> confidence
+  confidence["confidence"]
+  confidence -->|toBanquet| banquet
+  banquet["banquet"]
+  banquet -->|betrayal| _end_betrayal((betrayal))
+  banquet -->|loyalty| _end_loyalty((loyalty))
+  banquet -->|complicity| _end_complicity((complicity))
