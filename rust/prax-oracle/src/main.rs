@@ -385,27 +385,40 @@ pub struct Run {
     pub rust: Vec<Value>,
 }
 
-/// Run one comparison, gating on `worldshape` FIRST (§1.6: worlds are
-/// shape-checked before any seed runs, and [S-I2] makes ENUMERATION reportable
-/// only behind a green one).
+/// Run one comparison against `reference`, gating on `worldshape` FIRST (§1.6:
+/// worlds are shape-checked before any seed runs, and [S-I2] makes ENUMERATION
+/// reportable only behind a green one).
+///
+/// The frozen path drives the frozen `worldshape` document as the gate. The
+/// baseline path has no frozen subprocess: the committed corpus WAS certified by
+/// the frozen at capture, and a live world-port regression surfaces as a
+/// header/record divergence in [`compare::compare_streams`] (its [M1] header
+/// check plus the record-exact comparison). So under `--baseline` every world is
+/// taken green behind the corpus's identity, and the per-cell record comparison
+/// is the gate.
 ///
 /// # Errors
 /// If either side cannot be driven, or the classifier refuses.
-pub fn run_one(spec: &RunSpec, reg: &Register) -> Result<Run, String> {
-    let (green, shape_lines) = shape_compare(&spec.world)?;
-    let rev = drive_frozen::freeze_rev()?;
-    if !green {
-        return Ok(Run {
-            outcome: compare::Outcome::ShapeDivergent {
-                fields: vec!["worldshape".to_owned()],
-                detail: shape_lines,
-            },
-            shape: Shape::NotChecked,
-            walk: String::new(),
-            rust: Vec::new(),
-        });
+pub fn run_one(spec: &RunSpec, reg: &Register, reference: &Reference) -> Result<Run, String> {
+    if reference.is_frozen() {
+        let (green, shape_lines) = shape_compare(&spec.world)?;
+        let rev = drive_frozen::freeze_rev()?;
+        if !green {
+            return Ok(Run {
+                outcome: compare::Outcome::ShapeDivergent {
+                    fields: vec!["worldshape".to_owned()],
+                    detail: shape_lines,
+                },
+                shape: Shape::NotChecked,
+                walk: String::new(),
+                rust: Vec::new(),
+            });
+        }
+        run_one_behind(spec, reg, &Shape::Green(rev), reference)
+    } else {
+        let shape = Shape::Green(reference.identity()?);
+        run_one_behind(spec, reg, &shape, reference)
     }
-    run_one_behind(spec, reg, &Shape::Green(rev))
 }
 
 /// One comparison run BEHIND an already-established `worldshape` verdict.
@@ -418,74 +431,98 @@ pub fn run_one(spec: &RunSpec, reg: &Register) -> Result<Run, String> {
 ///
 /// # Errors
 /// If either side cannot be driven, or the classifier refuses.
-pub fn run_one_behind(spec: &RunSpec, reg: &Register, shape: &Shape) -> Result<Run, String> {
+pub fn run_one_behind(
+    spec: &RunSpec,
+    reg: &Register,
+    shape: &Shape,
+    reference: &Reference,
+) -> Result<Run, String> {
     let shape = shape.clone();
-    let mut frozen = drive_frozen::run_jsonl(&spec.frozen_args(spec.mode))?;
-    // The walk identity is taken from the COARSE frozen stream, before any
+    let mut reference_stream = reference.stream(spec)?;
+    // The walk identity is taken from the COARSE reference stream, before any
     // localization rerun truncates it — the walk a seed names is the whole walk,
     // not the prefix the comparator stopped at.
-    let walk = compare::walk_identity(&frozen);
+    let walk = compare::walk_identity(&reference_stream);
     let mut rust = rust_stream(spec)?;
     let mut ctx = Ctx {
         walk: spec.walk,
         shape: shape.clone(),
         view_differs_earlier: None,
     };
-    let mut outcome =
-        compare::compare_streams(&frozen, &rust, &ctx, reg, &spec.world, spec.sub(), spec.seed)?;
+    let mut outcome = compare::compare_streams(
+        &reference_stream,
+        &rust,
+        &ctx,
+        reg,
+        &spec.world,
+        spec.sub(),
+        spec.seed,
+    )?;
 
-    // [§1.4] THE LOCALIZATION RERUN. `compare` and `matrix` run the matrix
-    // emission (candidates only [S-I4]), under which RNG and SCHEDULE cannot
-    // reach their own pointers: `CRoll` advances the stream unconditionally, so
-    // taken-vs-not leaves `rng` EQUAL, and an expiry firing on the wrong subtree
-    // leaves `expiries` equal — both would report STATE and point at four
-    // innocent subsystems [S-C5]. So on ANY divergence both sides are rerun with
-    // the FULL emission (the draw log, the boundary log, the score table, the
-    // action identity), truncated to the divergent ordinal, and RE-CLASSIFIED.
-    // The richer emission can only reveal the divergence at or before the
-    // ordinal the coarse pass found; the truncation stops it from wandering past
-    // it, which is what makes the rerun a localization and not a second run.
-    if let Some(ordinal) = divergent_ordinal(&outcome)
-        && spec.emit != Emit::all()
-    {
-        let (f, r) = localization_streams(spec, ordinal)?;
-        outcome =
-            compare::compare_streams(&f, &r, &ctx, reg, &spec.world, spec.sub(), spec.seed)?;
-        frozen = f;
-        rust = r;
-        // The full emission is a SUPERSET of the coarse one, so the rerun must
-        // still find the divergence. If it does not, the two emissions disagree
-        // about the same walk — a comparator bug, and it says so rather than
-        // reporting the run clean.
-        if divergent_ordinal(&outcome).is_none() {
-            return Err(format!(
-                "the localization rerun at ordinal {ordinal} found NO divergence under the full \
-                 emission, while the matrix emission found one. The two emissions describe the \
-                 same walk, so this is a bug in prax-oracle, not in either engine."
-            ));
+    // The localization rerun and the view reclassification RE-DRIVE the reference
+    // under a richer emission (`Emit::all`) and `--mode view`. Only the live
+    // frozen oracle can answer those; a static baseline corpus holds ONLY the
+    // matrix emission at `--mode state` it was captured at. So both reruns run on
+    // the FROZEN path only. A baseline divergence still reports the coarse
+    // localization — the record ordinal, the class, and the full field diff — the
+    // whole DIVERGENCE artifact; it forgoes only the richer rerun a static corpus
+    // cannot serve.
+    if reference.is_frozen() {
+        // [§1.4] THE LOCALIZATION RERUN. `compare` and `matrix` run the matrix
+        // emission (candidates only [S-I4]), under which RNG and SCHEDULE cannot
+        // reach their own pointers: `CRoll` advances the stream unconditionally,
+        // so taken-vs-not leaves `rng` EQUAL, and an expiry firing on the wrong
+        // subtree leaves `expiries` equal — both would report STATE and point at
+        // four innocent subsystems [S-C5]. So on ANY divergence both sides are
+        // rerun with the FULL emission (the draw log, the boundary log, the score
+        // table, the action identity), truncated to the divergent ordinal, and
+        // RE-CLASSIFIED. The richer emission can only reveal the divergence at or
+        // before the ordinal the coarse pass found; the truncation stops it from
+        // wandering past it, which is what makes the rerun a localization and not
+        // a second run.
+        if let Some(ordinal) = divergent_ordinal(&outcome)
+            && spec.emit != Emit::all()
+        {
+            let (f, r) = localization_streams(spec, ordinal)?;
+            outcome =
+                compare::compare_streams(&f, &r, &ctx, reg, &spec.world, spec.sub(), spec.seed)?;
+            reference_stream = f;
+            rust = r;
+            // The full emission is a SUPERSET of the coarse one, so the rerun must
+            // still find the divergence. If it does not, the two emissions
+            // disagree about the same walk — a comparator bug, and it says so
+            // rather than reporting the run clean.
+            if divergent_ordinal(&outcome).is_none() {
+                return Err(format!(
+                    "the localization rerun at ordinal {ordinal} found NO divergence under the \
+                     full emission, while the matrix emission found one. The two emissions \
+                     describe the same walk, so this is a bug in prax-oracle, not in either engine."
+                ));
+            }
         }
-    }
 
-    // [§1.3(a)] THE VIEW-MODE RECLASSIFICATION — the DIV-1 shape and the single
-    // most valuable rule in the classifier. A view-only divergence is invisible
-    // in `state` mode and surfaces a turn later as TURN/ENUMERATION/DECISION/
-    // STATE, so on ANY divergence both sides are rerun in `--mode view`; if the
-    // views differ at an earlier record while the base dbs there agree, the class
-    // becomes STATE(view) and the classifier says so ABOVE the whole ladder.
-    if let Some(ordinal) = divergent_ordinal(&outcome)
-        && spec.mode != Mode::View
-        && let Some(witness) = view_divergence_before(spec, ordinal)?
-    {
-        ctx.view_differs_earlier = Some(witness);
-        outcome = compare::compare_streams(
-            &frozen,
-            &rust,
-            &ctx,
-            reg,
-            &spec.world,
-            spec.sub(),
-            spec.seed,
-        )?;
+        // [§1.3(a)] THE VIEW-MODE RECLASSIFICATION — the DIV-1 shape and the
+        // single most valuable rule in the classifier. A view-only divergence is
+        // invisible in `state` mode and surfaces a turn later as
+        // TURN/ENUMERATION/DECISION/STATE, so on ANY divergence both sides are
+        // rerun in `--mode view`; if the views differ at an earlier record while
+        // the base dbs there agree, the class becomes STATE(view) and the
+        // classifier says so ABOVE the whole ladder.
+        if let Some(ordinal) = divergent_ordinal(&outcome)
+            && spec.mode != Mode::View
+            && let Some(witness) = view_divergence_before(spec, ordinal)?
+        {
+            ctx.view_differs_earlier = Some(witness);
+            outcome = compare::compare_streams(
+                &reference_stream,
+                &rust,
+                &ctx,
+                reg,
+                &spec.world,
+                spec.sub(),
+                spec.seed,
+            )?;
+        }
     }
     Ok(Run {
         outcome,
@@ -658,10 +695,178 @@ pub fn load_register() -> Result<Register, String> {
     Register::load(&repo_root()?.join("conformance/ADJUDICATED.json"))
 }
 
+/// The reference side of a `compare`/`matrix` run: the live frozen Haskell
+/// oracle (the standing default), or a committed baseline corpus (the [P4]
+/// surviving net, §4).
+///
+/// `--baseline` swaps ONLY the reference source: the same
+/// [`compare::compare_streams`] runs, the Rust side is still the live in-process
+/// [`rust_stream`], so the net becomes Rust-now vs Rust-at-capture — the
+/// regression tripwire that survives the frozen tree's deletion. The classifier,
+/// diff, register and report are unchanged.
+#[derive(Clone)]
+pub enum Reference {
+    /// Drive the frozen Haskell oracle as a subprocess (the standing default).
+    Frozen,
+    /// Load the committed baseline corpus rooted at this directory. A cell is
+    /// `<dir>/<world>/{trace.jsonl, randtrace-<seed>.jsonl}`.
+    Baseline(std::path::PathBuf),
+}
+
+impl Reference {
+    /// The reference record stream for one run: the frozen oracle's JSONL, or the
+    /// committed baseline cell — fed into the SAME [`compare::compare_streams`].
+    pub(crate) fn stream(&self, spec: &RunSpec) -> Result<Vec<Value>, String> {
+        match self {
+            Reference::Frozen => drive_frozen::run_jsonl(&spec.frozen_args(spec.mode)),
+            Reference::Baseline(dir) => load_baseline_cell(dir, spec),
+        }
+    }
+
+    /// The report/shape identity for this reference: the frozen freeze rev, or the
+    /// committed baseline corpus's tree hash so a stale baseline cannot borrow
+    /// another corpus's authority.
+    pub(crate) fn identity(&self) -> Result<String, String> {
+        match self {
+            Reference::Frozen => drive_frozen::freeze_rev(),
+            Reference::Baseline(dir) => baseline_identity(dir),
+        }
+    }
+
+    /// Whether this is the frozen oracle — the path that can RE-DRIVE its
+    /// reference under a richer emission for the localization/view reruns.
+    pub(crate) fn is_frozen(&self) -> bool {
+        matches!(self, Reference::Frozen)
+    }
+}
+
+/// Resolve a corpus directory argument. A relative path is resolved against the
+/// REPOSITORY ROOT (not the process cwd), so `conformance/oracle-baselines` run
+/// from `rust/` under `cargo run` lands in the repo-root data dir (§5c), not the
+/// `rust/conformance/` crate dir. An absolute path is used as-is.
+///
+/// # Errors
+/// If the repository root cannot be resolved.
+pub fn resolve_repo_relative(dir: &str) -> Result<std::path::PathBuf, String> {
+    let p = std::path::Path::new(dir);
+    if p.is_absolute() {
+        Ok(p.to_owned())
+    } else {
+        Ok(repo_root()?.join(p))
+    }
+}
+
+/// Load a committed baseline cell as a record stream — the [P4] surviving net's
+/// reference source. The cell is `<dir>/<world>/{trace.jsonl,
+/// randtrace-<seed>.jsonl}`: one compact JSON record per line, header first, the
+/// EXACT stream `matrix --capture-baseline` wrote (`matrix::write_baseline_cell`).
+///
+/// # Errors
+/// If the cell is missing, unreadable, holds an unparseable line, or is empty —
+/// every one is LOUD. A missing baseline cell is a BROKEN NET, never a skip: the
+/// surviving comparator would have no reference to compare the live walk against,
+/// and a silently-absent reference would turn the tripwire green forever after.
+pub fn load_baseline_cell(dir: &std::path::Path, spec: &RunSpec) -> Result<Vec<Value>, String> {
+    let cell = match spec.walk {
+        Walk::Trace => "trace.jsonl".to_owned(),
+        Walk::Randtrace => format!("randtrace-{}.jsonl", spec.seed.unwrap_or(0)),
+    };
+    let path = dir.join(&spec.world).join(&cell);
+    let body = std::fs::read_to_string(&path).map_err(|e| {
+        format!(
+            "baseline cell {} could not be read: {e}\n  a missing or unreadable baseline cell is a \
+             BROKEN NET, not a skip — the surviving comparator has no reference to compare against",
+            path.display()
+        )
+    })?;
+    let mut out = Vec::new();
+    for (i, line) in body.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        out.push(serde_json::from_str(line).map_err(|e| {
+            format!("baseline record {} in {} is not JSON: {e}\n  {line}", i + 1, path.display())
+        })?);
+    }
+    if out.is_empty() {
+        return Err(format!(
+            "baseline cell {} produced NO records — an empty stream is never a valid comparison base",
+            path.display()
+        ));
+    }
+    Ok(out)
+}
+
+/// The committed baseline corpus's identity: the git tree hash of the corpus
+/// directory at HEAD, so the report names WHICH corpus the live walk was compared
+/// against and a stale (wrongly-pointed) baseline cannot borrow another's
+/// authority. Byte-level staleness is caught independently by
+/// [`compare::compare_streams`]' record-exact comparison — this is provenance,
+/// not the gate.
+///
+/// # Errors
+/// If the directory is not under the repository, or git cannot hash it (e.g. the
+/// corpus is not committed).
+fn baseline_identity(dir: &std::path::Path) -> Result<String, String> {
+    let root = repo_root()?;
+    let rel = dir.strip_prefix(&root).map_err(|_| {
+        format!(
+            "the baseline dir {} is not under the repository root {} — its committed identity \
+             cannot be resolved",
+            dir.display(),
+            root.display()
+        )
+    })?;
+    let spec = format!("HEAD:{}", rel.to_string_lossy());
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", &spec])
+        .current_dir(&root)
+        .output()
+        .map_err(|e| format!("git rev-parse {spec} failed to start: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "git rev-parse {spec} failed — is {} committed?: {}",
+            dir.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let hash = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    Ok(format!("baseline-tree {}", &hash[..12.min(hash.len())]))
+}
+
+/// The reference source for `compare`/`matrix`: `--baseline <dir>` selects the
+/// committed corpus; its absence is the frozen oracle (the standing default).
+///
+/// # Errors
+/// If the baseline directory cannot be resolved against the repository root.
+pub fn parse_reference(args: &[&str]) -> Result<Reference, String> {
+    match flag(args, "--baseline") {
+        Some(dir) => Ok(Reference::Baseline(resolve_repo_relative(dir)?)),
+        None => Ok(Reference::Frozen),
+    }
+}
+
 fn cmd_compare(args: &[&str]) -> Result<bool, String> {
     let spec = parse_run(args)?;
     let reg = load_register()?;
-    let Run { outcome, shape, .. } = run_one(&spec, &reg)?;
+    let reference = parse_reference(args)?;
+    // The committed corpus holds ONLY the matrix emission at `--mode state`
+    // (`matrix::run` hardwires both). A richer request has no baseline to compare
+    // against, so it is refused loudly rather than silently reddening as a
+    // header SHAPE-DIVERGENT that reads like a world-port error.
+    if !reference.is_frozen() {
+        if spec.emit == Emit::all() {
+            return Err("--baseline compares against the committed matrix emission; --localize \
+                        (the full localization emission) has no baseline corpus to compare against"
+                .to_owned());
+        }
+        if spec.mode != Mode::State {
+            return Err("--baseline compares against the committed state-mode corpus; \
+                        --emit decisions|view has no baseline to compare against"
+                .to_owned());
+        }
+    }
+    let Run { outcome, shape, .. } = run_one(&spec, &reg, &reference)?;
     report(&spec, &outcome, &shape);
     Ok(!outcome.is_failure())
 }
@@ -709,7 +914,9 @@ fn cmd_explain(args: &[&str]) -> Result<bool, String> {
     let mut spec = parse_run(args)?;
     spec.emit = Emit::all();
     let reg = load_register()?;
-    let Run { outcome, shape, .. } = run_one(&spec, &reg)?;
+    // `explain` IS the full localization emission, which only the live frozen
+    // oracle can produce a reference for — so it stays frozen-only.
+    let Run { outcome, shape, .. } = run_one(&spec, &reg, &Reference::Frozen)?;
     report(&spec, &outcome, &shape);
     Ok(!outcome.is_failure())
 }
@@ -745,6 +952,8 @@ fn report(spec: &RunSpec, outcome: &compare::Outcome, shape: &Shape) {
     }
 }
 
+#[cfg(test)]
+mod baseline_tests;
 #[cfg(test)]
 mod classifier_selftest;
 #[cfg(test)]

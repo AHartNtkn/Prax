@@ -60,7 +60,7 @@ use crate::classify::{Shape, Walk};
 use crate::compare::Outcome;
 use crate::record::{Emit, Mode};
 use crate::register::Register;
-use crate::{Run, RunSpec, drive_frozen, load_register, run_one_behind, shape_compare, worlds};
+use crate::{Reference, Run, RunSpec, load_register, run_one_behind, shape_compare, worlds};
 
 /// One (world, seed) result. `seed` is `None` for the world's single trace cell.
 struct Cell {
@@ -225,23 +225,6 @@ fn parse_seeds(s: &str) -> Result<Vec<i64>, String> {
     Ok((a..=b).collect())
 }
 
-/// Resolve the `--capture-baseline` directory. A relative path is resolved
-/// against the REPOSITORY ROOT (not the process cwd), so the invocation the
-/// design states — `--capture-baseline conformance/oracle-baselines`, run from
-/// `rust/` under `cargo run` — lands in the repo-root `conformance/` data dir
-/// (§5c), not the `rust/conformance/` crate dir. An absolute path is used as-is.
-///
-/// # Errors
-/// If the repository root cannot be resolved.
-fn resolve_capture_dir(dir: &str) -> Result<std::path::PathBuf, String> {
-    let p = std::path::Path::new(dir);
-    if p.is_absolute() {
-        Ok(p.to_owned())
-    } else {
-        Ok(crate::repo_root()?.join(p))
-    }
-}
-
 /// Write one cell's Rust-side stream to `path` as JSONL — one compact JSON value
 /// per line, header record first. This is the [P4] baseline sink: `stream` is the
 /// EXACT `rust` the comparator just cleared against the frozen (reused from the
@@ -302,24 +285,45 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
     // silently against a trace-only corpus. The bytes are the compared stream
     // reused, never recomputed.
     let capture_root = match crate::flag(args, "--capture-baseline") {
-        Some(dir) => Some(resolve_capture_dir(dir)?),
+        Some(dir) => Some(crate::resolve_repo_relative(dir)?),
         None => None,
     };
+    // [P4]/§4 THE SURVIVING NET's reference source. `--baseline <dir>` replaces the
+    // frozen oracle with the committed corpus: the Rust side stays the live
+    // in-process walk, so the matrix becomes Rust-now vs Rust-at-capture — the
+    // regression tripwire that survives the frozen tree's deletion.
+    let reference = crate::parse_reference(args)?;
+    if capture_root.is_some() && !reference.is_frozen() {
+        return Err("--capture-baseline and --baseline are mutually exclusive: one WRITES the \
+                    corpus from the frozen-certified run, the other READS it as the reference"
+            .to_owned());
+    }
     let reg = load_register()?;
 
     // Shape-check every world FIRST (§1.6), ONCE. A shape divergence is one line,
     // not a hundred seeds of noise — and the check is a property of the world at
     // a freeze rev, so re-running it per (world, seed) would be ~400 frozen
     // invocations that can only ever say the same thing.
-    let rev = drive_frozen::freeze_rev()?;
+    //
+    // The baseline path has no frozen `worldshape` subprocess: the committed
+    // corpus WAS certified by the frozen at capture, and a live world-port
+    // regression surfaces as a header/record divergence in the per-cell
+    // `compare_streams` ([M1] header check + record-exact comparison). So under
+    // `--baseline` every world is taken green behind the corpus's identity, and
+    // the per-cell comparison is the gate.
+    let rev = reference.identity()?;
     let mut shapes = Vec::new();
     for w in &worlds_arg {
-        let (green, lines) = shape_compare(w)?;
-        shapes.push((w.clone(), green));
-        if !green {
-            for l in lines {
-                println!("{l}");
+        if reference.is_frozen() {
+            let (green, lines) = shape_compare(w)?;
+            shapes.push((w.clone(), green));
+            if !green {
+                for l in lines {
+                    println!("{l}");
+                }
             }
+        } else {
+            shapes.push((w.clone(), true));
         }
     }
 
@@ -358,7 +362,7 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
             mode: Mode::State,
             emit: Emit::matrix(),
         };
-        let r = run_one_behind(&trace, &reg, &shape)?;
+        let r = run_one_behind(&trace, &reg, &shape, &reference)?;
         println!("{}", line(w, None, "trace", &r.outcome, false));
         if let Some(root) = &capture_root
             && !r.outcome.is_failure()
@@ -401,7 +405,7 @@ pub fn run(args: &[&str]) -> Result<bool, String> {
                     ..trace.clone()
                 })
                 .collect();
-            for (spec, r) in specs.iter().zip(run_seeds(&specs, &reg, &shape, jobs)?) {
+            for (spec, r) in specs.iter().zip(run_seeds(&specs, &reg, &shape, jobs, &reference)?) {
                 let fresh = !r.walk.is_empty() && walks.insert(r.walk.clone());
                 since_new = if fresh { 0 } else { since_new + 1 };
                 println!("{}", line(w, spec.seed, "randtrace", &r.outcome, fresh));
@@ -512,6 +516,7 @@ pub fn run_seeds(
     reg: &Register,
     shape: &Shape,
     jobs: usize,
+    reference: &Reference,
 ) -> Result<Vec<Run>, String> {
     let next = std::sync::atomic::AtomicUsize::new(0);
     let done: std::sync::Mutex<Vec<(usize, Result<Run, String>)>> =
@@ -523,7 +528,7 @@ pub fn run_seeds(
                 loop {
                     let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     let Some(spec) = specs.get(i) else { return };
-                    let r = run_one_behind(spec, reg, shape);
+                    let r = run_one_behind(spec, reg, shape, reference);
                     done.lock().expect("the results lock").push((i, r));
                 }
             });

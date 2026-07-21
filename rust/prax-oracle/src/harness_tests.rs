@@ -13,7 +13,7 @@
 use crate::classify::Walk;
 use crate::compare::Outcome;
 use crate::record::{Emit, Mode};
-use crate::{RunSpec, load_register, run_one, shape_compare, worlds};
+use crate::{Reference, RunSpec, load_register, run_one, shape_compare, worlds};
 
 fn spec(walk: Walk, steps: i64, seed: Option<i64>) -> RunSpec {
     RunSpec {
@@ -103,7 +103,9 @@ fn a_mistranscribed_action_label_is_caught_by_worldshape_as_a_one_line_diff() {
 #[test]
 fn the_trace_walk_agrees_record_for_record() {
     let reg = load_register().expect("the register loads");
-    let o = run_one(&spec(Walk::Trace, 16, None), &reg).expect("the run completes").outcome;
+    let o = run_one(&spec(Walk::Trace, 16, None), &reg, &Reference::Frozen)
+        .expect("the run completes")
+        .outcome;
     println!("trace: {}", o.cell());
     assert!(
         matches!(o, Outcome::Clean { .. }),
@@ -121,7 +123,7 @@ fn the_trace_walk_agrees_with_the_full_localization_emission() {
     let reg = load_register().expect("the register loads");
     let mut s = spec(Walk::Trace, 16, None);
     s.emit = Emit::all();
-    let o = run_one(&s, &reg).expect("the run completes").outcome;
+    let o = run_one(&s, &reg, &Reference::Frozen).expect("the run completes").outcome;
     println!("trace --localize: {}", o.cell());
     assert!(
         matches!(o, Outcome::Clean { .. }),
@@ -134,7 +136,7 @@ fn the_trace_walk_agrees_with_the_full_localization_emission() {
 fn the_randtrace_walk_agrees_over_a_seed_sweep() {
     let reg = load_register().expect("the register loads");
     for seed in 0..8 {
-        let o = run_one(&spec(Walk::Randtrace, 25, Some(seed)), &reg)
+        let o = run_one(&spec(Walk::Randtrace, 25, Some(seed)), &reg, &Reference::Frozen)
             .expect("the run completes")
             .outcome;
         println!("randtrace seed {seed}: {}", o.cell());
@@ -153,7 +155,7 @@ fn the_randtrace_walk_agrees_in_view_mode() {
     let reg = load_register().expect("the register loads");
     let mut s = spec(Walk::Randtrace, 20, Some(3));
     s.mode = Mode::View;
-    let o = run_one(&s, &reg).expect("the run completes").outcome;
+    let o = run_one(&s, &reg, &Reference::Frozen).expect("the run completes").outcome;
     println!("randtrace --emit view: {}", o.cell());
     assert!(matches!(o, Outcome::Clean { .. }), "{:?}", render(&o));
 }
@@ -179,7 +181,7 @@ fn the_die_seed_override_agrees() {
             let mut s = spec(Walk::Randtrace, 20, Some(seed));
             s.die_seed = Some(die);
             s.emit = Emit::all();
-            let o = run_one(&s, &reg).expect("the run completes").outcome;
+            let o = run_one(&s, &reg, &Reference::Frozen).expect("the run completes").outcome;
             println!("randtrace --seed {seed} --die-seed {die}: {}", o.cell());
             assert!(matches!(o, Outcome::Clean { .. }), "{:?}", render(&o));
             if seed == 2 {
@@ -242,8 +244,10 @@ fn a_hoisted_worldshape_is_not_re_run_per_cell() {
     );
     let before = crate::drive_frozen::frozen_calls();
     for seed in 0..3 {
-        let o = crate::run_one_behind(&spec(Walk::Randtrace, 20, Some(seed)), &reg, &shape)
-            .expect("the run completes").outcome;
+        let o =
+            crate::run_one_behind(&spec(Walk::Randtrace, 20, Some(seed)), &reg, &shape, &Reference::Frozen)
+                .expect("the run completes")
+                .outcome;
         assert!(matches!(o, Outcome::Clean { .. }), "seed {seed}: {:?}", render(&o));
     }
     let asked = crate::drive_frozen::frozen_calls() - before;
@@ -268,8 +272,9 @@ fn matrix_jobs_do_not_change_the_result_or_its_order() {
     let specs: Vec<crate::RunSpec> = (0..6)
         .map(|s| spec(Walk::Randtrace, 20, Some(s)))
         .collect();
-    let serial = crate::matrix::run_seeds(&specs, &reg, &shape, 1).expect("serial");
-    let parallel = crate::matrix::run_seeds(&specs, &reg, &shape, 4).expect("parallel");
+    let serial = crate::matrix::run_seeds(&specs, &reg, &shape, 1, &Reference::Frozen).expect("serial");
+    let parallel =
+        crate::matrix::run_seeds(&specs, &reg, &shape, 4, &Reference::Frozen).expect("parallel");
     let cells = |v: &[crate::Run]| v.iter().map(|r| r.outcome.cell()).collect::<Vec<_>>();
     let walks = |v: &[crate::Run]| v.iter().map(|r| r.walk.clone()).collect::<Vec<_>>();
     println!("jobs 1: {:?}\njobs 4: {:?}", cells(&serial), cells(&parallel));
@@ -567,8 +572,9 @@ fn worldshape_agrees_on_both_slice_1_worlds() {
 fn the_feud_trace_agrees_record_for_record() {
     let reg = load_register().expect("the register loads");
     for world in ["feud", "bigfeud"] {
-        let o = run_one(&feud_spec(world, Walk::Trace, 24, None), &reg)
-            .expect("the run completes").outcome;
+        let o = run_one(&feud_spec(world, Walk::Trace, 24, None), &reg, &Reference::Frozen)
+            .expect("the run completes")
+            .outcome;
         println!("{world} trace: {}", o.cell());
         assert!(
             matches!(o, Outcome::Clean { .. }),
@@ -583,8 +589,9 @@ fn the_feud_randtrace_agrees_over_a_seed_sweep() {
     let reg = load_register().expect("the register loads");
     for world in ["feud", "bigfeud"] {
         for seed in 0..4 {
-            let o = run_one(&feud_spec(world, Walk::Randtrace, 50, Some(seed)), &reg)
-                .expect("the run completes").outcome;
+            let o = run_one(&feud_spec(world, Walk::Randtrace, 50, Some(seed)), &reg, &Reference::Frozen)
+                .expect("the run completes")
+                .outcome;
             println!("{world} randtrace seed {seed}: {}", o.cell());
             assert!(
                 matches!(o, Outcome::Clean { .. }),
@@ -642,7 +649,9 @@ fn worldshape_agrees_on_the_intrigue_world() {
 #[test]
 fn the_intrigue_trace_agrees_record_for_record() {
     let reg = load_register().expect("the register loads");
-    let o = run_one(&intrigue_spec(Walk::Trace, 24, None), &reg).expect("the run completes").outcome;
+    let o = run_one(&intrigue_spec(Walk::Trace, 24, None), &reg, &Reference::Frozen)
+        .expect("the run completes")
+        .outcome;
     println!("intrigue trace: {}", o.cell());
     assert!(
         matches!(o, Outcome::Clean { .. }),
@@ -655,8 +664,9 @@ fn the_intrigue_trace_agrees_record_for_record() {
 fn the_intrigue_randtrace_agrees_over_a_seed_sweep() {
     let reg = load_register().expect("the register loads");
     for seed in 0..4 {
-        let o = run_one(&intrigue_spec(Walk::Randtrace, 50, Some(seed)), &reg)
-            .expect("the run completes").outcome;
+        let o = run_one(&intrigue_spec(Walk::Randtrace, 50, Some(seed)), &reg, &Reference::Frozen)
+            .expect("the run completes")
+            .outcome;
         println!("intrigue randtrace seed {seed}: {}", o.cell());
         assert!(
             matches!(o, Outcome::Clean { .. }),
