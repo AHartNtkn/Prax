@@ -171,7 +171,7 @@ pub fn rand_walk(st: &mut State, em: Emit, mode: Mode, cap: i64, seed0: u64) -> 
         // when `k == 0` before consulting `ending`/`living` (both side-effect
         // free reads), exactly as the former inline checks did.
         let ending = ending_reached(st);
-        let living = st.living_characters().len();
+        let living = st.living_character_count();
         if let Some(rs) = prax_core::stress::pre_advance_stop(k, ending, living, passes) {
             // The go-loop decision is single-sourced in prax_core::stress ([P8]);
             // map it to the comparator's wire-reason `Stop` for the record.

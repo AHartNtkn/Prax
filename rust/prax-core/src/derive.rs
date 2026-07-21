@@ -37,11 +37,11 @@
 use smallvec::SmallVec;
 
 use crate::db::{Bindings, Db, ground};
-use crate::el::{leq, meet};
 use crate::error::WorldError;
 use crate::interner::{Interner, Sym};
 use crate::path::{CompiledPath, tokenize};
 use crate::query::{CmpOp, Cond, Condition, compile_condition, query, read_anchors};
+use crate::relevance::may_unify_syms;
 
 /// A detected contradiction (`⊥`): the rendered head sentence whose assertion
 /// was incompatible with the model (`Prax.Derive.Contradiction`). The string is
@@ -75,6 +75,14 @@ pub struct CompiledRule {
     body: Vec<Cond>,
     heads: Vec<CompiledPath>,
     kind: RuleKind,
+    /// Every db path the body reads, at any polarity ([`read_anchors`]) — computed
+    /// once here so the semi-naive loop can skip a rule in a round whose delta
+    /// touches none of them. Within a single closure the model only grows, so a
+    /// rule newly-derives a fact only when a fact added last round may-unifies one
+    /// of these anchors; a negation only tightens and a monotone threshold only
+    /// crosses when its counted set (a read anchor) gains a member. Empty means the
+    /// body reads no path (a degenerate constant/filter body): never skipped.
+    read_anchors: Vec<SmallVec<[Sym; 6]>>,
 }
 
 impl CompiledRule {
@@ -96,7 +104,13 @@ impl CompiledRule {
             .map(|h| tokenize(interner, h))
             .collect::<Result<_, _>>()?;
         let kind = classify(&body);
-        Ok(CompiledRule { body, heads, kind })
+        let read_anchors = read_anchors(&body);
+        Ok(CompiledRule {
+            body,
+            heads,
+            kind,
+            read_anchors,
+        })
     }
 }
 
@@ -157,16 +171,96 @@ fn render_head(interner: &Interner, head: &CompiledPath) -> String {
 /// (`Prax.Derive.entailed`: `leq m (insertToks h emptyDb)`)? The round's
 /// entailed heads are dropped before the meet-fold, against the ROUND-START model.
 fn entailed(model: &Db, head: &CompiledPath) -> bool {
-    leq(model, &Db::empty().insert(head))
+    // `leq(model, Db::empty().insert(head))` specialised to one grounded path and
+    // walked WITHOUT building the singleton Db (the closure's hottest allocation:
+    // one throwaway chain per candidate head per round). The singleton is a linear
+    // chain whose node for segment `i` carries `excl = head.is_excl_after(i)` and
+    // whose LEAF alone is asserted; `leq` then demands, at each level, a model node
+    // at least as exclusive (Excl ≤ Multi) and — at the leaf — asserted. Interior
+    // singleton nodes are unasserted, so their assertedness clause is vacuous. The
+    // `entailed_matches_leq_singleton` proptest pins this against the general `leq`.
+    let mut node = model;
+    let n = head.segs.len();
+    for (i, &seg) in head.segs.iter().enumerate() {
+        let Some(child) = node.child(seg) else {
+            return false;
+        };
+        if head.is_excl_after(i) && !child.is_excl() {
+            return false;
+        }
+        if i + 1 == n && !child.is_asserted() {
+            return false;
+        }
+        node = child;
+    }
+    true
 }
 
 /// Meet a single grounded head into the model — MEET semantics (`⊥` on a second
 /// distinct child under an exclusive node, assertedness OR-joined), NOT insert
 /// semantics (no sibling clearing). `None` is the paper's `⊥` (`Prax.Derive.meetOne`,
-/// via `Prax.EL.meet`). The direct-walk optimization is banked (measure first,
-/// ARCHITECTURE.md).
+/// via `Prax.EL.meet`).
+///
+/// The banked direct-walk optimization (ARCHITECTURE.md): `meet(model,
+/// singleton(head))` touches ONLY the head's path, yet the general [`meet`] both
+/// materialises the singleton Db AND clones the model's whole child vector at
+/// every level. [`meet_head`] path-copies just the head's spine — sharing every
+/// untouched subtree — so a derived head meet is O(head depth × local width)
+/// rather than O(model width). Pinned bit-for-bit against the general `meet` by
+/// `meet_head_matches_general_meet`.
 fn meet_one(model: &Db, head: &CompiledPath) -> Option<Db> {
-    meet(model, &Db::empty().insert(head))
+    meet_head(model, head, 0)
+}
+
+/// Meet the head-singleton's `segs[i]` child into `node` (a model subtree),
+/// path-copying `node` and recursing down the spine. Only called at the root
+/// (`i == 0`), where `node` is never exclusive, so the root's own `⊥` check is
+/// vacuous; interior/leaf `⊥` is handled in [`meet_head_node`].
+fn meet_head(node: &Db, head: &CompiledPath, i: usize) -> Option<Db> {
+    let seg = head.segs[i];
+    let met_child = match node.child(seg) {
+        Some(existing) => meet_head_node(existing, head, i)?,
+        None => head_subchain(head, i),
+    };
+    let mut kids: Vec<(Sym, Db)> = node.kids().iter().filter(|(s, _)| *s != seg).cloned().collect();
+    kids.push((seg, met_child));
+    Some(Db::from_parts(node.is_excl(), node.is_asserted(), kids))
+}
+
+/// Meet the head-singleton node at depth `i` into the model node `existing` for
+/// `segs[i]`: OR-join `excl`/`asserted`, merge the singleton's single child
+/// (`segs[i+1]`, unless this is the leaf), and report `⊥` when an exclusive node
+/// is left with more than one child — exactly [`meet`]'s per-node rule.
+fn meet_head_node(existing: &Db, head: &CompiledPath, i: usize) -> Option<Db> {
+    let excl = existing.is_excl() || head.is_excl_after(i);
+    let asserted = existing.is_asserted() || (i + 1 == head.segs.len());
+    let mut kids: Vec<(Sym, Db)> = existing.kids().to_vec();
+    if i + 1 < head.segs.len() {
+        let seg1 = head.segs[i + 1];
+        let met = match existing.child(seg1) {
+            Some(c) => meet_head_node(c, head, i + 1)?,
+            None => head_subchain(head, i + 1),
+        };
+        kids.retain(|(s, _)| *s != seg1);
+        kids.push((seg1, met));
+    }
+    if excl && kids.len() > 1 {
+        return None;
+    }
+    Some(Db::from_parts(excl, asserted, kids))
+}
+
+/// The head-singleton's subtree rooted at `segs[j]` (no model node to meet with):
+/// the bare chain `segs[j..]` with each node's `excl = head.is_excl_after(k)` and
+/// only the leaf asserted — exactly what `Db::empty().insert(head)` builds below
+/// `segs[j]`.
+fn head_subchain(head: &CompiledPath, j: usize) -> Db {
+    let n = head.segs.len();
+    let mut node = Db::from_parts(head.is_excl_after(n - 1), true, Vec::new());
+    for k in (j..n - 1).rev() {
+        node = Db::from_parts(head.is_excl_after(k), false, vec![(head.segs[k + 1], node)]);
+    }
+    node
 }
 
 /// Close a base [`Db`] under a set of [`CompiledRule`]s: apply the rules to a
@@ -182,7 +276,9 @@ pub fn close(
     if rules.is_empty() {
         return Ok(base.clone());
     }
-    run(interner, rules, base.clone(), base.clone())
+    // From scratch: round 1 must evaluate every rule (the whole base is the delta),
+    // so pass `None` — the round-delta gate engages only from round 2 on.
+    run(interner, rules, base.clone(), base.clone(), None)
 }
 
 /// Continue an ALREADY-CLOSED model with new base `facts`: the frozen
@@ -216,7 +312,9 @@ pub fn close_from(
     if rules.is_empty() {
         return Ok(model);
     }
-    run(interner, rules, model, delta)
+    // Continuation: the inserted facts ARE the round-1 delta, so only the rules
+    // they can reach need evaluating — the crux of the continuation tier's speed.
+    run(interner, rules, model, delta, Some(facts.to_vec()))
 }
 
 /// The semi-naive fixpoint loop, shared by [`close`] and [`close_from`]. Each
@@ -231,10 +329,31 @@ fn run(
     rules: &[CompiledRule],
     mut model: Db,
     mut delta: Db,
+    delta_facts: Option<Vec<CompiledPath>>,
 ) -> Result<Db, Contradiction> {
+    // The ground facts added last round, for the per-rule delta gate. `None` in
+    // round 1 of a from-scratch closure means "the delta is everything" — no rule
+    // is gated. From round 2 on this is the previous round's fresh facts.
+    let mut delta_facts = delta_facts;
     loop {
         let mut fresh: Vec<(String, CompiledPath)> = Vec::new();
         for rule in rules {
+            // Semi-naive gate: a rule can only newly-fire this round if a fact
+            // added last round may-unifies one of its read anchors. Skipping the
+            // rest is exact — their bindings are unchanged from last round, where
+            // their heads were already entailed (a rule with no read anchors reads
+            // no path, so it is never gated). The gate reuses the engine router's
+            // own [`may_unify_syms`] relevance predicate.
+            if let Some(df) = delta_facts.as_deref()
+                && !rule.read_anchors.is_empty()
+                && !df.iter().any(|f| {
+                    rule.read_anchors
+                        .iter()
+                        .any(|a| may_unify_syms(&f.segs, a))
+                })
+            {
+                continue;
+            }
             for b in rule_bindings(interner, rule, &model, &delta) {
                 for h in &rule.heads {
                     let g = ground_head(interner, h, &b);
@@ -259,6 +378,7 @@ fn run(
         for (_, g) in &fresh {
             next_delta = next_delta.insert(g);
         }
+        let next_facts: Vec<CompiledPath> = fresh.iter().map(|(_, g)| g.clone()).collect();
 
         // Meet each fresh head into the model; the first ⊥ is the name-least one.
         let mut next_model = model;
@@ -270,6 +390,7 @@ fn run(
         }
         model = next_model;
         delta = next_delta;
+        delta_facts = Some(next_facts);
     }
 }
 
@@ -863,5 +984,177 @@ mod tests {
             ),
             "Eq over Match-bound names stays monotone"
         );
+    }
+}
+
+#[cfg(test)]
+mod optimization_laws {
+    //! The two perf-motivated transforms in this module, pinned so a semantic
+    //! regression reddens locally rather than only in a downstream differential:
+    //! (1) the allocation-free [`entailed`] equals the general
+    //! `leq(model, Db::empty().insert(head))` it replaced; (2) the per-round
+    //! delta gate in [`run`] leaves the closure identical to an ungated run.
+    use super::*;
+    use crate::el::{leq, meet};
+    use crate::interner::Interner;
+    use proptest::prelude::*;
+
+    fn seg() -> impl Strategy<Value = String> {
+        prop::sample::select(vec!["a", "b", "c", "d"]).prop_map(String::from)
+    }
+
+    /// A random ground path of 1–4 segments with `.`/`!` separators.
+    fn path_str() -> impl Strategy<Value = String> {
+        prop::collection::vec((seg(), prop::bool::ANY), 1..5).prop_map(|parts| {
+            let mut s = String::new();
+            for (idx, (name, bang)) in parts.iter().enumerate() {
+                if idx > 0 {
+                    s.push(if *bang { '!' } else { '.' });
+                }
+                s.push_str(name);
+            }
+            s
+        })
+    }
+
+    fn build(interner: &mut Interner, facts: &[String]) -> Db {
+        let mut db = Db::empty();
+        for f in facts {
+            db = db.insert_str(interner, f).unwrap();
+        }
+        db
+    }
+
+    proptest! {
+        /// [`entailed`] is exactly `leq` against the head's singleton model, over
+        /// arbitrary models and heads (`!`/`.` and assertedness varied).
+        #[test]
+        fn entailed_matches_leq_singleton(
+            facts in prop::collection::vec(path_str(), 0..8),
+            head_s in path_str(),
+        ) {
+            let mut i = Interner::new();
+            let model = build(&mut i, &facts);
+            let head = tokenize(&mut i, &head_s).unwrap();
+            let singleton = Db::empty().insert(&head);
+            prop_assert_eq!(entailed(&model, &head), leq(&model, &singleton));
+        }
+
+        /// [`meet_one`]'s path-copy `meet_head` equals the general
+        /// `meet(model, Db::empty().insert(head))` it replaced — both the ⊥ status
+        /// and, when defined, the resulting model — over arbitrary models and heads.
+        #[test]
+        fn meet_head_matches_general_meet(
+            facts in prop::collection::vec(path_str(), 0..8),
+            head_s in path_str(),
+        ) {
+            let mut i = Interner::new();
+            let model = build(&mut i, &facts);
+            let head = tokenize(&mut i, &head_s).unwrap();
+            let singleton = Db::empty().insert(&head);
+            match (meet_one(&model, &head), meet(&model, &singleton)) {
+                (Some(a), Some(b)) => {
+                    prop_assert_eq!(a.to_labeled_sentences(&i), b.to_labeled_sentences(&i));
+                }
+                (None, None) => {}
+                (a, b) => prop_assert!(
+                    false, "meet_head ⊥-status differs: {:?} vs {:?}",
+                    a.map(|d| d.to_labeled_sentences(&i)),
+                    b.map(|d| d.to_labeled_sentences(&i)),
+                ),
+            }
+        }
+    }
+
+    /// The naive full-query oracle with the SAME loop as [`run`] but the delta
+    /// gate forced OFF (`delta_facts = None` every round) — the reference the
+    /// gated `run` must match fact-for-fact.
+    fn run_ungated(
+        interner: &mut Interner,
+        rules: &[CompiledRule],
+        mut model: Db,
+        mut delta: Db,
+    ) -> Result<Db, Contradiction> {
+        loop {
+            let mut fresh: Vec<(String, CompiledPath)> = Vec::new();
+            for rule in rules {
+                for b in rule_bindings(interner, rule, &model, &delta) {
+                    for h in &rule.heads {
+                        let g = ground_head(interner, h, &b);
+                        if !entailed(&model, &g) {
+                            fresh.push((render_head(interner, &g), g));
+                        }
+                    }
+                }
+            }
+            if fresh.is_empty() {
+                return Ok(model);
+            }
+            fresh.sort_by(|a, b| a.0.cmp(&b.0));
+            fresh.dedup_by(|a, b| a.0 == b.0);
+            let mut next_delta = Db::empty();
+            for (_, g) in &fresh {
+                next_delta = next_delta.insert(g);
+            }
+            let mut next_model = model;
+            for (name, g) in &fresh {
+                next_model = match meet_one(&next_model, g) {
+                    Some(m) => m,
+                    None => return Err(Contradiction(name.clone())),
+                };
+            }
+            model = next_model;
+            delta = next_delta;
+        }
+    }
+
+    fn cond_m(s: &str) -> Condition {
+        Condition::Match(s.to_owned())
+    }
+
+    proptest! {
+        /// The delta-gated [`close_from`] equals an ungated continuation over a
+        /// transitive rule set (`a→b→c→d`) and arbitrary base + continuation
+        /// facts — the gate must never drop a derivation.
+        #[test]
+        fn gated_close_from_equals_ungated(
+            base_facts in prop::collection::vec(path_str(), 0..6),
+            cont_facts in prop::collection::vec(path_str(), 0..4),
+        ) {
+            let mut i = Interner::new();
+            // A transitive chain plus a join, so later rounds genuinely fire.
+            let rules = vec![
+                CompiledRule::compile(&mut i, &[cond_m("a.X")], &["b.X"]).unwrap(),
+                CompiledRule::compile(&mut i, &[cond_m("b.X")], &["c.X"]).unwrap(),
+                CompiledRule::compile(&mut i, &[cond_m("c.X"), cond_m("d.X")], &["e.X"]).unwrap(),
+            ];
+            let base = build(&mut i, &base_facts);
+            // A self-contradictory base is off-topic here (the continuation tier's
+            // precondition is a consistent closed model); skip it.
+            let Ok(closed) = close(&mut i, &rules, &base) else {
+                return Ok(());
+            };
+            let cont: Vec<CompiledPath> =
+                cont_facts.iter().map(|f| tokenize(&mut i, f).unwrap()).collect();
+
+            // Gated continuation (production path).
+            let gated = close_from(&mut i, &rules, &closed, &cont);
+            // Ungated reference: the same starting model/delta, gate off.
+            let mut model = closed.clone();
+            let mut d = Db::empty();
+            for f in &cont {
+                model = model.insert(f);
+                d = d.insert(f);
+            }
+            let ungated = run_ungated(&mut i, &rules, model, d);
+
+            match (gated, ungated) {
+                (Ok(g), Ok(u)) => {
+                    prop_assert_eq!(g.to_labeled_sentences(&i), u.to_labeled_sentences(&i));
+                }
+                (Err(g), Err(u)) => prop_assert_eq!(g, u),
+                (g, u) => prop_assert!(false, "gate changed ⊥ status: {:?} vs {:?}", g, u),
+            }
+        }
     }
 }

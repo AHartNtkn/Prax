@@ -276,7 +276,7 @@ pub fn query(
 /// extension into `out` (`Prax.Query.evalCookedCond`, case for case).
 fn eval_cond(interner: &mut Interner, db: &Db, cond: &Cond, b: Bindings, out: &mut Vec<Bindings>) {
     match cond {
-        Cond::Match(segs) => out.extend(db.unify(interner, segs, b)),
+        Cond::Match(segs) => db.unify_into(interner, segs, b, out),
         Cond::Not(segs) => {
             if db.unify(interner, segs, b.clone()).is_empty() {
                 out.push(b);

@@ -152,7 +152,7 @@ pub fn run_random(st0: &State, cap: i64, seed: u64, family: Option<&str>) -> Run
     let mut turns: i64 = 0;
     loop {
         let ending = ending_reached(&mut st);
-        let living = st.living_characters().len();
+        let living = st.living_character_count();
         if let Some(stop) = pre_advance_stop(k, ending.clone(), living, passes) {
             let ending = match &stop {
                 RunStop::Cap => ending,

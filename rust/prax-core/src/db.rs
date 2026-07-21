@@ -143,7 +143,7 @@ impl Db {
     }
 
     /// The child under segment `k`, if present.
-    fn child(&self, k: Sym) -> Option<&Db> {
+    pub(crate) fn child(&self, k: Sym) -> Option<&Db> {
         kid_index(&self.0.kids, k)
             .ok()
             .map(|idx| &self.0.kids[idx].1)
@@ -306,35 +306,69 @@ impl Db {
         segs: &[Sym],
         bindings: Bindings,
     ) -> Vec<Bindings> {
+        let mut out = Vec::new();
+        self.unify_into(interner, segs, bindings, &mut out);
+        out
+    }
+
+    /// [`unify`](Db::unify) that APPENDS its bindings to `out` rather than
+    /// returning a fresh `Vec` — the query layer's [`Cond::Match`] threads through
+    /// here, so a conjunct's results land straight in the accumulator with no
+    /// intermediate allocation or copy. Order is identical to [`unify`]'s.
+    pub fn unify_into(
+        &self,
+        interner: &mut Interner,
+        segs: &[Sym],
+        bindings: Bindings,
+        out: &mut Vec<Bindings>,
+    ) {
         let mut worlds: Vec<(Db, Bindings)> = vec![(self.clone(), bindings)];
         for &sym in segs {
-            let mut next: Vec<(Db, Bindings)> = Vec::new();
+            let mut next: Vec<(Db, Bindings)> = Vec::with_capacity(worlds.len());
             for (db, b) in worlds {
                 if sym.is_var() {
                     match b.get(sym) {
                         Some(v) => {
+                            // Bound variable: descend deterministically; the binding
+                            // is unchanged, so MOVE it (no clone).
                             let key = val_to_sym(interner, v);
                             if let Some(sub) = db.child(key) {
-                                next.push((sub.clone(), b.clone()));
+                                next.push((sub.clone(), b));
                             }
                         }
                         None => {
-                            let mut kids: Vec<(Sym, Db)> = db.0.kids.to_vec();
-                            kids.sort_by(|(a, _), (c, _)| interner.cmp_by_name(*a, *c));
-                            for (k, sub) in kids {
-                                let mut b2 = b.clone();
-                                b2.insert(sym, Val::Sym(k));
-                                next.push((sub, b2));
+                            // Unbound variable: branch over children IN NAME ORDER.
+                            // Sort child INDICES (not a cloned child vector) to avoid
+                            // an owned `(Sym, Db)` copy of every child per node, and
+                            // MOVE `b` into the final branch (clone only the rest).
+                            let kids = &db.0.kids;
+                            let mut order: SmallVec<[usize; 8]> = (0..kids.len()).collect();
+                            order.sort_by(|&x, &y| interner.cmp_by_name(kids[x].0, kids[y].0));
+                            if let Some((&last_idx, rest)) = order.split_last() {
+                                for &idx in rest {
+                                    let (k, sub) = &kids[idx];
+                                    let mut b2 = b.clone();
+                                    b2.insert(sym, Val::Sym(*k));
+                                    next.push((sub.clone(), b2));
+                                }
+                                let (k, sub) = &kids[last_idx];
+                                let mut b = b;
+                                b.insert(sym, Val::Sym(*k));
+                                next.push((sub.clone(), b));
                             }
                         }
                     }
                 } else if let Some(sub) = db.child(sym) {
-                    next.push((sub.clone(), b.clone()));
+                    // Constant segment: the binding is unchanged, so MOVE it.
+                    next.push((sub.clone(), b));
                 }
             }
             worlds = next;
         }
-        worlds.into_iter().map(|(_, b)| b).collect()
+        out.reserve(worlds.len());
+        for (_, b) in worlds {
+            out.push(b);
+        }
     }
 
     /// Whether any node exists at the given (constant) path — `Prax.Db.exists`,

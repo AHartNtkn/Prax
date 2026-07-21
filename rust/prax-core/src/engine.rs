@@ -1107,6 +1107,17 @@ impl State {
             .map(|(c, _)| c.clone())
             .collect()
     }
+    /// How many cast members have no `dead.<name>` mark in the BASE db — the
+    /// extinction test's count, without materialising and cloning the surviving
+    /// [`Character`] structs [`living_characters`](State::living_characters) would
+    /// (the random walk's per-turn stop check needs only this number).
+    pub fn living_character_count(&mut self) -> usize {
+        let names: Vec<String> = self.defs.characters.iter().map(|c| c.name.clone()).collect();
+        names
+            .iter()
+            .filter(|n| !self.db_has(&crate::types::dead_sentence(n)))
+            .count()
+    }
     /// A binding row rendered by name, in NAME order (never the run-dependent
     /// `Sym` id order) — the oracle's `bindingJSON`.
     pub fn render_bindings(&self, b: &Bindings) -> BTreeMap<String, String> {
