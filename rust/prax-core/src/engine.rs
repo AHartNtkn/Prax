@@ -1145,6 +1145,68 @@ impl State {
     pub fn with_intentions(&mut self, intentions: BTreeMap<String, Intention>) {
         self.rt.intentions = Arc::new(intentions);
     }
+
+    // ---- persist support (`Prax.Persist`, S9) -------------------------------
+    //
+    // Read/write access the serializer needs. Every `Sym` crosses the file
+    // boundary by NAME and is re-interned on load ([S-I1] re-intern hazard):
+    // `interner` resolves outbound, `intern_name` mints inbound, so a reloaded
+    // `GroundedAction`'s bindings compare content-canonically against freshly
+    // computed candidates under the reloaded world's monotonic interner.
+
+    /// The interner, for resolving a saved value's symbols to names on write.
+    pub(crate) fn interner(&self) -> &Interner {
+        &self.interner
+    }
+    /// Intern a name into THIS state's interner (re-interning a saved symbol on
+    /// load), through `Arc::make_mut` like every other writer.
+    pub(crate) fn intern_name(&mut self, name: &str) -> Sym {
+        Arc::make_mut(&mut self.interner).intern(name)
+    }
+    /// The declared schedule rules, for validating a reloaded due's rule name
+    /// (`Prax.Persist`'s `srName` re-association check).
+    pub(crate) fn schedule_rules(&self) -> &[ScheduleRule] {
+        &self.defs.schedule
+    }
+    /// Set the round-robin cursor on load (persist replaces the whole runtime).
+    pub(crate) fn set_cursor_loaded(&mut self, cursor: i32) {
+        self.rt.cursor = cursor;
+    }
+    /// Set the die's stream position raw on load — NOT [`State::seed_die`],
+    /// which re-validates `SEED_BOUNDS`; a saved position is already a legal
+    /// stream state and must round-trip exactly, including `None` (unseeded).
+    pub(crate) fn set_rng_seed_loaded(&mut self, seed: Option<i64>) {
+        self.rt.rng_seed = seed;
+    }
+    /// Replace the schedule dues wholesale on load.
+    pub(crate) fn replace_schedule_dues(&mut self, dues: BTreeMap<String, i64>) {
+        self.rt.schedule_dues = dues;
+    }
+    /// Replace the expiry queue on load from labeled sentences (`!`/`.` bearing),
+    /// re-tokenizing each into its `CompiledPath` key. Loud on a malformed path.
+    pub(crate) fn replace_expiries_from_labeled(
+        &mut self,
+        entries: &[(String, i64)],
+    ) -> Result<(), WorldError> {
+        let interner = Arc::make_mut(&mut self.interner);
+        let mut map = FxHashMap::default();
+        for (sentence, turn) in entries {
+            let path = tokenize(interner, sentence)?;
+            map.insert(path, *turn);
+        }
+        self.rt.expiries = map;
+        Ok(())
+    }
+    /// The expiry queue as labeled sentences (`!`/`.` preserved) paired with
+    /// their due boundary — the save's `expiry` lines. Ordering is incidental
+    /// (`CompiledPath` has no `Ord`); the round trip is set-equal.
+    pub(crate) fn expiries_labeled(&self) -> Vec<(String, i64)> {
+        self.rt
+            .expiries
+            .iter()
+            .map(|(k, v)| (ground(&self.interner, k, &Bindings::new()), *v))
+            .collect()
+    }
 }
 
 /// Fork-perform: apply a grounded action's effects to a runtime in place

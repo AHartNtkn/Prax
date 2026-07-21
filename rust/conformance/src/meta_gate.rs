@@ -73,6 +73,7 @@ mod gate {
         "JsonSpec.hs",
         // S9 (the authoring tools + the last audit before deletion):
         "AnalysisTableSpec.hs",
+        "PersistSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {

@@ -24,6 +24,7 @@ pub mod loop_advance;
 pub mod loop_bar;
 pub mod meta_gate;
 pub mod npc_replay;
+pub mod persist_spec;
 pub mod planner_replay;
 pub mod schedule_rule_spec;
 pub mod script_json_spec;

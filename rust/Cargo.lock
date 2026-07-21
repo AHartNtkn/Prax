@@ -156,6 +156,8 @@ version = "0.1.0"
 dependencies = [
  "proptest",
  "rustc-hash",
+ "serde",
+ "serde_json",
  "smallvec",
  "thiserror",
 ]

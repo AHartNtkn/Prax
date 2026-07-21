@@ -10,6 +10,8 @@ description = "The Prax engine: interner, exclusion-logic DB, closure, query, pl
 smallvec = { workspace = true }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [features]
 # The test-only naive-closure oracle (derive::naive_closure), asserted equal to
