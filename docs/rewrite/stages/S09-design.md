@@ -1,0 +1,149 @@
+# S9 design — TypeCheck + AnalysisTable + Persist + Stress + Inspect + the CLI: the authoring tools, and the last audit before deletion (panel input; agent-side)
+
+Frozen reference: `src/Prax/{TypeCheck,Persist,Stress,Inspect}.hs`, `src/Prax/Relevance.hs`'s `producibleAtoms`, `app/Main.hs` (the `play`/`stress`/`check`/`flow`/`dump-play` arms + the interactive loop), `test/Prax/{TypeCheckSpec,AnalysisTableSpec,PersistSpec,StressSpec,GateSpec}.hs`, and the already-additive `oracle/TraceMain.hs` `check`/`worldshape` subcommands. Builds on S1–S8. Scope: `rust/prax-core/src/{typecheck,persist}.rs` (both doc-header stubs today), a stress aggregator reusing `prax-oracle/src/walk.rs`, a small `inspect.rs`, `rust/prax-cli/src/main.rs` (a 12-line stub today), `rust/conformance/src/{typecheck_spec,analysis_table_spec,persist_spec,stress_spec}.rs` + the GateSpec `.rs`-scanner half, and two additive `oracle/` subcommands (`stress`; `check` already exists). NOT in scope: hardening, the 500-seed matrix, the perf table, the demo (all S10).
+
+S9 is a grind stage with one genuine design pivot inside it: **every net standing at S9-DONE that only asserts equal-to-frozen evaporates at the S10 deletion.** S8 started the cut-over audit for its own surface; S9 must FINISH it program-wide, because after S9 there is nothing between here and the deletion commit but hardening. That audit (§8) is a first-class deliverable, not a footnote. The rest is: one static checker (the largest single module in the tree), one serializer, two small tools, and a real CLI.
+
+**Count correction up front:** the frozen `TypeCheck` module header says "nine in all" and defines **nine** `TypeError` constructors — `UnboundVar, CardinalityClash, UndefinedRef, SortConflict, ReservedFamily, SeedlessDraw, DeadCondition, DeonticUnclosed, CoercionUnmotivated`. The brief's "10" is a miscount; there is no tenth, and S9 must not invent one (a spurious constructor is a false-positive generator, and the module's whole charter is soundness — no false positives, so the report is trustworthy).
+
+## 1. TypeCheck — the static checker
+
+`pub fn type_check(st: &State) -> Vec<TypeError>` in `prax-core/src/typecheck.rs`, concatenating the nine checks in the frozen order (that order is observable only through a doubly-offending world's first error, which nothing frozen pins → a native ordering pin, §9). Empty ⇒ well-formed. Every shipped world satisfies `type_check == []` — that is the standing net — but the CHECKER's job is catching MALFORMED worlds, so the pins that exercise each verdict are mostly synthetic fixtures that SHOULD flag.
+
+### 1.1 What S4/S6 already built vs what S9 adds
+
+**Substrate already landed** (S9 consumes, does not rebuild): the reserved-family list is the world-INDEPENDENT `prax-core` constant `RESERVED_FAMILIES = ["turn","contradiction","scenePatience","currentScene"]` (already in `typecheck.rs`, resolved by the S8 [D-C2] ruling — no per-state door, no `reserved_families()` accessor, no growth); `engine_rule_names` (the v53 provenance list, door-written, in `Defs`); `may_unify_syms` and the outcome/condition walkers (`outcome_vars`, `condition_vars`, `outcome_sents`, S4/S2); `cooked_outcome_atoms` + `cooked_fn_pool` (born S6, §4 shared-forward); the analysis tables (`footprint`/`neg_footprint`/`axiom_heads`/`cont_monotone` from S4, `improvables`/`liveness`/`cares_about` from S6). The Defs already retain the authored sources (`practices`/`fns`/`axioms`/`characters`/`desires`/`schedule`/`sorts`) the checker scans.
+
+**What S9 adds**: the nine verdict passes and the ONE deferred primitive they need — `producible_atoms` (§1.2). Nothing else in prax-core changes.
+
+### 1.2 [R1] `producible_atoms` — the deferred-from-S6 primitive, and the dead-condition lint's whole foundation
+
+`producible_atoms(&State) -> Option<Vec<SmallVec<[Sym; 6]>>>` in `relevance.rs`, `pub(crate)`, verbatim from `Prax.Relevance.producibleAtoms`. It ranges over **everything the registered world can ever contain**: `cooked_outcome_atoms`' insert half over ALL practices' action outcomes AND init outcomes, PLUS ALL **schedule-rule** insert atoms (this is the one place that differs from S6's `world_atom_pools`, which is movers-only and schedule-free — the consumer here asks "can this fact EVER exist", and schedule-moved facts like `marketDay.*` and expiring feelings do exist), PLUS the initial db's facts (`db_to_sentences`), PLUS every axiom head (`cr_heads`, □-lifted forms included — heads count regardless of whether their rule can fire; conservative, which here only ever SILENCES the lint), PLUS `turn`, PLUS `contradiction`. `None` = wild: an unresolvable `Call` in any scanned outcome makes the whole pool opaque and **silences the dead-condition lint entirely** (soundness: an unknowable producer means no atom can be proven dead).
+
+The dead-condition pass: `Some(pool)` ⇒ for each `(loc, conds)` in `lint_sites`, each positive pattern `p` (top-level `CMatch`, or inside `CExists` — a dead positive there kills the Exists, killing the site), where `p` is **not** all-variable and **no** pool atom `may_unify`s it → `DeadCondition{loc, sentence}`. NOT flagged: negations, `Or` clauses, `Subquery` interiors, all-variable patterns (the last is load-bearing — `may_unify` discards the evidence-free overlap, so without the all-variable exemption the lint would flag exactly the patterns that can never be dead). `lint_sites` scans affordances/motives only — action conds, `ForEach`/`Roll` effect guards (recursively, over action/init/fn-case outcomes), fn-case conds, schedule-rule guards + their effect guards, desires, wants. **Axiom bodies are deliberately OUT of scope** (a rule library included wholesale routinely leaves rules inert — feud's kinAxioms, documented deliberate — and an unfireable rule is harmless).
+
+**Opinion / open item for the panel:** `producible_atoms` fidelity IS the dead-condition lint. It is the single most consequential S9 correctness surface, and it has NO differential channel that specifically exercises it except through `type_check`'s output (the oracle `check` subcommand, §1.4). It must carry its own native pins over the ScheduleRuleSpec/SightSpec fixtures that are precisely `type_check == []` because a schedule-fed guard IS producible — a wrong `producible_atoms` that dropped the schedule contribution would falsely flag those exact fixtures. That is the discriminating test, and it is one of the owed:S9 rows (§7).
+
+### 1.3 [R2] The reserved-family WRITE scan and the v53 provenance exemption
+
+`reserved_family_errors` scans `write_sites` (practice init/action outcomes, fn-case outcomes, and every AUTHORED schedule-rule body's outcomes) plus axiom heads; `writes_of` is insert/insert_for/delete recursing through `ForEach`/`Roll` (a `Call` writes nothing; a delete IS a write). `family_of s = head(path_names s) if ∈ RESERVED_FAMILIES`. **The v53 exemption lives in `write_sites`, exactly where the frozen puts it:** schedule rules whose `sr_name ∈ engine_rule_names` are dropped WHOLE — machinery is the sanctioned writer of the compiler families (the compiled `story` rule writes `currentScene`/`scenePatience`). The exemption lives on `write_sites` and NOT on `defs.schedule`, because `seedless_draw_errors` and the dead-condition lint read the schedule directly and MUST see the engine rules. `ending` is NOT reserved (Intrigue raw-authors `Insert "ending!…"` — shared world-facing vocabulary, two sanctioned writer classes).
+
+This discharges the ScheduleRuleSpec "flag/exempt verdict" owed:S9 row (§7): an authored rule writing `scenePatience` is flagged; the same body registered through the door is exempt.
+
+### 1.4 The differential — `check` already exists
+
+The frozen oracle ALREADY emits `check <world>` = `sort(map describe (typeCheck st0))` as a JSON array (`TraceMain.hs:846`). So **`type_check` has a live cross-engine channel over every shipped world for free**: `prax-oracle` gains a Rust `check` drive + a comparison (Value-vs-Value of the sorted describe array). But every shipped world is well-formed, so this channel only ever asserts `[] == []` — it proves the shipped worlds agree, not that the CHECKER discriminates. The discrimination lives in **native fixtures that SHOULD flag** (one per constructor), asserted against the Rust verdict directly; those fixtures are not shipped worlds and never reach the comparator. Two nets, two jobs — say so, and do NOT let the empty-agreement channel read as coverage of the verdict logic.
+
+The `describe` strings (`Main.hs:76-100`) are a cut-over equality criterion for `prax check` (§6): reproduce them byte-for-byte and commit a golden.
+
+## 2. AnalysisTable — NATIVE, the v41 representation-switch guard
+
+`AnalysisTableSpec` renders every derived table a world carries — `contMonotone`, `improvables`, `liveness`, `caresAbout`, `footprint`, `negFootprint`, `axiomHeads` — **one line per entry, in the exact emission order the state holds them**, and pins the whole rendering per world against captured pre-v41 literals. Order is part of the contract: the v41 cooked rewrite had to reproduce the old string-walkers' emission order, not just their sets.
+
+**[R3] Adjudication: NATIVE re-expression, not a differential target.** Every field it renders already exists in `Compiled` (S4 built footprint/neg_footprint/axiom_heads/cont_monotone; S6 built improvables/liveness/cares_about). The 7 world pins re-express as native Rust pins whose expected line-arrays are the frozen literals committed in the test file (the S7 [D-I1] pattern applied verbatim: these assert NAMED CONTENT — `clean-conscience`, `spites-carol`, `pursues-earnBread` — so a worldshape "equal-to-frozen" diff would invert the program's authority and evaporate at cut-over). `worldshape` DOES emit `improvables`/`liveness`/`caresAbout`/`axiom_heads` (an early, near-free localizer that turns a table divergence into a shape-time diff) — but it emits **NEITHER `footprint` NOR `negFootprint`**, so those two rows have no net but the native one. Ruling: the native AnalysisTableSpec re-expression is the durable pin; worldshape is a redundant slice-time localizer for the subset it happens to cover. It is NOT a new differential channel and needs no oracle extension.
+
+**Open item:** the `caresAbout` lines carry rendered action labels with `[Actor]`/`[Hearer]` placeholders and world-specific ordering (e.g. village's ten-entry `bob` list) — these are exactly the S6 `cares_about` table's `bearing_templates` walk output. If the S6 port reproduced them, this pin is green by construction; if not, this is where a `cares_about` ordering bug surfaces as a committed-literal mismatch. Verify the seven pins pass at slice start before treating the table as settled.
+
+## 3. Persist — the serializer; NO differential, round-trip is the invariant
+
+**[R4] Format is FREE; serializability is the invariant; there is NO cross-engine save compat (stated non-goal, PLAN.md).** Per ARCHITECTURE: serde JSON, versioned, facts as labeled sentences, loud version rejection. The Rust format is NOT the frozen line-format — it is serde JSON with its own version tag (`"prax-rs-state v1"`). The frozen `Persist` is line-oriented (`prax-state v4`); reproducing its bytes would be pointless (nothing loads a cross-engine save). So **there is no persist differential at all**: the net is Rust-internal round-trip + the frozen `PersistSpec` re-expressed as BEHAVIORAL pins over the Rust format.
+
+**[R5] What round-trips** (mirrors `Persist.hs`'s six-field save): `cursor`, `intentions`, `schedule_dues`, `expiries`, `rng_seed`; reloaded onto a freshly-constructed world of the same kind that supplies the rule bodies the dues re-associate to BY NAME. Practices/characters/wants/schedule DECLARATIONS are code, not saved. Facts serialize as labeled sentences (`labeled_facts`, `!`/`.` preserved so the reload rebuilds exclusion structure). `rng_seed` is present only for a seeded state (an unseeded save reloads as `None`). Dues whose name is not in the reloaded world's schedule are a LOUD error (a save from a since-changed world); a malformed line/field is loud; an unknown/foreign version tag is loud (the v3/v4 rejection-ladder stance — reproduce the STANCE, "no silent misparse of a save whose facts a freshly-constructed world no longer interprets", not the exact tag).
+
+**[R6] The S6 re-intern hazard [S-I1] discharges HERE, and it is the load-bearing part.** `intentions` serialize by NAME (`sym_name`), including the `GroundedAction`'s bindings and the `MotiveSignature`'s bearing/satisfaction-counts/live-desires/known-motives, and re-intern (`intern`) on load. The hazard S6 flagged forward: a resumed `Intention`'s `GroundedAction` must still compare-equal (`still_offered`'s FULL equality) against freshly-computed candidates after a fresh interner has minted new ids — sound iff equality is content-canonical under a monotonic interner, which S6 [S-I1] pinned load-bearing. The persist round-trip pin must be END-TO-END: reload, then assert `npc_act` acts on the stored intention WITHOUT re-deliberating. The two `CoerceSpec` owed rows (mid-racket save/resume, pending complied-expiry round-trip) and the `ScriptSpec` persistence-symmetry row (mid-scene `audience` save at boundary 2, reload, still reaches `dismissed` at absolute boundary 5) are exactly these end-to-end resume pins (§7). They RIDE `expiries` serialization — the ScriptSpec claim is that a patience marker is an ordinary fact whose pending expiry rides v44's due serialization, so a timed-scene save needs no Persist code of its own. That is the pin that proves the format is complete.
+
+Plus the banked `persist round-trip` proptest law (ARCHITECTURE): `deserialize(serialize(st)) == st` over generated states with non-empty intentions/dues/expiries/seed.
+
+## 4. Stress — the aggregator over the walk
+
+**[R7] `walk.rs` IS the walk; Stress is the aggregator.** `runRandom`'s generator (`lcg`/`pick`, MMIX) and `Stop` enum already live in `walk.rs` (S7). But the `runRandom` GO-LOOP itself (the `passes > living` dead-end rule, `endingReached`, `familyReached` coverage tracking, idle-pass-doesn't-spend-a-turn) currently lives in `drive_rust` (S7 §10 [M5] noted it would be re-derived here). S9 factors `runRandom(cap, seed, family, st) -> RunResult` into a shared home (reused by both the randtrace driver AND Stress) and adds the aggregator: `stress_test(runs, cap, family, st) -> StressReport` folding `runRandom` over `seedFor i = i*2654435761` for `i in 1..=runs`, tallying `endings`/`coverage`/`visited`/`dead_ends`/`no_ending`. The v46 stated dead-end limit (tolerates exactly one boundary of move-less progression) is transcribed as a documented bound, not fixed. `family` = the optional single-valued coverage family (the CLI passes `currentScene`; the module privileges nothing).
+
+**[R8] The differential: add an additive `oracle stress <world>`.** The frozen oracle has trace/randtrace/worldshape/check/fixtures but NO `stress`. The `stress`/`check` CLI outputs are named EQUAL in the PLAN cut-over criteria. Two nets:
+1. **Structural cross-engine**: an additive `oracle stress <world>` emitting the `StressReport` as canonical JSON (endings map, coverage size or set, visited map, dead-ends, no-ending count), compared Value-vs-Value. This exercises the aggregation, the many-seed family-coverage tracking, and the dead-end counter across the deterministic `seedFor` sweep — none of which the single-seed randtrace channel reaches. `~15` LOC on the frozen side.
+2. **CLI format golden**: `prax stress`'s exact stdout (`Main.hs:runStress`, `200 random runs, cap 50`) committed as a golden, byte-compared pre-deletion, surviving as a Rust-vs-own-golden.
+
+Because `runRandom` is `walk.rs`, the per-record STREAM is already the randtrace differential; the stress channel adds the aggregate, not new stream semantics.
+
+## 5. Inspect — small, library-only, native pins
+
+`first_failing(db, conds, b0) -> Option<Condition>` (the first prefix `take k conds` whose query empties the binding set) and `explain(st, actor, needle) -> Vec<String>` (per practice instance the action could apply to: AVAILABLE or "blocked by: <cond>"). Reuses the query evaluator; no engine changes. **[R9] Inspect is NOT a CLI subcommand** — `app/Main.hs` has no `explain`/`inspect` arm, so Inspect has NO cut-over equality criterion and NO differential; it is a library surface pinned only by the two `IntrigueSpec` owed rows (there is no `InspectSpec.hs` — the brief's file list is wrong on this one). Native pins: (a) the inspector explains the belief precondition (blocked before Cassia confides, AVAILABLE after) — asserted by SUBSTRING, matching the frozen pin's own content assertion, so the rendered `Condition` format is free; (b) an instantiated **zero-role** practice — instance fact is exactly `practice.<pid>`, and the instance query must NOT append a dangling separator (the v43 trailing-operator class); this is where the frozen `intercalate "." ("practice":pid:roles)` with empty roles matters, and the Rust must not emit `practice.<pid>.`.
+
+## 6. The CLI — `prax-cli`, a 12-line stub today
+
+Subcommands from `app/Main.hs`: `stress [world]`, `check [world]`, `dump-play`, `flow [file.json]`, `play [file.json]`, and default `play [world] [resume]`. **[R10] Cut-over equality, per-command, specified:**
+
+| cmd | durable net | pre-deletion equality mechanism |
+|---|---|---|
+| `check` | oracle `check` differential (§1.4) + native fixtures + `describe`-string golden | `prax check <w>` stdout byte-compared frozen-vs-rust |
+| `stress` | oracle `stress` differential (§4) + format golden | `prax stress <w>` stdout byte-compared |
+| `flow` | S8 native full-string `flow_chart` pin + committed golden | `prax flow` stdout byte-compared (S8 measured Mermaid rendering mechanical) |
+| `dump-play` | S8 encoder-bytes pin against `examples/play.json` (SHA256-committed) | `prax dump-play == examples/play.json` (S8 [R7] MEASURED byte-identical, 2122 bytes) |
+
+`check`/`stress`/`flow`/`dump-play` are the four PLAN names; each gets BOTH a structural/native durable net AND a committed stdout golden byte-compared while the frozen still lives. The goldens survive deletion; the frozen comparison does not.
+
+**[R11] `play` (interactive) + save/resume — what is testable without a human, and what defers to S10.** Testable now: (a) the resume path — `resume` ⇒ `load_state(save_file, fresh_world)`, i.e. Persist round-trip (§3), plus the save-point subtlety (`savePoint` is the state BEFORE advancing to the player, so resume replays `advance` and lands back on the player's turn) — a native pin; (b) `playerActions` filtering — `candidate_actions` minus pure no-ops (empty-outcome actions hidden from the player, kept for NPCs), and the practice-bound-player restriction (the drama manager sees only its bound practice's affordances) — a native pin. Deferred to the S10 demo (human-in-the-loop): the interactive menu rendering, stdin prompt parsing (`q`/`s`/`m`/`Pick n`), and `renderScene`'s cosmetic string assembly. `renderScene` is a large pure function over the view; it has NO frozen pin and NO cut-over criterion (it is not among check/stress/flow/dump-play), so it is demo-verified, not conformance-pinned — say so explicitly (do not quietly pin it and do not quietly drop it; it is the demo's surface).
+
+## 7. The owed discharges — after S9, owed is ZERO
+
+All **15** `owed:S9` KILLED rows discharge and are REMOVED (the exactly-once rule forces removal on re-expression); there are no `owed:S10` rows anywhere, so after S9-DONE the ledger owes nothing:
+
+| # | SpecFile | row | lands in |
+|---|---|---|---|
+| 1 | EngineSpec | build-order death (the `typeCheck`-equality clause) | typecheck_spec — `set_axioms` order-independence now asserted through `type_check` too |
+| 2–7 | GateSpec ×6 | the scanner + its four discriminators + the world-source gate | the `.rs`-scanner (§7.1) |
+| 8 | ScheduleRuleSpec | a schedule world is well-formed (`type_check == []`; dead-condition lint over a schedule-fed guard) | typecheck_spec |
+| 9 | ScheduleRuleSpec | authored reserved-family write flagged; same body via door exempt (v53 verdict) | typecheck_spec (§1.3) |
+| 10 | SightSpec | the sighting fixture is well-formed | typecheck_spec |
+| 11 | IntrigueSpec | inspector explains (un)availability | inspect (§5) |
+| 12 | IntrigueSpec | inspector handles a zero-role practice | inspect (§5) |
+| 13 | CoerceSpec | mid-racket save/resume (group) | persist_spec (§3, end-to-end resume) |
+| 14 | CoerceSpec | pending complied-expiry round-trips, cycle resumes | persist_spec |
+| 15 | ScriptSpec | mid-scene save/resume reaches the same boundary (persistence symmetry) | persist_spec |
+
+**Allowlist growth**: `TypeCheckSpec` (56 labels), `AnalysisTableSpec` (8), `PersistSpec` (22), `StressSpec` (6), and the GateSpec scanner half (its 6 owed rows). No `InspectSpec` file exists — the two Inspect pins are re-expressed inside the already-allowlisted `IntrigueSpec` and their KILLED rows removed. ≈ **92 new allowlist labels + 15 KILLED removals**. Each native pin states in-file why it carries no frozen label (the `coerce.rs` precedent).
+
+### 7.1 The GateSpec `.rs`-scanner retarget
+
+The frozen GateSpec scanner reads `src/Prax/Worlds/*.hs`, extracts quoted string-literal content by a naive unescaped-quote scan, and flags any Prax-namespaced token (`is_prax_var` shape) inside a literal — ignoring unquoted text (imports, comments) even if Prax-shaped. **Retarget at `rust/prax-worlds/src/*.rs`** (the frozen scanned Worlds only; keep that scope). Reuse the S7 `conformance::unchecked_split_gate` machinery — it already sweeps every `.rs` file in the workspace and is the established "scan Rust sources for a forbidden shape" pattern. Two halves, matching the frozen:
+- **The discriminator subgroup** (the 4 mutation-evidence rows: catches a token, catches more-than-one in order, ignores ordinary literals, ignores unquoted text) re-expresses over a synthetic in-test Rust source string — the scanner must be shown to actually discriminate, or it is not a scanner.
+- **The durable world-source gate** ("no world source authors a Prax-namespaced variable in a quoted literal") sweeps the actual `.rs` worlds, with the frozen's own anti-vacuity guard (at least one world file must exist, else an empty scan passes trivially).
+
+The shared-guard half (`authored_var_clash` through `draw`) already landed at S4 — do not re-express it.
+
+## 8. The cut-over-relevant audit — S9 FINISHES it (major deliverable)
+
+S7's standing lesson, re-earned every slice: **a net that only asserts equal-to-frozen EVAPORATES at the S10 deletion.** S8 audited its own surface. S9 is the last stage before cut-over, so it owes the PROGRAM-WIDE table: every net across S1–S9 whose only comparison is against the frozen tree gets a native successor OR an explicit cut-over criterion. The evidence report carries this table in full; the load-bearing rows:
+
+| net | what it compares to frozen | survives deletion? | successor / criterion |
+|---|---|---|---|
+| `prax-oracle compare` / `matrix` (all worlds × seeds) | frozen JSONL, record-by-record | **no** — frozen oracle dies | becomes Rust-vs-own-goldens QA (PLAN); the S10 matrix (500 seeds) runs clean BEFORE deletion, then the tool retargets to committed baselines |
+| `worldshape --check` (shape+bodies, all worlds) | frozen `worldshape` JSON | **no** | the content it guards is covered by native pins (AnalysisTable §2, the S8 O1/O3/O4 + endeavor + project native pins, the RelevanceSpec native rows); worldshape stays as a slice-time localizer only |
+| `oracle check` differential (§1.4) | frozen `typeCheck` describe array | **no** | native SHOULD-flag fixtures (one per constructor) + the `type_check == []` standing net over shipped worlds as resident Rust pins |
+| `oracle stress` differential (§4) | frozen `StressReport` | **no** | the stress-report native pins + the committed CLI format golden |
+| `golden-check.sh` (village-21, bar-12, intrigue-12, loop-bar-25) | frozen spec literals | **no** — source-of-truth is frozen | `conformance/goldens/SHA256SUMS` (S7 [D-C3], already committed); check retargets to hashes at deletion |
+| `examples/play.json` byte-identity (dump-play) | frozen encoder + the file | **partly** | committed SHA256 (S8 [R7]); the FILE survives, the frozen encoder does not — pins are file-driven |
+| the meta-gate (849 labels) | `HASKELL_PINS.txt` extracted from the frozen tree | **no** | PLAN's "committed manifest after deletion" — S9 must ensure `HASKELL_PINS.txt` is committed as a frozen snapshot, not re-derived from `test/` (which is deleted) |
+| `freeze-check.sh` | `git diff haskell-freeze -- src app test` | **n/a** — its subject is deleted | dies at cut-over (nothing to freeze); the comparator's freeze-gate is removed in the deletion commit |
+| CLI stdout equality (check/stress/flow/dump-play) | frozen `prax` binary stdout | **no** | committed stdout goldens (§6), byte-compared pre-deletion, then Rust-vs-golden |
+
+**The two rows most at risk of being missed**, and S9 must close both explicitly: (1) the **meta-gate's manifest** — the entire pin-accounting gate reads labels from the frozen `test/` tree; if that snapshot is not committed as a standalone file BEFORE deletion, the meta-gate silently passes on an empty label set post-deletion (the `stage_states_or_die` loud-on-zero idiom must guard it). (2) the **comparator's own reason for being** — `prax-oracle` is a frozen-vs-Rust differential; after deletion it has no frozen side. PLAN says it "survives as Rust-vs-own-goldens QA", but that retarget is unspecified today. S9 names the retarget (the Rust goldens become the baseline; `compare` diffs Rust-now against Rust-committed) so the tool does not become dead weight the moment its counterparty is deleted.
+
+## 9. The pins (each verified to REDDEN under a named mutation)
+
+- **TypeCheck**: nine SHOULD-flag native fixtures (one per constructor) + the shipped-worlds `type_check == []` standing net; the check-ORDER native pin (a doubly-offending world gets the earlier check's error); `producible_atoms` schedule-contribution pin (dropping the schedule half falsely flags the ScheduleRuleSpec/SightSpec well-formed fixtures — reddens there); the v53 flag/exempt pair.
+- **AnalysisTable**: the 7 world pins as committed native literals (§2).
+- **Persist**: round-trip proptest; version-rejection (foreign tag → loud); unknown-due → loud; the three end-to-end resume pins (§3/§7).
+- **Stress**: the aggregation pins + the CLI format golden.
+- **Inspect**: the two IntrigueSpec native pins incl. the zero-role no-dangling-separator.
+- **CLI**: `playerActions` no-op-hidden + bound-player restriction; resume-replays-advance save-point; the four stdout goldens.
+- **GateSpec**: the discriminator subgroup + the `.rs` world-source gate.
+
+## 10. Panel charge
+
+1. **`producible_atoms` fidelity.** The dead-condition lint is only as sound as this pool. Is the schedule-insert-atoms contribution reproduced (the divergence from S6's movers-only `world_atom_pools`)? Is the `None`-is-wild propagation correct (an unresolvable `Call` anywhere silences the WHOLE lint)? Construct the fixture where a wrong pool (schedule dropped) turns a well-formed ScheduleRuleSpec world into a false `DeadCondition` — is that the discriminating pin, and does it redden?
+2. **AnalysisTable: native vs differential — is the call right?** worldshape covers improvables/liveness/caresAbout/axiom_heads but not footprint/negFootprint. Are the 7 committed-literal pins the durable net, and do they pass at slice start against the actual S4/S6 `Compiled` tables (esp. the `caresAbout` label ordering)? Is there any table field whose emission order is NOT reproduced by the S4/S6 port?
+3. **The CLI-output equality mechanism.** Is a committed stdout golden per command the right durable form, given the frozen binary is byte-compared only pre-deletion? Should `check`/`stress` lean on the structural oracle differential or the format golden as primary? Is `dump-play == examples/play.json` (already MEASURED true at S8) still the whole `dump-play` criterion?
+4. **Persist round-trip completeness and the S6 re-intern hazard.** Does serializing intentions by name and re-interning on load preserve `still_offered`'s content-canonical equality [S6 S-I1]? Is the mid-scene/mid-racket resume pin genuinely end-to-end (does the RESUMED intention act without re-deliberating, or does the pin stop at fact-equality and miss the hazard)? Is `expiries` round-trip exact enough that a patience marker's pending expiry survives (the ScriptSpec symmetry claim)?
+5. **Is the cut-over audit actually complete?** Beyond the table's nine rows — is there any S1–S9 net (a proptest oracle, a fixture-replay, a golden) that silently compares to something the deletion removes? Specifically: the meta-gate manifest snapshot and the `prax-oracle` retarget — are those two closed, or still latent dead-weight at deletion?
+6. **The GateSpec `.rs`-scanner retarget.** Is scoping it to `prax-worlds/src/*.rs` (matching the frozen Worlds-only scope) right, or should it sweep `prax-vocab` too (the frozen did not)? Does the naive unescaped-quote scan port faithfully to Rust string literals (raw strings, escapes)? Does the discriminator subgroup actually discriminate over a synthetic Rust source?
+7. **What S10 inherits.** The 500-seed matrix + perf table + the demo are S10's. Does S9 hand off a clean owed-ledger (zero rows)? Is `renderScene` correctly classified as demo-verified-not-pinned, or is something in the `play` loop being quietly deferred without a KILLED row (the S8 [8.8] scope-honesty check, applied to the interactive CLI)? Is the `type_check == []` guarantee for all six shipped worlds a stated S10 cut-over criterion?
