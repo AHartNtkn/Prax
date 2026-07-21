@@ -25,7 +25,7 @@ comparator.
 | S7 | Vertical world slices: Feud → Intrigue → Bar → Village (Audience → S8, [A1]) | SLICES 1-4 LANDED, slice-4 fix wave applied; slice-4 evidence report outstanding | [S07-1](reports/S07-slice1-feud.md) [S07-2](reports/S07-slice2-intrigue.md) [S07-3](reports/S07-slice3-bar.md) |
 | S8 | Script + Play + Audience ([A1]) | DONE | [S08](reports/S08-script-play-audience.md) |
 | S9 | TypeCheck + AnalysisTable + Stress + Persist + Inspect + CLI | DONE (owed:S9==0, whole ledger owes nothing; review APPROVE-WITH-MINORS) | [S09](reports/S09-tools-and-cutover-audit.md) |
-| S10 | Hardening + cut-over | IN PROGRESS (500-seed matrix CLEAN + baseline captured; perf fix MERGED — closure delta-gate, review APPROVE, DIV-1 disproven, full 500-seed re-run clean; village-stress at marginal parity needs a quiescent-machine re-measure; soak/goldens finishing) — see S10 CONTRACT below | — |
+| S10 | Hardening + cut-over | HARDENING COMPLETE — AWAITING THE DEMO (the one user gate): 500-seed matrix clean, perf fix merged (review APPROVE, DIV-1 disproven), [P2] surviving baseline net green, soak/zero-unsafe/goldens/type_check all green (980 tests); village-stress/trace at marginal parity = the user's perf judgment at the demo. Nothing deleted until "go". | [S10](reports/S10-hardening.md) |
 
 ## S10 CONTRACT — inherited obligations (from the S9 cut-over audit; binding)
 
