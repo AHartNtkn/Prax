@@ -40,3 +40,4 @@ pub mod view_invariant;
 pub mod village;
 pub mod village_relevance;
 pub mod witness_templates;
+pub mod zero_unsafe_gate;
