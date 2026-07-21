@@ -75,6 +75,7 @@ mod gate {
         "AnalysisTableSpec.hs",
         "PersistSpec.hs",
         "TypeCheckSpec.hs",
+        "StressSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {

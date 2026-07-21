@@ -30,6 +30,7 @@ mod matrix;
 mod probe;
 mod record;
 mod register;
+mod stress;
 mod walk;
 mod worldshape;
 mod worlds;

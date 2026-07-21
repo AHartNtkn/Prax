@@ -165,21 +165,15 @@ pub fn rand_walk(st: &mut State, em: Emit, mode: Mode, cap: i64, seed0: u64) -> 
     let mut s = seed0;
     let mut recs: i64 = 0;
     loop {
-        if k == 0 {
-            out.push(stop_of(&Stop::Cap, passes, recs));
-            return out;
-        }
-        if let Some(e) = ending_reached(st) {
-            out.push(stop_of(&Stop::Ending(e), passes, recs));
-            return out;
-        }
+        // The go-loop's four pre-advance exits, in order, from the single shared
+        // decision ([P8]) — so this walk and Stress's `run_random` can never
+        // drift. Behaviour is byte-preserved: `pre_advance_stop` returns `Cap`
+        // when `k == 0` before consulting `ending`/`living` (both side-effect
+        // free reads), exactly as the former inline checks did.
+        let ending = ending_reached(st);
         let living = st.living_characters().len();
-        if living == 0 {
-            out.push(stop_of(&Stop::Extinct, passes, recs));
-            return out;
-        }
-        if passes > living as i64 {
-            out.push(stop_of(&Stop::DeadEnd, passes, recs));
+        if let Some(stop) = crate::walk::pre_advance_stop(k, ending, living, passes) {
+            out.push(stop_of(&stop, passes, recs));
             return out;
         }
         let pre = if em.logs { Some(st.clone()) } else { None };

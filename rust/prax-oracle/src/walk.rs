@@ -64,6 +64,33 @@ impl Stop {
     }
 }
 
+/// The go-loop's terminal stop decision, taken BEFORE the round's `advance` —
+/// the frozen `runRandom`'s four pre-advance exits, IN ORDER: cap, ending,
+/// extinction, dead-end ([P8]). Single-sourced here so the randtrace driver
+/// ([`crate::drive_rust::rand_walk`]) and the Stress aggregator
+/// ([`crate::stress::run_random`]) can never let the stop-rule order drift
+/// between them. `None` ⇒ take a turn.
+///
+/// `passes > living` is the v46 dead-end rule: only past a FULL rotation of idle
+/// passes has the round-boundary wrap had its say (the boundary fires on the
+/// wrap call, and `cursor` starts one below every valid index), so the streak
+/// crossed a boundary and still changed nothing.
+pub fn pre_advance_stop(k: i64, ending: Option<String>, living: usize, passes: i64) -> Option<Stop> {
+    if k == 0 {
+        return Some(Stop::Cap);
+    }
+    if let Some(e) = ending {
+        return Some(Stop::Ending(e));
+    }
+    if living == 0 {
+        return Some(Stop::Extinct);
+    }
+    if passes > living as i64 {
+        return Some(Stop::DeadEnd);
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
