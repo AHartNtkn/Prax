@@ -172,7 +172,15 @@ pub fn rand_walk(st: &mut State, em: Emit, mode: Mode, cap: i64, seed0: u64) -> 
         // free reads), exactly as the former inline checks did.
         let ending = ending_reached(st);
         let living = st.living_characters().len();
-        if let Some(stop) = crate::walk::pre_advance_stop(k, ending, living, passes) {
+        if let Some(rs) = prax_core::stress::pre_advance_stop(k, ending, living, passes) {
+            // The go-loop decision is single-sourced in prax_core::stress ([P8]);
+            // map it to the comparator's wire-reason `Stop` for the record.
+            let stop = match rs {
+                prax_core::stress::RunStop::Cap => Stop::Cap,
+                prax_core::stress::RunStop::Ending(e) => Stop::Ending(e),
+                prax_core::stress::RunStop::Extinct => Stop::Extinct,
+                prax_core::stress::RunStop::DeadEnd => Stop::DeadEnd,
+            };
             out.push(stop_of(&stop, passes, recs));
             return out;
         }

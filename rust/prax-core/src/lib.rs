@@ -38,6 +38,7 @@ pub mod relevance;
 pub mod rng;
 pub mod schedule;
 pub mod sight;
+pub mod stress;
 pub mod turn;
 pub mod typecheck;
 pub mod types;

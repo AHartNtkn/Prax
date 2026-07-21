@@ -11,22 +11,11 @@
 //! a temper flares. Confusing them is exactly the bug the classifier's walkSeed
 //! rule exists to name.
 
-/// One MMIX linear-congruential step.
-pub fn lcg(x: u64) -> u64 {
-    6_364_136_223_846_793_005_u64
-        .wrapping_mul(x)
-        .wrapping_add(1_442_695_040_888_963_407)
-}
-
-/// A uniform index in `[0, n)` and the next seed — the frozen `pick`.
-///
-/// # Panics
-/// If `n == 0` (the walk only picks from a non-empty candidate list).
-pub fn pick(n: usize, s: u64) -> (usize, u64) {
-    assert!(n > 0, "pick from an empty candidate list");
-    let s2 = lcg(s);
-    ((s2 % n as u64) as usize, s2)
-}
+// The MMIX generator and its `pick` are single-sourced in `prax_core::stress`
+// (the frozen `Prax.Stress` is an engine-library module), so this transcription
+// re-exports them — the randtrace driver and the Stress aggregator step the same
+// stream by construction, not by two copies staying in sync.
+pub use prax_core::stress::pick;
 
 /// Why a walk ended ([S-I3]). Each of the frozen walk's exits gets a name, so a
 /// stream-length divergence has a class (TERMINATION) and evidence.
@@ -64,52 +53,3 @@ impl Stop {
     }
 }
 
-/// The go-loop's terminal stop decision, taken BEFORE the round's `advance` —
-/// the frozen `runRandom`'s four pre-advance exits, IN ORDER: cap, ending,
-/// extinction, dead-end ([P8]). Single-sourced here so the randtrace driver
-/// ([`crate::drive_rust::rand_walk`]) and the Stress aggregator
-/// ([`crate::stress::run_random`]) can never let the stop-rule order drift
-/// between them. `None` ⇒ take a turn.
-///
-/// `passes > living` is the v46 dead-end rule: only past a FULL rotation of idle
-/// passes has the round-boundary wrap had its say (the boundary fires on the
-/// wrap call, and `cursor` starts one below every valid index), so the streak
-/// crossed a boundary and still changed nothing.
-pub fn pre_advance_stop(k: i64, ending: Option<String>, living: usize, passes: i64) -> Option<Stop> {
-    if k == 0 {
-        return Some(Stop::Cap);
-    }
-    if let Some(e) = ending {
-        return Some(Stop::Ending(e));
-    }
-    if living == 0 {
-        return Some(Stop::Extinct);
-    }
-    if passes > living as i64 {
-        return Some(Stop::DeadEnd);
-    }
-    None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // The generator is a transcription, so it is pinned by its own arithmetic:
-    // one step from 0 is the increment, and `pick` returns that step's residue.
-    #[test]
-    fn lcg_step_is_the_mmix_recurrence() {
-        assert_eq!(lcg(0), 1_442_695_040_888_963_407);
-        assert_eq!(
-            lcg(1),
-            6_364_136_223_846_793_005_u64.wrapping_add(1_442_695_040_888_963_407)
-        );
-    }
-
-    #[test]
-    fn pick_indexes_the_advanced_seed_not_the_current_one() {
-        let (i, s) = pick(7, 0);
-        assert_eq!(s, lcg(0));
-        assert_eq!(i, (lcg(0) % 7) as usize);
-    }
-}

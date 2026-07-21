@@ -168,7 +168,7 @@ fn cmd_check(args: &[&str]) -> Result<bool, String> {
 /// none of which the single-seed randtrace channel reaches ([R8]).
 pub fn stress_json(world: &str) -> Result<Value, String> {
     let st = worlds::build(world)?;
-    let report = stress::stress_test(
+    let report = prax_core::stress::stress_test(
         stress::DIFF_RUNS,
         stress::DIFF_CAP,
         Some(stress::DIFF_FAMILY),
