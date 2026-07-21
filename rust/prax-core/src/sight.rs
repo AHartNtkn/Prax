@@ -68,6 +68,21 @@ mod tests {
         next
     }
 
+    // The sighting fixture is well-formed (owed:S9 discharged): the v42
+    // dead-condition and reserved-family lints see a schedule rule whose guard is
+    // fed only by authored location facts (`at.*`, in the db), so `type_check`
+    // finds nothing.
+    // H: SightSpec.hs "the fixture world is well-formed"
+    #[test]
+    fn the_fixture_world_is_well_formed() {
+        let st = world();
+        assert!(
+            crate::typecheck::type_check(&st).is_empty(),
+            "the sighting fixture is well-formed, got {:?}",
+            crate::typecheck::type_check(&st)
+        );
+    }
+
     // H: SightSpec.hs "the round boundary advances the world turn"
     #[test]
     fn the_round_boundary_advances_the_world_turn() {

@@ -1066,6 +1066,7 @@ mod tests {
         // 5b. The v53 flag/exempt PAIR: the SAME body registered through the
         // engine door (`engine_rule_names`) is exempt. Discharges the
         // ScheduleRuleSpec provenance verdict (owed row 9).
+        // H: ScheduleRuleSpec.hs "an authored rule writing a reserved family is flagged; the SAME body through the engine door is exempt"
         #[test]
         fn reserved_family_exempts_the_engine_door() {
             use crate::types::ScheduleRule;

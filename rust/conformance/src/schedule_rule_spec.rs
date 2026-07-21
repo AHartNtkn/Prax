@@ -37,6 +37,23 @@ mod tests {
         st
     }
 
+    // ===== well-formedness (owed:S9 discharged) =====
+
+    // A schedule world is well-formed: the v42 dead-condition lint sees the
+    // rule's guard (`flag.X`) fed by a producible fact (`flag.a`, here in the
+    // db), so `type_check` finds nothing — empty ⇒ well-formed.
+    // H: ScheduleRuleSpec.hs "a schedule world is well-formed"
+    #[test]
+    fn a_schedule_world_is_well_formed() {
+        let st = scheduled(vec![mark_r()], &[insert("flag.a")]);
+        assert!(
+            prax_core::typecheck::type_check(&st).is_empty(),
+            "a schedule world whose rule guard is fed by a producible fact is \
+             well-formed, got {:?}",
+            prax_core::typecheck::type_check(&st)
+        );
+    }
+
     // ===== firing / dues =====
 
     // H: ScheduleRuleSpec.hs "Prax.ScheduleRule"

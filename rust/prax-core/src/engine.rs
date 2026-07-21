@@ -2101,12 +2101,14 @@ mod tests {
         assert!(!axiom_head_has(&st, "obliged.Obligor.b.X"), "no lifted twin");
     }
 
-    // The INDEPENDENT compiled-rule regression (no Haskell label; the
-    // build-order-death label's typeCheck-equality clause is owed:S9). recompile
-    // is deontics-free and reads only the axiom list, never the db, so a
-    // db-changing insert between two identical set_axioms leaves the cooked rules
-    // byte-identical — the v48 build-order hazard is gone. (Compared within ONE
-    // State so the interner ids are stable — never a cross-lineage Sym compare.)
+    // The build-order-death label, now with BOTH clauses (owed:S9 discharged):
+    // recompile is deontics-free and reads only the axiom list, never the db, so
+    // (a) a db-changing insert between two identical set_axioms leaves the cooked
+    // rules byte-identical (compared within ONE State, interner ids stable — never
+    // a cross-lineage Sym compare), AND (b) the `type_check` verdict is
+    // independent of where in the build sequence `set_axioms` is called (compared
+    // ACROSS two states — safe, `TypeError` carries only strings, no Sym ids).
+    // H: EngineSpec.hs "build-order death: setAxioms-first equals setAxioms-outermost (cookedRules and typeCheck)"
     #[test]
     fn set_axioms_order_independent_cooked_rules() {
         let axs = vec![Axiom::new(vec![m("a.X")], ["b.X"])];
@@ -2116,10 +2118,24 @@ mod tests {
         // An obliged-producing db fact lands AFTER the rules are fixed (the order
         // v48 forbade); recompiling the same axioms must reproduce the rules.
         st.perform_outcome(&insert("obliged.w.a.foo")).unwrap();
-        st.set_axioms(axs).unwrap();
+        st.set_axioms(axs.clone()).unwrap();
         assert_eq!(
             st.defs.compiled.rules, rules_before,
             "recompile must not consult the db (cooked rules depend only on the axiom list)"
+        );
+
+        // typeCheck-equality clause: the same world built with `set_axioms` FIRST
+        // vs LAST is well-formed either way, and the verdict is identical.
+        let mut a = State::new();
+        a.set_axioms(axs.clone()).unwrap();
+        a.set_desires(vec![Desire::new("d", Want::new(vec![m("a.Owner")], 1))]).unwrap();
+        let mut b = State::new();
+        b.set_desires(vec![Desire::new("d", Want::new(vec![m("a.Owner")], 1))]).unwrap();
+        b.set_axioms(axs).unwrap();
+        assert_eq!(
+            crate::typecheck::type_check(&a),
+            crate::typecheck::type_check(&b),
+            "the type_check verdict is independent of set_axioms's build-order position"
         );
     }
 
