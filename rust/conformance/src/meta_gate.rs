@@ -71,6 +71,8 @@ mod gate {
         // S8 (script + play + audience):
         "ScriptSpec.hs",
         "JsonSpec.hs",
+        // S9 (the authoring tools + the last audit before deletion):
+        "AnalysisTableSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {

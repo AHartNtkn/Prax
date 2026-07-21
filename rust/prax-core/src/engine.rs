@@ -1068,6 +1068,29 @@ impl State {
             .map(|h| self.render_segs(h))
             .collect()
     }
+    /// Every axiom-footprint anchor, rendered by name, in table order (the
+    /// `footprint` field the v41 rewrite must reproduce in emission order —
+    /// `Prax.AnalysisTableSpec`'s `footprint:` rows). No differential localizer
+    /// covers this field (`worldshape` emits `axiom_heads` alone, [P1]); the
+    /// native AnalysisTable pin is its sole net.
+    pub fn footprint_names(&self) -> Vec<String> {
+        self.defs
+            .compiled
+            .footprint
+            .iter()
+            .map(|p| self.render_segs(p))
+            .collect()
+    }
+    /// Every negative-footprint anchor (`negFootprint:` rows), rendered by name,
+    /// in table order. Same sole-net status as [`State::footprint_names`].
+    pub fn neg_footprint_names(&self) -> Vec<String> {
+        self.defs
+            .compiled
+            .neg_footprint
+            .iter()
+            .map(|p| self.render_segs(p))
+            .collect()
+    }
     /// The characters with no `dead.<name>` mark in the BASE db
     /// (`Prax.Types.livingCharacters`) — the randtrace walk's extinction test.
     pub fn living_characters(&mut self) -> Vec<Character> {

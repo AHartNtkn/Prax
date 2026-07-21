@@ -13,6 +13,7 @@
 //!   one `KILLED.md` row. Pin accounting is a red/green test, not a claim.
 
 pub mod adjudicated_register;
+pub mod analysis_table_spec;
 pub mod derive_props;
 pub mod engine_deontic;
 pub mod engine_replay;
