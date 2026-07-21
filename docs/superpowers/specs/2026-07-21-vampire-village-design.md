@@ -37,9 +37,16 @@ emergent utility comparisons, never mechanism guarantees.)
      Snatching is not ordinary behaviour and carries a **standing penalty if the
      accusation proves false** (no mark under the scarf) — so it is only worth
      doing on real suspicion.
-   - **Disguise:** a vampire can disguise before feeding so a witness/victim
-     learns "*someone* bit me," not *who*. The disguise is fragile and its
-     identity-masking can leak.
+   - **Disguise (a general mechanic, not a vampire tell).** Anyone can disguise
+     to conceal their identity while doing something they'd rather not be tied
+     to; when witnessed, the belief records "*someone*," not *who*. A vampire
+     disguises before feeding — but so does a villager sneaking to a disreputable
+     place (a gambling den, an illicit tryst, a shameful errand). So a masked
+     figure is **ambiguous evidence**, never proof of vampirism: snatching the
+     mask may reveal a mark, or merely a philanderer — a scandal, not a stake,
+     and (with no mark) a false-accusation penalty. Disguise carries its own mild
+     social weight (why were you hidden?), but that weight is shared across its
+     uses. It is fragile and its masking can leak.
    Detection is by being **witnessed** (within a villager's sight scope), then
    carried by **gossip** — the same machinery the village already runs for
    witnessed theft.
@@ -96,6 +103,12 @@ Endings: **vampire win** = no living humans remain (all turned or dead);
 **Villager wants:**
 - Ordinary life-wants (work, family, standing) — the social substrate, largely
   inherited from the village world.
+- **A disreputable indulgence** (at least one) — a want some villagers hold to
+  visit a disreputable place / keep an illicit liaison, paired with a want to not
+  be *seen* doing it → they disguise. This is what makes "disguised" ambiguous
+  rather than a vampire tell, and it manufactures its own tragedies (a jealous
+  spouse who unmasks a "vampire" and finds an affair; a gambler accused, exposed,
+  ruined, but human).
 - **Fear / self-preservation** — sharpens as evidence of vampires mounts,
   driving investigation, gossip, accusation, scarf-snatching, and killing/curing
   — each weighed against its cost (the false-accusation penalty, the moral weight
@@ -117,13 +130,18 @@ New facts (illustrative, not final): `vampire.X`; `mark.X.neck`;
 disproven accusation → standing penalty); `restrained.X`; `cured.X`; `dead.X`;
 `ending.vampires`, `ending.village`.
 
-New practices/actions (illustrative): **vampire** — `feed` (co-located target,
-hungry, cooldown clear → mark + turn-timer + sate + cooldown; witnessed → belief;
-disguise → identity-masked belief), `disguise`, `wear/remove scarf`, `deflect`;
-**villager** — `snatch scarf` (suspect Y; mark present → exposed; absent →
-`slander` penalty; gated by suspicion), `accuse`, `gossip` (reuse whisper),
-`kill`, `restrain`; **priest** — `cure` (restrained target on holy ground);
-**world** — movement/wait.
+New practices/actions (illustrative): **disguise** is shared — `disguise` /
+`drop disguise` (available to anyone; a witnessed act by a disguised actor
+records `someone`, not the actor's name) and `snatch disguise`/`snatch scarf`
+(unmask a suspect; reveals whatever is hidden — a `mark`, or nothing but the
+scandal of *why they were hidden* — and a `slander` penalty on a wrong guess);
+**vampire** — `feed` (co-located target, hungry, cooldown clear → mark +
+turn-timer + sate + cooldown; witnessed → belief, identity-masked if disguised),
+`wear/remove scarf`, `deflect`; **the disreputable indulgence** — a `den`/tryst
+practice with an action a tempted villager takes (satisfying the indulgence want,
+motivating them to disguise en route); **villager** — `accuse`, `gossip` (reuse
+whisper), `kill`, `restrain`; **priest** — `cure` (restrained target on holy
+ground); **world** — movement/wait.
 
 Time: **day/night** phases on the turn clock (night = sparse sightings = the
 feeding window; day = market, Sabbath-in-church, gossip). Cooldowns/timers are
@@ -146,6 +164,10 @@ tractable size, before scaling.
 - **Day/night** cycle; the two **cooldown/turn timers**; both **endings**.
 - The full loop: feed → mark → scarf → witness → gossip → suspicion → expose →
   kill/cure → turn.
+- **At least one disreputable indulgence** (e.g. a den, or an illicit liaison
+  between two of the cast) so `disguise` is genuinely ambiguous *in the slice* —
+  without it, the false-positive dynamic (and the whole point of #2's disguise
+  rule) can't surface. This is why it belongs in Phase 1, not Phase 2.
 
 **Scope out (later phases):** the full ~30 cast, professions/schedules at scale,
 mass-run tooling, play-tuning.
@@ -162,9 +184,12 @@ validation is behavioural, per the project's test-as-you-build rule):
 3. **The loop closes both ways** in play: a seeded run reaches the vampire
    ending, and another reaches the village ending.
 4. **Emergence check:** across a stress sweep, *both* endings occur with a spread
-   of run-lengths, and at least one run exhibits an unscripted beat (e.g. a
-   feud-driven false accusation, or a family shielding a turned member). This is
-   the real signal that the drives interact rather than just execute.
+   of run-lengths, and at least one run exhibits an unscripted beat — a
+   feud-driven false accusation, a family shielding a turned member, or a
+   **disguise false-positive** (a masked innocent unmasked to a scandal, not a
+   mark). This is the real signal that the drives interact rather than just
+   execute — and the disguise ambiguity is specifically what keeps "masked =
+   vampire" from being a trivial win.
 5. **Perf measured** (not gated): record village-vs-this per-turn cost at cast 8,
    so Phase 2's scale-up starts from a real number.
 
