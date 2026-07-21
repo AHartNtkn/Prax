@@ -8,10 +8,10 @@
 //! endings.
 
 use prax_core::engine::State;
-use prax_core::query::{CalcOp, Condition, calc, matches, neq, not_};
+use prax_core::query::{CalcOp, CmpOp, Condition, calc, cmp, matches, neq, not_};
 use prax_core::schedule::sight_rule;
 use prax_core::types::{
-    Action, Character, Outcome, Practice, ScheduleRule, delete, insert, insert_for,
+    Action, Axiom, Character, Outcome, Practice, ScheduleRule, delete, insert, insert_for,
 };
 use prax_vocab::persona::cast;
 
@@ -57,10 +57,16 @@ const FEED_COOLDOWN: i64 = 2;
 /// action's own conditions (which read the movement substrate directly);
 /// it exists only to give the practice an instance to spawn from, the same
 /// idiom as `village::village_practice`'s `Scene` role. The bite leaves a
-/// neck mark, timestamps itself for Task 4's transformation axiom
-/// (`bittenOn.Prey.pending`, armed for [`TURN_DELAY`] — refined to a
-/// turn-stamped fact once that axiom exists), arms the actor's own feed
-/// cooldown for [`FEED_COOLDOWN`], and sates the actor's hunger.
+/// neck mark, timestamps itself with the current turn (`bittenOn.Prey!Now`
+/// — a PERSISTENT insert, not `insert_for`: [`transformation`] still needs to
+/// read it after the delay elapses) for [`transformation`]'s turn-arithmetic
+/// axiom to consume, arms the actor's own feed cooldown for
+/// [`FEED_COOLDOWN`], and sates the actor's hunger. The turn stamp follows
+/// the same variable-binding idiom `sight_rule` uses for
+/// `believes.atSince.Seen!Now` — no separate `call`/`Function` needed: an
+/// action's `when` may freely READ the engine-owned `turn!Now` clock (only
+/// WRITING it is reserved, per [`prax_core::typecheck`]), and the bound
+/// `Now` is then substituted straight into the `then` path string.
 fn prey_practice() -> Practice {
     Practice::new("prey")
         .name("Feeding")
@@ -75,14 +81,45 @@ fn prey_practice() -> Practice {
                     matches("practice.world.world.at.Prey!Spot"),
                     neq("Actor", "Prey"),
                     not_("vampire.Prey"),
+                    matches("turn!Now"),
                 ])
                 .then([
                     insert("mark.Prey.neck"),
-                    insert_for(TURN_DELAY, "bittenOn.Prey.pending"),
+                    insert("bittenOn.Prey!Now"),
                     insert_for(FEED_COOLDOWN, "fed.Actor"),
                     delete("bloodHunger.Actor"),
                 ]),
         )
+}
+
+/// Transformation: `TURN_DELAY` boundaries after a bite, the victim becomes
+/// a vampire — a turn-arithmetic axiom over the bite's timestamp
+/// ([`prey_practice`]'s `bittenOn.V!T`) and the live clock (`turn!Now`),
+/// re-evaluated on every view read rather than fired once by a schedule
+/// rule. Derived (a VIEW fact via [`crate::engine::State::set_axioms`]),
+/// not a base-fact schedule-rule insert — deliberately, DESPITE patient
+/// zero's `vampire.mara` being a base fact ([`turn_patient_zero`]): both
+/// paths converge on the same base-vs-derived question the type checker
+/// settles for us. A derived `vampire.V` still satisfies every existing
+/// `vampire.*` read — [`prey_practice`]'s `not_("vampire.Prey")` and
+/// [`turn_patient_zero`]'s own `not_("vampire.mara")` both query the VIEW,
+/// which folds base and derived facts together — so newly-turned vampires
+/// are indistinguishable, to every consumer, from patient zero. The
+/// `not_("vampire.V")` guard is the monotone idiom already used by
+/// `turn_patient_zero`: once derived it stays derivable every subsequent
+/// read (`T`, and hence `E`, never shrink), so the guard never flips it back
+/// off — it exists only to keep the axiom from being its own precondition.
+fn transformation() -> Axiom {
+    Axiom::new(
+        vec![
+            matches("bittenOn.V!T"),
+            matches("turn!Now"),
+            calc("E", CalcOp::Sub, "Now", "T"),
+            cmp(CmpOp::Gte, "E", TURN_DELAY.to_string()),
+            not_("vampire.V"),
+        ],
+        ["vampire.V"],
+    )
 }
 
 /// The day/night clock (`phase!day`/`phase!night`): a period-1 schedule rule
@@ -208,7 +245,8 @@ pub fn vampire_world() -> State {
     for o in vampire_setup().iter().chain(persona_facts.iter()) {
         st.perform_outcome(o).expect("vampire village setup");
     }
-    st.set_axioms(Vec::new()).expect("vampire village axioms");
+    st.set_axioms(vec![transformation()])
+        .expect("vampire village axioms");
     st.set_desires(Vec::new()).expect("vampire village desires");
     st.seed_die(VAMPIRE_SEED)
         .expect("the vampire village's die seed");
@@ -358,6 +396,16 @@ mod tests {
             .collect()
     }
 
+    /// Advance the engine's boundary clock `n` times — the plain stepping
+    /// [`advance_to_first_night`] already does, generalized to an arbitrary
+    /// count for [`transformation`]'s delay, which counts boundaries rather
+    /// than phase flips.
+    fn advance_boundaries(st: &mut State, n: i64) {
+        for _ in 0..n {
+            st.round_boundary();
+        }
+    }
+
     // H: task-3-brief.md "The feed action leaves a mark, arms the
     // transformation timer, and arms a feed cooldown"
     #[test]
@@ -383,6 +431,27 @@ mod tests {
         assert!(
             !feed_is_available(&mut st, "mara", "bram"),
             "cooldown blocks re-feeding"
+        );
+    }
+
+    // H: task-4-brief.md "A bitten victim turns after the delay"
+    #[test]
+    fn a_bitten_victim_turns_after_the_delay() {
+        let mut st = seeded_two_at(
+            /* vampire= */ "mara", /* victim= */ "bram", /* place= */ "mill",
+        );
+        make_hungry(&mut st, "mara");
+        let bite = ground_feed(&mut st, "mara", "bram");
+        st.perform_action(&bite);
+        assert!(
+            !fact(&mut st, "vampire.bram"),
+            "not yet turned right after the bite"
+        );
+        advance_boundaries(&mut st, TURN_DELAY);
+        assert!(fact(&mut st, "vampire.bram"), "bram turns after the delay");
+        assert!(
+            fact(&mut st, "mark.bram.neck"),
+            "the turned still bears the mark"
         );
     }
 }
