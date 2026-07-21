@@ -24,7 +24,7 @@ comparator.
 | S6 | Planner + Minds + Relevance + Sight (design-heavy; fidelity summit) | DONE | [S06](reports/S06-planner.md) |
 | S7 | Vertical world slices: Feud → Intrigue → Bar → Village (Audience → S8, [A1]) | SLICES 1-4 LANDED, slice-4 fix wave applied; slice-4 evidence report outstanding | [S07-1](reports/S07-slice1-feud.md) [S07-2](reports/S07-slice2-intrigue.md) [S07-3](reports/S07-slice3-bar.md) |
 | S8 | Script + Play + Audience ([A1]) | DONE | [S08](reports/S08-script-play-audience.md) |
-| S9 | TypeCheck + AnalysisTable + Stress + Persist + Inspect + CLI | IN PROGRESS (design) | — |
+| S9 | TypeCheck + AnalysisTable + Stress + Persist + Inspect + CLI | IN PROGRESS (panel done: SOUND + COMPLETE-WITH-GAPS, 0 critical; implementer running) | — |
 | S10 | Hardening + cut-over | — | — |
 
 ## Registers
