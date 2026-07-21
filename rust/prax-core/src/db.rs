@@ -322,9 +322,15 @@ impl Db {
         bindings: Bindings,
         out: &mut Vec<Bindings>,
     ) {
-        let mut worlds: Vec<(Db, Bindings)> = vec![(self.clone(), bindings)];
+        // Scratch buffers stay on the stack for the overwhelmingly common
+        // low-fan-out match (a pattern that descends constants and branches at
+        // one or two vars); only a genuinely wide unbound branch spills to the
+        // heap. `unify_into` is the closure/planner's leaf, called an enormous
+        // number of times, so the removed per-call `Vec` allocation is the win.
+        let mut worlds: SmallVec<[(Db, Bindings); 8]> = SmallVec::new();
+        worlds.push((self.clone(), bindings));
         for &sym in segs {
-            let mut next: Vec<(Db, Bindings)> = Vec::with_capacity(worlds.len());
+            let mut next: SmallVec<[(Db, Bindings); 8]> = SmallVec::with_capacity(worlds.len());
             for (db, b) in worlds {
                 if sym.is_var() {
                     match b.get(sym) {

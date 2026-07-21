@@ -64,6 +64,14 @@ pub struct Interner {
     fwd: FxHashMap<String, Sym>,
     /// Names in first-encounter order; `Sym(v)` resolves to `names[v >> 1]`.
     names: Vec<String>,
+    /// `name_rank[i]` is the position of `names[i]` in byte-lexicographic
+    /// name order. Maintained on every new intern so [`cmp_by_name`] — the
+    /// determinism contract's primitive, called O(k·log k) per unbound `unify`
+    /// branch across the whole closure/planner — is an integer compare rather
+    /// than a repeated string compare. It is EXACTLY the order `resolve(a).cmp(
+    /// resolve(b))` gives (a total order on distinct names), so no observable
+    /// order changes; only the cost does.
+    name_rank: Vec<u32>,
 }
 
 impl Interner {
@@ -84,7 +92,41 @@ impl Interner {
         let sym = Sym((index << 1) | var_bit);
         self.names.push(name.to_owned());
         self.fwd.insert(name.to_owned(), sym);
+        self.insert_rank(index as usize, name);
         sym
+    }
+
+    /// Splice the new name's index into the byte-lexicographic rank order.
+    /// The new name goes at rank `p` (its sorted position among all names);
+    /// every name previously ranked ≥ `p` shifts up by one. Amortized cheap:
+    /// after a world's vocabulary is established, `intern` is a hash hit and
+    /// never reaches here; new segments (turn numbers, fresh belief atoms)
+    /// arrive rarely on the hot path.
+    fn insert_rank(&mut self, index: usize, name: &str) {
+        // Position among existing names by byte order (binary search over the
+        // rank permutation, whose k-th entry is the name-index at rank k).
+        // `order[k]` is recovered as the index whose rank is k; we search the
+        // sorted names directly via the current permutation.
+        let p = self.name_rank_position(name);
+        for r in self.name_rank.iter_mut() {
+            if (*r as usize) >= p {
+                *r += 1;
+            }
+        }
+        self.name_rank.push(p as u32);
+    }
+
+    /// The byte-lexicographic rank the given name occupies among the already-
+    /// ranked names (i.e. how many existing names sort strictly before it).
+    fn name_rank_position(&self, name: &str) -> usize {
+        // `self.names[i]` has rank `self.name_rank[i]`; count names sorting
+        // before `name`. A linear pass is O(n) — same order as the shift below,
+        // and simpler than threading a separate sorted index that must also be
+        // shifted. New-intern events taper to near-zero on the hot path.
+        self.names[..self.name_rank.len()]
+            .iter()
+            .filter(|existing| existing.as_str() < name)
+            .count()
     }
 
     /// The segment a symbol names — the *only* observable form of a `Sym`.
@@ -102,7 +144,9 @@ impl Interner {
     /// every enumeration point (unify's unbound branch, `child_keys`, sentence
     /// enumeration). Never compare by raw id for an observable order.
     pub fn cmp_by_name(&self, a: Sym, b: Sym) -> Ordering {
-        self.resolve(a).cmp(self.resolve(b))
+        let ra = self.name_rank[(a.0 >> 1) as usize];
+        let rb = self.name_rank[(b.0 >> 1) as usize];
+        ra.cmp(&rb)
     }
 }
 

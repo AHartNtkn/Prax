@@ -47,3 +47,14 @@ proptest = "1.5"
 # semantic does.
 [profile.dev]
 opt-level = 2
+
+# The release profile is the shipped/perf profile (the dev profile above is the
+# standing-gate profile that keeps `cargo test` usable). Cross-module inlining
+# (fat LTO) and a single codegen unit matter here because the hot path is a tight
+# recursive descent split across prax-core modules (db/query/derive/engine) — the
+# per-call boundaries the optimizer can only collapse with whole-program view.
+# Purely a code-generation change; nothing semantic, and the differential/tests
+# run on the dev profile, so this cannot alter an observable record.
+[profile.release]
+lto = "fat"
+codegen-units = 1
