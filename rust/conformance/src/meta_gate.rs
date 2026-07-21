@@ -103,20 +103,51 @@ mod gate {
     /// left it the one asymmetrically unprotected side — a duplicated manifest
     /// line would collapse into one entry and its second occurrence would go
     /// unaccounted for, silently.
+    /// The committed manifest's total pin count (`conformance/HASKELL_PINS.txt`
+    /// is a FROZEN snapshot of the frozen `test/` tree — 849 labels — read as
+    /// committed, never re-derived). The anti-vacuity floor [P2]: if the manifest
+    /// were ever emptied or truncated, the "each label accounted exactly once"
+    /// loop would pass VACUOUSLY and the whole meta-gate would silently disable.
+    /// The frozen snapshot never shrinks, so a `>=` floor tolerates nothing less.
+    const EXPECTED_MANIFEST_PINS: usize = 849;
+
     fn read_pins() -> Vec<(String, String)> {
         let path = repo_root().join("conformance/HASKELL_PINS.txt");
         let text =
             fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
+        parse_pins(&text)
+    }
+
+    /// Parse the manifest text into the allowlisted pins, guarding the read
+    /// against vacuity ([P2]) BEFORE the accounting can pass on an empty set.
+    fn parse_pins(text: &str) -> Vec<(String, String)> {
+        let mut total = 0usize;
         let mut pins = Vec::new();
         for line in text.lines() {
             let Some((file, label)) = line.split_once('\t') else {
                 continue;
             };
+            total += 1;
             let base = basename(file);
             if ALLOWLIST.contains(&base.as_str()) {
                 pins.push((base, label.to_owned()));
             }
         }
+        // [P2] — the loud-on-zero idiom the stage-states parse already has, now
+        // on `read_pins`: an emptied/truncated manifest must FAIL LOUDLY, never
+        // disable the gate silently.
+        assert!(
+            total >= EXPECTED_MANIFEST_PINS,
+            "HASKELL_PINS.txt has {total} pins, below the frozen floor of \
+             {EXPECTED_MANIFEST_PINS}: the manifest was emptied or truncated, which \
+             would make the meta-gate pass vacuously. The manifest is a committed \
+             frozen snapshot and must not shrink."
+        );
+        assert!(
+            !pins.is_empty(),
+            "no allowlisted pins survived the manifest read: the meta-gate would \
+             account nothing and pass vacuously"
+        );
         let mut seen: BTreeSet<&(String, String)> = BTreeSet::new();
         let dups: Vec<&(String, String)> = pins.iter().filter(|p| !seen.insert(p)).collect();
         assert!(
@@ -363,6 +394,20 @@ mod gate {
     // The meta-gate FIRST CUT: every allowlisted Haskell pin is accounted for
     // exactly once, and no `// H:`/`KILLED.md` entry in an allowlisted spec file
     // names a pin that does not exist.
+    /// [P2] NATIVE PIN — no frozen label. The anti-vacuity floor on `read_pins`
+    /// must FIRE if the manifest is emptied, so the "each label accounted exactly
+    /// once" loop can never pass on an empty pin set. Feeding `parse_pins` an
+    /// empty manifest must panic (the loud-on-zero idiom).
+    ///
+    /// REDDENS UNDER: deleting the `total >= EXPECTED_MANIFEST_PINS` assert from
+    /// `parse_pins` — an emptied manifest would then parse to an empty pin set and
+    /// the gate would silently disable.
+    #[test]
+    #[should_panic(expected = "emptied or truncated")]
+    fn an_emptied_manifest_reddens_the_gate() {
+        parse_pins("");
+    }
+
     #[test]
     fn every_allowlisted_pin_accounted_for_exactly_once() {
         let pins = read_pins();
