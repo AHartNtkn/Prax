@@ -1031,10 +1031,24 @@ mod proptest_laws {
         walk(&db.0)
     }
 
-    /// A random segment from a tiny constant alphabet (lowercase ⇒ constant, so
-    /// these are ground facts, never variables).
+    /// The four-segment alphabet (lowercase ⇒ constant, so these are ground
+    /// facts, never variables).
+    const ALPHA: [&str; 4] = ["a", "b", "c", "d"];
+
+    /// A random segment from a tiny constant alphabet.
     fn seg() -> impl Strategy<Value = String> {
-        prop::sample::select(vec!["a", "b", "c", "d"]).prop_map(String::from)
+        prop::sample::select(ALPHA.to_vec()).prop_map(String::from)
+    }
+
+    /// A pair of DISTINCT segments, distinct by construction (no rejection
+    /// sampling). `d` is a nonzero step mod 4, so `(a + d) % 4 != a` always;
+    /// this covers every ordered distinct pair uniformly and, unlike a
+    /// `prop_assume!(x != y)` guard over a 25%-collision alphabet, generates
+    /// ZERO rejects — so the law it feeds soaks at any `PROPTEST_CASES` budget
+    /// instead of aborting on proptest's global-reject ceiling.
+    fn distinct_seg_pair() -> impl Strategy<Value = (String, String)> {
+        (0usize..4, 1usize..4)
+            .prop_map(|(a, d)| (ALPHA[a].to_string(), ALPHA[(a + d) % 4].to_string()))
     }
 
     /// A random dotted, ground path of 1–4 segments with `.`/`!` separators.
@@ -1097,9 +1111,11 @@ mod proptest_laws {
         // `p!c.x` then `p!c.y`, both x and y survive under c.
         #[test]
         fn bang_supersession_preserves_survivor_subtree(
-            p in seg(), c in seg(), x in seg(), y in seg()
+            p in seg(), c in seg(), (x, y) in distinct_seg_pair()
         ) {
-            prop_assume!(x != y);
+            // x != y by construction (distinct_seg_pair) — no rejection sampling,
+            // so the law completes at soak depth rather than exhausting the
+            // global-reject budget.
             let mut i = Interner::new();
             let db = Db::empty()
                 .insert_str(&mut i, &format!("{p}!{c}.{x}")).unwrap()
