@@ -109,7 +109,7 @@ S7's standing lesson, twice earned: **a net that only asserts equal-to-frozen EV
 | initial expiries (audience) | shape + the boundary-5 pin | yes | none |
 | `flow_chart` output | 7 substrings + CLI equality (S9) | partially | full-string native pin |
 | JSON encoder bytes | `dump-play` equality (S9/S10) | **no** — the frozen encoder dies | pin against the FILE + committed SHA256 |
-| reserved-families list | nothing (Rust-only field) | n/a | native pin [R4] |
+| reserved-families list | native pin, world-INDEPENDENT prax-core constant | yes | [D-C2] SUPERSEDES [R4] — see §9 and the S08 report's reconciled table | 
 
 **The JSON pins must be FILE-driven, not frozen-encoder-driven**, because `examples/play.json` survives the cut-over and the frozen encoder does not — the same retargeting [D-C3] designed for goldens, applied to the one data file the PLAN promises to keep.
 
