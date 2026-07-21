@@ -8,9 +8,11 @@
 //! endings.
 
 use prax_core::engine::State;
-use prax_core::query::{CalcOp, Condition, calc, matches, not_};
+use prax_core::query::{CalcOp, Condition, calc, matches, neq, not_};
 use prax_core::schedule::sight_rule;
-use prax_core::types::{Action, Character, Outcome, Practice, ScheduleRule, insert};
+use prax_core::types::{
+    Action, Character, Outcome, Practice, ScheduleRule, delete, insert, insert_for,
+};
 use prax_vocab::persona::cast;
 
 /// The village's sighting template, over the movement vocabulary below:
@@ -43,6 +45,46 @@ fn world_practice() -> Practice {
         )
 }
 
+/// Both of the feed action's timers, in the clock's own unit: one turn is one
+/// phase (see [`phase_clock`]), so two turns is a full day-night cycle — the
+/// design's "24h" window, for both the transformation delay and the feed
+/// cooldown.
+const TURN_DELAY: i64 = 2;
+const FEED_COOLDOWN: i64 = 2;
+
+/// Feeding: a vampire bites a co-located, not-yet-vampire victim. A
+/// world-scoped singleton practice — the `Scene` role plays no part in the
+/// action's own conditions (which read the movement substrate directly);
+/// it exists only to give the practice an instance to spawn from, the same
+/// idiom as `village::village_practice`'s `Scene` role. The bite leaves a
+/// neck mark, timestamps itself for Task 4's transformation axiom
+/// (`bittenOn.Prey.pending`, armed for [`TURN_DELAY`] — refined to a
+/// turn-stamped fact once that axiom exists), arms the actor's own feed
+/// cooldown for [`FEED_COOLDOWN`], and sates the actor's hunger.
+fn prey_practice() -> Practice {
+    Practice::new("prey")
+        .name("Feeding")
+        .roles(["Scene"])
+        .action(
+            Action::new("[Actor]: feed on [Prey]")
+                .when([
+                    matches("vampire.Actor"),
+                    matches("bloodHunger.Actor"),
+                    not_("fed.Actor"),
+                    matches("practice.world.world.at.Actor!Spot"),
+                    matches("practice.world.world.at.Prey!Spot"),
+                    neq("Actor", "Prey"),
+                    not_("vampire.Prey"),
+                ])
+                .then([
+                    insert("mark.Prey.neck"),
+                    insert_for(TURN_DELAY, "bittenOn.Prey.pending"),
+                    insert_for(FEED_COOLDOWN, "fed.Actor"),
+                    delete("bloodHunger.Actor"),
+                ]),
+        )
+}
+
 /// The day/night clock (`phase!day`/`phase!night`): a period-1 schedule rule
 /// that derives the phase directly from the round-boundary clock's parity —
 /// `turn!Now` mod 2 — via a static lookup table (`phaseOfParity.0!day`,
@@ -65,11 +107,16 @@ fn phase_clock() -> ScheduleRule {
 }
 
 /// Patient zero: mara turns — and is marked, per the design that every
-/// vampire (including patient zero) is marked — at the first night. Guarded
-/// by `everBitten` so it fires exactly once and never re-fires. Declared
-/// after [`phase_clock`] in the schedule so the SAME round boundary that
-/// first flips the phase to night also turns her: both are period-1 rules
-/// firing in declaration order within one `round_boundary` call.
+/// vampire (including patient zero) is marked — at the first night. She also
+/// wakes hungry: turning IS becoming hungry, the same fact [`prey_practice`]'s
+/// feed action sates and the only currently-reachable producer of
+/// `bloodHunger.X` (Task 5's hunger DRIVE will elaborate how it re-arms
+/// afterward; this is what keeps `bloodHunger.Actor` a live — not
+/// dead-condition — read in the meantime). Guarded by `everBitten` so it
+/// fires exactly once and never re-fires. Declared after [`phase_clock`] in
+/// the schedule so the SAME round boundary that first flips the phase to
+/// night also turns her: both are period-1 rules firing in declaration order
+/// within one `round_boundary` call.
 fn turn_patient_zero() -> ScheduleRule {
     ScheduleRule::new("turnPatientZero", 1).clause(
         [
@@ -81,6 +128,7 @@ fn turn_patient_zero() -> ScheduleRule {
             insert("vampire.mara"),
             insert("mark.mara.neck"),
             insert("everBitten"),
+            insert("bloodHunger.mara"),
         ],
     )
 }
@@ -134,6 +182,9 @@ fn vampire_setup() -> Vec<Outcome> {
         insert("phase!day"),
         insert("phaseOfParity.0!day"),
         insert("phaseOfParity.1!night"),
+        // Spawns the `prey` practice's singleton instance (see
+        // [`prey_practice`]) so its `feed` action can ever be offered.
+        insert("practice.prey.here"),
     ]
 }
 
@@ -145,7 +196,7 @@ fn vampire_setup() -> Vec<Outcome> {
 pub fn vampire_world() -> State {
     let (roster, persona_facts) = vampire_cast();
     let mut st = State::new();
-    st.define_practices([world_practice()])
+    st.define_practices([world_practice(), prey_practice()])
         .expect("vampire village practices");
     st.set_characters(roster).expect("vampire village cast");
     st.set_schedule(vec![
@@ -169,6 +220,7 @@ pub fn vampire_world() -> State {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use prax_core::engine::GroundedAction;
 
     #[test]
     fn the_world_builds_and_is_well_formed() {
@@ -235,6 +287,102 @@ mod tests {
             count_vampires(&mut st),
             1,
             "exactly one vampire at the start"
+        );
+    }
+
+    /// A prefix existence query on the view: true if some fact in the closed
+    /// view is `path` itself or begins `path` followed by a `.` or `!`
+    /// separator. Used for `bittenOn.<victim>`, whose exact suffix Task 4
+    /// refines from `.pending` to a turn stamp (`!<turn>`) — the test only
+    /// pins the timestamping, not the interim suffix.
+    fn fact_prefix(st: &mut State, path: &str) -> bool {
+        st.labeled_view().iter().any(|f| {
+            f == path || f.starts_with(&format!("{path}.")) || f.starts_with(&format!("{path}!"))
+        })
+    }
+
+    /// A fresh vampire world with `vampire` already turned and co-located
+    /// with `victim` at `place` — bypassing the day/night clock so feed
+    /// tests don't have to advance to a real first night. Direct
+    /// `perform_outcome` writes, exactly as [`vampire_setup`] itself seeds
+    /// starting positions.
+    fn seeded_two_at(vampire: &str, victim: &str, place: &str) -> State {
+        let mut st = vampire_world();
+        st.perform_outcome(&insert(format!("vampire.{vampire}")))
+            .expect("mark the vampire");
+        st.perform_outcome(&insert(format!(
+            "practice.world.world.at.{vampire}!{place}"
+        )))
+        .expect("place the vampire");
+        st.perform_outcome(&insert(format!("practice.world.world.at.{victim}!{place}")))
+            .expect("place the victim");
+        st
+    }
+
+    /// Arms `bloodHunger.<who>` directly — Task 5 wires this from the
+    /// hunger DRIVE; this task only needs the fact `feed`'s `when` reads.
+    fn make_hungry(st: &mut State, who: &str) {
+        st.perform_outcome(&insert(format!("bloodHunger.{who}")))
+            .expect("arm hunger");
+    }
+
+    /// The offered `prey.feed` action grounded on this exact victim, off the
+    /// real `possible_actions` enumeration — the `bar::tests::find` idiom.
+    /// Panics (with the actor's full offer list) if the pairing isn't
+    /// offered, since every caller of this helper expects it to be.
+    fn ground_feed(st: &mut State, vampire: &str, victim: &str) -> GroundedAction {
+        let needle = format!("feed on {victim}");
+        let had = labels(st, vampire);
+        st.possible_actions(vampire)
+            .into_iter()
+            .find(|ga| ga.practice_id == "prey" && ga.label.contains(&needle))
+            .unwrap_or_else(|| {
+                panic!("no feed-on-{victim} action offered to {vampire}; available: {had:?}")
+            })
+    }
+
+    /// Whether `vampire` is currently offered a feed on `victim` — the
+    /// cooldown-blocks-refeeding check, which must find nothing rather than
+    /// panic (unlike [`ground_feed`]).
+    fn feed_is_available(st: &mut State, vampire: &str, victim: &str) -> bool {
+        let needle = format!("feed on {victim}");
+        st.possible_actions(vampire)
+            .into_iter()
+            .any(|ga| ga.practice_id == "prey" && ga.label.contains(&needle))
+    }
+
+    fn labels(st: &mut State, actor: &str) -> Vec<String> {
+        st.possible_actions(actor)
+            .into_iter()
+            .map(|ga| ga.label)
+            .collect()
+    }
+
+    // H: task-3-brief.md "The feed action leaves a mark, arms the
+    // transformation timer, and arms a feed cooldown"
+    #[test]
+    fn feeding_marks_the_victim_and_locks_the_cooldown() {
+        let mut st = seeded_two_at(
+            /* vampire= */ "mara", /* victim= */ "bram", /* place= */ "mill",
+        );
+        make_hungry(&mut st, "mara");
+        let bite = ground_feed(&mut st, "mara", "bram");
+        st.perform_action(&bite);
+        assert!(
+            fact(&mut st, "mark.bram.neck"),
+            "the bite leaves a neck mark"
+        );
+        assert!(
+            fact_prefix(&mut st, "bittenOn.bram"),
+            "the bite is timestamped"
+        );
+        assert!(fact(&mut st, "fed.mara"), "feeding arms the cooldown");
+        assert!(!fact(&mut st, "bloodHunger.mara"), "feeding sates hunger");
+        // A second feed is blocked while the cooldown holds.
+        make_hungry(&mut st, "mara");
+        assert!(
+            !feed_is_available(&mut st, "mara", "bram"),
+            "cooldown blocks re-feeding"
         );
     }
 }
