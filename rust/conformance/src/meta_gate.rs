@@ -472,12 +472,21 @@ mod gate {
     #[test]
     fn no_owed_deferral_survives_its_owing_stage_being_done() {
         let states = read_program_stage_states();
-        let owed = read_killed_owed();
+        // Anti-vacuity: an emptied/truncated KILLED.md (the table format drifting
+        // out from under the parser) must FAIL LOUDLY, not silently disable the
+        // gate. The guard is on the KILLED TABLE being substantive — NOT on the
+        // owed set being non-empty: at S9-DONE the whole deferral ledger is
+        // legitimately discharged (owed == 0 is the terminal success state, S9
+        // design §7), so demanding a live owed row would false-fire on the very
+        // outcome the program is driving toward. The owed-column PARSER's
+        // discrimination is proven by the synthetic-input tests below.
+        let killed = read_killed();
         assert!(
-            !owed.is_empty(),
-            "no owed deferral rows found in KILLED.md — the Owed column format changed \
-             and the deferral gate is now dead."
+            !killed.is_empty(),
+            "no KILLED rows parsed from KILLED.md — the table format changed and \
+             the deferral gate is now dead."
         );
+        let owed = read_killed_owed();
         let problems = owed_problems(&states, &owed);
         assert!(
             problems.is_empty(),

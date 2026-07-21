@@ -18,6 +18,7 @@ pub mod derive_props;
 pub mod engine_deontic;
 pub mod engine_replay;
 pub mod fixtures;
+pub mod gate_scanner;
 pub mod golden_drive;
 pub mod goldens;
 pub mod loop_advance;
