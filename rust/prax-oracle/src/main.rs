@@ -46,6 +46,7 @@ fn main() -> ExitCode {
     let rest: Vec<&str> = args.iter().skip(1).map(String::as_str).collect();
     let r = match args.first().map(String::as_str) {
         Some("worldshape") => cmd_worldshape(&rest),
+        Some("check") => cmd_check(&rest),
         Some("compare") => cmd_compare(&rest),
         Some("explain") => cmd_explain(&rest),
         Some("matrix") => matrix::run(&rest),
@@ -65,6 +66,7 @@ fn usage() -> String {
     format!(
         "usage:\n\
          \x20 prax-oracle worldshape <world>\n\
+         \x20 prax-oracle check <world>\n\
          \x20 prax-oracle compare <world> --mode trace|randtrace [--turns N] [--cap N] [--seed S]\n\
          \x20                             [--die-seed S] [--depth D] [--emit decisions|state|view]\n\
          \x20 prax-oracle explain <world> --mode M [same flags as compare]\n\
@@ -100,6 +102,56 @@ fn int_flag(args: &[&str], name: &str, default: Option<i64>) -> Result<i64, Stri
 fn cmd_worldshape(args: &[&str]) -> Result<bool, String> {
     let world = *args.first().ok_or("worldshape needs a world")?;
     let (green, lines) = shape_compare(world)?;
+    for l in lines {
+        println!("{l}");
+    }
+    Ok(green)
+}
+
+/// The Rust `check` document: `sort(map describe (type_check world))` as a JSON
+/// array — byte-comparable, Value-vs-Value, against the frozen `check`
+/// (`TraceMain.hs:runCheckCmd`). Shared by the CLI's `prax check` and this
+/// differential.
+pub fn check_json(world: &str) -> Result<Value, String> {
+    let st = worlds::build(world)?;
+    let mut lines: Vec<String> = prax_core::typecheck::type_check(&st)
+        .iter()
+        .map(prax_core::typecheck::describe)
+        .collect();
+    lines.sort();
+    Ok(serde_json::json!(lines))
+}
+
+/// The `check` differential: the frozen `sort(map describe (typeCheck))` array
+/// vs the Rust one, Value-vs-Value.
+///
+/// **This is a shipped-worlds `[] == []` AGREEMENT channel, not verdict
+/// coverage.** Every shipped world is well-formed, so both sides are the empty
+/// array; what this proves is that the shipped worlds AGREE clean, cross-engine.
+/// The checker's DISCRIMINATION — one SHOULD-flag fixture per constructor, and
+/// the byte-exact `describe` rendering — lives in the native pins
+/// (`conformance::typecheck_spec` and `typecheck::describe_renders_…`), which are
+/// not shipped worlds and never reach this comparator. Do not read a green
+/// `check` differential as evidence the verdict logic is exercised.
+pub fn check_compare(world: &str) -> Result<(bool, Vec<String>), String> {
+    let frozen = drive_frozen::run_json(&["check".to_owned(), world.to_owned()])?;
+    let rust = check_json(world)?;
+    let d = diff::diff_records(&frozen, &rust);
+    let rev = drive_frozen::freeze_rev()?;
+    if d.is_empty() {
+        Ok((true, vec![format!("check {world}: GREEN (freeze rev {rev})")]))
+    } else {
+        let mut out = vec![format!("check {world}: DIVERGENT (freeze rev {rev})")];
+        for fd in &d.fields {
+            out.extend(diff::render_field(fd));
+        }
+        Ok((false, out))
+    }
+}
+
+fn cmd_check(args: &[&str]) -> Result<bool, String> {
+    let world = *args.first().ok_or("check needs a world")?;
+    let (green, lines) = check_compare(world)?;
     for l in lines {
         println!("{l}");
     }

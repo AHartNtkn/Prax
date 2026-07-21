@@ -38,6 +38,24 @@ fn worldshape_agrees_on_the_probe_world() {
     assert!(green, "the probe world's two transcriptions disagree");
 }
 
+// The `check` differential (item 3): the frozen `sort(map describe (typeCheck))`
+// array vs the Rust one, Value-vs-Value, over the shipped worlds. Every shipped
+// world is well-formed, so this is a `[] == []` AGREEMENT channel — it proves
+// the shipped worlds agree clean cross-engine, NOT that the verdict logic
+// discriminates (that lives in the native SHOULD-flag fixtures and the
+// byte-exact `describe` golden). Both facts hold at once and neither substitutes
+// for the other.
+#[test]
+fn the_check_differential_agrees_over_shipped_worlds() {
+    for world in ["intrigue", "bar", "feud", "play"] {
+        let (green, lines) = crate::check_compare(world).expect("both sides emit a check array");
+        for l in &lines {
+            println!("{l}");
+        }
+        assert!(green, "check differential diverged for {world}");
+    }
+}
+
 #[test]
 fn a_mistranscribed_action_label_is_caught_by_worldshape_as_a_one_line_diff() {
     // THE GATE'S MUTATION EVIDENCE (§2). A swapped label is exactly what a world

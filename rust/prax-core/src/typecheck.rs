@@ -160,6 +160,53 @@ pub fn type_check(st: &State) -> Vec<TypeError> {
     errs
 }
 
+/// Render a [`TypeError`] as the checker's human-readable diagnostic line —
+/// byte-for-byte the frozen `describe` (`app/Main.hs`'s `runCheck` and
+/// `oracle/TraceMain.hs`, which are byte-identical, [S-OK11]). The CLI `check`
+/// arm prints these; the oracle `check` differential compares `sort(map describe
+/// …)` Value-vs-Value. Reproduced verbatim — a divergence here is a cut-over
+/// equality failure, not a cosmetic one. `ReservedFamily` renders its sentence
+/// via Haskell `show` (a quoted string); the reserved sentences are simple ASCII
+/// paths, so a plain `"…"` wrap is byte-exact.
+pub fn describe(e: &TypeError) -> String {
+    match e {
+        TypeError::UnboundVar { where_, var, sentence } => {
+            format!("unbound variable {var} in \"{sentence}\" ({where_})")
+        }
+        TypeError::CardinalityClash { slot } => {
+            format!("relation {slot} is used both single-valued (!) and multi-valued (.)")
+        }
+        TypeError::UndefinedRef { where_, name } => {
+            format!("undefined reference {name} ({where_})")
+        }
+        TypeError::SortConflict { where_, detail } => {
+            format!("sort conflict at {where_}: {detail}")
+        }
+        TypeError::ReservedFamily { family, where_, sentence } => format!(
+            "reserved family {family}: \"{sentence}\" ({where_}) -- engine-owned; \
+             authored code may not touch it"
+        ),
+        TypeError::SeedlessDraw => "draw used but the die is unseeded: seed it with \
+             Prax.Engine.seedDie when building the world"
+            .to_owned(),
+        TypeError::DeadCondition { where_, sentence } => format!(
+            "dead condition \"{sentence}\" ({where_}): no action, initial fact, or \
+             axiom head can ever produce a match"
+        ),
+        TypeError::DeonticUnclosed { sentence } => format!(
+            "unclosed obligation rule \"{sentence}\": this world can invoke an \
+             obligation but did not declare its □-closure -- wrap its axioms in \
+             Prax.Deontic.obligedClose"
+        ),
+        TypeError::CoercionUnmotivated { name } => format!(
+            "unmotivated coercion \"{name}\": a threat deposits this punitive belief \
+             but no such desire is registered, so the threat is silently inert -- \
+             register it with Prax.Engine.setDesires (hold it or not is the \
+             genuine/bluff choice)"
+        ),
+    }
+}
+
 // ---- variables mentioned (`condVars`/`varsOf`, filtered to variables) -------
 
 /// The variables a raw sentence mentions (`varsOf = filter isVariable . pathNames`).
@@ -1192,6 +1239,59 @@ mod tests {
                 Want::new(vec![m("w.Owner")], 1),
                 Desire::new("d", Want::new(vec![m("w.Owner")], 1)),
             )
+        }
+    }
+
+    /// NATIVE PIN — no frozen label. The `describe` renderings are the checker's
+    /// public string surface, byte-identical across `app/Main.hs`'s `runCheck`
+    /// and `oracle/TraceMain.hs` ([S-OK11]). This is the committed describe
+    /// GOLDEN: it pins each of the nine renderings byte-for-byte, so the oracle
+    /// `check` differential (`sort(map describe …)`) and the `prax check` stdout
+    /// golden both rest on one verified rendering. REDDENS UNDER: any wording,
+    /// spacing, or punctuation drift from the frozen strings.
+    #[test]
+    fn describe_renders_each_verdict_byte_for_byte() {
+        use crate::typecheck::{TypeError, describe};
+        let cases: &[(TypeError, &str)] = &[
+            (
+                TypeError::UnboundVar { where_: "bug".into(), var: "Ghost".into(), sentence: "foo.Ghost".into() },
+                "unbound variable Ghost in \"foo.Ghost\" (bug)",
+            ),
+            (
+                TypeError::CardinalityClash { slot: "a.mood".into() },
+                "relation a.mood is used both single-valued (!) and multi-valued (.)",
+            ),
+            (
+                TypeError::UndefinedRef { where_: "d / [Actor]: y".into(), name: "nope".into() },
+                "undefined reference nope (d / [Actor]: y)",
+            ),
+            (
+                TypeError::SortConflict { where_: "cup".into(), detail: "beverage, place".into() },
+                "sort conflict at cup: beverage, place",
+            ),
+            (
+                TypeError::ReservedFamily { family: "turn".into(), where_: "clocksmith / [Actor]: forge time".into(), sentence: "turn!99".into() },
+                "reserved family turn: \"turn!99\" (clocksmith / [Actor]: forge time) -- engine-owned; authored code may not touch it",
+            ),
+            (
+                TypeError::SeedlessDraw,
+                "draw used but the die is unseeded: seed it with Prax.Engine.seedDie when building the world",
+            ),
+            (
+                TypeError::DeadCondition { where_: "hunt / [Actor]: dig".into(), sentence: "tresure.spot".into() },
+                "dead condition \"tresure.spot\" (hunt / [Actor]: dig): no action, initial fact, or axiom head can ever produce a match",
+            ),
+            (
+                TypeError::DeonticUnclosed { sentence: "b.X".into() },
+                "unclosed obligation rule \"b.X\": this world can invoke an obligation but did not declare its □-closure -- wrap its axioms in Prax.Deontic.obligedClose",
+            ),
+            (
+                TypeError::CoercionUnmotivated { name: "punishes-ghost".into() },
+                "unmotivated coercion \"punishes-ghost\": a threat deposits this punitive belief but no such desire is registered, so the threat is silently inert -- register it with Prax.Engine.setDesires (hold it or not is the genuine/bluff choice)",
+            ),
+        ];
+        for (e, expected) in cases {
+            assert_eq!(&describe(e), expected, "describe mismatch for {e:?}");
         }
     }
 }
