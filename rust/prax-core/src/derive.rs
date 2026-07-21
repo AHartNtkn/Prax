@@ -270,7 +270,7 @@ fn run(
     // is gated. From round 2 on this is the previous round's fresh facts.
     let mut delta_facts = delta_facts;
     loop {
-        let mut fresh: Vec<(String, CompiledPath)> = Vec::new();
+        let mut fresh: Vec<CompiledPath> = Vec::new();
         for rule in rules {
             // Semi-naive gate: a rule can only newly-fire this round if a fact
             // added last round may-unifies one of its read anchors. Skipping the
@@ -292,8 +292,7 @@ fn run(
                 for h in &rule.heads {
                     let g = ground_head(interner, h, &b);
                     if !entailed(&model, &g) {
-                        let name = render_head(interner, &g);
-                        fresh.push((name, g));
+                        fresh.push(g);
                     }
                 }
             }
@@ -301,31 +300,68 @@ fn run(
         if fresh.is_empty() {
             return Ok(model);
         }
-        // Structural dedup + name-order (rendering is injective on CompiledPath,
-        // so dedup-by-name == dedup-structural — DIVERGENCES design I4).
-        fresh.sort_by(|a, b| a.0.cmp(&b.0));
-        fresh.dedup_by(|a, b| a.0 == b.0);
+        // Structural dedup on a cheap id-sequence key (rendering is injective on
+        // CompiledPath, so this is exactly the frozen's dedup-by-name — no strings
+        // rendered on the hot path). MEET is commutative (an OR-join with a
+        // ⊥-check, it never evicts), so the resulting model is independent of the
+        // order the fresh facts are met in; only WHICH fact is the ⊥ witness
+        // depends on name order, and a ⊥ essentially never occurs in play. So meet
+        // in this cheap order and render/name-order ONLY if a ⊥ actually fires.
+        fresh.sort_by(seg_id_order);
+        fresh.dedup();
 
-        // The next delta is a fresh Db of exactly this round's new facts
-        // (Derive.hs:122 `foldl insertToks emptyDb fresh`).
         let mut next_delta = Db::empty();
-        for (_, g) in &fresh {
+        for g in &fresh {
             next_delta = next_delta.inserted(g);
         }
-        let next_facts: Vec<CompiledPath> = fresh.iter().map(|(_, g)| g.clone()).collect();
 
-        // Meet each fresh head into the model; the first ⊥ is the name-least one.
-        let mut next_model = model;
-        for (name, g) in &fresh {
-            next_model = match next_model.met_one(g) {
-                Some(m) => m,
-                None => return Err(Contradiction(name.clone())),
-            };
+        // Keep the round-start model (a free `Arc` refcount bump) so the rare ⊥
+        // path can recompute the name-least witness by meeting in name order.
+        let round_start = model.clone();
+        let mut cur = Some(model);
+        let mut bottomed = false;
+        for g in &fresh {
+            match cur.take().expect("cur present each iteration").met_one(g) {
+                Some(m) => cur = Some(m),
+                None => {
+                    bottomed = true;
+                    break;
+                }
+            }
         }
-        model = next_model;
+        if bottomed {
+            // ⊥ is a property of the fact SET (an exclusive node left multi-child),
+            // independent of meet order — so meeting in NAME order into the same
+            // round-start model reaches the same ⊥, and the frozen ⊥ witness is the
+            // name-least fresh fact that first triggers it (DIVERGENCES design I4).
+            let mut named: Vec<(String, &CompiledPath)> =
+                fresh.iter().map(|g| (render_head(interner, g), g)).collect();
+            named.sort_by(|a, b| a.0.cmp(&b.0));
+            let mut m = round_start;
+            for (name, g) in &named {
+                m = match m.met_one(g) {
+                    Some(x) => x,
+                    None => return Err(Contradiction(name.clone())),
+                };
+            }
+            unreachable!("structural-order meet bottomed but name-order did not — ⊥ is order-independent");
+        }
+        model = cur.expect("no ⊥ ⇒ cur present");
         delta = next_delta;
-        delta_facts = Some(next_facts);
+        delta_facts = Some(fresh);
     }
+}
+
+/// A cheap total order on `CompiledPath` by interned-id sequence then exclusion
+/// mask — enough to bring structurally-equal derived heads adjacent for
+/// `dedup()`. NOT name order (ids are run-dependent); the closure only needs SOME
+/// total order here, because the meet it feeds is order-independent (see `run`).
+fn seg_id_order(a: &CompiledPath, b: &CompiledPath) -> std::cmp::Ordering {
+    a.segs
+        .iter()
+        .map(|s| s.id())
+        .cmp(b.segs.iter().map(|s| s.id()))
+        .then_with(|| a.excl.cmp(&b.excl))
 }
 
 /// The bindings a rule contributes this round: full-eval rules query their whole
