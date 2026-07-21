@@ -24,8 +24,33 @@ comparator.
 | S6 | Planner + Minds + Relevance + Sight (design-heavy; fidelity summit) | DONE | [S06](reports/S06-planner.md) |
 | S7 | Vertical world slices: Feud → Intrigue → Bar → Village (Audience → S8, [A1]) | SLICES 1-4 LANDED, slice-4 fix wave applied; slice-4 evidence report outstanding | [S07-1](reports/S07-slice1-feud.md) [S07-2](reports/S07-slice2-intrigue.md) [S07-3](reports/S07-slice3-bar.md) |
 | S8 | Script + Play + Audience ([A1]) | DONE | [S08](reports/S08-script-play-audience.md) |
-| S9 | TypeCheck + AnalysisTable + Stress + Persist + Inspect + CLI | IN PROGRESS (panel done: SOUND + COMPLETE-WITH-GAPS, 0 critical; implementer running) | — |
-| S10 | Hardening + cut-over | — | — |
+| S9 | TypeCheck + AnalysisTable + Stress + Persist + Inspect + CLI | DONE (owed:S9==0, whole ledger owes nothing; review APPROVE-WITH-MINORS) | [S09](reports/S09-tools-and-cutover-audit.md) |
+| S10 | Hardening + cut-over | — (see S10 CONTRACT below) | — |
+
+## S10 CONTRACT — inherited obligations (from the S9 cut-over audit; binding)
+
+S10 hands off nothing owed on the ledger (owed==0). Its cut-over criteria are
+the PLAN's (conformance green · meta-gate green · differential matrix clean at
+500 seeds × cap 50 per world, state mode · check/stress/flow/dump-play equal ·
+clippy -D warnings · zero unsafe · proptest soak · perf table Rust ≥ Haskell ·
+the user plays village+bar on Rust and says go), PLUS these written contracts
+the S9 audit binds so no frozen-comparing net becomes silent dead-weight:
+
+- **[P4] the prax-oracle retarget** (the tool loses its counterparty at
+  deletion): at cut-over, capture the clean 500-seed matrix run's Rust-side
+  JSONL as a committed baseline corpus under `conformance/oracle-baselines/`;
+  DELETE `drive_frozen.rs` and its `freeze_check`/`freeze_rev` gates (not stub);
+  add a `compare --baseline` mode diffing Rust-now against the committed corpus;
+  retarget `die-seed-sweep.sh`/`verify.sh` to it. **[P3]** `die-seed-sweep.sh`
+  folds into this same retarget.
+- **freeze-check.sh** is removed in the deletion commit (its subject is gone).
+- **golden-check.sh** retargets to `conformance/goldens/SHA256SUMS`; the
+  meta-gate reads the already-committed `HASKELL_PINS.txt` snapshot (the [P2]
+  anti-vacuity floor is already in place, guarding an emptied manifest).
+- **`type_check == []` for all six shipped worlds** is a stated cut-over
+  criterion (the standing S9 net, carried into the matrix).
+- The one user gate in the whole program is the demo (village + bar on Rust
+  `prax play` with save/resume); the deletion commit follows only after "go".
 
 ## Registers
 
