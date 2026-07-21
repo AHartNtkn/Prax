@@ -764,6 +764,16 @@ impl State {
             self.rt.db(),
         )
     }
+    /// A private clone of the interner for a side-effect-free analysis pass (the
+    /// checker's deontic-invokability census interns and resolves without touching
+    /// the real pool).
+    pub(crate) fn interner_snapshot(&self) -> Interner {
+        (*self.interner).clone()
+    }
+    /// The compiled tables the checker's dead-condition lint reads.
+    pub(crate) fn compiled_tables(&self) -> &Compiled {
+        self.defs.compiled()
+    }
     /// Would inserting or retracting `sentence` disturb the derived closure
     /// (`Prax.Relevance.relevantDelta`)? False is the FAST PATH the engine takes:
     /// the delta commutes with closure, so no reclose is needed. The eviction
