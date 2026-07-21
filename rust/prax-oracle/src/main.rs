@@ -47,6 +47,7 @@ fn main() -> ExitCode {
     let r = match args.first().map(String::as_str) {
         Some("worldshape") => cmd_worldshape(&rest),
         Some("check") => cmd_check(&rest),
+        Some("stress") => cmd_stress(&rest),
         Some("compare") => cmd_compare(&rest),
         Some("explain") => cmd_explain(&rest),
         Some("matrix") => matrix::run(&rest),
@@ -67,6 +68,7 @@ fn usage() -> String {
         "usage:\n\
          \x20 prax-oracle worldshape <world>\n\
          \x20 prax-oracle check <world>\n\
+         \x20 prax-oracle stress <world>\n\
          \x20 prax-oracle compare <world> --mode trace|randtrace [--turns N] [--cap N] [--seed S]\n\
          \x20                             [--die-seed S] [--depth D] [--emit decisions|state|view]\n\
          \x20 prax-oracle explain <world> --mode M [same flags as compare]\n\
@@ -152,6 +154,50 @@ pub fn check_compare(world: &str) -> Result<(bool, Vec<String>), String> {
 fn cmd_check(args: &[&str]) -> Result<bool, String> {
     let world = *args.first().ok_or("check needs a world")?;
     let (green, lines) = check_compare(world)?;
+    for l in lines {
+        println!("{l}");
+    }
+    Ok(green)
+}
+
+/// The Rust `stress` document: the [`stress::StressReport`] over the fixed
+/// [`stress::DIFF_RUNS`]/`DIFF_CAP`/`DIFF_FAMILY` sweep, as canonical JSON —
+/// Value-vs-Value comparable against the additive frozen `oracle stress`. This
+/// STRUCTURAL channel exercises the aggregation, the many-seed family-coverage
+/// tracking and the dead-end counter across the deterministic `seedFor` sweep —
+/// none of which the single-seed randtrace channel reaches ([R8]).
+pub fn stress_json(world: &str) -> Result<Value, String> {
+    let st = worlds::build(world)?;
+    let report = stress::stress_test(
+        stress::DIFF_RUNS,
+        stress::DIFF_CAP,
+        Some(stress::DIFF_FAMILY),
+        &st,
+    );
+    Ok(stress::report_json(&report))
+}
+
+/// The `stress` differential: the frozen `StressReport` JSON vs the Rust one,
+/// Value-vs-Value.
+pub fn stress_compare(world: &str) -> Result<(bool, Vec<String>), String> {
+    let frozen = drive_frozen::run_json(&["stress".to_owned(), world.to_owned()])?;
+    let rust = stress_json(world)?;
+    let d = diff::diff_records(&frozen, &rust);
+    let rev = drive_frozen::freeze_rev()?;
+    if d.is_empty() {
+        Ok((true, vec![format!("stress {world}: GREEN (freeze rev {rev})")]))
+    } else {
+        let mut out = vec![format!("stress {world}: DIVERGENT (freeze rev {rev})")];
+        for fd in &d.fields {
+            out.extend(diff::render_field(fd));
+        }
+        Ok((false, out))
+    }
+}
+
+fn cmd_stress(args: &[&str]) -> Result<bool, String> {
+    let world = *args.first().ok_or("stress needs a world")?;
+    let (green, lines) = stress_compare(world)?;
     for l in lines {
         println!("{l}");
     }

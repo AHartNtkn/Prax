@@ -56,6 +56,21 @@ fn the_check_differential_agrees_over_shipped_worlds() {
     }
 }
 
+// The `stress` differential (item 6 [R8]): the additive frozen `oracle stress`
+// StressReport vs the Rust one, Value-vs-Value, over the deterministic seedFor
+// sweep. This exercises the aggregation, many-seed family-coverage and dead-end
+// tracking the single-seed randtrace channel never reaches.
+#[test]
+fn the_stress_differential_agrees_over_shipped_worlds() {
+    for world in ["intrigue", "bar", "play"] {
+        let (green, lines) = crate::stress_compare(world).expect("both sides emit a stress report");
+        for l in &lines {
+            println!("{l}");
+        }
+        assert!(green, "stress differential diverged for {world}");
+    }
+}
+
 #[test]
 fn a_mistranscribed_action_label_is_caught_by_worldshape_as_a_one_line_diff() {
     // THE GATE'S MUTATION EVIDENCE (§2). A swapped label is exactly what a world

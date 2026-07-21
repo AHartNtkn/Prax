@@ -167,6 +167,29 @@ pub fn stress_test(runs: i64, cap: i64, family: Option<&str>, st0: &State) -> St
     report
 }
 
+/// The report as CANONICAL JSON for the oracle `stress` differential — the
+/// `BTreeMap`/`BTreeSet` fields serialize sorted, so the document is
+/// Value-vs-Value comparable against the frozen `oracle stress`. Field spellings
+/// mirror `StressReport`'s frozen record (`srEndings`/…) in camelCase.
+pub fn report_json(r: &StressReport) -> serde_json::Value {
+    serde_json::json!({
+        "runs": r.runs,
+        "endings": r.endings,
+        "coverage": r.coverage,
+        "visited": r.visited,
+        "deadEnds": r.dead_ends,
+        "noEnding": r.no_ending,
+    })
+}
+
+/// The fixed parameters the oracle `stress` differential drives with, on BOTH
+/// engines: enough runs to exercise the many-seed coverage/dead-end tracking the
+/// single-seed randtrace channel never reaches, tracking the `currentScene`
+/// family the CLI's own callers name.
+pub const DIFF_RUNS: i64 = 50;
+pub const DIFF_CAP: i64 = 40;
+pub const DIFF_FAMILY: &str = "currentScene";
+
 #[cfg(test)]
 mod tests {
     // H: StressSpec.hs "Prax.Stress"

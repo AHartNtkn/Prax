@@ -54,6 +54,7 @@ import           Prax.Engine (possibleActions, performAction, currentTurn,
 import           Prax.Rng (rollStep, draw)
 import           Prax.Loop (advance, npcAct, runNpcTicks)
 import           Prax.TypeCheck (TypeError (..), typeCheck)
+import           Prax.Stress (stressTest, StressReport (..))
 import           Prax.EL (meet, leq)
 import           Prax.Query (Condition (..), CookedCondition (..), CmpOp (..),
                              CalcOp (..), forAll, implies, query)
@@ -844,6 +845,25 @@ runCheckCmd :: String -> IO ()
 runCheckCmd world = buildWorld world >>= \built -> case built of
   Nothing        -> dieMsg ("unknown world " ++ show world)
   Just (st0, _)  -> putJSON (toJSON (sort (map describe (typeCheck st0))))
+
+-- | The additive @stress@ differential (S9 [R8]): the 'StressReport' over a
+-- fixed 50-run, cap-40 sweep tracking the @currentScene@ family, as canonical
+-- JSON. This exercises the aggregation, the many-seed family-coverage tracking
+-- and the dead-end counter across the deterministic @seedFor@ sweep — none of
+-- which the single-seed randtrace channel reaches. The parameters and family
+-- match the Rust @stress_json@ side byte-for-byte.
+runStressCmd :: String -> IO ()
+runStressCmd world = buildWorld world >>= \built -> case built of
+  Nothing        -> dieMsg ("unknown world " ++ show world)
+  Just (st0, _)  ->
+    let r = stressTest 50 40 (Just "currentScene") st0
+    in putJSON (object
+         [ "runs"     .= srRuns r
+         , "endings"  .= srEndings r
+         , "coverage" .= srCoverage r
+         , "visited"  .= srVisited r
+         , "deadEnds" .= srDeadEnds r
+         , "noEnding" .= srNoEnding r ])
 
 -- The renderings from @app/Main.hs@'s @runCheck@, reproduced (that module is
 -- frozen; the strings are the checker's public surface).
@@ -1890,6 +1910,7 @@ main = do
     ("randtrace" : world : rest) -> runRandtrace world rest
     ("worldshape" : world : _)   -> runWorldshape world
     ("check" : world : _)        -> runCheckCmd world
+    ("stress" : world : _)       -> runStressCmd world
     ("fixtures" : name : _)      -> runFixtures name
     _ -> dieMsg (unlines
            [ "usage:"
@@ -1897,6 +1918,7 @@ main = do
            , "  prax-oracle randtrace <world> --seed S --cap N [--mode M] [--die-seed S] [LOC]"
            , "  prax-oracle worldshape <world>"
            , "  prax-oracle check <world>"
+           , "  prax-oracle stress <world>"
            , "  prax-oracle fixtures db|el|query|derive|kin|div1|engine|planner|npc"
            , ""
            , "  LOC (localization emission) = [--candidates] [--scores] [--identity] [--logs]" ])
