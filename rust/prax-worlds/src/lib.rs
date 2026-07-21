@@ -12,4 +12,5 @@ pub mod bar;
 pub mod feud;
 pub mod intrigue;
 pub mod play;
+pub mod vampire;
 pub mod village;
