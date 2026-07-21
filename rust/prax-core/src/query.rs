@@ -22,6 +22,7 @@
 //! A structurally impossible query (a subquery nested inside a subquery) is
 //! rejected loudly at compile, not at run (see [`crate::error::WorldError`]).
 
+use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 use crate::db::{Bindings, Db, Val, val_to_sym};
@@ -262,19 +263,110 @@ pub fn query(
     seed: &Bindings,
 ) -> Vec<Bindings> {
     let mut matches = vec![seed.clone()];
+    // A `Subquery`'s rows depend only on the model (fixed for this call) and the
+    // bindings its `where` reads — NOT on the outer bindings threaded past it. A
+    // rule like `notoriety` guards on `regards.W0.T` (binding a regarder W0 the
+    // rest of the body ignores) and then subqueries `regards.W.T`: it fires once
+    // per regarder, re-running the SAME subquery each time. Memoize the rows by
+    // the `where`-read bindings so those repeats collapse to one evaluation. The
+    // result is identical (byte-exact) — only redundant work is removed. Scope is
+    // this `query` call: `db` is constant here, and nested `query`s get their own.
+    let mut memo: SubqMemo = FxHashMap::default();
     for cond in conds {
         let mut next = Vec::new();
         for b in matches {
-            eval_cond(interner, db, cond, b, &mut next);
+            eval_cond(interner, db, cond, b, &mut next, &mut memo);
         }
         matches = next;
     }
     matches
 }
 
+/// Memo for [`Cond::Subquery`] rows within one [`query`] call: keyed by the
+/// subquery's result var plus the values its `where` reads from the outer
+/// binding. `None` values are unbound reads; a read bound to a non-`Sym` value
+/// (a `Num`/`Set`) makes the key unrepresentable, so that subquery is not
+/// memoized (falls through to a fresh evaluation — always correct).
+type SubqKey = (usize, Sym, SmallVec<[(Sym, Option<Sym>); 4]>);
+type SubqMemo = FxHashMap<SubqKey, Vec<Vec<Sym>>>;
+
+/// The memo key for a subquery, or `None` if any `where`-read var is bound to a
+/// non-`Sym` value (then the caller evaluates fresh rather than memoizing). Keyed
+/// by the `where` clause's address (stable across this call — it is the same
+/// compiled slice for every outer binding, and distinguishes sibling subqueries),
+/// the result var, and the values `where` reads from the outer binding.
+fn subquery_key(set: Sym, where_: &[Cond], b: &Bindings) -> Option<SubqKey> {
+    let mut vars: SmallVec<[Sym; 4]> = SmallVec::new();
+    collect_cond_vars(where_, &mut vars);
+    vars.sort_by_key(|s| s.id());
+    vars.dedup();
+    let mut proj: SmallVec<[(Sym, Option<Sym>); 4]> = SmallVec::new();
+    for v in vars {
+        match b.get(v) {
+            None => proj.push((v, None)),
+            Some(Val::Sym(s)) => proj.push((v, Some(*s))),
+            Some(_) => return None, // Num/Set read binding — do not memoize
+        }
+    }
+    Some((where_.as_ptr() as usize, set, proj))
+}
+
+/// Collect the variable [`Sym`]s a compiled condition list reads (for the
+/// subquery memo key). Recurses through every db-reading form.
+fn collect_cond_vars(conds: &[Cond], out: &mut SmallVec<[Sym; 4]>) {
+    for c in conds {
+        match c {
+            Cond::Match(segs) | Cond::Not(segs) => {
+                out.extend(segs.iter().copied().filter(|s| s.is_var()));
+            }
+            Cond::Eq(a, b) | Cond::Neq(a, b) | Cond::Cmp(_, a, b) => {
+                for &s in [a, b] {
+                    if s.is_var() {
+                        out.push(s);
+                    }
+                }
+            }
+            Cond::Calc(r, _, a, b) => {
+                for &s in [r, a, b] {
+                    if s.is_var() {
+                        out.push(s);
+                    }
+                }
+            }
+            Cond::Count(r, s) => {
+                for &x in [r, s] {
+                    if x.is_var() {
+                        out.push(x);
+                    }
+                }
+            }
+            Cond::Or(clauses) => {
+                for cl in clauses {
+                    collect_cond_vars(cl, out);
+                }
+            }
+            Cond::Absent(cs) | Cond::Exists(cs) => collect_cond_vars(cs, out),
+            Cond::Subquery { set, find, where_ } => {
+                if set.is_var() {
+                    out.push(*set);
+                }
+                out.extend(find.iter().copied().filter(|s| s.is_var()));
+                collect_cond_vars(where_, out);
+            }
+        }
+    }
+}
+
 /// Evaluate one condition against one binding, pushing every consistent
 /// extension into `out` (`Prax.Query.evalCookedCond`, case for case).
-fn eval_cond(interner: &mut Interner, db: &Db, cond: &Cond, b: Bindings, out: &mut Vec<Bindings>) {
+fn eval_cond(
+    interner: &mut Interner,
+    db: &Db,
+    cond: &Cond,
+    b: Bindings,
+    out: &mut Vec<Bindings>,
+    memo: &mut SubqMemo,
+) {
     match cond {
         Cond::Match(segs) => db.unify_into(interner, segs, b, out),
         Cond::Not(segs) => {
@@ -334,18 +426,28 @@ fn eval_cond(interner: &mut Interner, db: &Db, cond: &Cond, b: Bindings, out: &m
             }
         }
         Cond::Subquery { set, find, where_ } => {
-            let results = query(interner, db, where_, &b);
-            let rows: Vec<Vec<Sym>> = results
-                .iter()
-                .map(|r| {
-                    find.iter()
-                        .map(|&lvar| match r.get(lvar) {
-                            Some(v) => val_to_sym(interner, v),
-                            None => lvar,
+            let key = subquery_key(*set, where_, &b);
+            let rows: Vec<Vec<Sym>> = match key.as_ref().and_then(|k| memo.get(k)) {
+                Some(cached) => cached.clone(),
+                None => {
+                    let results = query(interner, db, where_, &b);
+                    let rows: Vec<Vec<Sym>> = results
+                        .iter()
+                        .map(|r| {
+                            find.iter()
+                                .map(|&lvar| match r.get(lvar) {
+                                    Some(v) => val_to_sym(interner, v),
+                                    None => lvar,
+                                })
+                                .collect()
                         })
-                        .collect()
-                })
-                .collect();
+                        .collect();
+                    if let Some(k) = key {
+                        memo.insert(k, rows.clone());
+                    }
+                    rows
+                }
+            };
             let mut b = b;
             b.insert(*set, Val::Set(rows));
             out.push(b);
