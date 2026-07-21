@@ -34,6 +34,7 @@ pub mod script_supersession;
 pub mod schedule_spec;
 pub mod source_sweep;
 pub mod supersession_world;
+pub mod typecheck_spec;
 pub mod unchecked_split_gate;
 pub mod view_invariant;
 pub mod village;

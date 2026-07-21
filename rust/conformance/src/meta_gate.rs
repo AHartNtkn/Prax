@@ -74,6 +74,7 @@ mod gate {
         // S9 (the authoring tools + the last audit before deletion):
         "AnalysisTableSpec.hs",
         "PersistSpec.hs",
+        "TypeCheckSpec.hs",
     ];
 
     fn repo_root() -> PathBuf {
