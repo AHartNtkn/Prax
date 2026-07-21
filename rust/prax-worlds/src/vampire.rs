@@ -287,9 +287,16 @@ mod tests {
         st.view_has(path)
     }
 
-    /// How many `vampire.*` facts exist, via `child_keys` on the base db.
+    /// How many `vampire.*` facts hold, via the VIEW (`labeled_view`) rather
+    /// than the base db: since [`transformation`] a turned victim's
+    /// `vampire.V` is a derived fact, not a base one, so a base-db read
+    /// (`db_child_keys`) silently undercounts. The same `labeled_view` idiom
+    /// [`fact_prefix`] already uses, filtered to the `vampire.` prefix.
     fn count_vampires(st: &mut State) -> usize {
-        st.db_child_keys("vampire").len()
+        st.labeled_view()
+            .iter()
+            .filter(|f| f.starts_with("vampire."))
+            .count()
     }
 
     /// Advance the engine's boundary clock until `phase!night` holds. The
@@ -452,6 +459,29 @@ mod tests {
         assert!(
             fact(&mut st, "mark.bram.neck"),
             "the turned still bears the mark"
+        );
+    }
+
+    /// Regression: [`count_vampires`] must count a DERIVED `vampire.V`
+    /// (produced by [`transformation`]) alongside a base-fact one, not just
+    /// the base db's own children. A base-db-only `count_vampires` reports 1
+    /// here (only the seeded base-fact `vampire.mara`) even though
+    /// `fact(&mut st, "vampire.bram")` — reading the view, like every other
+    /// consumer of `vampire.*` — already asserts true.
+    #[test]
+    fn count_vampires_includes_derived_vampires() {
+        let mut st = seeded_two_at(
+            /* vampire= */ "mara", /* victim= */ "bram", /* place= */ "mill",
+        );
+        make_hungry(&mut st, "mara");
+        let bite = ground_feed(&mut st, "mara", "bram");
+        st.perform_action(&bite);
+        advance_boundaries(&mut st, TURN_DELAY);
+        assert!(fact(&mut st, "vampire.bram"), "bram turns after the delay");
+        assert_eq!(
+            count_vampires(&mut st),
+            2,
+            "count_vampires must count bram's derived vampire.bram alongside mara's base-fact vampire.mara"
         );
     }
 }
