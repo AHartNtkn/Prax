@@ -49,6 +49,7 @@ fn main() -> ExitCode {
         Some("check") => cmd_check(&rest),
         Some("stress") => cmd_stress(&rest),
         Some("compare") => cmd_compare(&rest),
+        Some("emit") => cmd_emit(&rest),
         Some("explain") => cmd_explain(&rest),
         Some("matrix") => matrix::run(&rest),
         _ => Err(usage()),
@@ -71,6 +72,7 @@ fn usage() -> String {
          \x20 prax-oracle stress <world>\n\
          \x20 prax-oracle compare <world> --mode trace|randtrace [--turns N] [--cap N] [--seed S]\n\
          \x20                             [--die-seed S] [--depth D] [--emit decisions|state|view]\n\
+         \x20 prax-oracle emit <world> --mode trace|randtrace [same flags as compare]\n\
          \x20 prax-oracle explain <world> --mode M [same flags as compare]\n\
          \x20 prax-oracle matrix [--worlds a,b,c] --seeds A..B --cap N [--jobs N]\n\
          \x20                    [--min-records N] [--format report]\n\
@@ -662,6 +664,42 @@ fn cmd_compare(args: &[&str]) -> Result<bool, String> {
     let Run { outcome, shape, .. } = run_one(&spec, &reg)?;
     report(&spec, &outcome, &shape);
     Ok(!outcome.is_failure())
+}
+
+/// `emit` runs ONE engine — the Rust side, in-process — and writes its record
+/// stream as JSONL, the exact mirror of the frozen `trace`/`randtrace` output
+/// (`oracle/TraceMain.hs`'s `putJSONL`). No frozen subprocess, no comparison:
+/// this is the pure-Rust walk exposed as a stream, which the [P6] perf harness
+/// times against the frozen binary over the SAME emission (both engines
+/// serialize every record to stdout, so the timed region is symmetric).
+///
+/// The emission is [`Emit::matrix`] (candidates, `--mode state`) — byte-identical
+/// to the field set the 500-seed matrix just cleared — so `emit` and the frozen
+/// `<walk> … --mode state --candidates` do equal serialization work per record.
+fn cmd_emit(args: &[&str]) -> Result<bool, String> {
+    use std::io::Write;
+    // `--mode stress` emits the single StressReport document — the Rust
+    // `stress_json` the frozen `stress` differential proved byte-equal — so the
+    // [P6] perf harness can time the random hot path with launch amortized over
+    // the whole `DIFF_RUNS` sweep and a single terminal emit on BOTH engines
+    // (the [P6]-preferred "both exclude per-record serialization" symmetry).
+    if flag(args, "--mode") == Some("stress") {
+        let world = *args.first().ok_or("emit needs a world")?;
+        println!("{}", serde_json::to_string(&stress_json(world)?).map_err(|e| e.to_string())?);
+        return Ok(true);
+    }
+    let spec = parse_run(args)?;
+    let stream = rust_stream(&spec)?;
+    let stdout = std::io::stdout();
+    let mut out = std::io::BufWriter::new(stdout.lock());
+    for rec in &stream {
+        serde_json::to_writer(&mut out, rec)
+            .map_err(|e| format!("emit: cannot serialize a record: {e}"))?;
+        out.write_all(b"\n")
+            .map_err(|e| format!("emit: cannot write to stdout: {e}"))?;
+    }
+    out.flush().map_err(|e| format!("emit: cannot flush stdout: {e}"))?;
+    Ok(true)
 }
 
 /// `explain` is `compare` with the FULL localization emission on: candidates in
