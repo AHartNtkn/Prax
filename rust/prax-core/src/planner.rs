@@ -178,7 +178,7 @@ pub(crate) fn predict_move(
     if ds.is_empty() {
         return None;
     }
-    let improvables = defs.compiled().improvables.clone();
+    let improvables = &defs.compiled().improvables;
     // Every believed desire DEAD (statically un-improvable OR dead-now): no
     // candidate can strictly beat standing still, so don't ground or evaluate any.
     let all_dead = ds
@@ -495,7 +495,7 @@ pub(crate) fn motive_signature(
         .map(|(cs, _)| query(interner, rt.view(), cs, &seed).len())
         .collect();
 
-    let improvables = defs.compiled().improvables.clone();
+    let improvables = &defs.compiled().improvables;
     let mut live_desires: Vec<String> = Vec::new();
     for d in defs.desires() {
         if c.desires.contains(&d.name)

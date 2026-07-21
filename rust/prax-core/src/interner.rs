@@ -92,7 +92,7 @@ impl Interner {
         let sym = Sym((index << 1) | var_bit);
         self.names.push(name.to_owned());
         self.fwd.insert(name.to_owned(), sym);
-        self.insert_rank(index as usize, name);
+        self.insert_rank(name);
         sym
     }
 
@@ -102,7 +102,7 @@ impl Interner {
     /// after a world's vocabulary is established, `intern` is a hash hit and
     /// never reaches here; new segments (turn numbers, fresh belief atoms)
     /// arrive rarely on the hot path.
-    fn insert_rank(&mut self, index: usize, name: &str) {
+    fn insert_rank(&mut self, name: &str) {
         // Position among existing names by byte order (binary search over the
         // rank permutation, whose k-th entry is the name-index at rank k).
         // `order[k]` is recovered as the index whose rank is k; we search the

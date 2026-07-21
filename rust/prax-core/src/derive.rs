@@ -196,72 +196,6 @@ fn entailed(model: &Db, head: &CompiledPath) -> bool {
     true
 }
 
-/// Meet a single grounded head into the model — MEET semantics (`⊥` on a second
-/// distinct child under an exclusive node, assertedness OR-joined), NOT insert
-/// semantics (no sibling clearing). `None` is the paper's `⊥` (`Prax.Derive.meetOne`,
-/// via `Prax.EL.meet`).
-///
-/// The banked direct-walk optimization (ARCHITECTURE.md): `meet(model,
-/// singleton(head))` touches ONLY the head's path, yet the general [`meet`] both
-/// materialises the singleton Db AND clones the model's whole child vector at
-/// every level. [`meet_head`] path-copies just the head's spine — sharing every
-/// untouched subtree — so a derived head meet is O(head depth × local width)
-/// rather than O(model width). Pinned bit-for-bit against the general `meet` by
-/// `meet_head_matches_general_meet`.
-fn meet_one(model: &Db, head: &CompiledPath) -> Option<Db> {
-    meet_head(model, head, 0)
-}
-
-/// Meet the head-singleton's `segs[i]` child into `node` (a model subtree),
-/// path-copying `node` and recursing down the spine. Only called at the root
-/// (`i == 0`), where `node` is never exclusive, so the root's own `⊥` check is
-/// vacuous; interior/leaf `⊥` is handled in [`meet_head_node`].
-fn meet_head(node: &Db, head: &CompiledPath, i: usize) -> Option<Db> {
-    let seg = head.segs[i];
-    let met_child = match node.child(seg) {
-        Some(existing) => meet_head_node(existing, head, i)?,
-        None => head_subchain(head, i),
-    };
-    let mut kids: Vec<(Sym, Db)> = node.kids().iter().filter(|(s, _)| *s != seg).cloned().collect();
-    kids.push((seg, met_child));
-    Some(Db::from_parts(node.is_excl(), node.is_asserted(), kids))
-}
-
-/// Meet the head-singleton node at depth `i` into the model node `existing` for
-/// `segs[i]`: OR-join `excl`/`asserted`, merge the singleton's single child
-/// (`segs[i+1]`, unless this is the leaf), and report `⊥` when an exclusive node
-/// is left with more than one child — exactly [`meet`]'s per-node rule.
-fn meet_head_node(existing: &Db, head: &CompiledPath, i: usize) -> Option<Db> {
-    let excl = existing.is_excl() || head.is_excl_after(i);
-    let asserted = existing.is_asserted() || (i + 1 == head.segs.len());
-    let mut kids: Vec<(Sym, Db)> = existing.kids().to_vec();
-    if i + 1 < head.segs.len() {
-        let seg1 = head.segs[i + 1];
-        let met = match existing.child(seg1) {
-            Some(c) => meet_head_node(c, head, i + 1)?,
-            None => head_subchain(head, i + 1),
-        };
-        kids.retain(|(s, _)| *s != seg1);
-        kids.push((seg1, met));
-    }
-    if excl && kids.len() > 1 {
-        return None;
-    }
-    Some(Db::from_parts(excl, asserted, kids))
-}
-
-/// The head-singleton's subtree rooted at `segs[j]` (no model node to meet with):
-/// the bare chain `segs[j..]` with each node's `excl = head.is_excl_after(k)` and
-/// only the leaf asserted — exactly what `Db::empty().insert(head)` builds below
-/// `segs[j]`.
-fn head_subchain(head: &CompiledPath, j: usize) -> Db {
-    let n = head.segs.len();
-    let mut node = Db::from_parts(head.is_excl_after(n - 1), true, Vec::new());
-    for k in (j..n - 1).rev() {
-        node = Db::from_parts(head.is_excl_after(k), false, vec![(head.segs[k + 1], node)]);
-    }
-    node
-}
 
 /// Close a base [`Db`] under a set of [`CompiledRule`]s: apply the rules to a
 /// fixpoint and return the closed model. `Err` reports the first contradiction
@@ -306,8 +240,8 @@ pub fn close_from(
     let mut model = closed.clone();
     let mut delta = Db::empty();
     for f in facts {
-        model = model.insert(f);
-        delta = delta.insert(f);
+        model = model.inserted(f);
+        delta = delta.inserted(f);
     }
     if rules.is_empty() {
         return Ok(model);
@@ -376,14 +310,14 @@ fn run(
         // (Derive.hs:122 `foldl insertToks emptyDb fresh`).
         let mut next_delta = Db::empty();
         for (_, g) in &fresh {
-            next_delta = next_delta.insert(g);
+            next_delta = next_delta.inserted(g);
         }
         let next_facts: Vec<CompiledPath> = fresh.iter().map(|(_, g)| g.clone()).collect();
 
         // Meet each fresh head into the model; the first ⊥ is the name-least one.
         let mut next_model = model;
         for (name, g) in &fresh {
-            next_model = match meet_one(&next_model, g) {
+            next_model = match next_model.met_one(g) {
                 Some(m) => m,
                 None => return Err(Contradiction(name.clone())),
             };
@@ -481,7 +415,7 @@ pub fn naive_closure(
         fresh.dedup_by(|a, b| a.0 == b.0);
         let mut next_model = model;
         for (name, g) in &fresh {
-            next_model = match meet_one(&next_model, g) {
+            next_model = match next_model.met_one(g) {
                 Some(m) => m,
                 None => return Err(Contradiction(name.clone())),
             };
@@ -1040,7 +974,7 @@ mod optimization_laws {
             prop_assert_eq!(entailed(&model, &head), leq(&model, &singleton));
         }
 
-        /// [`meet_one`]'s path-copy `meet_head` equals the general
+        /// The in-place [`Db::met_one`] equals the general
         /// `meet(model, Db::empty().insert(head))` it replaced — both the ⊥ status
         /// and, when defined, the resulting model — over arbitrary models and heads.
         #[test]
@@ -1052,7 +986,7 @@ mod optimization_laws {
             let model = build(&mut i, &facts);
             let head = tokenize(&mut i, &head_s).unwrap();
             let singleton = Db::empty().insert(&head);
-            match (meet_one(&model, &head), meet(&model, &singleton)) {
+            match (model.clone().met_one(&head), meet(&model, &singleton)) {
                 (Some(a), Some(b)) => {
                     prop_assert_eq!(a.to_labeled_sentences(&i), b.to_labeled_sentences(&i));
                 }
@@ -1098,7 +1032,7 @@ mod optimization_laws {
             }
             let mut next_model = model;
             for (name, g) in &fresh {
-                next_model = match meet_one(&next_model, g) {
+                next_model = match next_model.met_one(g) {
                     Some(m) => m,
                     None => return Err(Contradiction(name.clone())),
                 };

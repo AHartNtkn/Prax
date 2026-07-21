@@ -122,6 +122,20 @@ fn kid_index(kids: &[(Sym, Db)], k: Sym) -> Result<usize, usize> {
     kids.binary_search_by(|(s, _)| s.id().cmp(&k.id()))
 }
 
+/// The head-singleton's subtree rooted at `segs[j]` (no model node to meet
+/// with): the bare chain `segs[j..]` with each node's `excl = is_excl_after(k)`
+/// and only the leaf asserted — exactly what `Db::empty().insert(head)` builds
+/// below `segs[j]`. The meet drops it in wholesale where the model has no
+/// existing node.
+fn head_subchain(head: &CompiledPath, j: usize) -> Db {
+    let n = head.segs.len();
+    let mut node = Db::from_parts(head.is_excl_after(n - 1), true, Vec::new());
+    for k in (j..n - 1).rev() {
+        node = Db::from_parts(head.is_excl_after(k), false, vec![(head.segs[k + 1], node)]);
+    }
+    node
+}
+
 impl Db {
     /// The empty database.
     pub fn empty() -> Db {
@@ -181,7 +195,63 @@ impl Db {
     /// child's subtree is preserved. The endpoint node is marked asserted;
     /// interior marks are carried through untouched.
     pub fn insert(&self, path: &CompiledPath) -> Db {
-        self.insert_at(path, 0)
+        self.clone().inserted(path)
+    }
+
+    /// The consuming form of [`insert`]. When the receiver's nodes are uniquely
+    /// owned (`Arc` refcount 1) — every trie the closure builds up fresh
+    /// (`next_delta`, and the `model` it threads round to round) — the descent
+    /// mutates in place via `Arc::make_mut`, allocating nothing; a node shared
+    /// with a planner fork is cloned exactly where the old path-copy cloned it.
+    /// Never worse than [`insert`], strictly cheaper on owned tries — and the
+    /// trie path-copy's `node.kids.clone()` was the dominant allocation.
+    pub fn inserted(mut self, path: &CompiledPath) -> Db {
+        self.insert_in_place(path, 0);
+        self
+    }
+
+    /// In-place mirror of [`insert_at`]: `Arc::make_mut` gives a uniquely-owned
+    /// `&mut Node` (cloning iff shared), then the exact same exclusion/endpoint
+    /// logic mutates it. Byte-identical result to `insert_at`.
+    fn insert_in_place(&mut self, path: &CompiledPath, i: usize) {
+        let node = Arc::make_mut(&mut self.0);
+        if i == path.segs.len() {
+            node.asserted = true;
+            return;
+        }
+        let n = path.segs[i];
+        let child_excl = path.is_excl_after(i);
+        let idx = match kid_index(&node.kids, n) {
+            Ok(idx) => idx,
+            Err(ins) => {
+                node.kids.insert(
+                    ins,
+                    (
+                        n,
+                        Db(Arc::new(Node {
+                            excl: child_excl,
+                            asserted: false,
+                            kids: SmallVec::new(),
+                        })),
+                    ),
+                );
+                ins
+            }
+        };
+        {
+            // The child edge's operator becomes this insert's (`.`/`!`), exactly
+            // as `insert_at` rebuilt the child with `excl: child_excl`; its
+            // asserted mark is preserved. `!` before a further segment sheds the
+            // child's siblings but keeps the surviving branch's subtree.
+            let child = &mut node.kids[idx].1;
+            let cnode = Arc::make_mut(&mut child.0);
+            cnode.excl = child_excl;
+            if child_excl && i + 1 < path.segs.len() {
+                let next = path.segs[i + 1];
+                cnode.kids.retain(|(s, _)| s.id() == next.id());
+            }
+        }
+        node.kids[idx].1.insert_in_place(path, i + 1);
     }
 
     fn insert_at(&self, path: &CompiledPath, i: usize) -> Db {
@@ -241,7 +311,59 @@ impl Db {
         }))
     }
 
+    // ---- meet (EL greatest-lower-bound of a derived head) ----------------
+
+    /// Meet a single grounded head into this model IN PLACE (the closure's
+    /// per-round model build). Equivalent to `meet(model, singleton(head))` and
+    /// to the former path-copy `meet_head`, but `Arc::make_mut` mutates the head's
+    /// spine directly when the model is uniquely owned (which it is inside the
+    /// fixpoint loop), sharing every untouched subtree and allocating nothing on
+    /// the spine — where the old meet cloned a child vector at every level. `None`
+    /// = ⊥ (an exclusive node left with more than one child); on ⊥ the caller
+    /// discards the receiver, so a partial mutation is harmless. Pinned
+    /// bit-for-bit against the general `meet` by `meet_head_matches_general_meet`.
+    pub fn met_one(mut self, head: &CompiledPath) -> Option<Db> {
+        self.meet_root(head)?;
+        Some(self)
+    }
+
+    /// Root level: the root is never exclusive and the head never asserts it, so
+    /// just meet the head's first segment's subtree in (mirrors the former
+    /// `meet_head` at `i == 0`).
+    fn meet_root(&mut self, head: &CompiledPath) -> Option<()> {
+        let seg = head.segs[0];
+        let node = Arc::make_mut(&mut self.0);
+        match kid_index(&node.kids, seg) {
+            Ok(idx) => node.kids[idx].1.meet_node(head, 0)?,
+            Err(ins) => node.kids.insert(ins, (seg, head_subchain(head, 0))),
+        }
+        Some(())
+    }
+
+    /// Meet the head into the model node for `segs[i]` (mirrors the former
+    /// `meet_head_node`): OR-join `excl`/`asserted`, meet the single child
+    /// `segs[i+1]`, then report ⊥ if an exclusive node is left multi-child.
+    fn meet_node(&mut self, head: &CompiledPath, i: usize) -> Option<()> {
+        let node = Arc::make_mut(&mut self.0);
+        node.excl = node.excl || head.is_excl_after(i);
+        let leaf = i + 1 == head.segs.len();
+        if leaf {
+            node.asserted = true;
+        } else {
+            let seg1 = head.segs[i + 1];
+            match kid_index(&node.kids, seg1) {
+                Ok(idx) => node.kids[idx].1.meet_node(head, i + 1)?,
+                Err(ins) => node.kids.insert(ins, (seg1, head_subchain(head, i + 1))),
+            }
+        }
+        if node.excl && node.kids.len() > 1 {
+            return None;
+        }
+        Some(())
+    }
+
     // ---- retract ---------------------------------------------------------
+    // (helper `head_subchain` for meet lives just below the impl block.)
 
     /// Retract the subtree named by `names` (operators are irrelevant to
     /// retract), then eagerly prune every ancestor the deletion leaves
