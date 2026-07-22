@@ -255,6 +255,21 @@ fn sate_hunger() -> Desire {
 /// the engine requires a seed to be set before it will run.
 const VAMPIRE_SEED: i64 = 1897;
 
+/// Every villager and the place they start and are rooted to. The SINGLE source
+/// of each home: [`vampire_cast`] reads it for each villager's anchor want and
+/// [`vampire_setup`] reads it for their starting position, so the two can never
+/// disagree. Roster order is name order at t=0 (the engine's cursor order).
+const HOMES: &[(&str, &str)] = &[
+    ("aldric", "square"),
+    ("mara", "square"),
+    ("bram", "church"),
+    ("cole", "church"),
+    ("rosa", "mill"),
+    ("gideon", "mill"),
+    ("nessa", "home"),
+    ("tam", "home"),
+];
+
 /// The villager the CLI seats a human player in (`prax play vampire`). A plain
 /// human villager — deliberately NOT mara (patient zero) — so a playthrough
 /// begins as an ordinary inhabitant. The skeleton has no human counterplay yet
@@ -262,37 +277,43 @@ const VAMPIRE_SEED: i64 = 1897;
 /// seat, read only by the CLI `world_named` play path (`stress`/`check` discard it).
 pub const PLAYER_NAME: &str = "bram";
 
-/// The eight-villager roster. No per-instance wants, no traits: DYNAMIC
-/// vampirism (patient zero at first night, anyone else [`transformation`]
-/// later turns) means no fixed subset of the roster can be "the vampires" at
-/// authoring time, so every member holds `sate-hunger` ([`sate_hunger`]) —
-/// gated by its own condition (`bloodHunger.Owner`), not by roster
-/// membership, since only a vampire can ever hold `bloodHunger.X`
-/// ([`hunger_pulse`]). A human's copy of the want is simply never live: it
-/// contributes zero to their score until the day they turn. [`cast`] still
-/// stamps `character.<who>` per member (the setup fact
-/// [`transparent`](prax_vocab::persona::transparent) and this task's own
-/// test read).
+/// The eight-villager roster, built from [`HOMES`]. Each villager holds two
+/// wants:
+/// - `sate-hunger` ([`sate_hunger`]) — gated by `bloodHunger.Owner`, so it is
+///   live only once they are a vampire (only a vampire is ever hungry, via
+///   [`hunger_pulse`]); a human's copy contributes zero until the day they turn.
+/// - a **home-anchor** life-want: `+1` to be at their [`HOMES`] location — the
+///   spec's "ordinary life-wants... the social substrate, inherited from the
+///   village world," and the same magnitude `village`'s bob "loiter" want uses.
+///   Without it the whole cast has identical empty valuations and drifts in
+///   lockstep, so a hungry vampire is never co-located with prey at its own
+///   turn and the infection cannot propagate. `+1` roots each villager to their
+///   home while staying far below hunger's `-22`, so a turned vampire abandons
+///   home to hunt.
+/// DYNAMIC vampirism (patient zero at first night, anyone [`transformation`]
+/// later turns) means no fixed subset can be "the vampires" at authoring time,
+/// so every member holds `sate-hunger`, not just a chosen few. [`cast`] stamps
+/// `character.<who>` per member (the setup fact this world's tests read).
 fn vampire_cast() -> (Vec<Character>, Vec<Outcome>) {
-    cast(
-        &[],
-        vec![
-            (Character::new("aldric").holds("sate-hunger"), Vec::new()),
-            (Character::new("mara").holds("sate-hunger"), Vec::new()),
-            (Character::new("bram").holds("sate-hunger"), Vec::new()),
-            (Character::new("cole").holds("sate-hunger"), Vec::new()),
-            (Character::new("rosa").holds("sate-hunger"), Vec::new()),
-            (Character::new("gideon").holds("sate-hunger"), Vec::new()),
-            (Character::new("nessa").holds("sate-hunger"), Vec::new()),
-            (Character::new("tam").holds("sate-hunger"), Vec::new()),
-        ],
-    )
-    .expect("the vampire village roster")
+    let roster = HOMES
+        .iter()
+        .map(|(who, home)| {
+            (
+                Character::new(*who).holds("sate-hunger").want(Want::new(
+                    vec![matches(format!("practice.world.world.at.{who}!{home}"))],
+                    1,
+                )),
+                Vec::new(),
+            )
+        })
+        .collect();
+    cast(&[], roster).expect("the vampire village roster")
 }
 
 /// The vampire village's setup facts: four connected places (`square`,
 /// `church`, `mill`, `home`, all reachable from the square) and the cast's
-/// starting positions, two to a place.
+/// starting positions, two to a place — the latter built from [`HOMES`], the
+/// same single source [`vampire_cast`] reads for each villager's anchor want.
 fn vampire_setup() -> Vec<Outcome> {
     vec![
         insert("practice.world.world.connected.square.church"),
@@ -301,14 +322,6 @@ fn vampire_setup() -> Vec<Outcome> {
         insert("practice.world.world.connected.mill.square"),
         insert("practice.world.world.connected.square.home"),
         insert("practice.world.world.connected.home.square"),
-        insert("practice.world.world.at.aldric!square"),
-        insert("practice.world.world.at.mara!square"),
-        insert("practice.world.world.at.bram!church"),
-        insert("practice.world.world.at.cole!church"),
-        insert("practice.world.world.at.rosa!mill"),
-        insert("practice.world.world.at.gideon!mill"),
-        insert("practice.world.world.at.nessa!home"),
-        insert("practice.world.world.at.tam!home"),
         // Day one starts in daylight; the parity table [`phase_clock`] reads
         // every boundary to re-derive `phase!X` off `turn!Now`.
         insert("phase!day"),
@@ -318,6 +331,13 @@ fn vampire_setup() -> Vec<Outcome> {
         // [`prey_practice`]) so its `feed` action can ever be offered.
         insert("practice.prey.here"),
     ]
+    .into_iter()
+    .chain(
+        HOMES
+            .iter()
+            .map(|(who, home)| insert(format!("practice.world.world.at.{who}!{home}"))),
+    )
+    .collect()
 }
 
 /// The fully initialized vampire village — the empty stage.
@@ -728,6 +748,39 @@ mod tests {
         assert!(
             st.db_child_keys("ending").is_empty(),
             "no base ending fact either"
+        );
+    }
+
+    /// The skeleton's end-to-end acceptance: driven by the REAL game loop
+    /// (`advance` to select the next actor, then `npc_act` to deliberate and
+    /// act — exactly what `prax play` runs, at the same depth), the infection
+    /// spreads through the whole cast and reaches a terminal ending. With only
+    /// feeding and turning — no human counterplay yet (detection/elimination
+    /// are later plans) — the vampires take the village; the point is that the
+    /// loop CLOSES, deterministically. It closes at ~208 character-turns
+    /// (≈26 rounds × 8 actors); the 400 ceiling is generous headroom, present
+    /// only so a regression that stalls the loop fails loudly instead of
+    /// looping forever.
+    #[test]
+    fn the_infection_runs_to_an_ending() {
+        use prax_core::turn::{advance, npc_act};
+        // The lookahead depth the CLI plays the cast at (prax-cli LOOKAHEAD_DEPTH):
+        // a hungry vampire must foresee move-then-feed, which is exactly depth 2.
+        let depth = 2;
+        let mut st = vampire_world();
+        let mut reached = None;
+        for _ in 0..400 {
+            let actor = advance(&mut st);
+            npc_act(&mut st, depth, &actor);
+            if let Some(e) = st.db_child_keys("ending").into_iter().next() {
+                reached = Some(e);
+                break;
+            }
+        }
+        assert_eq!(
+            reached.as_deref(),
+            Some("vampires"),
+            "the skeleton loop must close to the vampire ending; got {reached:?}"
         );
     }
 }
