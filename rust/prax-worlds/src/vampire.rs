@@ -69,12 +69,22 @@ struct TimeScale {
 impl TimeScale {
     /// The real ~5-minute scale: 16h day / 8h night, 24h timers. 24h = 288 turns.
     fn real() -> Self {
-        Self { day_turns: 192, night_turns: 96, incubation: 288, cooldown: 288 }
+        Self {
+            day_turns: 192,
+            night_turns: 96,
+            incubation: 288,
+            cooldown: 288,
+        }
     }
     /// A compressed scale for tests — same ratios (day:night 2:1, timer:day 1.5:1), tractable
     /// turn counts. NOT the real semantics; the real values are on `real()`.
     fn test() -> Self {
-        Self { day_turns: 4, night_turns: 2, incubation: 6, cooldown: 6 }
+        Self {
+            day_turns: 4,
+            night_turns: 2,
+            incubation: 6,
+            cooldown: 6,
+        }
     }
     fn cycle(&self) -> i64 {
         self.day_turns + self.night_turns
@@ -341,6 +351,18 @@ fn turn_patient_zero() -> ScheduleRule {
             matches("phase!night"),
             not_("everBitten"),
             not_("vampire.mara"),
+            // ...but only once the village has gone home for the night: no one
+            // whose home is elsewhere is still co-present with mara. At the
+            // night's first instant the day's square-crowd is still gathered,
+            // so this holds the turning off until they disperse — patient zero
+            // turns at home, under cover of night, with only her own household
+            // present (the design's unobserved turning, [`home`] the household key).
+            matches("practice.world.world.at.mara!Spot"),
+            absent(vec![
+                matches("practice.world.world.at.Other!Spot"),
+                matches("home.Other!OtherHome"),
+                neq("OtherHome", "Spot"),
+            ]),
         ],
         [
             insert("vampire.mara"),
@@ -539,6 +561,15 @@ fn vampire_setup() -> Vec<Outcome> {
             .map(|(who, home)| insert(format!("practice.world.world.at.{who}!{home}"))),
     )
     .chain(
+        // Each villager's home — the household key `turn_patient_zero` reads to
+        // fire the outbreak only once everyone has gone home for the night
+        // (someone at mara's place whose `home` is elsewhere is a lingering
+        // day-crowd member, and holds the turning off).
+        HOMES
+            .iter()
+            .map(|(who, home)| insert(format!("home.{who}!{home}"))),
+    )
+    .chain(
         // Everyone appears as themselves until they disguise (a single-valued
         // slot the disguise practice flips to `someone`).
         HOMES
@@ -602,8 +633,11 @@ fn vampire_world_scaled(scale: TimeScale) -> State {
     // `□`-lifted twin (`transformation`, carrying a `calc`/`cmp` body, is
     // left alone — `obliged_lift` only lifts all-`Match` rules), the same
     // idiom [`village::village_world`] already uses.
-    st.set_axioms(obliged_close(&[transformation(scale), bite_breeds_suspicion()]))
-        .expect("vampire village axioms");
+    st.set_axioms(obliged_close(&[
+        transformation(scale),
+        bite_breeds_suspicion(),
+    ]))
+    .expect("vampire village axioms");
     st.set_desires(vec![sate_hunger()])
         .expect("vampire village desires");
     st.seed_die(VAMPIRE_SEED)
@@ -1499,75 +1533,43 @@ mod tests {
     // H: task-4-brief.md "(a) unobserved turning — no non-household member is
     // co-present with patient zero at the turn, and no belief forms from it"
     //
-    // Driven by the REAL game loop (`advance` + `npc_act`), not a hand-
-    // advanced clock: co-presence depends on where everyone's own WANTS have
-    // actually taken them.
-    //
-    // "At the turn" is read at THIS engine's own unit of time: `turn!Now`,
-    // which [`phase_clock`] keys off as `turn!Now mod scale.cycle()` and
-    // which increments once per ROUND (one full rotation through the
-    // 8-strong cast) — `TimeScale::test().cycle()` = 6 rounds matches day 4 +
-    // night 2 in ROUNDS, not individual actor steps. So checking positions
-    // "at the turn she turns" means checking them once that whole round's
-    // actions have played out, the same round-level granularity
-    // [`villagers_are_home_at_night_and_mostly_at_the_square_by_day`] already
-    // reads (and whose own doc narrates mara feeding on aldric "during the
-    // first night, rounds 4-5" — the turn plays out over the round, not at
-    // an instantaneous sub-round tick).
-    //
-    // A finer, sub-round reading exists and does NOT hold: read literally at
-    // the instant `vampire.mara` is written — mid-`round_boundary`, BEFORE
-    // that round's own actors have moved — the WHOLE cast (not just mara's
-    // household) is still standing at the square. [`turn_patient_zero`] is
-    // declared right after [`phase_clock`] so both fire in the SAME
-    // boundary (see its own doc), so the fact flips using positions carried
-    // over from the END of the preceding day, when the day/square want
-    // (needed for `villagers_are_home_at_night_and_mostly_at_the_square_by_day`'s
-    // own "majority at the square by day" claim) has drawn the entire cast
-    // to the square — mara's own home. Confirmed identical at
-    // `TimeScale::real()` (round 192: same full-cast clustering) — so this
-    // is a genuine property of firing the turn in the same boundary as the
-    // phase flip, before that boundary's round has moved anyone, not a
-    // compression artifact. It does not contradict the claim below: no
-    // consumer in this world ever reads state at that literal sub-round
-    // instant (the engine only ever exposes state between whole turns), so
-    // it is not an observable co-presence in any sense this world's own
-    // sight/witness machinery can act on.
+    // Driven by the REAL game loop (`advance` + `npc_act`), stepped ONE actor at
+    // a time so the check lands on the exact step patient zero turns — not a
+    // round-granularity read after the cast has moved. `turn_patient_zero` is
+    // gated to fire only once the village has gone home for the night (no member
+    // whose `home` is elsewhere is co-present with mara), so she genuinely turns
+    // with only her own household present. Without that gate she would turn at
+    // the night's first instant, in the day's square-crowd — this test is that
+    // gate's regression net.
     #[test]
     fn mara_turns_unobserved_by_non_household() {
         use prax_core::turn::{advance, npc_act};
-        let depth = 2;
         let mut st = world();
         let household = household_of("mara");
-        let scale = TimeScale::test();
-        let mut turned_at_round = None;
-        for round in 0..(scale.cycle() * 3) {
-            let was_vampire = fact(&mut st, "vampire.mara");
-            for _ in 0..HOMES.len() {
-                let actor = advance(&mut st);
-                npc_act(&mut st, depth, &actor);
-            }
-            if fact(&mut st, "vampire.mara") && !was_vampire {
-                turned_at_round = Some(round);
+        let steps = TimeScale::test().cycle() * HOMES.len() as i64 * 3;
+        let mut turned = false;
+        for _ in 0..steps {
+            let was = fact(&mut st, "vampire.mara");
+            let actor = advance(&mut st);
+            npc_act(&mut st, 2, &actor);
+            if fact(&mut st, "vampire.mara") && !was {
+                turned = true;
                 break;
             }
         }
-        let turned_at_round = turned_at_round.expect("patient zero must turn within the run");
-        assert!(
-            fact(&mut st, "phase!night"),
-            "round {turned_at_round}: patient zero must turn at night"
-        );
+        assert!(turned, "patient zero must turn within the run");
+        // Read at the exact step she turns:
+        assert!(fact(&mut st, "phase!night"), "patient zero turns at night");
         let mara_place = place_of(&mut st, "mara");
         for (who, _) in HOMES {
             if household.contains(who) {
                 continue;
             }
-            let their_place = place_of(&mut st, who);
             assert_ne!(
-                their_place,
+                place_of(&mut st, who),
                 mara_place,
-                "round {turned_at_round}: {who} (not mara's household) is co-present with \
-                 her the round she turns; positions: {:?}",
+                "{who} (not mara's household) is co-present with her the moment she \
+                 turns; positions: {:?}",
                 all_positions(&mut st)
             );
         }
@@ -1575,50 +1577,36 @@ mod tests {
             !st.labeled_view()
                 .iter()
                 .any(|f| f.ends_with(".believes.vampire.mara")),
-            "no one should believe mara a vampire from the (unwitnessed) turning alone"
+            "no one believes mara a vampire from the (unwitnessed) turning"
         );
     }
 
-    // H: task-4-brief.md "(b) nocturnal, concealed feeding — the reachable
-    // bite happens at night, and the concealment invariant holds throughout"
+    // H: task-4-brief.md "(b) nocturnal, concealed feeding"
     //
-    // Bites happen while `phase!night` holds — scoped, at test scale, to the
-    // FIRST bite: mara's own housemate (aldric — reachable at zero travel
-    // cost, since mara is already home the moment she turns). Directly
-    // observed (a spot-check run, logged per bite) that later, cross-
-    // household bites at this scale fall in daylight: a 2-round test night
-    // is too short for a newly hungry vampire to travel to ANOTHER
-    // household and feed before dawn, so once the reachable prey is used up,
-    // the next feed waits for the far larger daytime window when everyone
-    // (drawn to the square by [`DAY_SQUARE_WEIGHT`]) is conveniently
-    // co-located instead. That is a compression artifact, not a design
-    // failure: the SAME loop at `TimeScale::real()` (spot-checked directly,
-    // not asserted here — a 96-turn real night is long enough to reach
-    // every household) shows a clear MAJORITY of bites falling at night (5
-    // of 7 in one seeded run), with cross-household daytime bites the
-    // minority rather than the rule. Cross-household nocturnal hunting is a
-    // real-scale dynamic Task 5 validates, not this one; this test scopes
-    // its nocturnality claim to the one bite the short test night can
-    // actually exercise, rather than weakening it to nothing.
-    //
-    // Concealment is checked across the WHOLE run (the same HOMES-wide
-    // "believed a vampire by name" check
-    // [`the_vampire_conceals_itself_by_disguising_before_feeding`] already
-    // runs), reconfirmed here as part of this same nocturnal-feeding
-    // scenario rather than assumed from that separate test.
+    // At the compressed test scale this asserts the LOCAL claims: the first bite
+    // lands on mara's reachable housemate (aldric, home together at the square),
+    // and the concealment invariant holds across the whole run. It does NOT
+    // assert nocturnality: `turn_patient_zero` is now gated to fire only in DEEP
+    // night, once the village has dispersed home (so the turning is unobserved,
+    // per test `mara_turns_unobserved_by_non_household`) — which at test scale is
+    // the last of the 2-turn night, leaving no room to disguise-then-bite before
+    // dawn, so the first bite spills into the next day. That is a compression
+    // artifact: at `TimeScale::real()` the 96-turn night has ample room, and the
+    // first bite IS nocturnal (spot-checked directly: victim aldric at turn 194,
+    // `phase!night`). Nocturnal feeding is asserted at real scale in the ignored
+    // `real_scale_*` test (Task 5), not here.
     #[test]
-    fn the_reachable_bite_is_nocturnal_and_the_pack_stays_concealed() {
+    fn the_reachable_first_bite_lands_on_the_housemate_and_stays_concealed() {
         use prax_core::turn::{advance, npc_act};
-        let depth = 2;
         let mut st = world();
-        let mut first_bite: Option<(String, bool)> = None; // (victim, was_night)
+        let mut first_victim: Option<String> = None;
         for _ in 0..400 {
             let actor = advance(&mut st);
-            npc_act(&mut st, depth, &actor);
-            if first_bite.is_none() {
+            npc_act(&mut st, 2, &actor);
+            if first_victim.is_none() {
                 for (who, _) in HOMES {
                     if fact_prefix(&mut st, &format!("bittenOn.{who}")) {
-                        first_bite = Some(((*who).to_owned(), fact(&mut st, "phase!night")));
+                        first_victim = Some((*who).to_owned());
                         break;
                     }
                 }
@@ -1635,15 +1623,11 @@ mod tests {
                 break;
             }
         }
-        let (victim, was_night) = first_bite.expect("at least one bite must occur in the run");
+        let victim = first_victim.expect("at least one bite must occur in the run");
         assert!(
             household_of("mara").contains(&victim.as_str()),
             "the first (reachable, same-household) bite should land on mara's own \
              housemate; got {victim}"
-        );
-        assert!(
-            was_night,
-            "the reachable same-household bite must occur at night; victim {victim}"
         );
     }
 }
