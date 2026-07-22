@@ -11,7 +11,8 @@ use prax_core::engine::State;
 use prax_core::query::{CalcOp, CmpOp, Condition, calc, cmp, matches, neq, not_};
 use prax_core::schedule::sight_rule;
 use prax_core::types::{
-    Action, Axiom, Character, Outcome, Practice, ScheduleRule, delete, insert, insert_for,
+    Action, Axiom, Character, Desire, Outcome, Practice, ScheduleRule, Want, delete, insert,
+    insert_for,
 };
 use prax_vocab::persona::cast;
 
@@ -144,16 +145,18 @@ fn phase_clock() -> ScheduleRule {
 }
 
 /// Patient zero: mara turns — and is marked, per the design that every
-/// vampire (including patient zero) is marked — at the first night. She also
-/// wakes hungry: turning IS becoming hungry, the same fact [`prey_practice`]'s
-/// feed action sates and the only currently-reachable producer of
-/// `bloodHunger.X` (Task 5's hunger DRIVE will elaborate how it re-arms
-/// afterward; this is what keeps `bloodHunger.Actor` a live — not
-/// dead-condition — read in the meantime). Guarded by `everBitten` so it
-/// fires exactly once and never re-fires. Declared after [`phase_clock`] in
-/// the schedule so the SAME round boundary that first flips the phase to
-/// night also turns her: both are period-1 rules firing in declaration order
-/// within one `round_boundary` call.
+/// vampire (including patient zero) is marked — at the first night. Guarded
+/// by `everBitten` so it fires exactly once and never re-fires. Declared
+/// after [`phase_clock`] in the schedule so the SAME round boundary that
+/// first flips the phase to night also turns her: both are period-1 rules
+/// firing in declaration order within one `round_boundary` call. Turning no
+/// longer hard-codes `bloodHunger.mara` here (a Task 3 stopgap, since feeding
+/// was the only reachable producer of `bloodHunger.X` before Task 5's DRIVE
+/// existed): [`hunger_pulse`], declared immediately after this rule, now
+/// subsumes it — she satisfies `vampire.X` the instant THIS clause inserts
+/// it, in the very same boundary, so she still wakes hungry the night she
+/// turns, but via the one general mechanism instead of a duplicate special
+/// case.
 fn turn_patient_zero() -> ScheduleRule {
     ScheduleRule::new("turnPatientZero", 1).clause(
         [
@@ -165,8 +168,41 @@ fn turn_patient_zero() -> ScheduleRule {
             insert("vampire.mara"),
             insert("mark.mara.neck"),
             insert("everBitten"),
-            insert("bloodHunger.mara"),
         ],
+    )
+}
+
+/// Blood-hunger, the recurring DRIVE: a period-1 schedule rule, guarded
+/// exactly like [`turn_patient_zero`]'s own idiom, that arms `bloodHunger.X`
+/// for any vampire who is neither already hungry nor still within the feed
+/// cooldown (`fed.X`, armed by [`prey_practice`]'s `feed` action for
+/// [`FEED_COOLDOWN`] turns). Declared right after `turn_patient_zero` so a
+/// freshly turned vampire (mara, or anyone [`transformation`] later turns)
+/// picks up hunger the SAME boundary they turn — no separate insert needed
+/// at the turning site; this one clause is now the only producer of
+/// `bloodHunger.X` in the world. `not_("bloodHunger.X")` keeps re-firing
+/// idempotent rather than a heuristic guard against "too much" hunger: there
+/// is no such thing as more-hungry here, only hungry-or-not.
+fn hunger_pulse() -> ScheduleRule {
+    ScheduleRule::new("hunger", 1).clause(
+        [matches("vampire.X"), not_("fed.X"), not_("bloodHunger.X")],
+        [insert("bloodHunger.X")],
+    )
+}
+
+/// Blood-hunger as a WANT: hunger is a negative state a vampire is driven to
+/// end, the same idiom as `village::suffers_hunger` — and mirrored at that
+/// desire's exact magnitude (-22). The vampire roster carries no other wants
+/// at all (see [`vampire_cast`]), so unlike bob (who must outweigh a +19
+/// bread/pride stack) any negative utility here would already make `feed`
+/// (which deletes `bloodHunger.Actor`) outrank the neutral "Wait a moment"
+/// (utility 0); -22 is reused rather than re-derived because it is the scale
+/// this codebase has already proven survives combination with competing
+/// wants, not because a smaller number would fail this particular roster.
+fn sate_hunger() -> Desire {
+    Desire::new(
+        "sate-hunger",
+        Want::new(vec![matches("bloodHunger.Owner")], -22),
     )
 }
 
@@ -174,22 +210,29 @@ fn turn_patient_zero() -> ScheduleRule {
 /// the engine requires a seed to be set before it will run.
 const VAMPIRE_SEED: i64 = 1897;
 
-/// The eight-villager roster. No wants, no traits: this task is the empty
-/// stage only. [`cast`] still stamps `character.<who>` per member (the
-/// setup fact [`transparent`](prax_vocab::persona::transparent) and this
-/// task's own test read).
+/// The eight-villager roster. No per-instance wants, no traits: DYNAMIC
+/// vampirism (patient zero at first night, anyone else [`transformation`]
+/// later turns) means no fixed subset of the roster can be "the vampires" at
+/// authoring time, so every member holds `sate-hunger` ([`sate_hunger`]) —
+/// gated by its own condition (`bloodHunger.Owner`), not by roster
+/// membership, since only a vampire can ever hold `bloodHunger.X`
+/// ([`hunger_pulse`]). A human's copy of the want is simply never live: it
+/// contributes zero to their score until the day they turn. [`cast`] still
+/// stamps `character.<who>` per member (the setup fact
+/// [`transparent`](prax_vocab::persona::transparent) and this task's own
+/// test read).
 fn vampire_cast() -> (Vec<Character>, Vec<Outcome>) {
     cast(
         &[],
         vec![
-            (Character::new("aldric"), Vec::new()),
-            (Character::new("mara"), Vec::new()),
-            (Character::new("bram"), Vec::new()),
-            (Character::new("cole"), Vec::new()),
-            (Character::new("rosa"), Vec::new()),
-            (Character::new("gideon"), Vec::new()),
-            (Character::new("nessa"), Vec::new()),
-            (Character::new("tam"), Vec::new()),
+            (Character::new("aldric").holds("sate-hunger"), Vec::new()),
+            (Character::new("mara").holds("sate-hunger"), Vec::new()),
+            (Character::new("bram").holds("sate-hunger"), Vec::new()),
+            (Character::new("cole").holds("sate-hunger"), Vec::new()),
+            (Character::new("rosa").holds("sate-hunger"), Vec::new()),
+            (Character::new("gideon").holds("sate-hunger"), Vec::new()),
+            (Character::new("nessa").holds("sate-hunger"), Vec::new()),
+            (Character::new("tam").holds("sate-hunger"), Vec::new()),
         ],
     )
     .expect("the vampire village roster")
@@ -240,6 +283,7 @@ pub fn vampire_world() -> State {
         sight_rule(sighting()),
         phase_clock(),
         turn_patient_zero(),
+        hunger_pulse(),
     ])
     .expect("vampire village schedule");
     for o in vampire_setup().iter().chain(persona_facts.iter()) {
@@ -247,7 +291,8 @@ pub fn vampire_world() -> State {
     }
     st.set_axioms(vec![transformation()])
         .expect("vampire village axioms");
-    st.set_desires(Vec::new()).expect("vampire village desires");
+    st.set_desires(vec![sate_hunger()])
+        .expect("vampire village desires");
     st.seed_die(VAMPIRE_SEED)
         .expect("the vampire village's die seed");
     st.set_prediction_scope(sighting())
@@ -459,6 +504,36 @@ mod tests {
         assert!(
             fact(&mut st, "mark.bram.neck"),
             "the turned still bears the mark"
+        );
+    }
+
+    /// The named character's own definition, straight off a fresh world's
+    /// roster — the `villager` idiom `conformance::village`'s planner tests
+    /// use: [`State::pick_action`] takes `&Character`, and
+    /// `minds::cooked_self_wants` reads the PASSED Character's `.desires`
+    /// field (not anything looked up on `st`) to decide which held desires
+    /// apply, so the test must hand back exactly the roster's own Character —
+    /// including its `.holds("sate-hunger")` marker — rather than a bare
+    /// `Character::new(name)`.
+    fn character(name: &str) -> Character {
+        vampire_world()
+            .characters()
+            .iter()
+            .find(|c| c.name == name)
+            .unwrap_or_else(|| panic!("no such character: {name}"))
+            .clone()
+    }
+
+    // H: task-5-brief.md "A hungry vampire with prey at hand chooses to feed"
+    #[test]
+    fn a_hungry_vampire_with_prey_chooses_to_feed() {
+        let mut st = seeded_two_at("mara", "bram", "mill");
+        make_hungry(&mut st, "mara");
+        let choice = st.pick_action(2, &character("mara"));
+        let label = choice.map(|g| g.label).unwrap_or_default();
+        assert!(
+            label.contains("feed on bram"),
+            "a hungry vampire feeds; got {label:?}"
         );
     }
 
