@@ -91,7 +91,7 @@ fn prey_practice() -> Practice {
         .roles(["Scene"])
         .action(observable(
             &bite_witnessing(),
-            "bit.Actor.Prey",
+            "bit.Appears.Prey",
             Action::new("[Actor]: feed on [Prey]")
                 .when([
                     matches("vampire.Actor"),
@@ -101,6 +101,7 @@ fn prey_practice() -> Practice {
                     matches("practice.world.world.at.Prey!Spot"),
                     neq("Actor", "Prey"),
                     not_("vampire.Prey"),
+                    matches("appears.Actor!Appears"),
                     matches("turn!Now"),
                 ])
                 .then([
@@ -110,6 +111,26 @@ fn prey_practice() -> Practice {
                     delete("bloodHunger.Actor"),
                 ]),
         ))
+}
+
+/// The general disguise affordance — available to ANYONE, not a vampire tell
+/// (Part 2 gives it an innocent use). Disguising flips the actor's single-valued
+/// `appears.Actor!` slot to `someone`; dropping it restores their name. A
+/// witnessed act by a disguised actor is attributed to `someone`.
+fn disguise_practice() -> Practice {
+    Practice::new("disguise")
+        .name("Disguise")
+        .roles(["Scene"])
+        .action(
+            Action::new("[Actor]: put on a disguise")
+                .when([matches("appears.Actor!Actor")]) // not already disguised
+                .then([insert("appears.Actor!someone")]),
+        )
+        .action(
+            Action::new("[Actor]: drop the disguise")
+                .when([matches("appears.Actor!someone")])
+                .then([insert("appears.Actor!Actor")]),
+        )
 }
 
 /// Transformation: `TURN_DELAY` boundaries after a bite, the victim becomes
@@ -363,12 +384,22 @@ fn vampire_setup() -> Vec<Outcome> {
         // Spawns the `prey` practice's singleton instance (see
         // [`prey_practice`]) so its `feed` action can ever be offered.
         insert("practice.prey.here"),
+        // Spawns the `disguise` practice's singleton instance (see
+        // [`disguise_practice`]) so its two actions can ever be offered.
+        insert("practice.disguise.here"),
     ]
     .into_iter()
     .chain(
         HOMES
             .iter()
             .map(|(who, home)| insert(format!("practice.world.world.at.{who}!{home}"))),
+    )
+    .chain(
+        // Everyone appears as themselves until they disguise (a single-valued
+        // slot the disguise practice flips to `someone`).
+        HOMES
+            .iter()
+            .map(|(who, _)| insert(format!("appears.{who}!{who}"))),
     )
     .collect()
 }
@@ -381,7 +412,7 @@ fn vampire_setup() -> Vec<Outcome> {
 pub fn vampire_world() -> State {
     let (roster, persona_facts) = vampire_cast();
     let mut st = State::new();
-    st.define_practices([world_practice(), prey_practice()])
+    st.define_practices([world_practice(), prey_practice(), disguise_practice()])
         .expect("vampire village practices");
     st.set_characters(roster).expect("vampire village cast");
     st.set_schedule(vec![
@@ -549,6 +580,16 @@ mod tests {
             })
     }
 
+    /// The offered action whose label contains `needle`, grounded off the real
+    /// `possible_actions` enumeration. Panics (with the offer list) if absent.
+    fn find_action(st: &mut State, actor: &str, needle: &str) -> GroundedAction {
+        let had = labels(st, actor);
+        st.possible_actions(actor)
+            .into_iter()
+            .find(|g| g.label.contains(needle))
+            .unwrap_or_else(|| panic!("no action containing {needle:?} offered to {actor}; available: {had:?}"))
+    }
+
     /// Whether `vampire` is currently offered a feed on `victim` — the
     /// cooldown-blocks-refeeding check, which must find nothing rather than
     /// panic (unlike [`ground_feed`]).
@@ -690,6 +731,25 @@ mod tests {
             fact(&mut st, "bram.believes.vampire.mara"),
             "the bitten victim suspects mara is a vampire"
         );
+    }
+
+    // H: detection spec "a disguised bite records 'someone', not the biter's name"
+    #[test]
+    fn a_disguised_bite_masks_the_biter() {
+        let mut st = seeded_two_at("mara", "bram", "mill");
+        make_hungry(&mut st, "mara");
+        // mara disguises: her apparent identity becomes "someone"
+        let disg = find_action(&mut st, "mara", "put on a disguise");
+        st.perform_action(&disg);
+        assert!(fact(&mut st, "appears.mara!someone"), "disguise masks the apparent identity");
+        // now she feeds while disguised
+        let bite = ground_feed(&mut st, "mara", "bram");
+        st.perform_action(&bite);
+        // the victim believes SOMEONE bit them, not mara
+        assert!(fact(&mut st, "bram.believes.bit.someone.bram.seen"), "the bite is attributed to 'someone'");
+        assert!(!fact(&mut st, "bram.believes.bit.mara.bram.seen"), "the biter's name is not recorded");
+        // and so no vampire-suspicion attaches to mara
+        assert!(!fact(&mut st, "bram.believes.vampire.mara"), "a masked bite breeds no suspicion of mara");
     }
 
     // H: task-4-brief.md "A bitten victim turns after the delay"
