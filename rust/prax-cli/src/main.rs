@@ -28,7 +28,7 @@ use prax_core::types::Character;
 use prax_script::compile::{compile, flow_chart};
 use prax_script::json::{decode_script, encode_script};
 use prax_script::script::script_player;
-use prax_worlds::{audience, bar, feud, intrigue, play, village};
+use prax_worlds::{audience, bar, feud, intrigue, play, vampire, village};
 
 /// Where an in-game save is written / resumed from.
 const SAVE_FILE: &str = "prax.save";
@@ -45,6 +45,7 @@ fn world_named(args: &[String]) -> (&'static str, State, &'static str) {
         Some("feud") => ("the feud (emergent sandbox)", feud::feud_world(), feud::PLAYER_NAME),
         Some("audience") => ("the royal audience", audience::audience_world(), audience::PLAYER_NAME),
         Some("village") => ("the village", village::village_world(), village::PLAYER_NAME),
+        Some("vampire") => ("the vampire village", vampire::vampire_world(), vampire::PLAYER_NAME),
         _ => ("a night at the bar", bar::bar_world(), bar::PLAYER_NAME),
     }
 }
@@ -320,6 +321,17 @@ mod tests {
             assert_eq!(n, name);
             assert_eq!(render_check(n, &world), format!("well-formed: {name}\n"));
         }
+    }
+
+    #[test]
+    fn vampire_world_is_selectable() {
+        let (title, world, player) = world_named(&["vampire".to_owned()]);
+        assert_eq!(title, "the vampire village");
+        assert_eq!(player, "bram");
+        assert!(
+            world.labeled_facts().iter().any(|f| f == "character.bram"),
+            "world_named(\"vampire\") returns the vampire village"
+        );
     }
 
     // flow ([P7]): byte-exact stdout golden. `prax flow` (no `.json` arg) prints

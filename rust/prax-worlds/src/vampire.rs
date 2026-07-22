@@ -255,6 +255,13 @@ fn sate_hunger() -> Desire {
 /// the engine requires a seed to be set before it will run.
 const VAMPIRE_SEED: i64 = 1897;
 
+/// The villager the CLI seats a human player in (`prax play vampire`). A plain
+/// human villager — deliberately NOT mara (patient zero) — so a playthrough
+/// begins as an ordinary inhabitant. The skeleton has no human counterplay yet
+/// (detection/elimination are later plans); this is the provisional default
+/// seat, read only by the CLI `world_named` play path (`stress`/`check` discard it).
+pub const PLAYER_NAME: &str = "bram";
+
 /// The eight-villager roster. No per-instance wants, no traits: DYNAMIC
 /// vampirism (patient zero at first night, anyone else [`transformation`]
 /// later turns) means no fixed subset of the roster can be "the vampires" at

@@ -70,6 +70,7 @@ pub fn build(name: &str) -> Result<State, String> {
         "bar" => Ok(prax_worlds::bar::bar_world()),
         "dm" => Ok(prax_worlds::bar::bar_director_world()),
         "village" => Ok(prax_worlds::village::village_world()),
+        "vampire" => Ok(prax_worlds::vampire::vampire_world()),
         "play" => Ok(prax_worlds::play::play_world()),
         "audience" => Ok(prax_worlds::audience::audience_world()),
         CG1_WORLD => Ok(cg1_world()),

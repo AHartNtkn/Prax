@@ -704,3 +704,14 @@ fn the_randtrace_walk_stops_at_the_ending_on_both_sides() {
         );
     }
 }
+
+#[test]
+fn vampire_world_registers_and_runs_a_walk() {
+    // Vampire is NEW content with no frozen counterpart, so it is deliberately NOT
+    // in `ported()` (the differential matrix's default sweep) — but it must still
+    // BUILD and run a single-engine walk, which is what `emit vampire --mode
+    // randtrace` and the CLI's mining surface drive.
+    let mut st = worlds::build("vampire").expect("the vampire world builds");
+    let recs = crate::drive_rust::rand_walk(&mut st, Emit::matrix(), Mode::State, 40, 0);
+    assert!(!recs.is_empty(), "the vampire world produces a walk");
+}
