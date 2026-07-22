@@ -123,45 +123,48 @@ fn transformation() -> Axiom {
     )
 }
 
-/// Vampires win: the outbreak has started (`everBitten`) and no living human
-/// remains — no `character.H` for whom `H` is neither a vampire nor dead.
-/// `not_("dead.H")` reads a family nothing in this task yet produces (the
-/// kill mechanic is a later plan): a NEGATIVE read of an unproducible fact is
-/// always-true, not a dead condition — only a POSITIVE read of one would be.
-/// `everBitten` guards the same way [`turn_patient_zero`] itself is guarded
-/// by it: without this clause the `absent` alone would already hold on the
-/// very first tick (nobody is a character.H WITHOUT being a character... but
-/// nobody is a vampire OR dead either, on day one, before mara has turned),
-/// so the ending would fire before the outbreak. Derived (a VIEW fact, like
-/// [`transformation`]'s own `vampire.V`), not a schedule-rule insert: it must
-/// re-evaluate on every view read, the same reasoning as `transformation`'s.
-fn vampires_win() -> Axiom {
-    Axiom::new(
-        vec![
+/// Vampires win: the outbreak has begun (`everBitten`) and no living human
+/// remains. Stamped as a BASE fact by a period-1 referee schedule rule, NOT an
+/// axiom: the stress harness's ending detector reads the base db
+/// (`prax_core::stress::ending_reached` → `db_child_keys`, mirroring frozen
+/// `Prax.Stress.endingReached`'s `unify "ending.E" (db st)`), so an axiom-derived
+/// `ending.*` (view-only) is invisible to every mass run — the base-vs-view split
+/// that also hid a derived `vampire.V` from a base-db `count_vampires` (Task 4).
+/// The rule's `when` reads the closed VIEW, so it sees `transformation`'s derived
+/// `vampire.V` just as [`hunger_pulse`] does. Guarded by `everBitten` (without it
+/// the `absent` alone holds on day one, before mara turns) and by
+/// `not_("ending.vampires")` (fire once). Declared AFTER [`hunger_pulse`] so the
+/// boundary's view is fully updated when it evaluates. `not_("dead.H")` is a
+/// negative read of a family no task yet produces — always-true, not a dead
+/// condition (a POSITIVE read would be).
+fn vampires_win_rule() -> ScheduleRule {
+    ScheduleRule::new("vampiresWin", 1).clause(
+        [
             matches("everBitten"),
+            not_("ending.vampires"),
             absent(vec![
                 matches("character.H"),
                 not_("vampire.H"),
                 not_("dead.H"),
             ]),
         ],
-        ["ending.vampires"],
+        [insert("ending.vampires")],
     )
 }
 
-/// Village wins: the outbreak has started (`everBitten`) and no living
-/// vampire remains — no `vampire.V` (base OR derived; the closed view folds
-/// [`turn_patient_zero`]'s base-fact `vampire.mara` and [`transformation`]'s
-/// derived `vampire.V` together, so this one clause sees both) for which `V`
-/// isn't dead. Same `everBitten` guard and same unproducible-`dead.V`
-/// reasoning as [`vampires_win`].
-fn village_wins() -> Axiom {
-    Axiom::new(
-        vec![
+/// Village wins: the outbreak has begun (`everBitten`) and no living vampire
+/// remains — no `vampire.V` (base `vampire.mara` OR `transformation`'s derived
+/// `vampire.V`; the closed view folds both) for which `V` isn't dead. A base-fact
+/// referee rule for the same reason as [`vampires_win_rule`]; same `everBitten`
+/// and `not_("ending.village")` guards, same unproducible-`dead.V` reasoning.
+fn village_wins_rule() -> ScheduleRule {
+    ScheduleRule::new("villageWins", 1).clause(
+        [
             matches("everBitten"),
+            not_("ending.village"),
             absent(vec![matches("vampire.V"), not_("dead.V")]),
         ],
-        ["ending.village"],
+        [insert("ending.village")],
     )
 }
 
@@ -326,12 +329,14 @@ pub fn vampire_world() -> State {
         phase_clock(),
         turn_patient_zero(),
         hunger_pulse(),
+        vampires_win_rule(),
+        village_wins_rule(),
     ])
     .expect("vampire village schedule");
     for o in vampire_setup().iter().chain(persona_facts.iter()) {
         st.perform_outcome(o).expect("vampire village setup");
     }
-    st.set_axioms(vec![transformation(), vampires_win(), village_wins()])
+    st.set_axioms(vec![transformation()])
         .expect("vampire village axioms");
     st.set_desires(vec![sate_hunger()])
         .expect("vampire village desires");
@@ -624,14 +629,15 @@ mod tests {
         st.with_db(|_, db| db.clone());
     }
 
-    // H: task-6-brief.md "The two terminal conditions ... derived by axioms"
+    // H: task-7a-brief.md "the endings fire as base-fact referee schedule
+    // rules, harness-visible via db_child_keys"
     #[test]
     fn endings_fire_on_their_conditions() {
-        // no-vampires -> village wins
+        // no living vampires -> village wins. Forcing everBitten first guards off
+        // turn_patient_zero, so this boundary does not turn mara: the premise holds.
         let mut st = vampire_world();
         force_fact(&mut st, "everBitten");
-        // (no vampire.* present)
-        reclose(&mut st);
+        st.round_boundary();
         assert!(
             fact(&mut st, "ending.village"),
             "no vampires => village ending"
@@ -640,8 +646,14 @@ mod tests {
             !fact(&mut st, "ending.vampires"),
             "not simultaneously the vampire ending"
         );
+        // The ending is a BASE fact — what the stress harness's base-db `ending_reached`
+        // reads. A view-only derivation would be invisible to every mass run.
+        assert!(
+            st.db_child_keys("ending").contains(&"village".to_owned()),
+            "the village ending must be a base fact visible to the stress harness"
+        );
 
-        // all-humans-gone -> vampires win
+        // no living humans -> vampires win.
         let mut st2 = vampire_world();
         force_fact(&mut st2, "everBitten");
         for who in [
@@ -649,35 +661,66 @@ mod tests {
         ] {
             force_fact(&mut st2, &format!("vampire.{who}"));
         }
-        reclose(&mut st2);
+        st2.round_boundary();
         assert!(
             fact(&mut st2, "ending.vampires"),
             "all turned => vampire ending"
         );
+        assert!(
+            st2.db_child_keys("ending").contains(&"vampires".to_owned()),
+            "the vampire ending must be a base fact visible to the stress harness"
+        );
     }
 
-    /// Regression: [`vampires_win`] and [`village_wins`] are guarded by
-    /// `matches("everBitten")` specifically so neither fires before the
-    /// outbreak — see both axioms' doc comments. On a freshly-built
-    /// [`vampire_world`] (no bites yet: no `everBitten`, no `vampire.*` at
-    /// all), `village_wins`'s `absent(vampire.V ...)` clause would otherwise
-    /// hold VACUOUSLY (there are no vampires on day one, the same way there
-    /// are none after the village wins), firing `ending.village` before a
-    /// single villager has turned. This test pins the guard directly rather
-    /// than only exercising the positive case
-    /// ([`endings_fire_on_their_conditions`]), so dropping the guard clause
-    /// from either axiom is caught here instead of silently regressing.
+    /// Regression: on a fresh world with NO boundary yet run, neither referee
+    /// rule ([`vampires_win_rule`], [`village_wins_rule`]) has fired, so no
+    /// `ending.*` fact exists — not in the view, and not (the harness-visible
+    /// check) in the base db.
     #[test]
     fn endings_absent_before_the_outbreak() {
         let mut st = vampire_world();
         reclose(&mut st);
         assert!(
             !fact(&mut st, "ending.village"),
-            "village ending must not fire before the outbreak (everBitten unset)"
+            "no village ending before any boundary"
         );
         assert!(
             !fact(&mut st, "ending.vampires"),
-            "vampire ending must not fire before the outbreak (everBitten unset)"
+            "no vampire ending before any boundary"
+        );
+        assert!(
+            st.db_child_keys("ending").is_empty(),
+            "no base ending fact before any boundary"
+        );
+    }
+
+    /// Regression: [`village_wins_rule`]'s `absent(vampire.V ...)` clause holds
+    /// VACUOUSLY when no vampire exists yet — the same way it holds once the
+    /// village has actually won. The `matches("everBitten")` guard is what
+    /// keeps the rule from firing on that vacuous truth before the outbreak
+    /// has even begun. The full [`vampire_world`] can't isolate this: its
+    /// first night boundary fires `turn_patient_zero`, which sets `everBitten`
+    /// itself. So this builds a MINIMAL `State` carrying only the `villageWins`
+    /// referee rule and no `turnPatientZero`, keeping `everBitten` unset across
+    /// a boundary. Falsifiable by construction: remove `matches("everBitten")`
+    /// from [`village_wins_rule`] and this test fails (RED/GREEN transcript in
+    /// the task report).
+    #[test]
+    fn everbitten_guard_blocks_endings_before_the_outbreak() {
+        let mut st = State::new();
+        st.set_characters(vec![Character::new("a"), Character::new("b")])
+            .expect("minimal roster");
+        st.set_schedule(vec![village_wins_rule()])
+            .expect("minimal schedule");
+        st.seed_die(VAMPIRE_SEED).expect("seed");
+        st.round_boundary();
+        assert!(
+            !fact(&mut st, "ending.village"),
+            "the everBitten guard must block the referee rule before the outbreak"
+        );
+        assert!(
+            st.db_child_keys("ending").is_empty(),
+            "no base ending fact either"
         );
     }
 }
