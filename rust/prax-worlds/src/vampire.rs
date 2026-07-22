@@ -15,6 +15,7 @@ use prax_core::types::{
     insert_for,
 };
 use prax_vocab::persona::cast;
+use prax_vocab::witness::{observable, saw};
 
 /// The village's sighting template, over the movement vocabulary below:
 /// whoever shares a place with you is someone you see. Copied from
@@ -53,6 +54,21 @@ fn world_practice() -> Practice {
 const TURN_DELAY: i64 = 2;
 const FEED_COOLDOWN: i64 = 2;
 
+/// The bite's co-presence template: whoever shares the biter's spot with them
+/// — the same movement substrate [`sighting`] reads, over the `witness`
+/// vocabulary's own fixed variables (`Actor`, `Witness`) rather than
+/// `sighting`'s (`Seer`, `Seen`). Copied rather than reused for the same
+/// reason `sighting` itself is copied from `village` — worlds stay
+/// independent — and because the two serve different call sites:
+/// `sighting` feeds [`sight_rule`]'s ambient perception, `bite_witnessing`
+/// feeds [`prey_practice`]'s per-action `observable` deposit.
+fn bite_witnessing() -> Vec<Condition> {
+    vec![
+        matches("practice.world.world.at.Actor!Spot"),
+        matches("practice.world.world.at.Witness!Spot"),
+    ]
+}
+
 /// Feeding: a vampire bites a co-located, not-yet-vampire victim. A
 /// world-scoped singleton practice — the `Scene` role plays no part in the
 /// action's own conditions (which read the movement substrate directly);
@@ -72,7 +88,9 @@ fn prey_practice() -> Practice {
     Practice::new("prey")
         .name("Feeding")
         .roles(["Scene"])
-        .action(
+        .action(observable(
+            &bite_witnessing(),
+            "bit.Actor.Prey",
             Action::new("[Actor]: feed on [Prey]")
                 .when([
                     matches("vampire.Actor"),
@@ -90,7 +108,7 @@ fn prey_practice() -> Practice {
                     insert_for(FEED_COOLDOWN, "fed.Actor"),
                     delete("bloodHunger.Actor"),
                 ]),
-        )
+        ))
 }
 
 /// Transformation: `TURN_DELAY` boundaries after a bite, the victim becomes
@@ -606,6 +624,33 @@ mod tests {
         assert!(
             feed_is_available(&mut st, "mara", "cole"),
             "once the cooldown clears the vampire can feed again"
+        );
+    }
+
+    // H: detection spec "a witnessed bite makes co-present characters believe a bite occurred"
+    #[test]
+    fn a_bite_is_witnessed_by_the_victim_and_bystanders() {
+        // mara + bram (victim) + cole (bystander) all at the mill
+        let mut st = seeded_two_at("mara", "bram", "mill");
+        st.perform_outcome(&insert("practice.world.world.at.cole!mill"))
+            .expect("place cole at the mill");
+        make_hungry(&mut st, "mara");
+        let bite = ground_feed(&mut st, "mara", "bram");
+        st.perform_action(&bite);
+        // the victim believes mara bit them
+        assert!(
+            fact(&mut st, "bram.believes.bit.mara.bram.seen"),
+            "the victim witnesses who bit them"
+        );
+        // a co-present bystander believes it too
+        assert!(
+            fact(&mut st, "cole.believes.bit.mara.bram.seen"),
+            "a bystander witnesses the bite"
+        );
+        // the biter is not their own witness
+        assert!(
+            !fact(&mut st, "mara.believes.bit.mara.bram.seen"),
+            "the actor is not their own witness"
         );
     }
 
