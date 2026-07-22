@@ -8,7 +8,7 @@
 //! endings.
 
 use prax_core::engine::State;
-use prax_core::query::{CalcOp, CmpOp, Condition, calc, cmp, matches, neq, not_};
+use prax_core::query::{CalcOp, CmpOp, Condition, absent, calc, cmp, matches, neq, not_};
 use prax_core::schedule::sight_rule;
 use prax_core::types::{
     Action, Axiom, Character, Desire, Outcome, Practice, ScheduleRule, Want, delete, insert,
@@ -120,6 +120,48 @@ fn transformation() -> Axiom {
             not_("vampire.V"),
         ],
         ["vampire.V"],
+    )
+}
+
+/// Vampires win: the outbreak has started (`everBitten`) and no living human
+/// remains — no `character.H` for whom `H` is neither a vampire nor dead.
+/// `not_("dead.H")` reads a family nothing in this task yet produces (the
+/// kill mechanic is a later plan): a NEGATIVE read of an unproducible fact is
+/// always-true, not a dead condition — only a POSITIVE read of one would be.
+/// `everBitten` guards the same way [`turn_patient_zero`] itself is guarded
+/// by it: without this clause the `absent` alone would already hold on the
+/// very first tick (nobody is a character.H WITHOUT being a character... but
+/// nobody is a vampire OR dead either, on day one, before mara has turned),
+/// so the ending would fire before the outbreak. Derived (a VIEW fact, like
+/// [`transformation`]'s own `vampire.V`), not a schedule-rule insert: it must
+/// re-evaluate on every view read, the same reasoning as `transformation`'s.
+fn vampires_win() -> Axiom {
+    Axiom::new(
+        vec![
+            matches("everBitten"),
+            absent(vec![
+                matches("character.H"),
+                not_("vampire.H"),
+                not_("dead.H"),
+            ]),
+        ],
+        ["ending.vampires"],
+    )
+}
+
+/// Village wins: the outbreak has started (`everBitten`) and no living
+/// vampire remains — no `vampire.V` (base OR derived; the closed view folds
+/// [`turn_patient_zero`]'s base-fact `vampire.mara` and [`transformation`]'s
+/// derived `vampire.V` together, so this one clause sees both) for which `V`
+/// isn't dead. Same `everBitten` guard and same unproducible-`dead.V`
+/// reasoning as [`vampires_win`].
+fn village_wins() -> Axiom {
+    Axiom::new(
+        vec![
+            matches("everBitten"),
+            absent(vec![matches("vampire.V"), not_("dead.V")]),
+        ],
+        ["ending.village"],
     )
 }
 
@@ -289,7 +331,7 @@ pub fn vampire_world() -> State {
     for o in vampire_setup().iter().chain(persona_facts.iter()) {
         st.perform_outcome(o).expect("vampire village setup");
     }
-    st.set_axioms(vec![transformation()])
+    st.set_axioms(vec![transformation(), vampires_win(), village_wins()])
         .expect("vampire village axioms");
     st.set_desires(vec![sate_hunger()])
         .expect("vampire village desires");
@@ -557,6 +599,56 @@ mod tests {
             count_vampires(&mut st),
             2,
             "count_vampires must count bram's derived vampire.bram alongside mara's base-fact vampire.mara"
+        );
+    }
+
+    /// Insert a base fact directly and reclose — the same `perform_outcome`
+    /// seeding idiom [`seeded_two_at`] already uses (`perform_outcome` itself
+    /// recloses the view on every call), generalized to an arbitrary path.
+    fn force_fact(st: &mut State, path: &str) {
+        st.perform_outcome(&insert(path))
+            .expect("force a base fact");
+    }
+
+    /// Force a full view reclose off the current base, via
+    /// [`State::with_db`]'s identity transform — [`crate::engine::reclose`]'s
+    /// own from-scratch fixpoint (not `perform_outcome`'s incremental
+    /// monotone-fast-path branch), so an ending test's assertions rest on the
+    /// same closure the harness itself would reach, not an artifact of
+    /// whichever internal update path a single `force_fact` happened to take.
+    fn reclose(st: &mut State) {
+        st.with_db(|_, db| db.clone());
+    }
+
+    // H: task-6-brief.md "The two terminal conditions ... derived by axioms"
+    #[test]
+    fn endings_fire_on_their_conditions() {
+        // no-vampires -> village wins
+        let mut st = vampire_world();
+        force_fact(&mut st, "everBitten");
+        // (no vampire.* present)
+        reclose(&mut st);
+        assert!(
+            fact(&mut st, "ending.village"),
+            "no vampires => village ending"
+        );
+        assert!(
+            !fact(&mut st, "ending.vampires"),
+            "not simultaneously the vampire ending"
+        );
+
+        // all-humans-gone -> vampires win
+        let mut st2 = vampire_world();
+        force_fact(&mut st2, "everBitten");
+        for who in [
+            "aldric", "mara", "bram", "cole", "rosa", "gideon", "nessa", "tam",
+        ] {
+            force_fact(&mut st2, &format!("vampire.{who}"));
+        }
+        reclose(&mut st2);
+        assert!(
+            fact(&mut st2, "ending.vampires"),
+            "all turned => vampire ending"
         );
     }
 }
