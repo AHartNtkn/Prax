@@ -14,6 +14,7 @@ use prax_core::types::{
     Action, Axiom, Character, Desire, Outcome, Practice, ScheduleRule, Want, delete, insert,
     insert_for,
 };
+use prax_vocab::deontic::obliged_close;
 use prax_vocab::persona::cast;
 use prax_vocab::witness::{observable, saw};
 
@@ -138,6 +139,19 @@ fn transformation() -> Axiom {
             not_("vampire.V"),
         ],
         ["vampire.V"],
+    )
+}
+
+/// Suspicion, the act channel: whoever believes they saw `Biter` bite someone
+/// believes `Biter` is a vampire — biting is how vampirism manifests, so a
+/// witnessed biter is a suspected vampire. Derived (a belief head, no `.seen`),
+/// so it dissolves if its supporting memory ever does and it is exactly the
+/// `<W>.believes.vampire.<X>` shape [`conceal`] quantifies over. A disguised
+/// bite (Task 3) binds `Biter = someone`, deriving the inert `…vampire.someone`.
+fn bite_breeds_suspicion() -> Axiom {
+    Axiom::new(
+        vec![matches("Believer.believes.bit.Biter.Victim.seen")],
+        ["Believer.believes.vampire.Biter"],
     )
 }
 
@@ -382,7 +396,18 @@ pub fn vampire_world() -> State {
     for o in vampire_setup().iter().chain(persona_facts.iter()) {
         st.perform_outcome(o).expect("vampire village setup");
     }
-    st.set_axioms(vec![transformation()])
+    // Wrapped in `obliged_close`, not a bare `vec![...]`: `prey_practice`'s
+    // witness deposit (`witnessed`, via [`observable`]) writes to a
+    // VARIABLE-headed path (`Witness.believes....seen`), so the checker's
+    // conservative `deontic_invokable` census counts this world as able to
+    // invoke an obligation — even though nothing here ever actually grounds
+    // `Witness` to `obliged`. That makes `bite_breeds_suspicion` (a purely
+    // `Match`-bodied rule) subject to v51 deontic closure: unclosed, it fails
+    // `type_check` with `DeonticUnclosed`. `obliged_close` adds its inert
+    // `□`-lifted twin (`transformation`, carrying a `calc`/`cmp` body, is
+    // left alone — `obliged_lift` only lifts all-`Match` rules), the same
+    // idiom [`village::village_world`] already uses.
+    st.set_axioms(obliged_close(&[transformation(), bite_breeds_suspicion()]))
         .expect("vampire village axioms");
     st.set_desires(vec![sate_hunger()])
         .expect("vampire village desires");
@@ -651,6 +676,19 @@ mod tests {
         assert!(
             !fact(&mut st, "mara.believes.bit.mara.bram.seen"),
             "the actor is not their own witness"
+        );
+    }
+
+    // H: detection spec "believing X bit Y ⟹ believing X is a vampire"
+    #[test]
+    fn a_witnessed_bite_makes_the_witness_suspect_the_biter() {
+        let mut st = seeded_two_at("mara", "bram", "mill");
+        make_hungry(&mut st, "mara");
+        let bite = ground_feed(&mut st, "mara", "bram");
+        st.perform_action(&bite);
+        assert!(
+            fact(&mut st, "bram.believes.vampire.mara"),
+            "the bitten victim suspects mara is a vampire"
         );
     }
 
