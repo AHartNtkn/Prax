@@ -288,25 +288,38 @@ fn village_wins_rule() -> ScheduleRule {
     )
 }
 
-/// The day/night clock (`phase!day`/`phase!night`): a period-1 schedule rule
-/// that derives the phase directly from the round-boundary clock's parity —
-/// `turn!Now` mod 2 — via a static lookup table (`phaseOfParity.0!day`,
-/// `phaseOfParity.1!night`; set up in [`vampire_setup`]), the same
-/// static-relation idiom as `connected.X.Y`. Deriving the phase fresh from
-/// the absolute turn count each boundary, rather than flipping the previous
-/// value, keeps it self-correcting: nothing can desync it from the clock,
-/// and — unlike a mutual pair of "if day then night / if night then day"
-/// rules — a single clause reading only the immutable `turn!Now` can never
-/// see its own write and re-fire within the same boundary.
-fn phase_clock() -> ScheduleRule {
-    ScheduleRule::new("phase", 1).clause(
-        [
-            matches("turn!Now"),
-            calc("Parity", CalcOp::Mod, "Now", "2"),
-            matches("phaseOfParity.Parity!Phase"),
-        ],
-        [insert("phase!Phase")],
-    )
+/// The day/night clock (`phase!day`/`phase!night`): a period-1, two-arm
+/// schedule rule that derives the phase from the round-boundary clock's
+/// position within a real day/night cycle — `turn!Now mod scale.cycle()` —
+/// rather than flipping every turn. The day arm fires while that position is
+/// before dusk (`< scale.day_turns`); the night arm fires from dusk onward
+/// (`>= scale.day_turns`). Deriving the phase fresh from the absolute turn
+/// count each boundary, rather than flipping the previous value, keeps it
+/// self-correcting: nothing can desync it from the clock, and — unlike a
+/// mutual pair of "if day then night / if night then day" rules — a clause
+/// reading only the immutable `turn!Now` can never see its own write and
+/// re-fire within the same boundary. `phase!X` is single-valued (`!`), so
+/// whichever arm matches replaces the previous phase outright.
+fn phase_clock(scale: TimeScale) -> ScheduleRule {
+    ScheduleRule::new("phase", 1)
+        // day: position in the day/night cycle is before dusk
+        .clause(
+            [
+                matches("turn!Now"),
+                calc("InCycle", CalcOp::Mod, "Now", scale.cycle().to_string()),
+                cmp(CmpOp::Lt, "InCycle", scale.day_turns.to_string()),
+            ],
+            [insert("phase!day")],
+        )
+        // night: at or past dusk
+        .clause(
+            [
+                matches("turn!Now"),
+                calc("InCycle", CalcOp::Mod, "Now", scale.cycle().to_string()),
+                cmp(CmpOp::Gte, "InCycle", scale.day_turns.to_string()),
+            ],
+            [insert("phase!night")],
+        )
 }
 
 /// Patient zero: mara turns — and is marked, per the design that every
@@ -466,11 +479,10 @@ fn vampire_setup() -> Vec<Outcome> {
         insert("practice.world.world.connected.mill.square"),
         insert("practice.world.world.connected.square.home"),
         insert("practice.world.world.connected.home.square"),
-        // Day one starts in daylight; the parity table [`phase_clock`] reads
-        // every boundary to re-derive `phase!X` off `turn!Now`.
+        // Day one starts in daylight; [`phase_clock`] reads `turn!Now mod
+        // scale.cycle()` every boundary to re-derive `phase!X` from scratch,
+        // so this seed only covers the window before the first boundary.
         insert("phase!day"),
-        insert("phaseOfParity.0!day"),
-        insert("phaseOfParity.1!night"),
         // Spawns the `prey` practice's singleton instance (see
         // [`prey_practice`]) so its `feed` action can ever be offered.
         insert("practice.prey.here"),
@@ -530,7 +542,7 @@ fn vampire_world_scaled(scale: TimeScale) -> State {
     st.set_characters(roster).expect("vampire village cast");
     st.set_schedule(vec![
         sight_rule(sighting()),
-        phase_clock(),
+        phase_clock(scale),
         turn_patient_zero(),
         hunger_pulse(),
         vampires_win_rule(),
@@ -614,6 +626,38 @@ mod tests {
             .iter()
             .filter(|f| f.starts_with("vampire."))
             .count()
+    }
+
+    // H: task-2-brief.md "phase spans a real day, not a flip every turn"
+    #[test]
+    fn phase_spans_the_day_then_the_night() {
+        let scale = TimeScale::test(); // day 4 / night 2, cycle 6
+        let mut st = vampire_world_scaled(scale);
+        // turns 0..day_turns are day; day_turns..cycle are night; then it repeats.
+        for _ in 0..(scale.cycle() * 2) {
+            st.round_boundary();
+            let turn = st.current_turn();
+            let in_cycle = turn.rem_euclid(scale.cycle());
+            if in_cycle < scale.day_turns {
+                assert!(
+                    fact(&mut st, "phase!day"),
+                    "turn {turn} (in-cycle {in_cycle}) should be day, phase!day absent"
+                );
+                assert!(
+                    !fact(&mut st, "phase!night"),
+                    "turn {turn} (in-cycle {in_cycle}) should be day, but phase!night holds"
+                );
+            } else {
+                assert!(
+                    fact(&mut st, "phase!night"),
+                    "turn {turn} (in-cycle {in_cycle}) should be night, phase!night absent"
+                );
+                assert!(
+                    !fact(&mut st, "phase!day"),
+                    "turn {turn} (in-cycle {in_cycle}) should be night, but phase!day holds"
+                );
+            }
+        }
     }
 
     /// Advance the engine's boundary clock until `phase!night` holds. The
