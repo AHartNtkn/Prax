@@ -50,12 +50,36 @@ fn world_practice() -> Practice {
         )
 }
 
-/// Both of the feed action's timers, in the clock's own unit: one turn is one
-/// phase (see [`phase_clock`]), so two turns is a full day-night cycle — the
-/// design's "24h" window, for both the transformation delay and the feed
-/// cooldown.
-const TURN_DELAY: i64 = 2;
-const FEED_COOLDOWN: i64 = 2;
+/// The world's time scale in turns. A turn is ~5 minutes (docs/PRINCIPLES.md), so the real
+/// scale measures a day and the 24h timers in hundreds of turns. `test()` is a COMPRESSED
+/// scale for the suite — it preserves the real ratios so the dynamics are the same shape, but
+/// it is NOT the real semantics (a real night is 96 turns, not 2).
+#[derive(Clone, Copy)]
+struct TimeScale {
+    /// Daylight turns per cycle.
+    day_turns: i64,
+    /// Night turns per cycle.
+    night_turns: i64,
+    /// Incubation: turns from bite to turning (24h real).
+    incubation: i64,
+    /// Feed cooldown: turns a vampire must wait to feed again (24h real).
+    cooldown: i64,
+}
+
+impl TimeScale {
+    /// The real ~5-minute scale: 16h day / 8h night, 24h timers. 24h = 288 turns.
+    fn real() -> Self {
+        Self { day_turns: 192, night_turns: 96, incubation: 288, cooldown: 288 }
+    }
+    /// A compressed scale for tests — same ratios (day:night 2:1, timer:day 1.5:1), tractable
+    /// turn counts. NOT the real semantics; the real values are on `real()`.
+    fn test() -> Self {
+        Self { day_turns: 4, night_turns: 2, incubation: 6, cooldown: 6 }
+    }
+    fn cycle(&self) -> i64 {
+        self.day_turns + self.night_turns
+    }
+}
 
 /// The bite's co-presence template: whoever shares the biter's spot with them
 /// — the same movement substrate [`sighting`] reads, over the `witness`
@@ -81,7 +105,7 @@ fn bite_witnessing() -> Vec<Condition> {
 /// (`bittenOn.Prey!Now` — a PERSISTENT insert, not `insert_for`:
 /// [`transformation`] still needs to read it after the delay elapses) for
 /// [`transformation`]'s turn-arithmetic axiom to consume, arms the actor's
-/// own feed cooldown for [`FEED_COOLDOWN`], and sates the actor's hunger. The
+/// own feed cooldown for `scale.cooldown`, and sates the actor's hunger. The
 /// turn stamp follows the same variable-binding idiom `sight_rule` uses for
 /// `believes.atSince.Seen!Now` — no separate `call`/`Function` needed: an
 /// action's `when` may freely READ the engine-owned `turn!Now` clock (only
@@ -103,7 +127,7 @@ fn bite_witnessing() -> Vec<Condition> {
 /// requiring that exact node be independently asserted, so this matches the
 /// moment ANY `bittenOn.Prey!<turn>` value exists, regardless of the bound
 /// turn.
-fn prey_practice() -> Practice {
+fn prey_practice(scale: TimeScale) -> Practice {
     Practice::new("prey")
         .name("Feeding")
         .roles(["Scene"])
@@ -126,7 +150,7 @@ fn prey_practice() -> Practice {
                 .then([
                     insert("mark.Prey.neck"),
                     insert("bittenOn.Prey!Now"),
-                    insert_for(FEED_COOLDOWN, "fed.Actor"),
+                    insert_for(scale.cooldown, "fed.Actor"),
                     delete("bloodHunger.Actor"),
                 ]),
         ))
@@ -168,7 +192,7 @@ fn talk_practice() -> Practice {
     )
 }
 
-/// Transformation: `TURN_DELAY` boundaries after a bite, the victim becomes
+/// Transformation: `scale.incubation` boundaries after a bite, the victim becomes
 /// a vampire — a turn-arithmetic axiom over the bite's timestamp
 /// ([`prey_practice`]'s `bittenOn.V!T`) and the live clock (`turn!Now`),
 /// re-evaluated on every view read rather than fired once by a schedule
@@ -185,13 +209,13 @@ fn talk_practice() -> Practice {
 /// `turn_patient_zero`: once derived it stays derivable every subsequent
 /// read (`T`, and hence `E`, never shrink), so the guard never flips it back
 /// off — it exists only to keep the axiom from being its own precondition.
-fn transformation() -> Axiom {
+fn transformation(scale: TimeScale) -> Axiom {
     Axiom::new(
         vec![
             matches("bittenOn.V!T"),
             matches("turn!Now"),
             calc("E", CalcOp::Sub, "Now", "T"),
-            cmp(CmpOp::Gte, "E", TURN_DELAY.to_string()),
+            cmp(CmpOp::Gte, "E", scale.incubation.to_string()),
             not_("vampire.V"),
         ],
         ["vampire.V"],
@@ -317,7 +341,7 @@ fn turn_patient_zero() -> ScheduleRule {
 /// exactly like [`turn_patient_zero`]'s own idiom, that arms `bloodHunger.X`
 /// for any vampire who is neither already hungry nor still within the feed
 /// cooldown (`fed.X`, armed by [`prey_practice`]'s `feed` action for
-/// [`FEED_COOLDOWN`] turns). Declared right after `turn_patient_zero` so a
+/// `scale.cooldown` turns). Declared right after `turn_patient_zero` so a
 /// freshly turned vampire (mara, or anyone [`transformation`] later turns)
 /// picks up hunger the SAME boundary they turn — no separate insert needed
 /// at the turning site; this one clause is now the only producer of
@@ -473,17 +497,32 @@ fn vampire_setup() -> Vec<Outcome> {
     .collect()
 }
 
-/// The fully initialized vampire village — the empty stage.
+/// The fully initialized vampire village, on the real ~5-minute time scale
+/// ([`TimeScale::real`]) — the registration entry point (`worlds::build`,
+/// the CLI `world_named`) and every mass run.
 ///
 /// # Panics
 /// If a construction guard rejects the authored content — a bug in this
 /// file, not a condition a world can handle.
 pub fn vampire_world() -> State {
+    vampire_world_scaled(TimeScale::real())
+}
+
+/// The fully initialized vampire village — the empty stage — built at the
+/// given [`TimeScale`]. [`vampire_world`] is this at [`TimeScale::real`];
+/// the test suite instead builds at [`TimeScale::test`] (the `#[cfg(test)]`
+/// `world` helper), so the compressed and real worlds share every line of
+/// construction, differing only in the timer magnitudes `scale` carries.
+///
+/// # Panics
+/// If a construction guard rejects the authored content — a bug in this
+/// file, not a condition a world can handle.
+fn vampire_world_scaled(scale: TimeScale) -> State {
     let (roster, persona_facts) = vampire_cast();
     let mut st = State::new();
     st.define_practices([
         world_practice(),
-        prey_practice(),
+        prey_practice(scale),
         disguise_practice(),
         talk_practice(),
     ])
@@ -512,7 +551,7 @@ pub fn vampire_world() -> State {
     // `□`-lifted twin (`transformation`, carrying a `calc`/`cmp` body, is
     // left alone — `obliged_lift` only lifts all-`Match` rules), the same
     // idiom [`village::village_world`] already uses.
-    st.set_axioms(obliged_close(&[transformation(), bite_breeds_suspicion()]))
+    st.set_axioms(obliged_close(&[transformation(scale), bite_breeds_suspicion()]))
         .expect("vampire village axioms");
     st.set_desires(vec![sate_hunger()])
         .expect("vampire village desires");
@@ -528,9 +567,19 @@ mod tests {
     use super::*;
     use prax_core::engine::GroundedAction;
 
+    /// The suite's world builder: [`vampire_world_scaled`] at
+    /// [`TimeScale::test`], the compressed scale ([`TimeScale::test`]'s own
+    /// doc explains why) — every test in this module builds through here (or
+    /// [`seeded_two_at`], which itself calls this), never through
+    /// [`vampire_world`], which is reserved for the real-scale registration
+    /// path.
+    fn world() -> State {
+        vampire_world_scaled(TimeScale::test())
+    }
+
     #[test]
     fn the_world_builds_and_is_well_formed() {
-        let st = vampire_world();
+        let st = world();
         assert_eq!(
             prax_core::typecheck::type_check(&st),
             vec![],
@@ -584,7 +633,7 @@ mod tests {
     // H: task-2-brief.md "Patient zero turns on the first night"
     #[test]
     fn patient_zero_turns_after_the_first_day() {
-        let mut st = vampire_world();
+        let mut st = world();
         // No vampire on day one.
         assert!(
             !fact(&mut st, "vampire.mara"),
@@ -620,7 +669,7 @@ mod tests {
     /// `perform_outcome` writes, exactly as [`vampire_setup`] itself seeds
     /// starting positions.
     fn seeded_two_at(vampire: &str, victim: &str, place: &str) -> State {
-        let mut st = vampire_world();
+        let mut st = world();
         st.perform_outcome(&insert(format!("vampire.{vampire}")))
             .expect("mark the vampire");
         st.perform_outcome(&insert(format!(
@@ -764,7 +813,7 @@ mod tests {
         );
     }
 
-    // H: task-3 feed cooldown — clears after FEED_COOLDOWN so the vampire can feed again
+    // H: task-3 feed cooldown — clears after TimeScale::test().cooldown so the vampire can feed again
     #[test]
     fn the_feed_cooldown_clears_after_its_delay() {
         let mut st = seeded_two_at("mara", "bram", "mill");
@@ -781,10 +830,10 @@ mod tests {
             !feed_is_available(&mut st, "mara", "cole"),
             "the cooldown blocks feeding again immediately"
         );
-        advance_boundaries(&mut st, FEED_COOLDOWN);
+        advance_boundaries(&mut st, TimeScale::test().cooldown);
         assert!(
             !fact(&mut st, "fed.mara"),
-            "the cooldown clears after FEED_COOLDOWN boundaries"
+            "the cooldown clears after TimeScale::test().cooldown boundaries"
         );
         // hunger_pulse re-arms mara each boundary; feed is offered again on a still-human prey.
         assert!(
@@ -896,7 +945,7 @@ mod tests {
             !fact(&mut st, "vampire.bram"),
             "not yet turned right after the bite"
         );
-        advance_boundaries(&mut st, TURN_DELAY);
+        advance_boundaries(&mut st, TimeScale::test().incubation);
         assert!(fact(&mut st, "vampire.bram"), "bram turns after the delay");
         assert!(
             fact(&mut st, "mark.bram.neck"),
@@ -913,7 +962,7 @@ mod tests {
     /// including its `.holds("sate-hunger")` marker — rather than a bare
     /// `Character::new(name)`.
     fn character(name: &str) -> Character {
-        vampire_world()
+        world()
             .characters()
             .iter()
             .find(|c| c.name == name)
@@ -976,7 +1025,7 @@ mod tests {
         make_hungry(&mut st, "mara");
         let bite = ground_feed(&mut st, "mara", "bram");
         st.perform_action(&bite);
-        advance_boundaries(&mut st, TURN_DELAY);
+        advance_boundaries(&mut st, TimeScale::test().incubation);
         assert!(fact(&mut st, "vampire.bram"), "bram turns after the delay");
         assert_eq!(
             count_vampires(&mut st),
@@ -1055,7 +1104,7 @@ mod tests {
     fn endings_fire_on_their_conditions() {
         // no living vampires -> village wins. Forcing everBitten first guards off
         // turn_patient_zero, so this boundary does not turn mara: the premise holds.
-        let mut st = vampire_world();
+        let mut st = world();
         force_fact(&mut st, "everBitten");
         st.round_boundary();
         assert!(
@@ -1074,7 +1123,7 @@ mod tests {
         );
 
         // no living humans -> vampires win.
-        let mut st2 = vampire_world();
+        let mut st2 = world();
         force_fact(&mut st2, "everBitten");
         for who in [
             "aldric", "mara", "bram", "cole", "rosa", "gideon", "nessa", "tam",
@@ -1098,7 +1147,7 @@ mod tests {
     /// check) in the base db.
     #[test]
     fn endings_absent_before_the_outbreak() {
-        let mut st = vampire_world();
+        let mut st = world();
         reclose(&mut st);
         assert!(
             !fact(&mut st, "ending.village"),
@@ -1160,7 +1209,7 @@ mod tests {
         // The lookahead depth the CLI plays the cast at (prax-cli LOOKAHEAD_DEPTH):
         // a hungry vampire must foresee move-then-feed, which is exactly depth 2.
         let depth = 2;
-        let mut st = vampire_world();
+        let mut st = world();
         let mut reached = None;
         for _ in 0..400 {
             let actor = advance(&mut st);
@@ -1181,7 +1230,7 @@ mod tests {
     #[test]
     fn the_vampire_conceals_itself_by_disguising_before_feeding() {
         use prax_core::turn::{advance, npc_act};
-        let mut st = vampire_world();
+        let mut st = world();
         let mut fed_at_least_once = false;
         for _ in 0..400 {
             let actor = advance(&mut st);
