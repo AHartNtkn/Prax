@@ -77,7 +77,9 @@ impl TimeScale {
         }
     }
     /// A compressed scale for tests — same ratios (day:night 2:1, timer:day 1.5:1), tractable
-    /// turn counts. NOT the real semantics; the real values are on `real()`.
+    /// turn counts. NOT the real semantics; the real values are on `real()`. Test-only: the
+    /// registration/play path builds `real()`, so this is never used off the test path.
+    #[cfg(test)]
     fn test() -> Self {
         Self {
             day_turns: 4,
@@ -1562,7 +1564,7 @@ mod tests {
         assert!(fact(&mut st, "phase!night"), "patient zero turns at night");
         let mara_place = place_of(&mut st, "mara");
         assert_eq!(
-            place_of(&mut st, "mara").as_deref(),
+            mara_place.as_deref(),
             Some("square"),
             "patient zero turns at her own home"
         );
