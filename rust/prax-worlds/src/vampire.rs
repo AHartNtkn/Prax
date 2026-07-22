@@ -603,8 +603,12 @@ mod tests {
     }
 
     /// Insert a base fact directly and reclose — the same `perform_outcome`
-    /// seeding idiom [`seeded_two_at`] already uses (`perform_outcome` itself
-    /// recloses the view on every call), generalized to an arbitrary path.
+    /// seeding idiom [`seeded_two_at`] already uses. `perform_outcome` inserts
+    /// the base fact through the engine; it does not itself guarantee a full
+    /// view reclose (`perform_effect`'s Insert branch has a skip path and an
+    /// incremental `apply_grow` path alongside the full-reclose one), so
+    /// callers that need the view to reflect the inserted fact call
+    /// [`reclose`] explicitly afterward, as every ending test below does.
     fn force_fact(st: &mut State, path: &str) {
         st.perform_outcome(&insert(path))
             .expect("force a base fact");
@@ -649,6 +653,31 @@ mod tests {
         assert!(
             fact(&mut st2, "ending.vampires"),
             "all turned => vampire ending"
+        );
+    }
+
+    /// Regression: [`vampires_win`] and [`village_wins`] are guarded by
+    /// `matches("everBitten")` specifically so neither fires before the
+    /// outbreak — see both axioms' doc comments. On a freshly-built
+    /// [`vampire_world`] (no bites yet: no `everBitten`, no `vampire.*` at
+    /// all), `village_wins`'s `absent(vampire.V ...)` clause would otherwise
+    /// hold VACUOUSLY (there are no vampires on day one, the same way there
+    /// are none after the village wins), firing `ending.village` before a
+    /// single villager has turned. This test pins the guard directly rather
+    /// than only exercising the positive case
+    /// ([`endings_fire_on_their_conditions`]), so dropping the guard clause
+    /// from either axiom is caught here instead of silently regressing.
+    #[test]
+    fn endings_absent_before_the_outbreak() {
+        let mut st = vampire_world();
+        reclose(&mut st);
+        assert!(
+            !fact(&mut st, "ending.village"),
+            "village ending must not fire before the outbreak (everBitten unset)"
+        );
+        assert!(
+            !fact(&mut st, "ending.vampires"),
+            "vampire ending must not fire before the outbreak (everBitten unset)"
         );
     }
 }
