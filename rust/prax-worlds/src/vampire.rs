@@ -1561,6 +1561,11 @@ mod tests {
         // Read at the exact step she turns:
         assert!(fact(&mut st, "phase!night"), "patient zero turns at night");
         let mara_place = place_of(&mut st, "mara");
+        assert_eq!(
+            place_of(&mut st, "mara").as_deref(),
+            Some("square"),
+            "patient zero turns at her own home"
+        );
         for (who, _) in HOMES {
             if household.contains(who) {
                 continue;
@@ -1594,7 +1599,8 @@ mod tests {
     // artifact: at `TimeScale::real()` the 96-turn night has ample room, and the
     // first bite IS nocturnal (spot-checked directly: victim aldric at turn 194,
     // `phase!night`). Nocturnal feeding is asserted at real scale in the ignored
-    // `real_scale_*` test (Task 5), not here.
+    // `real_scale_infection_closes_and_stays_concealed` test below (Task 5), which
+    // now genuinely exists and carries that assertion as a committed check.
     #[test]
     fn the_reachable_first_bite_lands_on_the_housemate_and_stays_concealed() {
         use prax_core::turn::{advance, npc_act};
@@ -1628,6 +1634,101 @@ mod tests {
             household_of("mara").contains(&victim.as_str()),
             "the first (reachable, same-household) bite should land on mara's own \
              housemate; got {victim}"
+        );
+    }
+
+    // H: task-5-brief.md "real-scale offline validation" — the ONLY committed
+    // assertion of nocturnal cross-household feeding, since
+    // `the_reachable_first_bite_lands_on_the_housemate_and_stays_concealed`'s own doc
+    // comment explains that the compressed test scale cannot exercise it (the 2-turn
+    // night leaves no room to disguise-then-bite before dawn). Driven by the REAL
+    // game loop (`advance` + `npc_act`, exactly what `the_infection_runs_to_an_ending`
+    // uses at test scale) but against [`vampire_world`] — the REAL `TimeScale::real()`
+    // build, day 192 / night 96 / incubation 288 / cooldown 288 — not the `world()`
+    // test helper. SLOW (tens of thousands of character-turns), so `#[ignore]`d out
+    // of the fast suite per the spec's "mass-run is offline"; run explicitly with
+    // `--ignored`.
+    #[test]
+    #[ignore = "real-scale: thousands of turns; run with --ignored"]
+    fn real_scale_infection_closes_and_stays_concealed() {
+        use prax_core::turn::{advance, npc_act};
+        use std::time::Instant;
+        let mut st = vampire_world(); // real scale: TimeScale::real()
+        let started = Instant::now();
+        // Cap: 30 real days (30 * scale.cycle() = 30 * 288 = 8640 turns) times the
+        // 8-strong cast (one character-turn per `advance`+`npc_act` step, per
+        // `prax_core::turn::advance`'s round-boundary-on-wrap semantics — the same
+        // reasoning `the_infection_runs_to_an_ending`'s doc comment applies at test
+        // scale) is ~69120 steps; generous headroom on top so a regression that
+        // stalls the loop fails loudly instead of looping forever, rather than the
+        // cap itself being a tight tuned bound.
+        let cap_steps = 8640_i64 * HOMES.len() as i64 + 30_000;
+        // (victim, turn, was_night) for the FIRST bite in the run — criterion #5
+        // (nocturnality), tracked at the exact step it appears rather than sampled
+        // after the fact, the same idiom
+        // `the_reachable_first_bite_lands_on_the_housemate_and_stays_concealed` uses.
+        let mut first_bite: Option<(String, i64, bool)> = None;
+        let mut reached = None;
+        let mut steps_taken = 0_i64;
+        for _ in 0..cap_steps {
+            steps_taken += 1;
+            let actor = advance(&mut st);
+            npc_act(&mut st, 2, &actor);
+            if first_bite.is_none() {
+                for (who, _) in HOMES {
+                    if fact_prefix(&mut st, &format!("bittenOn.{who}")) {
+                        first_bite = Some((
+                            (*who).to_owned(),
+                            st.current_turn(),
+                            fact(&mut st, "phase!night"),
+                        ));
+                        break;
+                    }
+                }
+            }
+            // The concealment invariant, HOMES-wide, held throughout the entire
+            // real-scale run — the same check
+            // `the_vampire_conceals_itself_by_disguising_before_feeding` and
+            // `the_reachable_first_bite_lands_on_the_housemate_and_stays_concealed` make at
+            // test scale, now checked against the real 288-turn incubation/cooldown
+            // timers rather than the compressed 6-turn ones.
+            assert!(
+                !st.labeled_view().iter().any(|f| {
+                    HOMES
+                        .iter()
+                        .any(|(who, _)| f.ends_with(&format!(".believes.vampire.{who}")))
+                }),
+                "every vampire must stay concealed at real scale — no one is ever believed \
+                 a vampire by name"
+            );
+            if let Some(e) = st.db_child_keys("ending").into_iter().next() {
+                reached = Some(e);
+                break;
+            }
+        }
+        let elapsed = started.elapsed();
+        let (victim, bite_turn, was_night) =
+            first_bite.expect("at least one bite must occur within the real-scale run's turn cap");
+        println!(
+            "real-scale run: closed at turn {} ({} character-turns, cap {cap_steps}) in {:?}; \
+             first bite victim={victim} turn={bite_turn} phase!night={was_night}; ending={:?}",
+            st.current_turn(),
+            steps_taken,
+            elapsed,
+            reached
+        );
+        // (a) the first bite is nocturnal.
+        assert!(
+            was_night,
+            "the first bite must land at night at real scale; victim={victim} \
+             turn={bite_turn} phase!night={was_night}"
+        );
+        // (c) the run closes to the vampire ending.
+        assert_eq!(
+            reached.as_deref(),
+            Some("vampires"),
+            "the real-scale run must close to the vampire ending within {cap_steps} steps; \
+             got {reached:?}"
         );
     }
 }
