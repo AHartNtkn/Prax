@@ -157,13 +157,15 @@ fn disguise_practice() -> Practice {
 /// hearsay then breeds suspicion through [`bite_breeds_suspicion`] just as an
 /// eyewitness account does.
 fn talk_practice() -> Practice {
-    Practice::new("talk")
-        .name("Talk")
-        .roles(["Scene"])
-        .action(
-            gossip(&bite_witnessing(), Vec::new(), "bit.Subject.Victim", "[Actor]: spread word about [Subject]")
-                .expect("the bite-gossip action"),
+    Practice::new("talk").name("Talk").roles(["Scene"]).action(
+        gossip(
+            &bite_witnessing(),
+            Vec::new(),
+            "bit.Subject.Victim",
+            "[Actor]: spread word about [Subject]",
         )
+        .expect("the bite-gossip action"),
+    )
 }
 
 /// Transformation: `TURN_DELAY` boundaries after a bite, the victim becomes
@@ -346,16 +348,13 @@ fn sate_hunger() -> Desire {
 }
 
 /// How much a villager values NOT being believed a vampire. Reuses the village
-/// `conceal` scale (bob's `stole.bob.loaf` concealment is 12) rather than a
-/// value derived for this world specifically: the break-even arithmetic already
-/// favors disguise-first at that shared magnitude. Biting in the open forfeits
-/// the concealment want across the depth-2 horizon, while disguising first only
-/// delays sating hunger by one turn — `2 * CONCEAL_WEIGHT` (24) exceeds
-/// [`sate_hunger`]'s magnitude (22), so the forfeited concealment outweighs the
-/// one-turn hunger delay and a hungry vampire disguises before feeding rather
-/// than biting undisguised. The Task 6 acceptance run
-/// (`the_vampire_conceals_itself_by_disguising_before_feeding`) confirms this
-/// holds across a full playthrough, not just the single-decision case.
+/// `conceal` scale (bob's `stole.bob.loaf` concealment is 12): strong enough
+/// that forfeiting concealment outweighs the one-turn cost of disguising
+/// before a bite. Confirmed empirically — not tuned — by the depth-2
+/// pick-preference test
+/// (`a_hungry_vampire_prefers_to_disguise_before_feeding_in_the_open`) and the
+/// full-run acceptance test
+/// (`the_vampire_conceals_itself_by_disguising_before_feeding`).
 const CONCEAL_WEIGHT: i32 = 12;
 
 /// The die seed for this playthrough. No draws are made yet in this task, but
@@ -662,7 +661,9 @@ mod tests {
         st.possible_actions(actor)
             .into_iter()
             .find(|g| g.label.contains(needle))
-            .unwrap_or_else(|| panic!("no action containing {needle:?} offered to {actor}; available: {had:?}"))
+            .unwrap_or_else(|| {
+                panic!("no action containing {needle:?} offered to {actor}; available: {had:?}")
+            })
     }
 
     /// Whether `vampire` is currently offered a feed on `victim` — the
@@ -832,6 +833,25 @@ mod tests {
         );
     }
 
+    // H: detection spec "disguise is a toggle — dropping it restores the true identity"
+    #[test]
+    fn dropping_a_disguise_restores_the_true_identity() {
+        let mut st = seeded_two_at("mara", "bram", "mill");
+        let disg = find_action(&mut st, "mara", "put on a disguise");
+        st.perform_action(&disg);
+        assert!(fact(&mut st, "appears.mara!someone"), "mara is disguised");
+        let drop = find_action(&mut st, "mara", "drop the disguise");
+        st.perform_action(&drop);
+        assert!(
+            fact(&mut st, "appears.mara!mara"),
+            "dropping the disguise restores her name"
+        );
+        assert!(
+            !fact(&mut st, "appears.mara!someone"),
+            "she is no longer disguised"
+        );
+    }
+
     // H: detection spec "a disguised bite records 'someone', not the biter's name"
     #[test]
     fn a_disguised_bite_masks_the_biter() {
@@ -840,15 +860,27 @@ mod tests {
         // mara disguises: her apparent identity becomes "someone"
         let disg = find_action(&mut st, "mara", "put on a disguise");
         st.perform_action(&disg);
-        assert!(fact(&mut st, "appears.mara!someone"), "disguise masks the apparent identity");
+        assert!(
+            fact(&mut st, "appears.mara!someone"),
+            "disguise masks the apparent identity"
+        );
         // now she feeds while disguised
         let bite = ground_feed(&mut st, "mara", "bram");
         st.perform_action(&bite);
         // the victim believes SOMEONE bit them, not mara
-        assert!(fact(&mut st, "bram.believes.bit.someone.bram.seen"), "the bite is attributed to 'someone'");
-        assert!(!fact(&mut st, "bram.believes.bit.mara.bram.seen"), "the biter's name is not recorded");
+        assert!(
+            fact(&mut st, "bram.believes.bit.someone.bram.seen"),
+            "the bite is attributed to 'someone'"
+        );
+        assert!(
+            !fact(&mut st, "bram.believes.bit.mara.bram.seen"),
+            "the biter's name is not recorded"
+        );
         // and so no vampire-suspicion attaches to mara
-        assert!(!fact(&mut st, "bram.believes.vampire.mara"), "a masked bite breeds no suspicion of mara");
+        assert!(
+            !fact(&mut st, "bram.believes.vampire.mara"),
+            "a masked bite breeds no suspicion of mara"
+        );
     }
 
     // H: task-4-brief.md "A bitten victim turns after the delay"
@@ -985,15 +1017,24 @@ mod tests {
         // onward and becomes a direct eyewitness (`bite_witnessing`), never an
         // absent villager for [`talk_practice`]'s gossip to reach.
         let mut st = seeded_two_at("mara", "bram", "mill");
-        st.perform_outcome(&insert("practice.world.world.at.cole!mill")).expect("cole at mill");
-        st.perform_outcome(&insert("practice.world.world.at.rosa!square")).expect("rosa away from the mill");
+        st.perform_outcome(&insert("practice.world.world.at.cole!mill"))
+            .expect("cole at mill");
+        st.perform_outcome(&insert("practice.world.world.at.rosa!square"))
+            .expect("rosa away from the mill");
         make_hungry(&mut st, "mara");
         let bite = ground_feed(&mut st, "mara", "bram");
         st.perform_action(&bite);
-        assert!(fact(&mut st, "cole.believes.bit.mara.bram.seen"), "cole witnessed it");
-        assert!(!fact(&mut st, "rosa.believes.bit.mara.bram.seen"), "rosa did not witness it");
+        assert!(
+            fact(&mut st, "cole.believes.bit.mara.bram.seen"),
+            "cole witnessed it"
+        );
+        assert!(
+            !fact(&mut st, "rosa.believes.bit.mara.bram.seen"),
+            "rosa did not witness it"
+        );
         // bring rosa to the mill with cole; cole tells her
-        st.perform_outcome(&insert("practice.world.world.at.rosa!mill")).expect("rosa at mill");
+        st.perform_outcome(&insert("practice.world.world.at.rosa!mill"))
+            .expect("rosa at mill");
         let tell = find_action(&mut st, "cole", "spread word");
         st.perform_action(&tell);
         assert!(
@@ -1002,7 +1043,10 @@ mod tests {
         );
         // and reclosing derives rosa's suspicion via the Task-2 axiom
         reclose(&mut st);
-        assert!(fact(&mut st, "rosa.believes.vampire.mara"), "hearsay breeds suspicion too");
+        assert!(
+            fact(&mut st, "rosa.believes.vampire.mara"),
+            "hearsay breeds suspicion too"
+        );
     }
 
     // H: task-7a-brief.md "the endings fire as base-fact referee schedule
@@ -1151,13 +1195,24 @@ mod tests {
             if fact_prefix(&mut st, "bittenOn") {
                 fed_at_least_once = true;
             }
-            // The invariant: no one ever pins a bite on mara by name.
+            // No character is ever pinned as a vampire by name — every vampire
+            // disguises before biting (the inert `.believes.vampire.someone` a
+            // masked bite derives is excluded: `someone` is not a villager).
             assert!(
-                !st.labeled_view().iter().any(|f| f.ends_with(".believes.vampire.mara")),
-                "mara must stay concealed — she disguises before biting"
+                !st.labeled_view().iter().any(|f| {
+                    HOMES
+                        .iter()
+                        .any(|(who, _)| f.ends_with(&format!(".believes.vampire.{who}")))
+                }),
+                "every vampire must stay concealed — each disguises before biting"
             );
-            if !st.db_child_keys("ending").is_empty() { break; }
+            if !st.db_child_keys("ending").is_empty() {
+                break;
+            }
         }
-        assert!(fed_at_least_once, "the vampire did feed (concealed), not merely avoid feeding");
+        assert!(
+            fed_at_least_once,
+            "the vampire did feed (concealed), not merely avoid feeding"
+        );
     }
 }
