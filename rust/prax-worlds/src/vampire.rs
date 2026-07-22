@@ -346,10 +346,16 @@ fn sate_hunger() -> Desire {
 }
 
 /// How much a villager values NOT being believed a vampire. Reuses the village
-/// `conceal` scale (bob's `stole.bob.loaf` concealment is 12): strong enough
-/// that forfeiting concealment outweighs a one-turn delay in sating hunger, so a
-/// hungry vampire disguises before biting rather than biting in the open. Tuned
-/// against behaviour in Task 6, starting from the proven village magnitude.
+/// `conceal` scale (bob's `stole.bob.loaf` concealment is 12) rather than a
+/// value derived for this world specifically: the break-even arithmetic already
+/// favors disguise-first at that shared magnitude. Biting in the open forfeits
+/// the concealment want across the depth-2 horizon, while disguising first only
+/// delays sating hunger by one turn — `2 * CONCEAL_WEIGHT` (24) exceeds
+/// [`sate_hunger`]'s magnitude (22), so the forfeited concealment outweighs the
+/// one-turn hunger delay and a hungry vampire disguises before feeding rather
+/// than biting undisguised. The Task 6 acceptance run
+/// (`the_vampire_conceals_itself_by_disguising_before_feeding`) confirms this
+/// holds across a full playthrough, not just the single-decision case.
 const CONCEAL_WEIGHT: i32 = 12;
 
 /// The die seed for this playthrough. No draws are made yet in this task, but
@@ -1125,5 +1131,33 @@ mod tests {
             Some("vampires"),
             "the skeleton loop must close to the vampire ending; got {reached:?}"
         );
+    }
+
+    // H: detection spec "the crux — the vampire emergently disguises before feeding"
+    #[test]
+    fn the_vampire_conceals_itself_by_disguising_before_feeding() {
+        use prax_core::turn::{advance, npc_act};
+        let mut st = vampire_world();
+        let mut fed_at_least_once = false;
+        for _ in 0..400 {
+            let actor = advance(&mut st);
+            npc_act(&mut st, 2, &actor);
+            // `fact_prefix` appends its own `.`/`!` separator (see its
+            // definition above); the family root is "bittenOn" with NO
+            // trailing dot, matching every other call site in this file
+            // (e.g. `fact_prefix(&mut st, "bittenOn.bram")`). A trailing dot
+            // here would query for "bittenOn.." / "bittenOn.!", which no
+            // real fact (`bittenOn.<victim>!<turn>`) ever matches.
+            if fact_prefix(&mut st, "bittenOn") {
+                fed_at_least_once = true;
+            }
+            // The invariant: no one ever pins a bite on mara by name.
+            assert!(
+                !st.labeled_view().iter().any(|f| f.ends_with(".believes.vampire.mara")),
+                "mara must stay concealed — she disguises before biting"
+            );
+            if !st.db_child_keys("ending").is_empty() { break; }
+        }
+        assert!(fed_at_least_once, "the vampire did feed (concealed), not merely avoid feeding");
     }
 }
