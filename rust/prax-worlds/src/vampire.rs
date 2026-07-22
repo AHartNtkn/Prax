@@ -17,7 +17,8 @@ use prax_core::types::{
 use prax_vocab::deceit::conceal;
 use prax_vocab::deontic::obliged_close;
 use prax_vocab::persona::cast;
-use prax_vocab::witness::{observable, saw};
+use prax_vocab::rumor::gossip;
+use prax_vocab::witness::observable;
 
 /// The village's sighting template, over the movement vocabulary below:
 /// whoever shares a place with you is someone you see. Copied from
@@ -151,6 +152,20 @@ fn disguise_practice() -> Practice {
         )
 }
 
+/// Word travels: a villager who believes they saw a bite tells a co-present
+/// other (never the biter, never another eyewitness, once per hearer). The
+/// hearsay then breeds suspicion through [`bite_breeds_suspicion`] just as an
+/// eyewitness account does.
+fn talk_practice() -> Practice {
+    Practice::new("talk")
+        .name("Talk")
+        .roles(["Scene"])
+        .action(
+            gossip(&bite_witnessing(), Vec::new(), "bit.Subject.Victim", "[Actor]: spread word about [Subject]")
+                .expect("the bite-gossip action"),
+        )
+}
+
 /// Transformation: `TURN_DELAY` boundaries after a bite, the victim becomes
 /// a vampire — a turn-arithmetic axiom over the bite's timestamp
 /// ([`prey_practice`]'s `bittenOn.V!T`) and the live clock (`turn!Now`),
@@ -181,15 +196,23 @@ fn transformation() -> Axiom {
     )
 }
 
-/// Suspicion, the act channel: whoever believes they saw `Biter` bite someone
+/// Suspicion, the act channel: whoever believes `Biter` bit someone — by any
+/// evidence, eyewitness OR hearsay ([`talk_practice`]'s gossip deposit) —
 /// believes `Biter` is a vampire — biting is how vampirism manifests, so a
-/// witnessed biter is a suspected vampire. Derived (a belief head, no `.seen`),
-/// so it dissolves if its supporting memory ever does and it is exactly the
-/// `<W>.believes.vampire.<X>` shape [`conceal`] quantifies over. A disguised
-/// bite (Task 3) binds `Biter = someone`, deriving the inert `…vampire.someone`.
+/// suspected biter is a suspected vampire. The body's pattern stops at
+/// `Victim`, one segment short of the evidence leaf (`.seen` or
+/// `.heard.<teller>`): per the engine's unify descent, reaching the end of a
+/// pattern is a match once that node is structurally present, regardless of
+/// which leaf sits beneath it — the same bare-pattern idiom [`prey_practice`]'s
+/// `not_("bittenOn.Prey")` guard already relies on, and the one
+/// [`prax_vocab::rumor::gossip`] itself uses for its own "does the teller have
+/// ANY evidence" check. Derived (a belief head, no `.seen`), so it dissolves if
+/// its supporting memory ever does and it is exactly the `<W>.believes.vampire.<X>`
+/// shape [`conceal`] quantifies over. A disguised bite (Task 3) binds `Biter =
+/// someone`, deriving the inert `…vampire.someone`.
 fn bite_breeds_suspicion() -> Axiom {
     Axiom::new(
-        vec![matches("Believer.believes.bit.Biter.Victim.seen")],
+        vec![matches("Believer.believes.bit.Biter.Victim")],
         ["Believer.believes.vampire.Biter"],
     )
 }
@@ -425,6 +448,9 @@ fn vampire_setup() -> Vec<Outcome> {
         // Spawns the `disguise` practice's singleton instance (see
         // [`disguise_practice`]) so its two actions can ever be offered.
         insert("practice.disguise.here"),
+        // Spawns the `talk` practice's singleton instance (see
+        // [`talk_practice`]) so its gossip action can ever be offered.
+        insert("practice.talk.here"),
     ]
     .into_iter()
     .chain(
@@ -450,8 +476,13 @@ fn vampire_setup() -> Vec<Outcome> {
 pub fn vampire_world() -> State {
     let (roster, persona_facts) = vampire_cast();
     let mut st = State::new();
-    st.define_practices([world_practice(), prey_practice(), disguise_practice()])
-        .expect("vampire village practices");
+    st.define_practices([
+        world_practice(),
+        prey_practice(),
+        disguise_practice(),
+        talk_practice(),
+    ])
+    .expect("vampire village practices");
     st.set_characters(roster).expect("vampire village cast");
     st.set_schedule(vec![
         sight_rule(sighting()),
@@ -936,6 +967,36 @@ mod tests {
     /// whichever internal update path a single `force_fact` happened to take.
     fn reclose(st: &mut State) {
         st.with_db(|_, db| db.clone());
+    }
+
+    // H: detection spec "suspicion spreads by gossip, not omniscience"
+    #[test]
+    fn a_witnessed_bite_spreads_by_gossip_to_an_absent_villager() {
+        // cole witnesses the bite at the mill; later, cole and rosa are together
+        // and cole gossips it to rosa, who was absent. rosa's HOME is the mill
+        // itself ([`HOMES`]), so she must be sent elsewhere before the bite —
+        // otherwise she is co-present with mara and bram from world creation
+        // onward and becomes a direct eyewitness (`bite_witnessing`), never an
+        // absent villager for [`talk_practice`]'s gossip to reach.
+        let mut st = seeded_two_at("mara", "bram", "mill");
+        st.perform_outcome(&insert("practice.world.world.at.cole!mill")).expect("cole at mill");
+        st.perform_outcome(&insert("practice.world.world.at.rosa!square")).expect("rosa away from the mill");
+        make_hungry(&mut st, "mara");
+        let bite = ground_feed(&mut st, "mara", "bram");
+        st.perform_action(&bite);
+        assert!(fact(&mut st, "cole.believes.bit.mara.bram.seen"), "cole witnessed it");
+        assert!(!fact(&mut st, "rosa.believes.bit.mara.bram.seen"), "rosa did not witness it");
+        // bring rosa to the mill with cole; cole tells her
+        st.perform_outcome(&insert("practice.world.world.at.rosa!mill")).expect("rosa at mill");
+        let tell = find_action(&mut st, "cole", "spread word");
+        st.perform_action(&tell);
+        assert!(
+            fact_prefix(&mut st, "rosa.believes.bit.mara.bram.heard"),
+            "rosa hears of the bite from cole"
+        );
+        // and reclosing derives rosa's suspicion via the Task-2 axiom
+        reclose(&mut st);
+        assert!(fact(&mut st, "rosa.believes.vampire.mara"), "hearsay breeds suspicion too");
     }
 
     // H: task-7a-brief.md "the endings fire as base-fact referee schedule
