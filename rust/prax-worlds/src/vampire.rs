@@ -290,6 +290,7 @@ pub const PLAYER_NAME: &str = "bram";
 ///   turn and the infection cannot propagate. `+1` roots each villager to their
 ///   home while staying far below hunger's `-22`, so a turned vampire abandons
 ///   home to hunt.
+///
 /// DYNAMIC vampirism (patient zero at first night, anyone [`transformation`]
 /// later turns) means no fixed subset can be "the vampires" at authoring time,
 /// so every member holds `sate-hunger`, not just a chosen few. [`cast`] stamps
@@ -557,6 +558,54 @@ mod tests {
         assert!(
             !feed_is_available(&mut st, "mara", "bram"),
             "cooldown blocks re-feeding"
+        );
+    }
+
+    // H: task-3 feed guards — a vampire cannot feed on itself or on another vampire
+    #[test]
+    fn feed_will_not_target_self_or_another_vampire() {
+        let mut st = seeded_two_at("mara", "bram", "mill");
+        make_hungry(&mut st, "mara");
+        // neq(Actor, Prey): never offered to feed on itself.
+        assert!(
+            !feed_is_available(&mut st, "mara", "mara"),
+            "a vampire cannot feed on itself"
+        );
+        // not_(vampire.Prey): another vampire is not prey.
+        st.perform_outcome(&insert("vampire.bram"))
+            .expect("make bram a vampire");
+        assert!(
+            !feed_is_available(&mut st, "mara", "bram"),
+            "a vampire cannot feed on another vampire"
+        );
+    }
+
+    // H: task-3 feed cooldown — clears after FEED_COOLDOWN so the vampire can feed again
+    #[test]
+    fn the_feed_cooldown_clears_after_its_delay() {
+        let mut st = seeded_two_at("mara", "bram", "mill");
+        // a third villager co-located and never bitten, so they stay human prey
+        st.perform_outcome(&insert("practice.world.world.at.cole!mill"))
+            .expect("place cole at the mill");
+        make_hungry(&mut st, "mara");
+        let bite = ground_feed(&mut st, "mara", "bram");
+        st.perform_action(&bite);
+        assert!(fact(&mut st, "fed.mara"), "feeding arms the cooldown");
+        // While the cooldown holds, a freshly-hungry mara still cannot feed.
+        make_hungry(&mut st, "mara");
+        assert!(
+            !feed_is_available(&mut st, "mara", "cole"),
+            "the cooldown blocks feeding again immediately"
+        );
+        advance_boundaries(&mut st, FEED_COOLDOWN);
+        assert!(
+            !fact(&mut st, "fed.mara"),
+            "the cooldown clears after FEED_COOLDOWN boundaries"
+        );
+        // hunger_pulse re-arms mara each boundary; feed is offered again on a still-human prey.
+        assert!(
+            feed_is_available(&mut st, "mara", "cole"),
+            "once the cooldown clears the vampire can feed again"
         );
     }
 
