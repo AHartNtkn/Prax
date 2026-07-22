@@ -394,6 +394,26 @@ fn sate_hunger() -> Desire {
 /// (`the_vampire_conceals_itself_by_disguising_before_feeding`).
 const CONCEAL_WEIGHT: i32 = 12;
 
+/// How strongly a villager is pulled home once `phase!night` holds — the
+/// night arm of the day/night location rhythm ([`vampire_cast`]). Must beat
+/// [`DAY_SQUARE_WEIGHT`] so night reliably overrides a still-lingering day
+/// want at the phase boundary, and both must stay far below [`sate_hunger`]'s
+/// -22 magnitude so a hungry vampire still abandons home (or the square) to
+/// hunt, and below [`CONCEAL_WEIGHT`] so a vampire still disguises before
+/// feeding in the open rather than heading straight home. Confirmed
+/// empirically by the real `advance`+`npc_act` loop
+/// (`villagers_are_home_at_night_and_mostly_at_the_square_by_day`).
+const NIGHT_HOME_WEIGHT: i32 = 3;
+
+/// How strongly a villager is pulled to the square once `phase!day` holds —
+/// the day arm of the rhythm (market/gossip; mild, since day is not the
+/// governing constraint the way night is). Weaker than [`NIGHT_HOME_WEIGHT`]
+/// so the asymmetry is principled rather than accidental: the design only
+/// requires night to reliably pull people home (the feeding/concealment
+/// window), not day to reliably empty every home, so day's pull is the
+/// smaller of the two.
+const DAY_SQUARE_WEIGHT: i32 = 1;
+
 /// The die seed for this playthrough. No draws are made yet in this task, but
 /// the engine requires a seed to be set before it will run.
 const VAMPIRE_SEED: i64 = 1897;
@@ -425,14 +445,18 @@ pub const PLAYER_NAME: &str = "bram";
 /// - `sate-hunger` ([`sate_hunger`]) — gated by `bloodHunger.Owner`, so it is
 ///   live only once they are a vampire (only a vampire is ever hungry, via
 ///   [`hunger_pulse`]); a human's copy contributes zero until the day they turn.
-/// - a **home-anchor** life-want: `+1` to be at their [`HOMES`] location — the
-///   spec's "ordinary life-wants... the social substrate, inherited from the
-///   village world," and the same magnitude `village`'s bob "loiter" want uses.
-///   Without it the whole cast has identical empty valuations and drifts in
-///   lockstep, so a hungry vampire is never co-located with prey at its own
-///   turn and the infection cannot propagate. `+1` roots each villager to their
-///   home while staying far below hunger's `-22`, so a turned vampire abandons
-///   home to hunt.
+/// - a **day/night location rhythm**, two phase-gated wants replacing a
+///   single always-on home anchor: `NIGHT_HOME_WEIGHT` to be at their
+///   [`HOMES`] location while `phase!night` holds, and `DAY_SQUARE_WEIGHT` to
+///   be at the square while `phase!day` holds — the spec's "ordinary
+///   life-wants... the social substrate, inherited from the village world,"
+///   now shaped by the clock instead of constant. Without SOME location want
+///   the whole cast has identical empty valuations and drifts in lockstep, so
+///   a hungry vampire is never co-located with prey at its own turn and the
+///   infection cannot propagate; gating by phase is what makes night the
+///   feeding/unobserved-turning window and day the social one, rather than
+///   villagers sitting home around the clock. Both weights stay far below
+///   hunger's `-22`, so a turned vampire abandons the rhythm to hunt.
 /// - a **concealment** want, `conceal("vampire.<self>", CONCEAL_WEIGHT)`: nobody
 ///   should believe them a vampire. Dormant for a human — nobody yet believes
 ///   `vampire.<them>`, so the want is already satisfied and contributes nothing
@@ -452,9 +476,24 @@ fn vampire_cast() -> (Vec<Character>, Vec<Outcome>) {
             (
                 Character::new(*who)
                     .holds("sate-hunger")
+                    // night → home: be at one's own home while it is night (strong — this is
+                    // what puts the household together at night, makes the turning unobserved,
+                    // and makes night the feeding window).
                     .want(Want::new(
-                        vec![matches(format!("practice.world.world.at.{who}!{home}"))],
-                        1,
+                        vec![
+                            matches("phase!night"),
+                            matches(format!("practice.world.world.at.{who}!{home}")),
+                        ],
+                        NIGHT_HOME_WEIGHT,
+                    ))
+                    // day → square: be in the square while it is day (mild — market/gossip), so
+                    // the day/night distinction actually moves people off their homes.
+                    .want(Want::new(
+                        vec![
+                            matches("phase!day"),
+                            matches(format!("practice.world.world.at.{who}!square")),
+                        ],
+                        DAY_SQUARE_WEIGHT,
                     ))
                     .want(
                         conceal(&format!("vampire.{who}"), CONCEAL_WEIGHT)
@@ -655,6 +694,125 @@ mod tests {
                 assert!(
                     !fact(&mut st, "phase!day"),
                     "turn {turn} (in-cycle {in_cycle}) should be night, but phase!day holds"
+                );
+            }
+        }
+    }
+
+    /// How many of [`HOMES`]'s villagers are currently at `place`.
+    fn count_at(st: &mut State, place: &str) -> usize {
+        HOMES
+            .iter()
+            .filter(|(who, _)| fact(st, &format!("practice.world.world.at.{who}!{place}")))
+            .count()
+    }
+
+    /// The place-suffix of `who`'s current `practice.world.world.at.<who>!<place>`
+    /// fact, if any — for failure-message diagnostics only (a plain named
+    /// helper rather than an inline closure, so the `rustfmt`-mandated line
+    /// breaks stay readable at the call sites below).
+    fn position_of(st: &mut State, who: &str) -> Option<String> {
+        let prefix = format!("practice.world.world.at.{who}!");
+        st.labeled_view()
+            .iter()
+            .find(|f| f.starts_with(&prefix))
+            .cloned()
+    }
+
+    /// Every villager's current position, for a failing assertion's message.
+    fn all_positions(st: &mut State) -> Vec<(&'static str, Option<String>)> {
+        HOMES
+            .iter()
+            .map(|(who, _)| (*who, position_of(st, who)))
+            .collect()
+    }
+
+    // H: task-3-brief.md "villagers home at night, in the square by day" — the
+    // day/night location rhythm, driven by the REAL game loop (`advance` +
+    // `npc_act`, the same primitives `the_infection_runs_to_an_ending` uses),
+    // not a hand-advanced clock: the rhythm is a WANT, so it only shows up
+    // through actual deliberation and action, never through `round_boundary`
+    // alone.
+    //
+    // A "round" here is one full rotation through the 8-strong cast — exactly
+    // what `advance` wraps a `round_boundary` on ([`prax_core::turn::advance`]),
+    // so the phase is fixed for the whole round and every villager gets
+    // exactly one action under it. Night is 2 rounds wide at `TimeScale::test`
+    // ([`TimeScale::test`]), so — since every villager starts EITHER already
+    // home ([`vampire_setup`] seeds them at their [`HOMES`] place) or at most
+    // one hop from home (every non-square home connects directly to the
+    // square, per [`vampire_setup`]'s `connected.*` facts, and the square
+    // itself is home to aldric and mara) — one round's worth of individual
+    // actions is enough for the WHOLE cast to reach home: no one needs the
+    // second night round to arrive. There is no compression artifact from the
+    // short night to work around here.
+    //
+    // The strong night claim is scoped to HUMANS, not literally "everyone" —
+    // observed by running this exact loop with per-round position logging
+    // (task-3-report.md carries the transcript): a human's only active life-
+    // wants are the two location wants themselves (`conceal` contributes zero
+    // utility while nobody suspects them, which holds throughout — this cast
+    // never gets far enough for suspicion before the ending), so for a human
+    // the night-home want is UNCONTESTED and the strong claim is exact, not
+    // approximate. A vampire additionally carries `sate-hunger` at -22
+    // ([`sate_hunger`]), which by design (see [`NIGHT_HOME_WEIGHT`]'s doc)
+    // outweighs the +3 home want whenever a feed is actually reachable — and
+    // reachable prey is a direct CONSEQUENCE of the rhythm itself: pulling
+    // everyone home at night is what makes a hungry vampire's own household,
+    // or a villager still finishing their walk home, the available target.
+    // Observed directly in this test: mara — already home (home == square) —
+    // bites and marks aldric during the first night (rounds 4-5); by round 11
+    // aldric has turned (incubation, 6 test-scale turns) and mara's own feed
+    // cooldown (also 6 turns) has just cleared, so she leaves her home for
+    // church to chase newly-available prey (bram, cole) instead of idling
+    // home hungry — night is the feeding window exactly because it is also
+    // the home-gathering window. Excluding vampires from the strong claim
+    // is not a weakening for pass-at-any-cost: it is the same -22-dominance
+    // fact [`NIGHT_HOME_WEIGHT`]'s own doc states, checked here directly
+    // against the real loop rather than asserted and left unverified.
+    #[test]
+    fn villagers_are_home_at_night_and_mostly_at_the_square_by_day() {
+        use prax_core::turn::{advance, npc_act};
+        let scale = TimeScale::test(); // day 4 / night 2, cycle 6
+        let depth = 2;
+        let mut st = world();
+        let cast_size = HOMES.len();
+        // Two full cycles: enough to see day, the night-round transition, and
+        // the following day again, confirming the rhythm repeats rather than
+        // being a one-shot artifact of the starting positions — and, as it
+        // happens, enough to observe a vampire's hunger break the rhythm too
+        // (see the doc comment above), which one cycle alone would not reach.
+        let rounds = (scale.cycle() * 2) as usize;
+        for round in 0..rounds {
+            for _ in 0..cast_size {
+                let actor = advance(&mut st);
+                npc_act(&mut st, depth, &actor);
+            }
+            if fact(&mut st, "phase!night") {
+                for (who, home) in HOMES {
+                    if fact(&mut st, &format!("vampire.{who}")) {
+                        continue; // hunger may legitimately pull a vampire off the rhythm
+                    }
+                    let home_fact = format!("practice.world.world.at.{who}!{home}");
+                    let ok = fact(&mut st, &home_fact);
+                    if !ok {
+                        let positions = all_positions(&mut st);
+                        panic!(
+                            "round {round}: human villager {who} should be home ({home}) at \
+                             night; positions: {positions:?}"
+                        );
+                    }
+                }
+            } else {
+                assert!(
+                    fact(&mut st, "phase!day"),
+                    "round {round}: phase must be day or night"
+                );
+                let at_square = count_at(&mut st, "square");
+                assert!(
+                    at_square * 2 >= cast_size,
+                    "round {round}: expected most of the cast at the square by day, got \
+                     {at_square}/{cast_size}"
                 );
             }
         }
