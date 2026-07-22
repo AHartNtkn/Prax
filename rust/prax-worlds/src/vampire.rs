@@ -14,6 +14,7 @@ use prax_core::types::{
     Action, Axiom, Character, Desire, Outcome, Practice, ScheduleRule, Want, delete, insert,
     insert_for,
 };
+use prax_vocab::deceit::conceal;
 use prax_vocab::deontic::obliged_close;
 use prax_vocab::persona::cast;
 use prax_vocab::witness::{observable, saw};
@@ -70,21 +71,37 @@ fn bite_witnessing() -> Vec<Condition> {
     ]
 }
 
-/// Feeding: a vampire bites a co-located, not-yet-vampire victim. A
-/// world-scoped singleton practice — the `Scene` role plays no part in the
-/// action's own conditions (which read the movement substrate directly);
-/// it exists only to give the practice an instance to spawn from, the same
-/// idiom as `village::village_practice`'s `Scene` role. The bite leaves a
-/// neck mark, timestamps itself with the current turn (`bittenOn.Prey!Now`
-/// — a PERSISTENT insert, not `insert_for`: [`transformation`] still needs to
-/// read it after the delay elapses) for [`transformation`]'s turn-arithmetic
-/// axiom to consume, arms the actor's own feed cooldown for
-/// [`FEED_COOLDOWN`], and sates the actor's hunger. The turn stamp follows
-/// the same variable-binding idiom `sight_rule` uses for
+/// Feeding: a vampire bites a co-located, not-yet-vampire, not-yet-bitten
+/// victim. A world-scoped singleton practice — the `Scene` role plays no part
+/// in the action's own conditions (which read the movement substrate
+/// directly); it exists only to give the practice an instance to spawn from,
+/// the same idiom as `village::village_practice`'s `Scene` role. The bite
+/// leaves a neck mark, timestamps itself with the current turn
+/// (`bittenOn.Prey!Now` — a PERSISTENT insert, not `insert_for`:
+/// [`transformation`] still needs to read it after the delay elapses) for
+/// [`transformation`]'s turn-arithmetic axiom to consume, arms the actor's
+/// own feed cooldown for [`FEED_COOLDOWN`], and sates the actor's hunger. The
+/// turn stamp follows the same variable-binding idiom `sight_rule` uses for
 /// `believes.atSince.Seen!Now` — no separate `call`/`Function` needed: an
 /// action's `when` may freely READ the engine-owned `turn!Now` clock (only
 /// WRITING it is reserved, per [`prax_core::typecheck`]), and the bound
 /// `Now` is then substituted straight into the `then` path string.
+///
+/// `not_("bittenOn.Prey")` excludes an already-bitten, still-incubating
+/// victim from being offered as prey at all — found while validating Task 4
+/// (the concealment want): once every vampire prefers to disguise before
+/// feeding, several can go hungry in the same window and converge on the
+/// same nearest victim; without this guard a second bite silently overwrites
+/// the first's `bittenOn.Prey!Now` timestamp (a single-valued slot), resetting
+/// [`transformation`]'s elapsed-time clock, and a victim ganged up on by a
+/// pack of vampires never accumulates enough uninterrupted time to turn — a
+/// livelock, not a slowdown (`the_infection_runs_to_an_ending` never reaches
+/// its ending). The guard matches on the bare `bittenOn.Prey` path with no
+/// trailing `!T`: the engine's unify descent treats reaching the end of a
+/// pattern as a match once the node is structurally present, without
+/// requiring that exact node be independently asserted, so this matches the
+/// moment ANY `bittenOn.Prey!<turn>` value exists, regardless of the bound
+/// turn.
 fn prey_practice() -> Practice {
     Practice::new("prey")
         .name("Feeding")
@@ -101,6 +118,7 @@ fn prey_practice() -> Practice {
                     matches("practice.world.world.at.Prey!Spot"),
                     neq("Actor", "Prey"),
                     not_("vampire.Prey"),
+                    not_("bittenOn.Prey"),
                     matches("appears.Actor!Appears"),
                     matches("turn!Now"),
                 ])
@@ -304,6 +322,13 @@ fn sate_hunger() -> Desire {
     )
 }
 
+/// How much a villager values NOT being believed a vampire. Reuses the village
+/// `conceal` scale (bob's `stole.bob.loaf` concealment is 12): strong enough
+/// that forfeiting concealment outweighs a one-turn delay in sating hunger, so a
+/// hungry vampire disguises before biting rather than biting in the open. Tuned
+/// against behaviour in Task 6, starting from the proven village magnitude.
+const CONCEAL_WEIGHT: i32 = 12;
+
 /// The die seed for this playthrough. No draws are made yet in this task, but
 /// the engine requires a seed to be set before it will run.
 const VAMPIRE_SEED: i64 = 1897;
@@ -330,7 +355,7 @@ const HOMES: &[(&str, &str)] = &[
 /// seat, read only by the CLI `world_named` play path (`stress`/`check` discard it).
 pub const PLAYER_NAME: &str = "bram";
 
-/// The eight-villager roster, built from [`HOMES`]. Each villager holds two
+/// The eight-villager roster, built from [`HOMES`]. Each villager holds three
 /// wants:
 /// - `sate-hunger` ([`sate_hunger`]) — gated by `bloodHunger.Owner`, so it is
 ///   live only once they are a vampire (only a vampire is ever hungry, via
@@ -343,20 +368,33 @@ pub const PLAYER_NAME: &str = "bram";
 ///   turn and the infection cannot propagate. `+1` roots each villager to their
 ///   home while staying far below hunger's `-22`, so a turned vampire abandons
 ///   home to hunt.
+/// - a **concealment** want, `conceal("vampire.<self>", CONCEAL_WEIGHT)`: nobody
+///   should believe them a vampire. Dormant for a human — nobody yet believes
+///   `vampire.<them>`, so the want is already satisfied and contributes nothing
+///   — and load-bearing once they turn: it is what makes a hungry vampire
+///   disguise before biting in the open, rather than biting undisguised and
+///   forfeiting concealment (Task 6).
 ///
 /// DYNAMIC vampirism (patient zero at first night, anyone [`transformation`]
 /// later turns) means no fixed subset can be "the vampires" at authoring time,
-/// so every member holds `sate-hunger`, not just a chosen few. [`cast`] stamps
-/// `character.<who>` per member (the setup fact this world's tests read).
+/// so every member holds `sate-hunger` and the concealment want, not just a
+/// chosen few. [`cast`] stamps `character.<who>` per member (the setup fact
+/// this world's tests read).
 fn vampire_cast() -> (Vec<Character>, Vec<Outcome>) {
     let roster = HOMES
         .iter()
         .map(|(who, home)| {
             (
-                Character::new(*who).holds("sate-hunger").want(Want::new(
-                    vec![matches(format!("practice.world.world.at.{who}!{home}"))],
-                    1,
-                )),
+                Character::new(*who)
+                    .holds("sate-hunger")
+                    .want(Want::new(
+                        vec![matches(format!("practice.world.world.at.{who}!{home}"))],
+                        1,
+                    ))
+                    .want(
+                        conceal(&format!("vampire.{who}"), CONCEAL_WEIGHT)
+                            .expect("a villager's concealment want"),
+                    ),
                 Vec::new(),
             )
         })
@@ -664,6 +702,30 @@ mod tests {
         );
     }
 
+    // H: bite-defect "an already-bitten, still-incubating victim cannot be
+    // re-bitten — a second bite must not be offered, since it would overwrite
+    // bittenOn.Prey!Now and reset the transformation clock, letting a pack of
+    // vampires keep a victim incubating forever"
+    #[test]
+    fn a_bitten_incubating_victim_cannot_be_rebitten() {
+        let mut st = seeded_two_at("mara", "bram", "mill");
+        st.perform_outcome(&insert("practice.world.world.at.cole!mill"))
+            .expect("place cole at the mill");
+        st.perform_outcome(&insert("vampire.cole"))
+            .expect("make cole a second vampire");
+        make_hungry(&mut st, "mara");
+        let bite = ground_feed(&mut st, "mara", "bram");
+        st.perform_action(&bite);
+        // bram is now incubating (bitten, not yet turned). A second, distinct
+        // vampire (on no cooldown of their own) must not be offered to bite
+        // bram again while the first bite's transformation clock is running.
+        make_hungry(&mut st, "cole");
+        assert!(
+            !feed_is_available(&mut st, "cole", "bram"),
+            "an already-bitten, incubating victim cannot be re-bitten"
+        );
+    }
+
     // H: task-3 feed cooldown — clears after FEED_COOLDOWN so the vampire can feed again
     #[test]
     fn the_feed_cooldown_clears_after_its_delay() {
@@ -795,11 +857,39 @@ mod tests {
     fn a_hungry_vampire_with_prey_chooses_to_feed() {
         let mut st = seeded_two_at("mara", "bram", "mill");
         make_hungry(&mut st, "mara");
+        // Task 4's concealment want makes a hungry vampire disguise before
+        // biting in the open — see
+        // `a_hungry_vampire_prefers_to_disguise_before_feeding_in_the_open`,
+        // which pins that first-step choice directly. Drive that one step
+        // here too, then assert the feed follows once disguised: disguise-
+        // then-feed is the correct post-Task-4 behaviour, not a regression
+        // of this test's original "a hungry vampire feeds" claim.
+        let first = st.pick_action(2, &character("mara"));
+        let first_label = first.map(|g| g.label).unwrap_or_default();
+        assert!(
+            first_label.contains("put on a disguise"),
+            "a hungry vampire disguises before feeding in the open; got {first_label:?}"
+        );
+        let disg = find_action(&mut st, "mara", "put on a disguise");
+        st.perform_action(&disg);
         let choice = st.pick_action(2, &character("mara"));
         let label = choice.map(|g| g.label).unwrap_or_default();
         assert!(
             label.contains("feed on bram"),
-            "a hungry vampire feeds; got {label:?}"
+            "once disguised, a hungry vampire feeds; got {label:?}"
+        );
+    }
+
+    // H: detection spec "the vampire conceals being believed a vampire, so it disguises first"
+    #[test]
+    fn a_hungry_vampire_prefers_to_disguise_before_feeding_in_the_open() {
+        let mut st = seeded_two_at("mara", "bram", "mill");
+        make_hungry(&mut st, "mara");
+        let choice = st.pick_action(2, &character("mara"));
+        let label = choice.map(|g| g.label).unwrap_or_default();
+        assert!(
+            label.contains("put on a disguise"),
+            "a hungry vampire with an unconcealed identity disguises before biting in the open; got {label:?}"
         );
     }
 
